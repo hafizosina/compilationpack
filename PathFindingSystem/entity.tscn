@@ -1,0 +1,14 @@
+[gd_scene load_steps=3 format=3 uid="uid://drwjoxa10mtis"]
+
+[ext_resource type="Texture2D" uid="uid://drh8g67e8rsp1" path="res://PathFindingSystem/Asset/green_character.png" id="1_hecsj"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_xo0y3"]
+
+[node name="Entity" type="CharacterBody2D"]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_xo0y3")
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+scale = Vector2(0.2, 0.2)
+texture = ExtResource("1_hecsj")

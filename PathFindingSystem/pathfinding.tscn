@@ -1,0 +1,13 @@
+[gd_scene load_steps=3 format=3 uid="uid://cbw31c8i337jf"]
+
+[ext_resource type="PackedScene" uid="uid://drwjoxa10mtis" path="res://PathFindingSystem/entity.tscn" id="2_icwoj"]
+[ext_resource type="PackedScene" uid="uid://d313nau34hi3i" path="res://PathFindingSystem/terrain.tscn" id="2_xo0y3"]
+
+[node name="Wolrd" type="Node2D"]
+
+[node name="Entity" parent="." instance=ExtResource("2_icwoj")]
+position = Vector2(113, 105)
+
+[node name="Terrain" parent="." instance=ExtResource("2_xo0y3")]
+
+[node name="PathFindingSystem" type="Node" parent="."]
