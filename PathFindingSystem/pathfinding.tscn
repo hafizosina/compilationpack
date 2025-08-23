@@ -5,9 +5,9 @@
 
 [node name="Wolrd" type="Node2D"]
 
+[node name="Terrain" parent="." instance=ExtResource("2_xo0y3")]
+
 [node name="Entity" parent="." instance=ExtResource("2_icwoj")]
 position = Vector2(113, 105)
-
-[node name="Terrain" parent="." instance=ExtResource("2_xo0y3")]
 
 [node name="PathFindingSystem" type="Node" parent="."]
