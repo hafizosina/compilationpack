@@ -20,6 +20,7 @@ texture = ExtResource("2_2q3fv")
 path_desired_distance = 5.0
 target_desired_distance = 5.0
 path_postprocessing = 1
+debug_enabled = true
 debug_path_custom_color = Color(1, 0, 0, 1)
 
 [connection signal="velocity_computed" from="NavigationAgent2D" to="." method="_on_navigation_agent_2d_velocity_computed"]
