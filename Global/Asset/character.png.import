@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://s0nuxhwo34cp"
-path="res://.godot/imported/terain2.png-d4933c632625025eeb12c3a6b7d1cf16.ctex"
+uid="uid://bae16lxpt5p5x"
+path="res://.godot/imported/character.png-c685b7905fe43c3ebbf73f24fbcf307d.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://PathFindingSystem/Asset/terain2.png"
-dest_files=["res://.godot/imported/terain2.png-d4933c632625025eeb12c3a6b7d1cf16.ctex"]
+source_file="res://Global/Asset/character.png"
+dest_files=["res://.godot/imported/character.png-c685b7905fe43c3ebbf73f24fbcf307d.ctex"]
 
 [params]
 

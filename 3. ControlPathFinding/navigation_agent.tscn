@@ -1,0 +1,83 @@
+[gd_scene load_steps=3 format=3 uid="uid://bkc6vtckomm42"]
+
+[ext_resource type="Texture2D" uid="uid://djf1nsphdxmvv" path="res://Global/Asset/flag.png" id="2_ol0mj"]
+
+[sub_resource type="GDScript" id="GDScript_q5uvt"]
+script/source = "extends NavigationAgent2D
+
+@export_range(20,150,5) var movement_speed: float = 100.0
+
+@onready var flag: Sprite2D = $Flag
+
+var parent: CharacterBody2D
+var nav_active  :bool = false
+var is_navigating :bool= true
+
+func _ready() -> void:
+	## Connect Signal
+	navigation_finished.connect(_on_navigation_finished)	
+	
+	## Validate Parent
+	var parent_temp = get_parent()
+	if parent_temp is CharacterBody2D:
+		print(\"✅ Parent is CharacterBody2D:\", parent_temp.name)
+		parent = parent_temp
+		nav_active = true
+	else:
+		print(\"❌ Parent is not CharacterBody2D, it's:\", parent)
+		
+func _input(event: InputEvent) -> void:
+	if not nav_active:
+		return
+		
+	# Handle right mouse button click
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			## get world position consider camera pos and scale
+			var even_pos = Utils.screen_to_world_position(event.position)
+			set_navigation_target(even_pos)
+
+func _physics_process(delta: float) -> void:
+	if not nav_active:
+		return
+
+	# Only move if we have a valid path
+	if not is_navigation_finished():
+		var next_point: Vector2 = get_next_path_position()
+		var direction: Vector2 = (next_point - parent.global_position).normalized()
+		parent.velocity = direction * movement_speed
+		parent.move_and_slide()
+		
+func set_navigation_target(target_pos: Vector2) -> void:
+	set_target_position(target_pos)
+	# Show and position the flag
+	flag.global_position = target_pos
+	flag.visible = true
+	
+	is_navigating = true
+	print(\"🎯 Navigation target set to:\", target_position)
+
+func _on_navigation_finished() -> void:
+	print(\"🏁 Navigation finished!\")
+	is_navigating = false
+	flag.visible = false
+	
+	parent.velocity = Vector2.ZERO
+	parent.move_and_slide()
+"
+
+[node name="NavigationAgent" type="NavigationAgent2D"]
+path_desired_distance = 4.0
+target_desired_distance = 2.0
+path_postprocessing = 1
+simplify_path = true
+avoidance_enabled = true
+neighbor_distance = 100.0
+debug_enabled = true
+debug_path_custom_color = Color(1, 0, 0, 1)
+script = SubResource("GDScript_q5uvt")
+movement_speed = 50.0
+
+[node name="Flag" type="Sprite2D" parent="."]
+visible = false
+texture = ExtResource("2_ol0mj")

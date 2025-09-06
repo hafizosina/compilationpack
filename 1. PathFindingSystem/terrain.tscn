@@ -1,6 +1,6 @@
 [gd_scene load_steps=11 format=4 uid="uid://d313nau34hi3i"]
 
-[ext_resource type="Texture2D" uid="uid://s0nuxhwo34cp" path="res://PathFindingSystem/Asset/terain2.png" id="1_y80n3"]
+[ext_resource type="Texture2D" uid="uid://s0nuxhwo34cp" path="res://1. PathFindingSystem/Asset/terain2.png" id="1_y80n3"]
 
 [sub_resource type="NavigationPolygon" id="NavigationPolygon_74sui"]
 

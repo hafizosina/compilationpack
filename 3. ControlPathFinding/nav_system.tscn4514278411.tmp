@@ -1,0 +1,57 @@
+[gd_scene load_steps=2 format=3 uid="uid://lcrihoq46jbk"]
+
+[sub_resource type="GDScript" id="GDScript_85mv0"]
+script/source = "extends Node
+
+@export var nav_layer : TileMapLayer 
+
+func _ready() -> void:
+	if nav_layer==null: return
+	await _wait_for_nav_regions()
+	apply_navigation_weights()
+	
+
+func apply_navigation_weights() -> void:
+	var nav_map: RID = nav_layer.get_navigation_map()
+	if not nav_map.is_valid():
+		printerr(\"Nav Region not Valid\")
+		return
+		
+	var regions: Array = NavigationServer2D.map_get_regions(nav_map)
+	if regions.is_empty():
+		printerr(\"Nav Region Data is empty\")
+		return
+	
+	for rid in regions:
+		var region_xform: Transform2D = NavigationServer2D.region_get_transform(rid)
+		var local_pos: Vector2 = nav_layer.to_local(region_xform.origin)
+		var cell: Vector2i = nav_layer.local_to_map(local_pos)
+
+		var tile_data := nav_layer.get_cell_tile_data(cell)
+		if tile_data == null:
+			continue
+
+		var cost :float= tile_data.get_custom_data(\"travel_cost\")
+		if cost == null:
+			continue
+
+		NavigationServer2D.region_set_travel_cost(rid, float(cost))
+
+
+# WAIT for Nav Region to get bake
+func _wait_for_nav_regions() -> void:
+	var nav_map: RID = nav_layer.get_world_2d().navigation_map
+	var tries := 8  # small upper bound to avoid infinite waits
+	while tries > 0:
+		await get_tree().physics_frame
+		if nav_map.is_valid():
+			var regions := NavigationServer2D.map_get_regions(nav_map)
+			if regions.size() > 0:
+				print(\"Nav Region ready after \"+str(tries)+ \" tries\")
+				return
+		await get_tree().physics_frame
+		tries -= 1
+"
+
+[node name="NavSystem" type="Node"]
+script = SubResource("GDScript_85mv0")

@@ -1,0 +1,43 @@
+[gd_scene load_steps=2 format=3 uid="uid://dmgxte3osj42b"]
+
+[sub_resource type="GDScript" id="GDScript_x2tb1"]
+script/source = "extends CanvasLayer
+@onready var button: Button = $Container/Control/Button
+
+
+func _on_button_toggled(toggled_on: bool) -> void:
+	GlobalAstar2.toggle_overlay_travle_cost.emit(toggled_on)
+"
+
+[node name="UI" type="CanvasLayer"]
+script = SubResource("GDScript_x2tb1")
+
+[node name="Container" type="MarginContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="Control" type="Control" parent="Container"]
+layout_mode = 2
+
+[node name="Button" type="Button" parent="Container/Control"]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -77.0
+offset_top = -31.0
+grow_horizontal = 0
+grow_vertical = 0
+toggle_mode = true
+text = "Nav Cost"
+
+[connection signal="toggled" from="Container/Control/Button" to="." method="_on_button_toggled"]

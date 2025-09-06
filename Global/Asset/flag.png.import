@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://drh8g67e8rsp1"
-path="res://.godot/imported/green_character.png-afc668a473538cef9b201e12b9841260.ctex"
+uid="uid://djf1nsphdxmvv"
+path="res://.godot/imported/flag.png-e576e39814079133097d235a93abddf1.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://PathFindingSystem/Asset/green_character.png"
-dest_files=["res://.godot/imported/green_character.png-afc668a473538cef9b201e12b9841260.ctex"]
+source_file="res://Global/Asset/flag.png"
+dest_files=["res://.godot/imported/flag.png-e576e39814079133097d235a93abddf1.ctex"]
 
 [params]
 
@@ -31,4 +31,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

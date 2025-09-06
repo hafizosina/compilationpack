@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://djf1nsphdxmvv"
-path="res://.godot/imported/flag.png-227c1858ed3ffe9c5d4dabea06897c77.ctex"
+uid="uid://s0nuxhwo34cp"
+path="res://.godot/imported/terain2.png-26065d9af0f1f8d32797db89f27e66c3.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://PathFindingWithWeight/flag.png"
-dest_files=["res://.godot/imported/flag.png-227c1858ed3ffe9c5d4dabea06897c77.ctex"]
+source_file="res://1. PathFindingSystem/Asset/terain2.png"
+dest_files=["res://.godot/imported/terain2.png-26065d9af0f1f8d32797db89f27e66c3.ctex"]
 
 [params]
 
