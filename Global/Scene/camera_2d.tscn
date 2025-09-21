@@ -21,6 +21,10 @@ func _input(event):
 	handle_zoom(event)
 	handle_panning(event)
 	save_camera_state()
+	
+func _process(delta: float) -> void:
+	handle_keyboard_panning(delta)
+
 
 func handle_zoom(event):
 	if event is InputEventMouseButton:
@@ -39,6 +43,25 @@ func handle_panning(event):
 	
 	elif event is InputEventMouseMotion and is_panning:
 		pan_camera(event.position)
+		
+		
+func handle_keyboard_panning(delta: float):
+	var direction := Vector2.ZERO
+
+	if Input.is_action_pressed(\"ui_left\"):
+		direction.x -= 1
+	if Input.is_action_pressed(\"ui_right\"):
+		direction.x += 1
+	if Input.is_action_pressed(\"ui_up\"):
+		direction.y -= 1
+	if Input.is_action_pressed(\"ui_down\"):
+		direction.y += 1
+
+	if direction != Vector2.ZERO:
+		direction = direction.normalized()
+		# Move consistently regardless of zoom
+		global_position += direction * pan_speed * 200 * delta / zoom.x
+
 
 func start_panning(mouse_pos: Vector2):
 	is_panning = true
@@ -48,7 +71,7 @@ func stop_panning():
 	is_panning = false
 
 func pan_camera(mouse_pos: Vector2):
-	var delta = (last_mouse_position - mouse_pos) * pan_speed / zoom.x
+	var delta = (last_mouse_position - mouse_pos) / zoom.x
 	global_position += delta
 	last_mouse_position = mouse_pos
 

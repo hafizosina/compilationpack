@@ -1,0 +1,67 @@
+[gd_scene load_steps=5 format=3 uid="uid://fpwxn2350fam"]
+
+[ext_resource type="PackedScene" uid="uid://bk1q8o6rs4doa" path="res://4. SelectionSystem/entity.tscn" id="1_prh3m"]
+[ext_resource type="PackedScene" uid="uid://dth75t0oq6j10" path="res://4. SelectionSystem/selection_manager.tscn" id="2_ae6f1"]
+[ext_resource type="PackedScene" uid="uid://gctl0rjtf4op" path="res://Global/Scene/camera_2d.tscn" id="3_5rjeb"]
+
+[sub_resource type="GDScript" id="GDScript_prh3m"]
+script/source = "extends Node2D
+
+func _ready() -> void:
+	# Create a Timer that ticks every 1 second
+	var timer := Timer.new()
+	timer.wait_time = 1.0
+	timer.autostart = true
+	timer.one_shot = false
+	add_child(timer)
+	#timer.timeout.connect(_print_selected)  # connect signal
+
+#func _print_selected() -> void:
+	#var selected_nodes = get_tree().get_nodes_in_group(\"selected\")
+	#if selected_nodes.is_empty():
+		#print(\"No nodes selected\")
+	#else:
+		#print(\"Currently selected:\")
+		#for node in selected_nodes:
+			#print(\" - \", node.name)
+"
+
+[node name="MainSelection" type="Node2D"]
+script = SubResource("GDScript_prh3m")
+
+[node name="SelectionManager" parent="." instance=ExtResource("2_ae6f1")]
+
+[node name="Entity" parent="." instance=ExtResource("1_prh3m")]
+position = Vector2(619, 422)
+
+[node name="Entity7" parent="." instance=ExtResource("1_prh3m")]
+position = Vector2(505, 115)
+
+[node name="Entity8" parent="." instance=ExtResource("1_prh3m")]
+position = Vector2(91, 119)
+
+[node name="Entity9" parent="." instance=ExtResource("1_prh3m")]
+position = Vector2(48, 444)
+
+[node name="Entity10" parent="." instance=ExtResource("1_prh3m")]
+position = Vector2(364, 442)
+
+[node name="Entity11" parent="." instance=ExtResource("1_prh3m")]
+position = Vector2(602, 210)
+
+[node name="Entity2" parent="." instance=ExtResource("1_prh3m")]
+position = Vector2(706, 278)
+
+[node name="Entity3" parent="." instance=ExtResource("1_prh3m")]
+position = Vector2(131, 355)
+
+[node name="Entity4" parent="." instance=ExtResource("1_prh3m")]
+position = Vector2(229, 93)
+
+[node name="Entity5" parent="." instance=ExtResource("1_prh3m")]
+position = Vector2(125, 204)
+
+[node name="Entity6" parent="." instance=ExtResource("1_prh3m")]
+position = Vector2(307, 282)
+
+[node name="Camera2D" parent="." instance=ExtResource("3_5rjeb")]

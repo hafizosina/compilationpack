@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://d028e1ise5e1q"]
+
+[ext_resource type="Script" uid="uid://d4fkf5prrb3u8" path="res://4. SelectionSystem/select_able_component.gd" id="1_v57ol"]
+
+[node name="SelectAbleComponent" type="Node2D" groups=["select_able"]]
+script = ExtResource("1_v57ol")
