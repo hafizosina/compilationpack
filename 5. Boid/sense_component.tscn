@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3 uid="uid://qgaawflwov48"]
+
+[ext_resource type="Script" uid="uid://dlgrwfcxge235" path="res://5. Boid/sense_component.gd" id="1_nyuws"]
+
+[node name="SenseComponent" type="Node2D"]
+script = ExtResource("1_nyuws")
+
+[node name="Area2D" type="Area2D" parent="."]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Area2D"]
+unique_name_in_owner = true

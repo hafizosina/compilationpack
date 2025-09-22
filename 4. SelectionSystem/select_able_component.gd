@@ -1,8 +1,7 @@
 # select_able_component.gd
-extends Node2D
+extends EntityComponent
 class_name SelectAbleComponent
 
-var entity: Entity
 var selected:bool= false
 var padding : int = 5
 
@@ -35,11 +34,6 @@ func is_inside_box(rect : Rect2) -> bool:
 	var closest_point = Vector2(closest_x, closest_y)
 	# Check distance
 	return center.distance_to(closest_point) <= radius
-
-func _ready() -> void:
-	var parent_temp = get_parent()
-	if parent_temp is Entity:
-		entity = parent_temp
 		
 func _draw() -> void:
 	if selected:

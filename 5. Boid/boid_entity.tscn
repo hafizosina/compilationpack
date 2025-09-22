@@ -1,0 +1,14 @@
+[gd_scene load_steps=4 format=3 uid="uid://ctjvea1un3xd0"]
+
+[ext_resource type="Script" uid="uid://b0i324j75wef2" path="res://Global/Scene/master_entity.gd" id="1_dkgfi"]
+[ext_resource type="Texture2D" uid="uid://bae16lxpt5p5x" path="res://Global/Asset/character.png" id="2_v5pta"]
+[ext_resource type="PackedScene" uid="uid://qgaawflwov48" path="res://5. Boid/sense_component.tscn" id="3_yovlb"]
+
+[node name="BoidEntity" type="Node2D"]
+script = ExtResource("1_dkgfi")
+
+[node name="Character" type="Sprite2D" parent="."]
+scale = Vector2(0.25, 0.25)
+texture = ExtResource("2_v5pta")
+
+[node name="SenseComponent" parent="." instance=ExtResource("3_yovlb")]

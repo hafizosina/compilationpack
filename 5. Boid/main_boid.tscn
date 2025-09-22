@@ -1,7 +1,10 @@
-[gd_scene load_steps=2 format=3 uid="uid://bmxaerswxar1s"]
+[gd_scene load_steps=3 format=3 uid="uid://bmxaerswxar1s"]
 
 [ext_resource type="PackedScene" uid="uid://gctl0rjtf4op" path="res://Global/Scene/camera_2d.tscn" id="1_bn0nb"]
+[ext_resource type="PackedScene" uid="uid://ctjvea1un3xd0" path="res://5. Boid/boid_entity.tscn" id="2_mebh7"]
 
 [node name="MainBoid" type="Node2D"]
+
+[node name="BoidEntity" parent="." instance=ExtResource("2_mebh7")]
 
 [node name="Camera2D" parent="." instance=ExtResource("1_bn0nb")]

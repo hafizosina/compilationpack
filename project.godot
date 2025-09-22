@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="CompilationPack"
-run/main_scene="uid://fpwxn2350fam"
+run/main_scene="uid://bmxaerswxar1s"
 config/features=PackedStringArray("4.5", "Mobile")
 config/icon="res://icon.svg"
 
