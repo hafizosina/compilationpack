@@ -12,3 +12,11 @@ func _ready() -> void:
 		sense_shape.radius = entity.size * 10
 		sense_area.shape = sense_shape
 		
+
+
+func _on_collision_shape_2d_child_entered_tree(node: Node) -> void:
+	pass # Replace with function body.
+
+
+func _on_collision_shape_2d_child_exiting_tree(node: Node) -> void:
+	pass # Replace with function body.

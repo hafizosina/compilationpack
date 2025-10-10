@@ -9,3 +9,6 @@ script = ExtResource("1_nyuws")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Area2D"]
 unique_name_in_owner = true
+
+[connection signal="child_entered_tree" from="Area2D/CollisionShape2D" to="." method="_on_collision_shape_2d_child_entered_tree"]
+[connection signal="child_exiting_tree" from="Area2D/CollisionShape2D" to="." method="_on_collision_shape_2d_child_exiting_tree"]
