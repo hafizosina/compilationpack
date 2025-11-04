@@ -22,6 +22,7 @@ Core="*res://System/Core.gd"
 Global="*res://System/Global.gd"
 GlobalAstar2="*res://3. ControlPathFinding/global_astar2.gd"
 Utils="*res://System/Utils.gd"
+GraphDb="*res://6. GraphDb/GraphDb.gd"
 
 [debug]
 
