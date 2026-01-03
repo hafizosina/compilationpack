@@ -21,6 +21,35 @@ signal deadzone_leave
 #endregion Signals ===============================================
 
 
+#region Enums ====================================================
+enum JoystickMode {
+	## Joystick stays in a fixed position
+	FIXED,
+	## Joystick appears where the user touches
+	DYNAMIC,
+	## Joystick follows the finger when dragged beyond its radius
+	FOLLOW
+}
+
+enum _preset_enum {
+	## Nothing
+	NONE,
+	## Default preset texture
+	PRESET_DEFAULT,
+	## Texture 2
+	PRESET_2,
+	## Texture 3
+	PRESET_3,
+	## Texture 4
+	PRESET_4,
+	## Texture 5
+	PRESET_5,
+	## Texture 6
+	PRESET_6,
+}
+#endregion Enums =================================================
+
+
 #region Private Properties ======================================
 var _joystick: VirtualJoystickCircle
 var _stick: VirtualJoystickCircle
@@ -28,6 +57,7 @@ var _stick: VirtualJoystickCircle
 var _joystick_radius: float = 100.0
 var _joystick_border_width: float = 10.0
 var _joystick_start_position: Vector2 = Vector2(_joystick_radius + _joystick_border_width, _joystick_radius + _joystick_border_width)
+var _joystick_current_position: Vector2 = Vector2.ZERO
 
 var _stick_radius: float = 45.0
 var _stick_border_width: float = -1.0
@@ -47,6 +77,9 @@ var _in_deadzone: bool = false:
 			else:
 				deadzone_leave.emit()
 
+var _is_active_touch := false
+var _touch_index := -1
+
 var _real_size: Vector2 = size * scale
 var _warnings: PackedStringArray = []
 
@@ -63,24 +96,6 @@ var _STICK_TEXTURE_3 = preload("res://addons/virtual_joystick/resources/textures
 var _STICK_TEXTURE_4 = preload("res://addons/virtual_joystick/resources/textures/stick_texture_4.png")
 var _STICK_TEXTURE_5 = preload("res://addons/virtual_joystick/resources/textures/stick_texture_5.png")
 var _STICK_TEXTURE_6 = preload("res://addons/virtual_joystick/resources/textures/stick_texture_6.png")
-
-enum _preset_enum {
-	## Nothing
-	NONE,
-	## Default preset texture
-	PRESET_DEFAULT,
-	## Texture 2
-	PRESET_2,
-	## Texture 3
-	PRESET_3,
-	## Texture 4
-	PRESET_4,
-	## Texture 5
-	PRESET_5,
-	## Texture 6
-	PRESET_6,
-	
-}
 #endregion Private Properties ====================================
 
 
@@ -106,6 +121,16 @@ var angle_degrees_not_clockwise: float = 0.0
 @export_category("Virtual Joystick")
 ## Enables or disables the joystick input.
 @export var active: bool = true
+## Joystick behavior mode
+@export var joystick_mode: JoystickMode = JoystickMode.FIXED:
+	set(value):
+		joystick_mode = value
+		queue_redraw()
+## Show joystick base in dynamic/follow modes (false = only show when touched)
+@export var show_joystick_bg_when_idle: bool = false:
+	set(value):
+		show_joystick_bg_when_idle = value
+		queue_redraw()
 ## Deadzone threshold (0.0 = off, 1.0 = full range).
 @export_range(0.0, 0.9, 0.001, "suffix:length") var deadzone: float = 0.1
 ## Global scale factor of the joystick.
@@ -166,6 +191,7 @@ var angle_degrees_not_clockwise: float = 0.0
 		_joystick_border_width = value
 		_joystick_start_position = Vector2(_joystick_radius + _joystick_border_width, _joystick_radius + _joystick_border_width)
 		_joystick.position = _joystick_start_position
+		_joystick_current_position = _joystick_start_position
 		_stick_start_position = Vector2(_joystick_radius + _joystick_border_width, _joystick_radius + _joystick_border_width)
 		_stick.position = _stick_start_position
 		update_configuration_warnings()
@@ -211,6 +237,7 @@ var angle_degrees_not_clockwise: float = 0.0
 func _init() -> void:
 	_joystick = VirtualJoystickCircle.new(_joystick_start_position, _joystick_radius, _joystick_border_width, false, joystick_color, joystick_opacity)
 	_stick = VirtualJoystickCircle.new(_stick_start_position, _stick_radius, _stick_border_width, true, stick_color, stick_opacity)
+	_joystick_current_position = _joystick_start_position
 	queue_redraw()
 	
 
@@ -220,6 +247,7 @@ func _ready() -> void:
 
 
 func _draw() -> void:
+	# Always draw joystick background
 	if joystick_use_textures and joystick_texture:
 		var base_size = joystick_texture.get_size()
 		var base_scale = (_joystick_radius * 2) / base_size.x
@@ -228,7 +256,8 @@ func _draw() -> void:
 		draw_set_transform(Vector2.ZERO, 0, Vector2.ONE)
 	else:
 		_joystick.draw(self, false)
-			
+	
+	# Always draw stick
 	if stick_use_textures and stick_texture:
 		var stick_size = stick_texture.get_size()
 		var stick_scale = (_stick_radius * 2) / stick_size.x
@@ -245,25 +274,13 @@ func _draw() -> void:
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		if event.pressed:
-			distance = event.position.distance_to(_joystick.position)
-			_drag_started_inside = distance <= _joystick.radius + _joystick.width / 2
-			if _drag_started_inside:
-				_click_in = true
-				_update_stick(event.position)
-			else:
-				_click_in = false
+			_handle_touch_press(event.position)
 		else:
-			if _click_in:
-				_reset_values()
-				_update_emit_signals()
-			_click_in = false
-			_drag_started_inside = false
-			_stick.position = _stick_start_position
-			queue_redraw()
+			_handle_touch_release()
 
 	elif event is InputEventScreenDrag:
 		if _drag_started_inside:
-			_update_stick(event.position)
+			_handle_touch_drag(event.position)
 
 
 func _get_configuration_warnings() -> PackedStringArray:
@@ -280,11 +297,76 @@ func _get_configuration_warnings() -> PackedStringArray:
 
 
 #region Private Methods ============================================
+func _handle_touch_press(touch_position: Vector2) -> void:
+	match joystick_mode:
+		JoystickMode.FIXED:
+			distance = touch_position.distance_to(_joystick.position)
+			_drag_started_inside = distance <= _joystick.radius + _joystick.width / 2
+			if _drag_started_inside:
+				_click_in = true
+				_is_active_touch = true
+				_update_stick(touch_position)
+			else:
+				_click_in = false
+				
+		JoystickMode.DYNAMIC, JoystickMode.FOLLOW:
+			# Place joystick at touch position
+			_joystick.position = touch_position
+			_joystick_current_position = touch_position
+			_stick.position = touch_position
+			_drag_started_inside = true
+			_click_in = true
+			_is_active_touch = true
+			_update_stick(touch_position)
+
+
+func _handle_touch_release() -> void:
+	if _click_in:
+		_reset_values()
+		_update_emit_signals()
+	
+	_click_in = false
+	_drag_started_inside = false
+	_is_active_touch = false
+	
+	# Reset positions based on mode
+	match joystick_mode:
+		JoystickMode.FIXED:
+			_stick.position = _stick_start_position
+		JoystickMode.DYNAMIC, JoystickMode.FOLLOW:
+			_joystick.position = _joystick_start_position
+			_joystick_current_position = _joystick_start_position
+			_stick.position = _joystick_start_position
+	
+	queue_redraw()
+
+
+func _handle_touch_drag(touch_position: Vector2) -> void:
+	match joystick_mode:
+		JoystickMode.FIXED, JoystickMode.DYNAMIC:
+			_update_stick(touch_position)
+			
+		JoystickMode.FOLLOW:
+			# Calculate delta from joystick center
+			var delta_from_center = touch_position - _joystick_current_position
+			
+			# If beyond joystick radius, move the joystick to follow
+			if delta_from_center.length() > _joystick.radius:
+				var direction = delta_from_center.normalized()
+				_joystick_current_position = touch_position - (direction * _joystick.radius)
+				_joystick.position = _joystick_current_position
+			
+			_update_stick(touch_position)
+
+
 func _update_stick(_position: Vector2) -> void:
-	_delta = _position - _stick_start_position
+	var center = _joystick_current_position if joystick_mode != JoystickMode.FIXED else _joystick.position
+	_delta = _position - center
+	
 	if _delta.length() > _joystick.radius:
 		_delta = _delta.normalized() * _joystick.radius
-	_stick.position = _stick_start_position + _delta
+	
+	_stick.position = center + _delta
 	queue_redraw()
 
 	var processed = _apply_deadzone(_delta / _joystick.radius)
@@ -304,7 +386,9 @@ func _reset_values() -> void:
 	angle_degrees = 0.0
 	angle_degrees_clockwise = 0.0
 	angle_degrees_not_clockwise = 0.0
-	_stick.position = _stick_start_position
+	
+	var center = _joystick_current_position if joystick_mode != JoystickMode.FIXED else _joystick.position
+	_stick.position = center
 	
 	var length = (_delta / _joystick.radius).length()
 	var dz = clamp(deadzone, 0.0, 0.99)
