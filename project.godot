@@ -8,11 +8,15 @@
 
 config_version=5
 
+[animation]
+
+compatibility/default_parent_skeleton_in_mesh_instance_3d=true
+
 [application]
 
 config/name="CompilationPack"
-run/main_scene="uid://bt4ryaq58wd5g"
-config/features=PackedStringArray("4.5", "Mobile")
+run/main_scene="uid://cbd1yatel4wpq"
+config/features=PackedStringArray("4.6", "Mobile")
 config/icon="res://icon.svg"
 
 [autoload]
@@ -23,6 +27,7 @@ Global="*res://System/Global.gd"
 GlobalAstar2="*res://3. ControlPathFinding/global_astar2.gd"
 Utils="*res://System/Utils.gd"
 GraphDb="*res://6. GraphDb/GraphDb.gd"
+EventBus="*res://System/EventBus.gd"
 
 [debug]
 
@@ -81,6 +86,11 @@ QuitShortcut={
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":true,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":81,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
 ]
 }
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+pointing/emulate_mouse_from_touch=false
 
 [rendering]
 

@@ -310,14 +310,23 @@ func _handle_touch_press(touch_position: Vector2) -> void:
 				_click_in = false
 				
 		JoystickMode.DYNAMIC, JoystickMode.FOLLOW:
-			# Place joystick at touch position
-			_joystick.position = touch_position
-			_joystick_current_position = touch_position
-			_stick.position = touch_position
-			_drag_started_inside = true
-			_click_in = true
-			_is_active_touch = true
-			_update_stick(touch_position)
+			# Check if touch is within 85% of joystick area (centered on control)
+			var control_center = size / 2
+			var detection_radius = (_joystick.radius * 2) * 1.00 / 2  # 85% of diameter, then convert to radius
+			var distance_from_center = touch_position.distance_to(control_center)
+			
+			if distance_from_center <= detection_radius:
+				# Place joystick at touch position
+				_joystick.position = touch_position
+				_joystick_current_position = touch_position
+				_stick.position = touch_position
+				_drag_started_inside = true
+				_click_in = true
+				_is_active_touch = true
+				_update_stick(touch_position)
+			else:
+				_drag_started_inside = false
+				_click_in = false
 
 
 func _handle_touch_release() -> void:

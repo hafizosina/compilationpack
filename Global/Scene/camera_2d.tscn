@@ -7,6 +7,7 @@ script/source = "extends Camera2D
 @export var zoom_speed: float = 0.1
 @export var min_zoom: float = 0.5
 @export var max_zoom: float = 3.0
+@export var manual_control : bool = true
 @export var pan_speed: float = 1.0
 
 # Internal variables
@@ -46,21 +47,22 @@ func handle_panning(event):
 		
 		
 func handle_keyboard_panning(delta: float):
-	var direction := Vector2.ZERO
+	if manual_control :
+		var direction := Vector2.ZERO
 
-	if Input.is_action_pressed(\"ui_left\"):
-		direction.x -= 1
-	if Input.is_action_pressed(\"ui_right\"):
-		direction.x += 1
-	if Input.is_action_pressed(\"ui_up\"):
-		direction.y -= 1
-	if Input.is_action_pressed(\"ui_down\"):
-		direction.y += 1
+		if Input.is_action_pressed(\"ui_left\"):
+			direction.x -= 1
+		if Input.is_action_pressed(\"ui_right\"):
+			direction.x += 1
+		if Input.is_action_pressed(\"ui_up\"):
+			direction.y -= 1
+		if Input.is_action_pressed(\"ui_down\"):
+			direction.y += 1
 
-	if direction != Vector2.ZERO:
-		direction = direction.normalized()
-		# Move consistently regardless of zoom
-		global_position += direction * pan_speed * 200 * delta / zoom.x
+		if direction != Vector2.ZERO:
+			direction = direction.normalized()
+			# Move consistently regardless of zoom
+			global_position += direction * pan_speed * 200 * delta / zoom.x
 
 
 func start_panning(mouse_pos: Vector2):
@@ -71,9 +73,10 @@ func stop_panning():
 	is_panning = false
 
 func pan_camera(mouse_pos: Vector2):
-	var delta = (last_mouse_position - mouse_pos) / zoom.x
-	global_position += delta
-	last_mouse_position = mouse_pos
+	if manual_control:
+		var delta = (last_mouse_position - mouse_pos) / zoom.x
+		global_position += delta
+		last_mouse_position = mouse_pos
 
 func zoom_in():
 	var new_zoom = zoom.x + zoom_speed
