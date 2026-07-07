@@ -1,4 +1,4 @@
-[gd_resource type="TileSet" load_steps=3 format=3 uid="uid://b3svpv8eqyxqn"]
+[gd_resource type="TileSet" format=3 uid="uid://b3svpv8eqyxqn"]
 
 [ext_resource type="Texture2D" uid="uid://bpq3gx07uhbx3" path="res://Global/Asset/heatmap.png" id="1_67a86"]
 
