@@ -5,9 +5,9 @@ extends CanvasLayer
 # dragging them never moves the player) and are read via signals.
 @onready var basic_attack: VirtualJoystick = $MarginContainer/HBoxContainer/RightGroup/BasicAttack
 @onready var skills: Array[VirtualJoystick] = [
-	$MarginContainer/HBoxContainer/RightGroup/Skill1,
-	$MarginContainer/HBoxContainer/RightGroup/Skill2,
-	$MarginContainer/HBoxContainer/RightGroup/Skill3
+	$MarginContainer/HBoxContainer/RightGroup/SkillWheel/Skill1,
+	$MarginContainer/HBoxContainer/RightGroup/SkillWheel/Skill2,
+	$MarginContainer/HBoxContainer/RightGroup/SkillWheel/Skill3
 ]
 @onready var sprint: TextureButton = $MarginContainer/HBoxContainer/RightGroup/Sprint
 

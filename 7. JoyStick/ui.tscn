@@ -15,6 +15,7 @@
 [ext_resource type="Texture2D" uid="uid://c8o8y0ik51ypv" path="res://Global/Asset/Bar/ManaFrame.png" id="10_obtqw"]
 [ext_resource type="Texture2D" uid="uid://36b2kt4qg6vw" path="res://Global/Asset/Bar/ManaBar.png" id="11_6kv3l"]
 [ext_resource type="Script" uid="uid://gyd85gs7dflu" path="res://7. JoyStick/status_bar.gd" id="12_stat"]
+[ext_resource type="Script" uid="uid://bb8gfgbb0ipya" path="res://Global/Scene/r_box_container.gd" id="13_rbox"]
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_7ytd7"]
 texture = ExtResource("1_vgda6")
@@ -93,19 +94,27 @@ action_right = &"aim_right"
 action_up = &"aim_up"
 action_down = &"aim_down"
 
-[node name="Skill1" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroup" unique_id=189177511]
+[node name="SkillWheel" type="RBoxContainer" parent="MarginContainer/HBoxContainer/RightGroup"]
 layout_mode = 1
 anchors_preset = 3
 anchor_left = 1.0
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = -405.0
-offset_top = -208.0
-offset_right = -285.0
-offset_bottom = -88.0
+offset_left = -390.0
+offset_top = -390.0
+offset_right = 90.0
+offset_bottom = 90.0
 grow_horizontal = 0
 grow_vertical = 0
+mouse_filter = 2
+radius = 180.0
+start_angle = 180.0
+arc = 110.0
+item_size = Vector2(120, 120)
+
+[node name="Skill1" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroup/SkillWheel" unique_id=189177511]
+layout_mode = 2
 theme_override_styles/normal_joystick = SubResource("StyleBoxTexture_7ytd7")
 theme_override_styles/normal_tip = SubResource("StyleBoxTexture_subtm")
 theme_override_styles/pressed_joystick = SubResource("StyleBoxTexture_7ytd7")
@@ -115,19 +124,8 @@ action_right = &"aim_right"
 action_up = &"aim_up"
 action_down = &"aim_down"
 
-[node name="Skill2" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroup" unique_id=705925593]
-layout_mode = 1
-anchors_preset = 3
-anchor_left = 1.0
-anchor_top = 1.0
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = -306.0
-offset_top = -335.0
-offset_right = -186.0
-offset_bottom = -215.0
-grow_horizontal = 0
-grow_vertical = 0
+[node name="Skill2" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroup/SkillWheel" unique_id=705925593]
+layout_mode = 2
 theme_override_styles/normal_joystick = SubResource("StyleBoxTexture_7ytd7")
 theme_override_styles/normal_tip = SubResource("StyleBoxTexture_subtm")
 theme_override_styles/pressed_joystick = SubResource("StyleBoxTexture_7ytd7")
@@ -137,19 +135,8 @@ action_right = &"aim_right"
 action_up = &"aim_up"
 action_down = &"aim_down"
 
-[node name="Skill3" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroup" unique_id=1608809900]
-layout_mode = 1
-anchors_preset = 3
-anchor_left = 1.0
-anchor_top = 1.0
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = -141.0
-offset_top = -377.0
-offset_right = -21.0
-offset_bottom = -257.0
-grow_horizontal = 0
-grow_vertical = 0
+[node name="Skill3" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroup/SkillWheel" unique_id=1608809900]
+layout_mode = 2
 theme_override_styles/normal_joystick = SubResource("StyleBoxTexture_7ytd7")
 theme_override_styles/normal_tip = SubResource("StyleBoxTexture_subtm")
 theme_override_styles/pressed_joystick = SubResource("StyleBoxTexture_7ytd7")

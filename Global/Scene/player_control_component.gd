@@ -47,7 +47,7 @@ func _face_dir(dir: Vector2, delta: float) -> void:
 ## can strafe while aiming.
 func _move(dir: Vector2, delta: float) -> void:
 	var sprinting := Input.is_action_pressed("sprint")
-	# Sprinting ignores stick distance (power) and moves at full speed; otherwise
+	# Sprinting ignores sti	ck distance (power) and moves at full speed; otherwise
 	# speed scales with how far the stick is pushed, shaped by speed_curve.
 	var amount := 1.0 if sprinting else pow(dir.length(), speed_curve)
 	var speed := move_speed * (sprint_multiplier if sprinting else 1.0)
