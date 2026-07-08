@@ -1,0 +1,236 @@
+[gd_scene format=3 uid="uid://etip0xyfqx8s"]
+
+[ext_resource type="Texture2D" uid="uid://dlfyft0lv6p2h" path="res://Global/Asset/CircleButtonFull.png" id="1_vgda6"]
+[ext_resource type="Texture2D" uid="uid://y28jifgxaidc" path="res://Global/Asset/trapdoor_round.png" id="2_subtm"]
+[ext_resource type="Script" uid="uid://441l63hwq8l1" path="res://7. JoyStick/ui.gd" id="3_ui"]
+[ext_resource type="Texture2D" uid="uid://bm6wpxuyyo6hb" path="res://Global/Asset/Button/ButtonBostNormal2.png" id="4_d0xul"]
+[ext_resource type="Texture2D" uid="uid://b3whrh3vcjpkd" path="res://Global/Asset/Bar/HeatBar1.png" id="4_qj4ov"]
+[ext_resource type="Texture2D" uid="uid://c7ks531mkwfva" path="res://Global/Asset/Bar/HeatFrame1.png" id="4_ya5gl"]
+[ext_resource type="Texture2D" uid="uid://jnhck5myr2i8" path="res://Global/Asset/Button/ButtonBostPress2.png" id="5_wdqe1"]
+[ext_resource type="Texture2D" uid="uid://k0t08ifm7wjg" path="res://Global/Asset/Bar/HealthFrame2.png" id="6_8jxk0"]
+[ext_resource type="Texture2D" uid="uid://50cpibn5iu7b" path="res://Global/Asset/Button/Backpack.png" id="6_wdqe1"]
+[ext_resource type="Texture2D" uid="uid://bcn25w7spfmqn" path="res://Global/Asset/Bar/HeatBar2.png" id="7_yp42h"]
+[ext_resource type="Texture2D" uid="uid://c1cvvkeptbr1o" path="res://Global/Asset/Bar/StaminaFrame.png" id="8_q2sar"]
+[ext_resource type="Texture2D" uid="uid://ci8qt1ljs0pfw" path="res://Global/Asset/Bar/StaminaBar.png" id="9_fvwyp"]
+[ext_resource type="Texture2D" uid="uid://c8o8y0ik51ypv" path="res://Global/Asset/Bar/ManaFrame.png" id="10_obtqw"]
+[ext_resource type="Texture2D" uid="uid://36b2kt4qg6vw" path="res://Global/Asset/Bar/ManaBar.png" id="11_6kv3l"]
+[ext_resource type="Script" uid="uid://gyd85gs7dflu" path="res://7. JoyStick/status_bar.gd" id="12_stat"]
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_7ytd7"]
+texture = ExtResource("1_vgda6")
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_subtm"]
+texture = ExtResource("2_subtm")
+
+[node name="UI" type="CanvasLayer" unique_id=856290764]
+script = ExtResource("3_ui")
+
+[node name="MarginContainer" type="MarginContainer" parent="." unique_id=125601888]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -3.0
+offset_bottom = -3.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/margin_left = 50
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 50
+theme_override_constants/margin_bottom = 10
+
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer" unique_id=1238301244]
+layout_mode = 2
+
+[node name="LeftGroup" type="Control" parent="MarginContainer/HBoxContainer" unique_id=1853108437]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="MovementStick" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/LeftGroup" unique_id=824251211]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_top = -340.0
+offset_right = 480.0
+grow_vertical = 0
+theme_override_styles/normal_joystick = SubResource("StyleBoxTexture_7ytd7")
+theme_override_styles/normal_tip = SubResource("StyleBoxTexture_subtm")
+theme_override_styles/pressed_joystick = SubResource("StyleBoxTexture_7ytd7")
+theme_override_styles/pressed_tip = SubResource("StyleBoxTexture_subtm")
+joystick_mode = 1
+joystick_size = 200.0
+tip_size = 100.0
+
+[node name="RightGroup" type="Control" parent="MarginContainer/HBoxContainer" unique_id=310421975]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="BasicAttack" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroup" unique_id=714671740]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -350.0
+offset_top = -300.0
+offset_right = 50.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_styles/normal_joystick = SubResource("StyleBoxTexture_7ytd7")
+theme_override_styles/normal_tip = SubResource("StyleBoxTexture_subtm")
+theme_override_styles/pressed_joystick = SubResource("StyleBoxTexture_7ytd7")
+theme_override_styles/pressed_tip = SubResource("StyleBoxTexture_subtm")
+joystick_size = 160.0
+tip_size = 80.0
+action_left = &"aim_left"
+action_right = &"aim_right"
+action_up = &"aim_up"
+action_down = &"aim_down"
+
+[node name="Skill1" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroup" unique_id=189177511]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -405.0
+offset_top = -208.0
+offset_right = -285.0
+offset_bottom = -88.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_styles/normal_joystick = SubResource("StyleBoxTexture_7ytd7")
+theme_override_styles/normal_tip = SubResource("StyleBoxTexture_subtm")
+theme_override_styles/pressed_joystick = SubResource("StyleBoxTexture_7ytd7")
+theme_override_styles/pressed_tip = SubResource("StyleBoxTexture_subtm")
+action_left = &"aim_left"
+action_right = &"aim_right"
+action_up = &"aim_up"
+action_down = &"aim_down"
+
+[node name="Skill2" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroup" unique_id=705925593]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -306.0
+offset_top = -335.0
+offset_right = -186.0
+offset_bottom = -215.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_styles/normal_joystick = SubResource("StyleBoxTexture_7ytd7")
+theme_override_styles/normal_tip = SubResource("StyleBoxTexture_subtm")
+theme_override_styles/pressed_joystick = SubResource("StyleBoxTexture_7ytd7")
+theme_override_styles/pressed_tip = SubResource("StyleBoxTexture_subtm")
+action_left = &"aim_left"
+action_right = &"aim_right"
+action_up = &"aim_up"
+action_down = &"aim_down"
+
+[node name="Skill3" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroup" unique_id=1608809900]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -141.0
+offset_top = -377.0
+offset_right = -21.0
+offset_bottom = -257.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_styles/normal_joystick = SubResource("StyleBoxTexture_7ytd7")
+theme_override_styles/normal_tip = SubResource("StyleBoxTexture_subtm")
+theme_override_styles/pressed_joystick = SubResource("StyleBoxTexture_7ytd7")
+theme_override_styles/pressed_tip = SubResource("StyleBoxTexture_subtm")
+action_left = &"aim_left"
+action_right = &"aim_right"
+action_up = &"aim_up"
+action_down = &"aim_down"
+
+[node name="Sprint" type="TextureButton" parent="MarginContainer/HBoxContainer/RightGroup" unique_id=1689508772]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -53.0
+offset_top = -64.0
+offset_right = 75.0
+grow_horizontal = 2
+grow_vertical = 0
+texture_normal = ExtResource("4_d0xul")
+texture_pressed = ExtResource("5_wdqe1")
+
+[node name="Inventory" type="TextureButton" parent="MarginContainer/HBoxContainer/RightGroup" unique_id=534386729]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -80.0
+offset_top = -80.0
+grow_horizontal = 0
+grow_vertical = 0
+texture_normal = ExtResource("6_wdqe1")
+ignore_texture_size = true
+stretch_mode = 5
+
+[node name="StatusBar" type="Control" parent="MarginContainer" unique_id=1104696372]
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("12_stat")
+
+[node name="EndhalfHealthBar" type="TextureProgressBar" parent="MarginContainer/StatusBar" unique_id=282176194]
+layout_mode = 1
+offset_left = -4.0
+offset_right = 396.0
+offset_bottom = 128.0
+min_value = 40.0
+value = 100.0
+texture_over = ExtResource("6_8jxk0")
+texture_progress = ExtResource("7_yp42h")
+texture_progress_offset = Vector2(62, 0)
+
+[node name="FirstHalfHealthBar" type="TextureProgressBar" parent="MarginContainer/StatusBar" unique_id=1103884786]
+layout_mode = 0
+offset_right = 128.0
+offset_bottom = 128.0
+max_value = 40.0
+value = 40.0
+fill_mode = 4
+radial_initial_angle = 130.0
+radial_fill_degrees = 230.0
+texture_over = ExtResource("4_ya5gl")
+texture_progress = ExtResource("4_qj4ov")
+
+[node name="StaminaBar" type="TextureProgressBar" parent="MarginContainer/StatusBar" unique_id=1204622378]
+layout_mode = 0
+offset_left = 83.0
+offset_right = 356.0
+offset_bottom = 68.0
+value = 99.0
+texture_over = ExtResource("8_q2sar")
+texture_progress = ExtResource("9_fvwyp")
+
+[node name="ManaBar" type="TextureProgressBar" parent="MarginContainer/StatusBar" unique_id=70096772]
+layout_mode = 0
+offset_left = 93.0
+offset_right = 322.0
+offset_bottom = 100.0
+value = 100.0
+texture_over = ExtResource("10_obtqw")
+texture_progress = ExtResource("11_6kv3l")

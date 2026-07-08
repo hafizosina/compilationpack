@@ -16,6 +16,11 @@ func _ready() -> void:
 	_health_bar.min_value = health_split
 	_health_bar.max_value = 100.0
 
+	# Listen for stat changes broadcast on the EventBus.
+	EventBus.health_change.connect(set_health)
+	EventBus.stamina_change.connect(set_stamina)
+	EventBus.mana_change.connect(set_mana)
+
 func set_health(value: float) -> void:
 	_health_arc.value = clampf(value, 0.0, health_split)
 	_health_bar.value = clampf(value, health_split, 100.0)

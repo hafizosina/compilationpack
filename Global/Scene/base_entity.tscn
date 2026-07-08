@@ -1,0 +1,24 @@
+[gd_scene format=3 uid="uid://ccuv0hld2vrqo"]
+
+[ext_resource type="Script" uid="uid://b0i324j75wef2" path="res://Global/Scene/base_entity.gd" id="1_bexpu"]
+[ext_resource type="Texture2D" uid="uid://flw42i8l4ym5" path="res://Global/Asset/bald64.png" id="1_hok3e"]
+[ext_resource type="Script" uid="uid://crwyflxy3xd46" path="res://Global/Scene/player_control_component.gd" id="3_gkb2w"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_cjyxv"]
+radius = 36.0
+
+[node name="Entity" type="Node2D" unique_id=1000875351]
+script = ExtResource("1_bexpu")
+
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=1563382926]
+scale = Vector2(2, 2)
+texture = ExtResource("1_hok3e")
+
+[node name="CharacterBody2D" type="CharacterBody2D" parent="." unique_id=1256930636]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="CharacterBody2D" unique_id=893714278]
+shape = SubResource("CircleShape2D_cjyxv")
+
+[node name="ControlComponent" type="Node" parent="." unique_id=2019800998 node_paths=PackedStringArray("entity")]
+script = ExtResource("3_gkb2w")
+entity = NodePath("..")
