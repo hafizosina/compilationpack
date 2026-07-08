@@ -1,15 +1,9 @@
 extends Node
 class_name PlayerControlComponent
 
-## How fast the entity turns toward its facing direction (radians per second).
-@export var turn_speed: float = 12.0
-## How fast the entity moves, in pixels per second.
-@export var move_speed: float = 400.0
 ## Shapes analog response to stick distance: 1.0 = linear, >1 = finer control
 ## near center with a faster ramp toward the edge.
 @export var speed_curve: float = 2.0
-## Speed multiplier applied while the sprint button is held.
-@export var sprint_multiplier: float = 1.8
 ## The entity this component drives (its facing / rotation / movement).
 @export var entity : Entity
 
@@ -39,7 +33,7 @@ func _process(delta: float) -> void:
 func _face_dir(dir: Vector2, delta: float) -> void:
 	if dir != Vector2.ZERO:
 		_target_angle = dir.angle()
-	entity.rotation = rotate_toward(entity.rotation, _target_angle, turn_speed * delta)
+	entity.rotation = rotate_toward(entity.rotation, _target_angle, entity.turn_speed * delta)
 
 
 ## Move the entity in world space. dir magnitude (0..1) from the joystick gives
@@ -50,5 +44,5 @@ func _move(dir: Vector2, delta: float) -> void:
 	# Sprinting ignores sti	ck distance (power) and moves at full speed; otherwise
 	# speed scales with how far the stick is pushed, shaped by speed_curve.
 	var amount := 1.0 if sprinting else pow(dir.length(), speed_curve)
-	var speed := move_speed * (sprint_multiplier if sprinting else 1.0)
+	var speed := entity.move_speed * (entity.sprint_multiplier if sprinting else 1.0)
 	entity.position += dir.normalized() * amount * speed * delta

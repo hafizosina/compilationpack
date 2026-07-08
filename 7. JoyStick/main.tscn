@@ -13,6 +13,7 @@
 
 [node name="Entity" parent="." unique_id=1000875351 instance=ExtResource("2_subtm")]
 position = Vector2(763, 358)
+turn_speed = 5.0
 
 [node name="Camera2D" type="Camera2D" parent="." unique_id=886630416 node_paths=PackedStringArray("player")]
 zoom = Vector2(0.7, 0.7)

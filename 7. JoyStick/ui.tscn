@@ -3,12 +3,9 @@
 [ext_resource type="Texture2D" uid="uid://dlfyft0lv6p2h" path="res://Global/Asset/CircleButtonFull.png" id="1_vgda6"]
 [ext_resource type="Texture2D" uid="uid://y28jifgxaidc" path="res://Global/Asset/trapdoor_round.png" id="2_subtm"]
 [ext_resource type="Script" uid="uid://441l63hwq8l1" path="res://7. JoyStick/ui.gd" id="3_ui"]
-[ext_resource type="Texture2D" uid="uid://bm6wpxuyyo6hb" path="res://Global/Asset/Button/ButtonBostNormal2.png" id="4_d0xul"]
 [ext_resource type="Texture2D" uid="uid://b3whrh3vcjpkd" path="res://Global/Asset/Bar/HeatBar1.png" id="4_qj4ov"]
 [ext_resource type="Texture2D" uid="uid://c7ks531mkwfva" path="res://Global/Asset/Bar/HeatFrame1.png" id="4_ya5gl"]
-[ext_resource type="Texture2D" uid="uid://jnhck5myr2i8" path="res://Global/Asset/Button/ButtonBostPress2.png" id="5_wdqe1"]
 [ext_resource type="Texture2D" uid="uid://k0t08ifm7wjg" path="res://Global/Asset/Bar/HealthFrame2.png" id="6_8jxk0"]
-[ext_resource type="Texture2D" uid="uid://50cpibn5iu7b" path="res://Global/Asset/Button/Backpack.png" id="6_wdqe1"]
 [ext_resource type="Texture2D" uid="uid://bcn25w7spfmqn" path="res://Global/Asset/Bar/HeatBar2.png" id="7_yp42h"]
 [ext_resource type="Texture2D" uid="uid://c1cvvkeptbr1o" path="res://Global/Asset/Bar/StaminaFrame.png" id="8_q2sar"]
 [ext_resource type="Texture2D" uid="uid://ci8qt1ljs0pfw" path="res://Global/Asset/Bar/StaminaBar.png" id="9_fvwyp"]
@@ -36,11 +33,11 @@ grow_horizontal = 2
 grow_vertical = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
-mouse_filter = 2
 theme_override_constants/margin_left = 50
 theme_override_constants/margin_top = 10
 theme_override_constants/margin_right = 50
 theme_override_constants/margin_bottom = 10
+metadata/_edit_lock_ = true
 
 [node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer" unique_id=1238301244]
 layout_mode = 2
@@ -94,26 +91,26 @@ action_right = &"aim_right"
 action_up = &"aim_up"
 action_down = &"aim_down"
 
-[node name="SkillWheel" type="RBoxContainer" parent="MarginContainer/HBoxContainer/RightGroup"]
+[node name="RBoxContainer" type="Container" parent="MarginContainer/HBoxContainer/RightGroup/BasicAttack" unique_id=1247497934]
 layout_mode = 1
-anchors_preset = 3
-anchor_left = 1.0
-anchor_top = 1.0
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = -390.0
-offset_top = -390.0
-offset_right = 90.0
-offset_bottom = 90.0
-grow_horizontal = 0
-grow_vertical = 0
-mouse_filter = 2
-radius = 180.0
-start_angle = 180.0
-arc = 110.0
-item_size = Vector2(120, 120)
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -210.0
+offset_top = -210.0
+offset_right = 210.0
+offset_bottom = 210.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("13_rbox")
+radius = 160.0
+arc = 100.0
+metadata/_custom_type_script = "uid://bb8gfgbb0ipya"
 
-[node name="Skill1" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroup/SkillWheel" unique_id=189177511]
+[node name="Skill1" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroup/BasicAttack/RBoxContainer" unique_id=189177511]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_styles/normal_joystick = SubResource("StyleBoxTexture_7ytd7")
 theme_override_styles/normal_tip = SubResource("StyleBoxTexture_subtm")
@@ -124,7 +121,8 @@ action_right = &"aim_right"
 action_up = &"aim_up"
 action_down = &"aim_down"
 
-[node name="Skill2" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroup/SkillWheel" unique_id=705925593]
+[node name="Skill2" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroup/BasicAttack/RBoxContainer" unique_id=705925593]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_styles/normal_joystick = SubResource("StyleBoxTexture_7ytd7")
 theme_override_styles/normal_tip = SubResource("StyleBoxTexture_subtm")
@@ -135,7 +133,8 @@ action_right = &"aim_right"
 action_up = &"aim_up"
 action_down = &"aim_down"
 
-[node name="Skill3" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroup/SkillWheel" unique_id=1608809900]
+[node name="Skill3" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroup/BasicAttack/RBoxContainer" unique_id=1608809900]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_styles/normal_joystick = SubResource("StyleBoxTexture_7ytd7")
 theme_override_styles/normal_tip = SubResource("StyleBoxTexture_subtm")
@@ -158,8 +157,7 @@ offset_top = -64.0
 offset_right = 75.0
 grow_horizontal = 2
 grow_vertical = 0
-texture_normal = ExtResource("4_d0xul")
-texture_pressed = ExtResource("5_wdqe1")
+texture_normal = ExtResource("1_vgda6")
 
 [node name="Inventory" type="TextureButton" parent="MarginContainer/HBoxContainer/RightGroup" unique_id=534386729]
 layout_mode = 1
@@ -172,12 +170,14 @@ offset_left = -80.0
 offset_top = -80.0
 grow_horizontal = 0
 grow_vertical = 0
-texture_normal = ExtResource("6_wdqe1")
+texture_normal = ExtResource("1_vgda6")
 ignore_texture_size = true
 stretch_mode = 5
 
 [node name="StatusBar" type="Control" parent="MarginContainer" unique_id=1104696372]
 layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 0
 mouse_filter = 2
 script = ExtResource("12_stat")
 
