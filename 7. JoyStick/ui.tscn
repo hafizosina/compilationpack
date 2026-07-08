@@ -47,6 +47,55 @@ layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
 
+[node name="StatusBar" type="Control" parent="MarginContainer/HBoxContainer/LeftGroup" unique_id=1104696372]
+layout_mode = 1
+anchors_preset = 0
+size_flags_horizontal = 0
+size_flags_vertical = 0
+mouse_filter = 2
+script = ExtResource("12_stat")
+
+[node name="EndhalfHealthBar" type="TextureProgressBar" parent="MarginContainer/HBoxContainer/LeftGroup/StatusBar" unique_id=282176194]
+layout_mode = 1
+offset_left = -4.0
+offset_right = 396.0
+offset_bottom = 128.0
+min_value = 40.0
+value = 100.0
+texture_over = ExtResource("6_8jxk0")
+texture_progress = ExtResource("7_yp42h")
+texture_progress_offset = Vector2(62, 0)
+
+[node name="FirstHalfHealthBar" type="TextureProgressBar" parent="MarginContainer/HBoxContainer/LeftGroup/StatusBar" unique_id=1103884786]
+layout_mode = 0
+offset_right = 128.0
+offset_bottom = 128.0
+max_value = 40.0
+value = 40.0
+fill_mode = 4
+radial_initial_angle = 130.0
+radial_fill_degrees = 230.0
+texture_over = ExtResource("4_ya5gl")
+texture_progress = ExtResource("4_qj4ov")
+
+[node name="StaminaBar" type="TextureProgressBar" parent="MarginContainer/HBoxContainer/LeftGroup/StatusBar" unique_id=1204622378]
+layout_mode = 0
+offset_left = 83.0
+offset_right = 356.0
+offset_bottom = 68.0
+value = 99.0
+texture_over = ExtResource("8_q2sar")
+texture_progress = ExtResource("9_fvwyp")
+
+[node name="ManaBar" type="TextureProgressBar" parent="MarginContainer/HBoxContainer/LeftGroup/StatusBar" unique_id=70096772]
+layout_mode = 0
+offset_left = 93.0
+offset_right = 322.0
+offset_bottom = 100.0
+value = 100.0
+texture_over = ExtResource("10_obtqw")
+texture_progress = ExtResource("11_6kv3l")
+
 [node name="MovementStick" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/LeftGroup" unique_id=824251211]
 layout_mode = 1
 anchors_preset = 2
@@ -173,51 +222,3 @@ grow_vertical = 0
 texture_normal = ExtResource("1_vgda6")
 ignore_texture_size = true
 stretch_mode = 5
-
-[node name="StatusBar" type="Control" parent="MarginContainer" unique_id=1104696372]
-layout_mode = 2
-size_flags_horizontal = 0
-size_flags_vertical = 0
-mouse_filter = 2
-script = ExtResource("12_stat")
-
-[node name="EndhalfHealthBar" type="TextureProgressBar" parent="MarginContainer/StatusBar" unique_id=282176194]
-layout_mode = 1
-offset_left = -4.0
-offset_right = 396.0
-offset_bottom = 128.0
-min_value = 40.0
-value = 100.0
-texture_over = ExtResource("6_8jxk0")
-texture_progress = ExtResource("7_yp42h")
-texture_progress_offset = Vector2(62, 0)
-
-[node name="FirstHalfHealthBar" type="TextureProgressBar" parent="MarginContainer/StatusBar" unique_id=1103884786]
-layout_mode = 0
-offset_right = 128.0
-offset_bottom = 128.0
-max_value = 40.0
-value = 40.0
-fill_mode = 4
-radial_initial_angle = 130.0
-radial_fill_degrees = 230.0
-texture_over = ExtResource("4_ya5gl")
-texture_progress = ExtResource("4_qj4ov")
-
-[node name="StaminaBar" type="TextureProgressBar" parent="MarginContainer/StatusBar" unique_id=1204622378]
-layout_mode = 0
-offset_left = 83.0
-offset_right = 356.0
-offset_bottom = 68.0
-value = 99.0
-texture_over = ExtResource("8_q2sar")
-texture_progress = ExtResource("9_fvwyp")
-
-[node name="ManaBar" type="TextureProgressBar" parent="MarginContainer/StatusBar" unique_id=70096772]
-layout_mode = 0
-offset_left = 93.0
-offset_right = 322.0
-offset_bottom = 100.0
-value = 100.0
-texture_over = ExtResource("10_obtqw")
-texture_progress = ExtResource("11_6kv3l")
