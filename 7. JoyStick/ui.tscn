@@ -7,6 +7,7 @@
 [ext_resource type="Texture2D" uid="uid://3i5blhttg0sl" path="res://Global/Asset/Icon/switch_refresh.png" id="15_switch"]
 [ext_resource type="Texture2D" uid="uid://diqisfqytp5vd" path="res://Global/Asset/Icon/inventory_backpack.png" id="16_inv"]
 [ext_resource type="Texture2D" uid="uid://cd4peko5fm460" path="res://Global/Asset/Icon/sprint_boots.png" id="17_sprint"]
+[ext_resource type="Script" uid="uid://bw2hjtgagk6si" path="res://7. JoyStick/hold_ring.gd" id="18_holdring"]
 
 [node name="UI" type="CanvasLayer" unique_id=856290764]
 script = ExtResource("3_ui")
@@ -254,6 +255,17 @@ size_flags_vertical = 4
 theme_type_variation = &"RoundButton"
 icon = ExtResource("15_switch")
 expand_icon = true
+
+[node name="HoldRing" type="Control" parent="MarginContainer/HBoxContainer/RightGroupAttack/Addons/Switch" unique_id=190000001]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("18_holdring")
 
 [node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/HBoxContainer/RightGroupAttack" unique_id=1233446417]
 layout_mode = 1

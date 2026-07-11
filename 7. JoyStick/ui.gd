@@ -12,16 +12,22 @@ extends CanvasLayer
 @onready var interact: VirtualJoystick = %Interact
 @onready var sprint: Button = %Sprint
 @onready var switch: Button = %Switch
+@onready var hold_ring: HoldRing = %HoldRing
 
 # Which of the two right-hand modes is active. The Switch button flips it:
 # combat mode shows the BasicAttack joystick + skill wheel, interact mode shows
 # the Interact joystick + pickup/place/craft wheel.
 var combat_mode := true
 
-# Seconds the Switch button must be held before the mode flips. Each press bumps
-# _hold_token so an early release (or a new press) cancels the pending switch.
-const SWITCH_HOLD_TIME := 1.0
-var _hold_token := 0
+# Seconds the Switch button must be held before the mode flips. The hold ring
+# fills over this time via _hold_tween; releasing early kills it so no switch.
+const SWITCH_HOLD_TIME := 0.6
+var _hold_tween: Tween
+
+# Duration of the pop/fade when swapping mode groups; _mode_tween drives it and
+# is killed on re-entry so rapid switches don't overlap.
+const MODE_ANIM_TIME := 0.18
+var _mode_tween: Tween
 
 func _ready() -> void:
 	_bind(basic_attack, "Basic Attack")
@@ -39,27 +45,79 @@ func _ready() -> void:
 	# Hold Switch for SWITCH_HOLD_TIME to flip modes; releasing early cancels it.
 	switch.button_down.connect(_on_switch_held)
 	switch.button_up.connect(_on_switch_released)
-	_apply_mode()
+	# Touch-only HUD: stop the ui_* actions (also bound to WASD movement) from
+	# moving the keyboard focus highlight between buttons.
+	_disable_focus(self)
+	_apply_mode(false)
+
+## Recursively clears focus on every button so ui_up/down/left/right can't
+## navigate the highlight — this HUD is driven purely by touch.
+func _disable_focus(node: Node) -> void:
+	if node is BaseButton:
+		(node as BaseButton).focus_mode = Control.FOCUS_NONE
+	for child in node.get_children():
+		_disable_focus(child)
 
 func _on_switch_held() -> void:
-	_hold_token += 1
-	var token := _hold_token
-	# TODO: add visual feedback for the hold (e.g. radial fill / progress on the
-	# Switch button) so the player can see the 1s switch charging.
-	await get_tree().create_timer(SWITCH_HOLD_TIME).timeout
-	# Only flip if this same hold is still active (not released or re-pressed).
-	if token == _hold_token and switch.button_pressed:
-		combat_mode = not combat_mode
-		_apply_mode()
+	# Fill the ring over the hold time; when it completes, commit the switch.
+	_kill_hold_tween()
+	hold_ring.progress = 0.0
+	_hold_tween = create_tween()
+	_hold_tween.tween_property(hold_ring, "progress", 1.0, SWITCH_HOLD_TIME)
+	_hold_tween.tween_callback(_commit_switch)
 
 func _on_switch_released() -> void:
-	# Invalidate any pending hold started by the matching button_down.
-	_hold_token += 1
+	# Released before the ring filled → cancel the pending switch and drain it.
+	if hold_ring.progress < 1.0:
+		_kill_hold_tween()
+		_retract_ring()
 
-## Shows exactly one of the two right-hand mode groups.
-func _apply_mode() -> void:
-	basic_attack.visible = combat_mode
-	interact.visible = not combat_mode
+## Flips the mode once the hold ring completes, then empties the ring.
+func _commit_switch() -> void:
+	combat_mode = not combat_mode
+	_apply_mode()
+	_retract_ring()
+
+## Quickly animates the ring back to empty.
+func _retract_ring() -> void:
+	_hold_tween = create_tween()
+	_hold_tween.tween_property(hold_ring, "progress", 0.0, 0.12)
+
+func _kill_hold_tween() -> void:
+	if _hold_tween and _hold_tween.is_valid():
+		_hold_tween.kill()
+
+## Shows exactly one of the two right-hand mode groups. When animate is true the
+## incoming group pops in (fade + scale) while the outgoing one fades/shrinks out.
+func _apply_mode(animate := true) -> void:
+	var showing: Control = basic_attack if combat_mode else interact
+	var hiding: Control = interact if combat_mode else basic_attack
+	if _mode_tween and _mode_tween.is_valid():
+		_mode_tween.kill()
+	if not animate:
+		showing.visible = true
+		showing.modulate.a = 1.0
+		showing.scale = Vector2.ONE
+		hiding.visible = false
+		return
+	# Scale from the group's center so it grows/shrinks in place.
+	showing.pivot_offset = showing.size * 0.5
+	hiding.pivot_offset = hiding.size * 0.5
+	showing.visible = true
+	showing.modulate.a = 0.0
+	showing.scale = Vector2(0.7, 0.7)
+	_mode_tween = create_tween().set_parallel(true).set_ease(Tween.EASE_OUT)
+	_mode_tween.set_trans(Tween.TRANS_BACK)  # slight overshoot pop on the incoming group
+	_mode_tween.tween_property(showing, "scale", Vector2.ONE, MODE_ANIM_TIME)
+	_mode_tween.set_trans(Tween.TRANS_SINE)  # smooth fades / outgoing shrink
+	_mode_tween.tween_property(showing, "modulate:a", 1.0, MODE_ANIM_TIME)
+	_mode_tween.tween_property(hiding, "modulate:a", 0.0, MODE_ANIM_TIME)
+	_mode_tween.tween_property(hiding, "scale", Vector2(0.85, 0.85), MODE_ANIM_TIME)
+	# Once faded out, fully hide the outgoing group and reset it for next time.
+	_mode_tween.chain().tween_callback(func() -> void:
+		hiding.visible = false
+		hiding.modulate.a = 1.0
+		hiding.scale = Vector2.ONE)
 
 func _bind(joystick: VirtualJoystick, ability: String) -> void:
 	joystick.released.connect(_on_released.bind(ability))
