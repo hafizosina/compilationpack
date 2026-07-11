@@ -8,6 +8,7 @@
 [ext_resource type="Texture2D" uid="uid://diqisfqytp5vd" path="res://Global/Asset/Icon/inventory_backpack.png" id="16_inv"]
 [ext_resource type="Texture2D" uid="uid://cd4peko5fm460" path="res://Global/Asset/Icon/sprint_boots.png" id="17_sprint"]
 [ext_resource type="Script" uid="uid://bw2hjtgagk6si" path="res://7. JoyStick/hold_ring.gd" id="18_holdring"]
+[ext_resource type="PackedScene" path="res://7. JoyStick/inventory_panel.tscn" id="19_invpanel"]
 
 [node name="UI" type="CanvasLayer" unique_id=856290764]
 script = ExtResource("3_ui")
@@ -192,8 +193,8 @@ custom_minimum_size = Vector2(85, 85)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-theme_type_variation = &"RoundButton"
 focus_mode = 0
+theme_type_variation = &"RoundButton"
 expand_icon = true
 
 [node name="Button1" type="Button" parent="MarginContainer/HBoxContainer/RightGroupAttack/Interact/RBoxContainer" unique_id=483711722]
@@ -202,8 +203,8 @@ custom_minimum_size = Vector2(85, 85)
 layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
-theme_type_variation = &"RoundButton"
 focus_mode = 0
+theme_type_variation = &"RoundButton"
 expand_icon = true
 
 [node name="Addons" type="HBoxContainer" parent="MarginContainer/HBoxContainer/RightGroupAttack" unique_id=2135895230]
@@ -224,8 +225,8 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
 size_flags_vertical = 4
-theme_type_variation = &"RoundButton"
 focus_mode = 0
+theme_type_variation = &"RoundButton"
 expand_icon = true
 
 [node name="Potion2" type="Button" parent="MarginContainer/HBoxContainer/RightGroupAttack/Addons" unique_id=1292730638]
@@ -233,8 +234,8 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
 size_flags_vertical = 4
-theme_type_variation = &"RoundButton"
 focus_mode = 0
+theme_type_variation = &"RoundButton"
 expand_icon = true
 
 [node name="Sprint" type="Button" parent="MarginContainer/HBoxContainer/RightGroupAttack/Addons" unique_id=1689508772]
@@ -242,8 +243,8 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
 size_flags_vertical = 4
-theme_type_variation = &"RoundButton"
 focus_mode = 0
+theme_type_variation = &"RoundButton"
 icon = ExtResource("17_sprint")
 expand_icon = true
 
@@ -257,8 +258,8 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
 size_flags_vertical = 4
-theme_type_variation = &"RoundButton"
 focus_mode = 0
+theme_type_variation = &"RoundButton"
 icon = ExtResource("15_switch")
 expand_icon = true
 
@@ -292,8 +293,8 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
 size_flags_vertical = 4
-theme_type_variation = &"RoundButton"
 focus_mode = 0
+theme_type_variation = &"RoundButton"
 icon = ExtResource("16_inv")
 expand_icon = true
 
@@ -301,3 +302,6 @@ expand_icon = true
 custom_minimum_size = Vector2(0, 380)
 layout_mode = 2
 mouse_filter = 2
+
+[node name="InventoryPanel" parent="." unique_id=456212390 instance=ExtResource("19_invpanel")]
+unique_name_in_owner = true

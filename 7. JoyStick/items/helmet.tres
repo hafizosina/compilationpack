@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="Item" load_steps=3 format=3]
+
+[ext_resource type="Script" uid="uid://ccxyb2c5u776e" path="res://Global/Scene/item.gd" id="1_item"]
+[ext_resource type="Texture2D" uid="uid://c0usqdn3q4rrx" path="res://Global/Asset/Icon/items/helmet.png" id="2_icon"]
+
+[resource]
+script = ExtResource("1_item")
+id = &"helmet"
+display_name = "Iron Helmet"
+icon = ExtResource("2_icon")
+max_stack = 1
+description = "Sturdy head protection. Slightly dented."

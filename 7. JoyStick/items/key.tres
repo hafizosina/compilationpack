@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="Item" load_steps=3 format=3]
+
+[ext_resource type="Script" uid="uid://ccxyb2c5u776e" path="res://Global/Scene/item.gd" id="1_item"]
+[ext_resource type="Texture2D" uid="uid://bi01x4i55puq4" path="res://Global/Asset/Icon/items/key.png" id="2_icon"]
+
+[resource]
+script = ExtResource("1_item")
+id = &"key"
+display_name = "Rusty Key"
+icon = ExtResource("2_icon")
+max_stack = 10
+description = "An old iron key. Opens something, somewhere."

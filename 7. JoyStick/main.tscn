@@ -4,6 +4,12 @@
 [ext_resource type="PackedScene" uid="uid://ccuv0hld2vrqo" path="res://Global/Scene/base_entity.tscn" id="2_subtm"]
 [ext_resource type="PackedScene" uid="uid://ckqycc30rdklw" path="res://7. JoyStick/world/world.tscn" id="3_p0l7m"]
 [ext_resource type="Script" uid="uid://v3o6810xlc6e" path="res://7. JoyStick/camera_2d.gd" id="4_qj4ov"]
+[ext_resource type="Script" uid="uid://b8m1gdsu2l8m6" path="res://Global/Scene/inventory_component.gd" id="5_inv"]
+[ext_resource type="Script" uid="uid://ccxyb2c5u776e" path="res://Global/Scene/item.gd" id="5_obtqw"]
+[ext_resource type="Resource" path="res://7. JoyStick/items/coin.tres" id="6_coin"]
+[ext_resource type="Resource" path="res://7. JoyStick/items/key.tres" id="7_key"]
+[ext_resource type="Resource" path="res://7. JoyStick/items/dagger.tres" id="8_dagger"]
+[ext_resource type="Resource" path="res://7. JoyStick/items/helmet.tres" id="9_helmet"]
 
 [node name="Main" type="Node2D" unique_id=630137062]
 
@@ -15,6 +21,10 @@
 position = Vector2(763, 358)
 move_speed = 500.0
 turn_speed = 5.0
+
+[node name="InventoryComponent" type="Node2D" parent="Entity" unique_id=2043437474]
+script = ExtResource("5_inv")
+starting_items = Array[ExtResource("5_obtqw")]([ExtResource("6_coin"), ExtResource("6_coin"), ExtResource("6_coin"), ExtResource("7_key"), ExtResource("8_dagger"), ExtResource("9_helmet"), ExtResource("7_key")])
 
 [node name="Camera2D" type="Camera2D" parent="." unique_id=886630416 node_paths=PackedStringArray("player")]
 zoom = Vector2(0.7, 0.7)

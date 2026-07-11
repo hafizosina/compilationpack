@@ -13,6 +13,8 @@ extends CanvasLayer
 @onready var sprint: Button = %Sprint
 @onready var switch: Button = %Switch
 @onready var hold_ring: HoldRing = %HoldRing
+@onready var inventory: Button = %Inventory
+@onready var inventory_panel: InventoryPanel = %InventoryPanel
 
 # Which of the two right-hand modes is active. The Switch button flips it:
 # combat mode shows the BasicAttack joystick + skill wheel, interact mode shows
@@ -45,6 +47,8 @@ func _ready() -> void:
 	# Hold Switch for SWITCH_HOLD_TIME to flip modes; releasing early cancels it.
 	switch.button_down.connect(_on_switch_held)
 	switch.button_up.connect(_on_switch_released)
+	# Tap the Inventory button to slide the inventory panel in/out.
+	inventory.pressed.connect(inventory_panel.toggle)
 	_apply_mode(false)
 
 func _on_switch_held() -> void:
