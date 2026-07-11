@@ -45,18 +45,7 @@ func _ready() -> void:
 	# Hold Switch for SWITCH_HOLD_TIME to flip modes; releasing early cancels it.
 	switch.button_down.connect(_on_switch_held)
 	switch.button_up.connect(_on_switch_released)
-	# Touch-only HUD: stop the ui_* actions (also bound to WASD movement) from
-	# moving the keyboard focus highlight between buttons.
-	_disable_focus(self)
 	_apply_mode(false)
-
-## Recursively clears focus on every button so ui_up/down/left/right can't
-## navigate the highlight — this HUD is driven purely by touch.
-func _disable_focus(node: Node) -> void:
-	if node is BaseButton:
-		(node as BaseButton).focus_mode = Control.FOCUS_NONE
-	for child in node.get_children():
-		_disable_focus(child)
 
 func _on_switch_held() -> void:
 	# Fill the ring over the hold time; when it completes, commit the switch.

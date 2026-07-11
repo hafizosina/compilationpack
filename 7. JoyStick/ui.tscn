@@ -193,6 +193,7 @@ layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
 theme_type_variation = &"RoundButton"
+focus_mode = 0
 expand_icon = true
 
 [node name="Button1" type="Button" parent="MarginContainer/HBoxContainer/RightGroupAttack/Interact/RBoxContainer" unique_id=483711722]
@@ -202,6 +203,7 @@ layout_mode = 2
 size_flags_horizontal = 4
 size_flags_vertical = 4
 theme_type_variation = &"RoundButton"
+focus_mode = 0
 expand_icon = true
 
 [node name="Addons" type="HBoxContainer" parent="MarginContainer/HBoxContainer/RightGroupAttack" unique_id=2135895230]
@@ -223,6 +225,7 @@ custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
 size_flags_vertical = 4
 theme_type_variation = &"RoundButton"
+focus_mode = 0
 expand_icon = true
 
 [node name="Potion2" type="Button" parent="MarginContainer/HBoxContainer/RightGroupAttack/Addons" unique_id=1292730638]
@@ -231,6 +234,7 @@ custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
 size_flags_vertical = 4
 theme_type_variation = &"RoundButton"
+focus_mode = 0
 expand_icon = true
 
 [node name="Sprint" type="Button" parent="MarginContainer/HBoxContainer/RightGroupAttack/Addons" unique_id=1689508772]
@@ -239,6 +243,7 @@ custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
 size_flags_vertical = 4
 theme_type_variation = &"RoundButton"
+focus_mode = 0
 icon = ExtResource("17_sprint")
 expand_icon = true
 
@@ -253,6 +258,7 @@ custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
 size_flags_vertical = 4
 theme_type_variation = &"RoundButton"
+focus_mode = 0
 icon = ExtResource("15_switch")
 expand_icon = true
 
@@ -287,6 +293,7 @@ custom_minimum_size = Vector2(64, 64)
 layout_mode = 2
 size_flags_vertical = 4
 theme_type_variation = &"RoundButton"
+focus_mode = 0
 icon = ExtResource("16_inv")
 expand_icon = true
 
