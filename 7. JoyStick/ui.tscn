@@ -218,6 +218,7 @@ offset_left = -592.0
 offset_top = -70.0
 grow_horizontal = 0
 grow_vertical = 0
+theme_override_constants/separation = 16
 alignment = 2
 
 [node name="Potion1" type="Button" parent="MarginContainer/HBoxContainer/RightGroupAttack/Addons" unique_id=1362364995]
@@ -249,7 +250,7 @@ icon = ExtResource("17_sprint")
 expand_icon = true
 
 [node name="Spacer" type="Control" parent="MarginContainer/HBoxContainer/RightGroupAttack/Addons" unique_id=1357924680]
-custom_minimum_size = Vector2(320, 0)
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 mouse_filter = 2
 
@@ -305,3 +306,4 @@ mouse_filter = 2
 
 [node name="InventoryPanel" parent="." unique_id=456212390 instance=ExtResource("19_invpanel")]
 unique_name_in_owner = true
+anchors_preset = 11
