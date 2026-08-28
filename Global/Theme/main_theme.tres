@@ -180,6 +180,41 @@ corner_radius_top_right = 500
 corner_radius_bottom_right = 500
 corner_radius_bottom_left = 500
 
+[sub_resource type="StyleBoxFlat" id="sb_tab_selected"]
+content_margin_left = 12.0
+content_margin_top = 5.0
+content_margin_right = 12.0
+content_margin_bottom = 5.0
+bg_color = Color(0.373, 0.247, 0.133, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_color = Color(0.09, 0.06, 0.03, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+
+[sub_resource type="StyleBoxFlat" id="sb_tab_unselected"]
+content_margin_left = 12.0
+content_margin_top = 5.0
+content_margin_right = 12.0
+content_margin_bottom = 5.0
+bg_color = Color(0.808, 0.729, 0.557, 1)
+border_width_bottom = 2
+border_color = Color(0.165, 0.125, 0.086, 0.45)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+
+[sub_resource type="StyleBoxFlat" id="sb_tab_hovered"]
+content_margin_left = 12.0
+content_margin_top = 5.0
+content_margin_right = 12.0
+content_margin_bottom = 5.0
+bg_color = Color(0.867, 0.788, 0.612, 1)
+border_width_bottom = 2
+border_color = Color(0.725, 0.541, 0.196, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+
 [resource]
 Button/colors/font_color = Color(0.906, 0.839, 0.675, 1)
 Button/colors/font_hover_color = Color(1, 0.949, 0.827, 1)
@@ -199,6 +234,12 @@ RoundButton/colors/icon_pressed_color = Color(0.165, 0.125, 0.086, 1)
 RoundButton/styles/hover = SubResource("sb_round_hover")
 RoundButton/styles/normal = SubResource("sb_round_normal")
 RoundButton/styles/pressed = SubResource("sb_round_pressed")
+TabBar/colors/font_hovered_color = Color(0.165, 0.125, 0.086, 1)
+TabBar/colors/font_selected_color = Color(0.906, 0.839, 0.675, 1)
+TabBar/colors/font_unselected_color = Color(0.165, 0.125, 0.086, 0.7)
+TabBar/styles/tab_hovered = SubResource("sb_tab_hovered")
+TabBar/styles/tab_selected = SubResource("sb_tab_selected")
+TabBar/styles/tab_unselected = SubResource("sb_tab_unselected")
 VirtualJoystick/styles/normal_joystick = SubResource("sb_joy_base")
 VirtualJoystick/styles/normal_tip = SubResource("sb_joy_tip")
 VirtualJoystick/styles/pressed_joystick = SubResource("sb_joy_base_pressed")
