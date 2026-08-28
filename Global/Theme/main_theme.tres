@@ -132,6 +132,41 @@ expand_margin_top = -4.0
 expand_margin_right = -4.0
 expand_margin_bottom = -4.0
 
+[sub_resource type="StyleBoxFlat" id="sb_tab_hovered"]
+content_margin_left = 12.0
+content_margin_top = 5.0
+content_margin_right = 12.0
+content_margin_bottom = 5.0
+bg_color = Color(0.867, 0.788, 0.612, 1)
+border_width_bottom = 2
+border_color = Color(0.725, 0.541, 0.196, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+
+[sub_resource type="StyleBoxFlat" id="sb_tab_selected"]
+content_margin_left = 12.0
+content_margin_top = 5.0
+content_margin_right = 12.0
+content_margin_bottom = 5.0
+bg_color = Color(0.373, 0.247, 0.133, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_color = Color(0.09, 0.06, 0.03, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+
+[sub_resource type="StyleBoxFlat" id="sb_tab_unselected"]
+content_margin_left = 12.0
+content_margin_top = 5.0
+content_margin_right = 12.0
+content_margin_bottom = 5.0
+bg_color = Color(0.808, 0.729, 0.557, 1)
+border_width_bottom = 2
+border_color = Color(0.165, 0.125, 0.086, 0.45)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+
 [sub_resource type="StyleBoxFlat" id="sb_joy_base"]
 bg_color = Color(0.906, 0.839, 0.675, 0.12)
 border_width_left = 3
@@ -179,41 +214,6 @@ corner_radius_top_left = 500
 corner_radius_top_right = 500
 corner_radius_bottom_right = 500
 corner_radius_bottom_left = 500
-
-[sub_resource type="StyleBoxFlat" id="sb_tab_selected"]
-content_margin_left = 12.0
-content_margin_top = 5.0
-content_margin_right = 12.0
-content_margin_bottom = 5.0
-bg_color = Color(0.373, 0.247, 0.133, 1)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_color = Color(0.09, 0.06, 0.03, 1)
-corner_radius_top_left = 6
-corner_radius_top_right = 6
-
-[sub_resource type="StyleBoxFlat" id="sb_tab_unselected"]
-content_margin_left = 12.0
-content_margin_top = 5.0
-content_margin_right = 12.0
-content_margin_bottom = 5.0
-bg_color = Color(0.808, 0.729, 0.557, 1)
-border_width_bottom = 2
-border_color = Color(0.165, 0.125, 0.086, 0.45)
-corner_radius_top_left = 6
-corner_radius_top_right = 6
-
-[sub_resource type="StyleBoxFlat" id="sb_tab_hovered"]
-content_margin_left = 12.0
-content_margin_top = 5.0
-content_margin_right = 12.0
-content_margin_bottom = 5.0
-bg_color = Color(0.867, 0.788, 0.612, 1)
-border_width_bottom = 2
-border_color = Color(0.725, 0.541, 0.196, 1)
-corner_radius_top_left = 6
-corner_radius_top_right = 6
 
 [resource]
 Button/colors/font_color = Color(0.906, 0.839, 0.675, 1)
