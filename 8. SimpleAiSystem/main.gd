@@ -9,9 +9,8 @@ extends Node2D
 @onready var factory: SimEntityFactory = $EntityFactory
 
 func _ready() -> void:
-	factory.spawn_world()
-	if Constant.DEBUG:
-		factory.debug_report()
+	EventBus.sim_respawn_requested.connect(_respawn)
+	_respawn()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey and event.pressed and not event.echo):
@@ -21,7 +20,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			SimDebugComponent.overlay_visible = not SimDebugComponent.overlay_visible
 			get_viewport().set_input_as_handled()
 		KEY_F5:
-			factory.spawn_world()
-			if Constant.DEBUG:
-				factory.debug_report()
+			_respawn()
 			get_viewport().set_input_as_handled()
+
+func _respawn() -> void:
+	factory.spawn_world()
+	if Constant.DEBUG:
+		factory.debug_report()

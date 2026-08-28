@@ -18,9 +18,6 @@ const ENTITY_SCENE: PackedScene = preload("res://8. SimpleAiSystem/entity/sim_en
 ## Node the spawned entities are parented to.
 @export var entities_root: Node2D
 
-## Emitted after spawn_world() finishes, carrying the live entity count.
-signal world_spawned(count: int)
-
 var _serial: int = 0
 
 ## Clears any existing entities and spawns the whole world from `world`.
@@ -38,7 +35,7 @@ func spawn_world() -> void:
 		if scatter == null:
 			continue
 		_spawn_scatter(scatter)
-	world_spawned.emit(entities_root.get_child_count())
+	EventBus.sim_world_spawned.emit(census())
 
 ## Builds one entity of `type_id` at `pos`. `overrides` is keyed by component
 ## slot, e.g. `{ "wander": { "radius": 48.0 } }`.
@@ -81,6 +78,9 @@ func clear() -> void:
 	if entities_root == null:
 		return
 	for child in entities_root.get_children():
+		# Detached first: queue_free() alone leaves the node parented until the
+		# end of the frame, so a respawn in the same frame would double-count.
+		entities_root.remove_child(child)
 		child.queue_free()
 	_serial = 0
 

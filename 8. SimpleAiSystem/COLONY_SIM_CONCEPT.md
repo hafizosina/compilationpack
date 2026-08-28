@@ -282,7 +282,7 @@ RUN_SPEED_TYPE2    = 1.4 * R    # predator faster on the run
 RUN_SPEED_TYPE3    = 2.0 * R    # "much faster than Type2" (tunable) — fast prey
 ENERGY_PER_GRID_WALK = 0.5
 ENERGY_PER_GRID_RUN  = 2.0      # running = 4× walk cost per grid
-GRID_SIZE            = 32       # px, for per-grid → per-sec conversion
+GRID_SIZE            = 64       # px, one painted tile; for per-grid → per-sec conversion
 NEED_THRESHOLD       = 50
 DETECTION_RANGE_TYPE2 = D                  # baseline sensor radius
 DETECTION_RANGE_TYPE1 = 1.3 * D            # vigilant prey — sees farthest

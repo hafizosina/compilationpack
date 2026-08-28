@@ -100,12 +100,12 @@ All bars 0–100. Tick from a shared `_process(delta)` per component (self-ticki
 | Component | DO | RECEIVE | State + starter numbers |
 |---|---|---|---|
 | `SpriteComponent` | — | — | (texture/tint from def) |
-| `MovementComponent` | — | — | `walk=60 px/s`, `run=120` (Type1); gait set by Brain; spends energy per grid; `move_to(pos)` fixed point + `follow(entity)` chase (re-reads target pos each tick, falls back to last-known then emits `lost_target`) |
+| `MovementComponent` | — | — | `walk=120 px/s`, `run=240` (Type1); gait set by Brain; spends energy per grid; `move_to(pos)` fixed point + `follow(entity)` chase (re-reads target pos each tick, falls back to last-known then emits `lost_target`) |
 | `HungerComponent` | eat | — | `hunger=100`, drain **1.0/s**; `<50` → SatisfyHunger goal; `=0` → −**2 hp/s** starvation |
 | `FatigueComponent` | sleep | — | `energy=100`, drain **0.5/s** idle + movement cost; `=0` → −20 hp once + collapse |
 | `HealthComponent` | — | attack | `hp=100`; regen **+1/s while hunger>50**; `=0` → died → disable Movement+Brain (harvestable in place) |
 | `InventoryComponent` | pickUp | — | `items: Array` (item-data, def refs) |
-| `ActionComponent` | harvest | — | `reach=24 px`; runs the chosen ActionDef |
+| `ActionComponent` | harvest | — | `reach=40 px`; runs the chosen ActionDef |
 | `AttackComponent` | attack | — | `damage=20` (Type2 only) |
 | `EatableComponent` | — | eat | `food_type`, `hunger_value=25` → `actor.hunger.feed(25)` + free self |
 | `HarvestableComponent` | — | harvest | see §5 for yield/damage numbers |
@@ -114,7 +114,7 @@ All bars 0–100. Tick from a shared `_process(delta)` per component (self-ticki
 | `SensorComponent` | — | — | Area2D radius = detection (per type §6); `get_threats/get_prey/get_food` |
 | `BrainComponent` | — | — | GOAP; think tick **0.3s** |
 
-Movement energy: `walk 0.5/grid`, `run 2.0/grid`, `GRID=32px`. Exhaustion lock at energy 0 → can't run.
+Movement energy: `walk 0.5/grid`, `run 2.0/grid`, `GRID=64px` (one painted tile). Exhaustion lock at energy 0 → can't run.
 
 **Follow mode (chase):** `follow(target)` re-reads the target's position every tick and steers straight at it — **no pathfinding** for this milestone. If the target leaves Sensor range, it drives to the **last-known position**, then emits `lost_target` and stops so the Brain replans. Predators use this to chase prey; `move_to(pos)` stays the fixed-point version for bushes/beds.
 
@@ -138,15 +138,19 @@ Movement energy: `walk 0.5/grid`, `run 2.0/grid`, `GRID=32px`. Exhaustion lock a
 
 | Blueprint | Components | Detection | Run | Diet | Tint |
 |---|---|---|---|---|---|
-| `type1` | full stack, no Attack | **130** | 120 | VEGIE | green |
-| `type2` | full stack **+ Attack(20)** | 100 | **168** (1.4×) | MEAT | red |
-| `type3` | full stack, no Attack | **70** | **240** (2×) | VEGIE | blue |
+| `type1` | full stack, no Attack | **260** | 240 | VEGIE | green |
+| `type2` | full stack **+ Attack(20)** | 200 | **336** (1.4×) | MEAT | red |
+| `type3` | full stack, no Attack | **140** | **480** (2×) | VEGIE | blue |
 | `berrybush` | Harvestable(→berry) only | — | — | — | dark green |
 | `bed` | Receiver(sleep) only | — | — | — | brown |
 | `berry` | Eatable(VEGIE,25) + PickUpAble | — | — | — | pink |
 | `meat` | Eatable(MEAT,25) + PickUpAble | — | — | — | maroon |
 
-Base detection `D=100 px`. Base run `R=120 px/s`. Walk `60 px/s` all types.
+Base detection `D=200 px`. Base run `R=240 px/s`. Walk `120 px/s` all types.
+
+> **Rebased on the 64px tilemap.** The module's painted `TileMapLayer` uses 64px tiles over
+> roughly 2048×1216 px, so every distance and speed above is 2× the original 32px draft while the
+> per-grid energy costs are unchanged — one "grid" is now one visible tile. See `SimConst`.
 
 ---
 
@@ -168,7 +172,10 @@ WorldState is read from components + inventory: `has_vegie/has_meat` (inventory)
 
 ## 8. World file (starter `world1.tres`)
 
-A `WorldDef` with ~35 entries. Suggested mix on an **1200×800** map:
+A `WorldDef` covering the painted **2048×1216** map. It carries two lists: explicit `entries`
+(a `SimPlacement` each — used where position matters or a per-instance override is wanted) and
+bulk `scatters` (`{type, count, area, rng_seed}`, expanded by the factory with a seeded RNG), so a
+31-entity world stays a short file and changing a population is a one-field edit. Current mix:
 - 10 × `type1`, 4 × `type3`, 3 × `type2`
 - 8 × `berrybush`, 4 × `bed`
 - (berries/meat are spawned at runtime by harvest, not placed)
@@ -187,3 +194,25 @@ Each entity draws above itself: current **goal** name, and its **hunger/energy/h
 
 ## 10. Explicitly OUT of scope for Milestone 1
 Systems (vs self-ticking), spatial queries, serialization/save-load, event-bus scale, reproduction/equilibrium, production/crafting chains, LOS (sensor is radius-only), tuning polish. All deferred — this milestone only proves: **data → factory → components → actions → GOAP → visible behavior.**
+
+---
+
+## 11. Phase 1 as built
+
+Phase 1 (steps 1–2 plus the overlay) is implemented in `8. SimpleAiSystem/`. Three notes where the
+code and this document differ:
+
+- **`Sim` prefix on every global `class_name`** — `SimEntity`, `SimComponentDef`, `SimMovementComponent`…
+  `Entity` and `InventoryComponent` are already taken by `Global/Scene/`, and `ComponentDef`
+  subclasses need a global `class_name` to be creatable from the inspector's resource picker.
+- **`SimSpriteDef` adds no node.** It still lives in the blueprint's `components` array — so
+  everything about an entity is authored in one list — but it configures the `Sprite2D` the bare
+  entity scene already owns and registers it under the `sprite` slot. The factory therefore has no
+  special cases at all.
+- **The factory `add_child`s before building components**, not after. `SimEntity`'s `@onready`
+  members are null until it is in the tree, so `build_into()` would otherwise get a detached node.
+
+`SimEntity.components` is keyed by **slot** (`&"movement"`, `&"wander"`) rather than class name: the
+slot is already needed as the override key, so one identifier does both jobs.
+
+Verify with F1 (toggle the per-entity overlay) and F5 (respawn from `world1.tres`).

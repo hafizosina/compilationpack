@@ -3,7 +3,6 @@
 [ext_resource type="TileSet" uid="uid://chgm400ulxdc7" path="res://Global/Resource/simple_world_tile.tres" id="1_k7rym"]
 [ext_resource type="PackedScene" uid="uid://gctl0rjtf4op" path="res://Global/Scene/camera_2d.tscn" id="1_lmde2"]
 [ext_resource type="PackedScene" uid="uid://c5jyoourcq44e" path="res://8. SimpleAiSystem/ui/ui.tscn" id="1_rjg6k"]
-[ext_resource type="Texture2D" uid="uid://flw42i8l4ym5" path="res://Global/Asset/bald64.png" id="2_lijly"]
 [ext_resource type="Script" uid="uid://bc86lqdcl33o1" path="res://8. SimpleAiSystem/main.gd" id="3_main"]
 [ext_resource type="Script" uid="uid://c4xcx6k8t3010" path="res://8. SimpleAiSystem/entity/sim_entity_factory.gd" id="4_factory"]
 [ext_resource type="Resource" path="res://8. SimpleAiSystem/defs/catalog.tres" id="5_catalog"]
@@ -31,7 +30,3 @@ entities_root = NodePath("../World/Entities")
 [node name="Camera2D" parent="." unique_id=1692781263 instance=ExtResource("1_lmde2")]
 position = Vector2(832, 416)
 zoom_value = 0.55
-
-[node name="Bald64" type="Sprite2D" parent="." unique_id=228433717]
-position = Vector2(480, 416)
-texture = ExtResource("2_lijly")
