@@ -3,8 +3,9 @@ extends Node2D
 ## Module 8 entry point. Builds the whole world from data on startup — every
 ## entity on screen comes out of world1.tres via the SimEntityFactory.
 ##
-## F1 toggles the per-entity debug overlay, F5 respawns the world (edit
-## world1.tres, hit F5, see the change without touching code).
+## F1 cycles the per-entity debug overlay (off / labels / labels + wander
+## leashes), F5 respawns the world (edit world1.tres, hit F5, see the change
+## without touching code).
 
 @onready var factory: SimEntityFactory = $EntityFactory
 
@@ -17,7 +18,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	match event.keycode:
 		KEY_F1:
-			SimDebugComponent.overlay_visible = not SimDebugComponent.overlay_visible
+			SimDebugComponent.mode = ((SimDebugComponent.mode + 1)
+				% SimDebugComponent.Mode.size()) as SimDebugComponent.Mode
 			get_viewport().set_input_as_handled()
 		KEY_F5:
 			_respawn()

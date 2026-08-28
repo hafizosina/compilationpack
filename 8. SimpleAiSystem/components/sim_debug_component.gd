@@ -8,18 +8,26 @@ extends SimComponent
 ## injected by SimEntityFactory whenever Constant.DEBUG is on rather than
 ## authored into a blueprint — it is a dev tool, not content.
 
-## Shared toggle for every overlay in the scene, flipped by main.gd (F1).
-static var overlay_visible: bool = true
+## How much each overlay draws. LEASHES is the per-instance override proof but
+## is deliberately not the default — one circle per creature is unreadable with
+## a whole population on screen.
+enum Mode { OFF, LABELS, LEASHES }
 
-const TEXT_COLOR := Color(1, 1, 1, 0.85)
-const LEASH_COLOR := Color(0.4, 0.9, 1, 0.3)
+## Shared across every overlay in the scene, cycled by main.gd (F1).
+static var mode: Mode = Mode.LABELS
+
+const TEXT_COLOR := Color(0.09, 0.08, 0.1, 1)
+const TEXT_OUTLINE_COLOR := Color(1, 1, 1, 0.85)
+const TEXT_OUTLINE_SIZE := 4
+const LEASH_COLOR := Color(0.15, 0.55, 0.75, 0.45)
 const TARGET_COLOR := Color(1, 0.85, 0.3, 0.6)
-const FONT_SIZE := 11
-const LABEL_ORIGIN := Vector2(-46.0, -42.0)
+## Sized for the default camera zoom (0.55) — world-space text shrinks with it.
+const FONT_SIZE := 24
+const LABEL_ORIGIN := Vector2(-52.0, -72.0)
 
 var _wander: SimWanderComponent
 var _movement: SimMovementComponent
-var _was_visible: bool = true
+var _drawn_mode: Mode = Mode.LABELS
 
 ## Adds an overlay to `entity` and registers it. Called by the factory.
 static func attach(entity: SimEntity) -> SimDebugComponent:
@@ -43,25 +51,31 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	# The entity moves under the overlay every frame, and one extra redraw is
 	# needed on the frame the overlay is switched off.
-	if overlay_visible or _was_visible:
-		_was_visible = overlay_visible
+	if mode != Mode.OFF or _drawn_mode != Mode.OFF:
+		_drawn_mode = mode
 		queue_redraw()
 
 func _draw() -> void:
-	if not overlay_visible or entity == null:
+	if mode == Mode.OFF or entity == null:
 		return
-	var font := ThemeDB.fallback_font
-	draw_string(font, LABEL_ORIGIN, entity.name,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, TEXT_COLOR)
-	draw_string(font, LABEL_ORIGIN + Vector2(0.0, FONT_SIZE + 2.0), _slot_label(),
-		HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, TEXT_COLOR)
+	_draw_label(LABEL_ORIGIN, entity.name)
+	_draw_label(LABEL_ORIGIN + Vector2(0.0, FONT_SIZE + 4.0), _slot_label())
 
-	# The leash circle is the per-instance override proof: two type1s carrying
-	# a radius override must draw visibly different circles from the default.
-	if _wander != null:
-		draw_arc(to_local(entity.home_position), _wander.radius, 0.0, TAU, 64, LEASH_COLOR, 1.0)
 	if _movement != null and _movement.is_moving():
-		draw_line(Vector2.ZERO, to_local(_movement.target()), TARGET_COLOR, 1.0)
+		draw_line(Vector2.ZERO, to_local(_movement.target()), TARGET_COLOR, 2.0)
+
+	# The leash circle is the per-instance override proof: two type1s carrying a
+	# radius override must draw visibly different circles from the default.
+	if mode == Mode.LEASHES and _wander != null:
+		draw_arc(to_local(entity.home_position), _wander.radius, 0.0, TAU, 64, LEASH_COLOR, 2.0)
+
+## The map is near-white and the sprites are pale, so the label needs an outline
+## to stay readable against either.
+func _draw_label(at: Vector2, text: String) -> void:
+	var font := ThemeDB.fallback_font
+	draw_string_outline(font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE,
+		TEXT_OUTLINE_SIZE, TEXT_OUTLINE_COLOR)
+	draw_string(font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, TEXT_COLOR)
 
 func _slot_label() -> String:
 	var names: Array[String] = []
