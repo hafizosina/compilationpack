@@ -15,7 +15,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="CompilationPack"
-run/main_scene="res://7. JoyStick/main.tscn"
+run/main_scene="uid://dh2y3wsq313bu"
 config/features=PackedStringArray("4.7", "Mobile")
 config/icon="res://icon.svg"
 
