@@ -44,6 +44,13 @@ func _process(delta: float) -> void:
 	_wait = _rng.randf_range(pause_min, pause_max)
 	_movement.move_to(_pick_point(), SimMovementComponent.Gait.WALK)
 
+func describe() -> Dictionary:
+	return {
+		"radius": "%.0f px" % radius,
+		"pause": "%.1f - %.1f s" % [pause_min, pause_max],
+		"next pick": "%.1f s" % maxf(_wait, 0.0),
+	}
+
 ## A uniformly distributed point on the disc of `radius` around home, clamped to
 ## the world bounds. The sqrt keeps points from bunching at the centre.
 func _pick_point() -> Vector2:

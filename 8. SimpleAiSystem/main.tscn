@@ -7,6 +7,7 @@
 [ext_resource type="Script" uid="uid://c4xcx6k8t3010" path="res://8. SimpleAiSystem/entity/sim_entity_factory.gd" id="4_factory"]
 [ext_resource type="Resource" uid="uid://dldvh5p25k40x" path="res://8. SimpleAiSystem/defs/catalog.tres" id="5_catalog"]
 [ext_resource type="Resource" uid="uid://wdyc5afntjkk" path="res://8. SimpleAiSystem/defs/world1.tres" id="6_world"]
+[ext_resource type="Script" uid="uid://qpwrfvlam5jx" path="res://8. SimpleAiSystem/selection_marker.gd" id="7_marker"]
 
 [node name="Main" type="Node2D" unique_id=1530078585]
 script = ExtResource("3_main")
@@ -20,6 +21,9 @@ tile_map_data = PackedByteArray("AAAcAA8ABAAAAAAAAAAcAA4ABAAAAAAAAAAcAA0ABAAAAAA
 tile_set = ExtResource("1_k7rym")
 
 [node name="Entities" type="Node2D" parent="World" unique_id=17035332]
+
+[node name="SelectionMarker" type="Node2D" parent="World"]
+script = ExtResource("7_marker")
 
 [node name="EntityFactory" type="Node" parent="." unique_id=343339860 node_paths=PackedStringArray("entities_root")]
 script = ExtResource("4_factory")

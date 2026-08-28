@@ -54,6 +54,38 @@ func has_component(slot: StringName) -> bool:
 func component_slots() -> Array:
 	return _components.keys()
 
+## A formatted snapshot for the inspector panel: the entity's own facts plus
+## whatever each component chooses to expose through its describe().
+func describe() -> Dictionary:
+	var reported := {}
+	for key in _components:
+		var node: Node = _components[key]
+		# The sprite slot registers the bare Sprite2D from the scene, which has
+		# no describe() — guard rather than assume every slot is a SimComponent.
+		if not node.has_method("describe"):
+			continue
+		var fields: Dictionary = node.describe()
+		if fields.is_empty():
+			continue
+		# Label and fields both come from the component — the entity aggregates,
+		# it never decides how a component presents itself.
+		reported[String(key)] = {
+			"label": node.describe_label() if node.has_method("describe_label") else String(key),
+			"fields": fields,
+		}
+	var slot_names: Array[String] = []
+	for key in _components:
+		slot_names.append(String(key))
+	return {
+		"name": name,
+		"type": String(def_id),
+		"position": "%.0f, %.0f" % [global_position.x, global_position.y],
+		"home": "%.0f, %.0f" % [home_position.x, home_position.y],
+		"from home": "%.0f px" % global_position.distance_to(home_position),
+		"slots": ", ".join(slot_names),
+		"components": reported,
+	}
+
 ## Actions this entity can PERFORM, unioned across its components (Phase 2).
 func do_actions() -> Array[StringName]:
 	return []
