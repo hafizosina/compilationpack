@@ -21,3 +21,6 @@ func build_into(entity: SimEntity) -> void:
 	entity.sprite.texture = texture
 	entity.sprite.scale = Vector2.ONE * scale_factor
 	entity.sprite.modulate = tint
+	# The Sprite2D already exists on the bare scene, so this def adds no node —
+	# it registers the existing one so `sprite` shows up like any other slot.
+	entity.register_component(slot(), entity.sprite)
