@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="SimWorldDef" load_steps=11 format=3]
+[gd_resource type="Resource" script_class="SimWorldDef" format=3 uid="uid://wdyc5afntjkk"]
 
 [ext_resource type="Script" uid="uid://bed27uqyvu6ix" path="res://8. SimpleAiSystem/defs/sim_world_def.gd" id="1_world"]
 [ext_resource type="Script" uid="uid://cxh6wmbcf1dfa" path="res://8. SimpleAiSystem/defs/sim_placement.gd" id="2_placement"]
@@ -32,7 +32,6 @@ type = &"type1"
 count = 10
 area = Rect2(-100, -100, 1860, 1030)
 rng_seed = 1
-overrides = {}
 
 [sub_resource type="Resource" id="Resource_scatter_type3"]
 script = ExtResource("3_scatter")
@@ -40,7 +39,6 @@ type = &"type3"
 count = 4
 area = Rect2(-100, -100, 1860, 1030)
 rng_seed = 2
-overrides = {}
 
 [sub_resource type="Resource" id="Resource_scatter_type2"]
 script = ExtResource("3_scatter")
@@ -48,7 +46,6 @@ type = &"type2"
 count = 3
 area = Rect2(-100, -100, 1860, 1030)
 rng_seed = 3
-overrides = {}
 
 [sub_resource type="Resource" id="Resource_scatter_bush"]
 script = ExtResource("3_scatter")
@@ -56,7 +53,6 @@ type = &"berrybush"
 count = 8
 area = Rect2(-100, -100, 1860, 1030)
 rng_seed = 4
-overrides = {}
 
 [sub_resource type="Resource" id="Resource_scatter_bed"]
 script = ExtResource("3_scatter")
@@ -64,7 +60,6 @@ type = &"bed"
 count = 4
 area = Rect2(-100, -100, 1860, 1030)
 rng_seed = 5
-overrides = {}
 
 [resource]
 script = ExtResource("1_world")

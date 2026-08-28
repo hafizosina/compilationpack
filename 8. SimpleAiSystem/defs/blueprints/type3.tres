@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="SimEntityDef" load_steps=10 format=3]
+[gd_resource type="Resource" script_class="SimEntityDef" format=3 uid="uid://cav3lqmjv757m"]
 
 [ext_resource type="Script" uid="uid://ms54tio2v81x" path="res://8. SimpleAiSystem/defs/sim_entity_def.gd" id="1_def"]
 [ext_resource type="Script" uid="uid://b4qpnevkf8tls" path="res://8. SimpleAiSystem/defs/sim_component_def.gd" id="2_base"]
@@ -10,20 +10,14 @@
 [sub_resource type="Resource" id="Resource_sprite"]
 script = ExtResource("3_sprite")
 texture = ExtResource("6_tex")
-scale_factor = 0.5
-tint = Color(1, 1, 1, 1)
 
 [sub_resource type="Resource" id="Resource_movement"]
 script = ExtResource("4_movement")
-walk_speed = 120.0
 run_speed = 480.0
-arrive_radius = 8.0
 
 [sub_resource type="Resource" id="Resource_wander"]
 script = ExtResource("5_wander")
 radius = 320.0
-pause_min = 0.5
-pause_max = 2.0
 
 [resource]
 script = ExtResource("1_def")
