@@ -13,7 +13,8 @@ extends CharacterBody2D
 
 ## Blueprint id this entity was spawned from (e.g. &"type1").
 var def_id: StringName = &""
-## Where the entity was spawned. Wander leashes to this so nothing drifts off-map.
+## Where the entity was spawned, in GLOBAL space. Wander leashes to this so
+## nothing drifts off-map.
 var home_position: Vector2 = Vector2.ZERO
 
 ## slot (StringName) -> component node. Populated by SimComponentDef.build_into().

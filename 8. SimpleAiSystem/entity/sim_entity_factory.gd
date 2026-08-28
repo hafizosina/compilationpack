@@ -51,12 +51,13 @@ func spawn(type_id: StringName, pos: Vector2, overrides: Dictionary = {}, entity
 	entity.def_id = type_id
 	entity.name = entity_name if not entity_name.is_empty() else "%s_%d" % [type_id, _serial]
 	entity.position = pos
-	entity.home_position = pos
 	_serial += 1
 
 	# Added to the tree BEFORE the components are built, so the entity's @onready
 	# members (sprite, body) are resolved by the time build_into() touches them.
 	entities_root.add_child(entity)
+	# Global space, matching how movement and the overlay read positions.
+	entity.home_position = entity.global_position
 
 	for component_def in blueprint.components:
 		if component_def == null:
@@ -69,6 +70,9 @@ func spawn(type_id: StringName, pos: Vector2, overrides: Dictionary = {}, entity
 		if slot_overrides is Dictionary:
 			_apply_overrides(instance_def, slot_overrides)
 		instance_def.build_into(entity)
+
+	if Constant.DEBUG:
+		SimDebugComponent.attach(entity)
 
 	return entity
 
@@ -123,3 +127,23 @@ func _has_property(object: Object, property: StringName) -> bool:
 		if entry.name == property:
 			return true
 	return false
+
+## Prints one line per entity — its slots and their key tunables — so a leaked
+## per-instance override is visible in the log as well as on screen.
+func debug_report() -> void:
+	if entities_root == null:
+		return
+	print("[sim] %d entities from %d entries + %d scatter rules"
+		% [entities_root.get_child_count(), world.entries.size(), world.scatters.size()])
+	for child in entities_root.get_children():
+		if not child is SimEntity:
+			continue
+		var entity: SimEntity = child
+		var wander := entity.get_component(&"wander") as SimWanderComponent
+		var movement := entity.get_component(&"movement") as SimMovementComponent
+		print("[sim]   %-16s slots=%s wander_radius=%s run_speed=%s" % [
+			entity.name,
+			entity.component_slots(),
+			"-" if wander == null else str(wander.radius),
+			"-" if movement == null else str(movement.run_speed),
+		])
