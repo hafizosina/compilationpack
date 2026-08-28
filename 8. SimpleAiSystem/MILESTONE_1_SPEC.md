@@ -211,6 +211,11 @@ code and this document differ:
   special cases at all.
 - **The factory `add_child`s before building components**, not after. `SimEntity`'s `@onready`
   members are null until it is in the tree, so `build_into()` would otherwise get a detached node.
+- **No `Body` Area2D on the base scene.** §1 of the concept doc gave the entity a separate Area2D for
+  its presence; that turned out to be redundant, because an Area2D sensor already detects a
+  `CharacterBody2D` through `body_entered` / `get_overlapping_bodies()`. The body's own `BodyShape`
+  is the presence: `collision_layer` keeps it detectable, `collision_mask = 0` keeps entities from
+  shoving each other. Sensor radius and action reach remain separate areas on the *actor*.
 
 `SimEntity.components` is keyed by **slot** (`&"movement"`, `&"wander"`) rather than class name: the
 slot is already needed as the override key, so one identifier does both jobs.

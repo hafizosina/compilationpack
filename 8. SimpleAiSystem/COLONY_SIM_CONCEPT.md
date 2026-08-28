@@ -33,13 +33,20 @@ Main.tscn                     ← entry point / world root
 
 Entity.tscn                   ← BARE BASE (no per-type scenes)
 └── CharacterBody2D  (class_name Entity)
-    ├── Sprite2D                         ← texture set from def
-    └── Body (Area2D + CollisionShape2D) ← the entity's PRESENCE: how OTHER sensors
-                                            detect it, and the target OTHER actions reach
+    ├── Sprite2D                  ← texture set from def
+    └── BodyShape (CollisionShape2D) ← the entity's PRESENCE: how OTHER sensors
+                                       detect it, and what OTHER actions reach.
+                                       No separate Area2D — an Area2D sensor picks
+                                       a CharacterBody2D up via body_entered /
+                                       get_overlapping_bodies(), so the physics
+                                       body IS the presence. collision_layer keeps
+                                       it detectable, collision_mask = 0 stops
+                                       entities shoving each other.
     # ALL behavior components (Health, Hunger, Fatigue, Inventory, Movement,
     # Sensor, Action, Brain, [Attack]) are added AT RUNTIME by EntityFactory,
     # per the EntityDef's component list. Sensor's own detection radius and
-    # Action's own reach are their own areas (they vary per def), NOT the base Body.
+    # Action's own reach are their own areas on the ACTOR (they vary per def),
+    # NOT this shape.
     # Even a berry uses this same base: Sprite2D + Body + EatableComponent + PickUpAbleComponent.
 ```
 

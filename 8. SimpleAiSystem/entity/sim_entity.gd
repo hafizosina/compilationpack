@@ -7,9 +7,16 @@ extends CharacterBody2D
 ##
 ## Scene layout (sim_entity.tscn):
 ##   SimEntity (CharacterBody2D)
-##   ├── Sprite2D            texture/scale/tint set by SimSpriteDef
-##   └── Body (Area2D)       this entity's PRESENCE — how other entities' sensors
-##                           detect it, and what their actions reach (Phase 2)
+##   ├── Sprite2D      texture/scale/tint set by SimSpriteDef
+##   └── BodyShape     this entity's PRESENCE — how other entities' sensors detect
+##                     it, and what their actions reach (Phase 2)
+##
+## The CharacterBody2D *is* the presence: an Area2D sensor picks entities up
+## through `body_entered` / `get_overlapping_bodies()`, so no second Area2D is
+## needed here. `collision_layer` keeps an entity detectable while
+## `collision_mask = 0` stops the population from shoving itself around.
+## A Sensor's detection radius and an Action's reach are their own areas on the
+## *actor*, and vary per def — they are never this shape.
 
 ## Blueprint id this entity was spawned from (e.g. &"type1").
 var def_id: StringName = &""
@@ -21,7 +28,10 @@ var home_position: Vector2 = Vector2.ZERO
 var _components: Dictionary = {}
 
 @onready var sprite: Sprite2D = $Sprite2D
-@onready var body: Area2D = $Body
+## Extent of the entity's presence. The shape is a sub-resource shared by every
+## instance of the scene, so a def that resizes it per entity must duplicate()
+## it first — the same rule SimComponentDef states for live mutable state.
+@onready var body_shape: CollisionShape2D = $BodyShape
 
 ## Records a component under its slot key. Called by SimComponentDef.build_into()
 ## after the node has been added as a child.
