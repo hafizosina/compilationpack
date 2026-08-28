@@ -62,7 +62,7 @@ mouse_filter = 2
 size_flags_vertical = 8
 
 [node name="Inspector" type="VBoxContainer" parent="Root/InspectorHolder/InspectorRow/InspectorPanel"]
-custom_minimum_size = Vector2(300, 0)
+custom_minimum_size = Vector2(300, 300)
 
 [node name="NameLabel" type="Label" parent="Root/InspectorHolder/InspectorRow/InspectorPanel/Inspector"]
 unique_name_in_owner = true
@@ -72,5 +72,11 @@ text = "Entity"
 unique_name_in_owner = true
 clip_tabs = false
 
-[node name="Detail" type="VBoxContainer" parent="Root/InspectorHolder/InspectorRow/InspectorPanel/Inspector"]
+[node name="Scroll" type="ScrollContainer" parent="Root/InspectorHolder/InspectorRow/InspectorPanel/Inspector"]
 unique_name_in_owner = true
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Detail" type="VBoxContainer" parent="Root/InspectorHolder/InspectorRow/InspectorPanel/Inspector/Scroll"]
+unique_name_in_owner = true
+size_flags_horizontal = 3
