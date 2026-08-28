@@ -20,6 +20,8 @@ const TEXT_COLOR := Color(0.09, 0.08, 0.1, 1)
 const TEXT_OUTLINE_COLOR := Color(1, 1, 1, 0.85)
 const TEXT_OUTLINE_SIZE := 4
 const LEASH_COLOR := Color(0.15, 0.55, 0.75, 0.45)
+const HOME_COLOR := Color(0.1, 0.4, 0.6, 0.8)
+const HOME_MARK := 6.0
 const TARGET_COLOR := Color(1, 0.85, 0.3, 0.6)
 ## Sized for the default camera zoom (0.55) — world-space text shrinks with it.
 const FONT_SIZE := 24
@@ -66,8 +68,17 @@ func _draw() -> void:
 
 	# The leash circle is the per-instance override proof: two type1s carrying a
 	# radius override must draw visibly different circles from the default.
+	#
+	# It is centred on the SPAWN POINT, not on the entity, because that is what
+	# wander actually constrains — the entity roams inside a circle that stays
+	# put. The tether and the cross say which circle belongs to this entity, so
+	# a creature standing at the far edge of its own leash still reads clearly.
 	if mode == Mode.LEASHES and _wander != null:
-		draw_arc(to_local(entity.home_position), _wander.radius, 0.0, TAU, 64, LEASH_COLOR, 2.0)
+		var home := to_local(entity.home_position)
+		draw_arc(home, _wander.radius, 0.0, TAU, 64, LEASH_COLOR, 2.0)
+		draw_line(Vector2.ZERO, home, LEASH_COLOR, 1.0)
+		draw_line(home - Vector2(HOME_MARK, 0.0), home + Vector2(HOME_MARK, 0.0), HOME_COLOR, 2.0)
+		draw_line(home - Vector2(0.0, HOME_MARK), home + Vector2(0.0, HOME_MARK), HOME_COLOR, 2.0)
 
 ## The map is near-white and the sprites are pale, so the label needs an outline
 ## to stay readable against either.
