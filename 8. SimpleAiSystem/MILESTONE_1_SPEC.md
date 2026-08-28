@@ -220,5 +220,5 @@ code and this document differ:
 `SimEntity.components` is keyed by **slot** (`&"movement"`, `&"wander"`) rather than class name: the
 slot is already needed as the override key, so one identifier does both jobs.
 
-Verify with F1 (cycle the per-entity overlay: off / labels / labels + wander leashes) and F5
-(respawn from `world1.tres`).
+Verify with F1 (toggle the per-entity labels), a left-click on any entity (inspector panel plus
+that entity's wander leash) and F5 (respawn from `world1.tres`).

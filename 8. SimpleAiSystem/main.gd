@@ -3,10 +3,10 @@ extends Node2D
 ## Module 8 entry point. Builds the whole world from data on startup — every
 ## entity on screen comes out of world1.tres via the SimEntityFactory.
 ##
-## Left-click an entity to inspect it in the bottom-left panel; click bare
-## ground to clear the selection. F1 cycles the per-entity debug overlay (off /
-## labels / labels + wander leashes), F5 respawns the world (edit world1.tres,
-## hit F5, see the change without touching code).
+## Left-click an entity to inspect it in the bottom-left panel; the selected
+## entity also shows its wander leash. Click bare ground to clear. F1 toggles
+## the per-entity debug labels, F5 respawns the world (edit world1.tres, hit
+## F5, see the change without touching code).
 
 ## Physics layer entities sit on, and the layer picking queries against.
 const SELECT_MASK := 1

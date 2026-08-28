@@ -8,10 +8,10 @@ extends SimComponent
 ## injected by SimEntityFactory whenever Constant.DEBUG is on rather than
 ## authored into a blueprint — it is a dev tool, not content.
 
-## How much each overlay draws. LEASHES is the per-instance override proof but
-## is deliberately not the default — one circle per creature is unreadable with
-## a whole population on screen.
-enum Mode { OFF, LABELS, LEASHES }
+## How much each overlay draws. The wander leash is NOT here — it is drawn by
+## SimSelectionMarker for the selected entity only, because one circle per
+## creature is unreadable with a whole population on screen.
+enum Mode { OFF, LABELS }
 
 ## Shared across every overlay in the scene, cycled by main.gd (F1).
 static var mode: Mode = Mode.LABELS
@@ -19,15 +19,11 @@ static var mode: Mode = Mode.LABELS
 const TEXT_COLOR := Color(0.09, 0.08, 0.1, 1)
 const TEXT_OUTLINE_COLOR := Color(1, 1, 1, 0.85)
 const TEXT_OUTLINE_SIZE := 4
-const LEASH_COLOR := Color(0.15, 0.55, 0.75, 0.45)
-const HOME_COLOR := Color(0.1, 0.4, 0.6, 0.8)
-const HOME_MARK := 6.0
 const TARGET_COLOR := Color(1, 0.85, 0.3, 0.6)
 ## Sized for the default camera zoom (0.55) — world-space text shrinks with it.
 const FONT_SIZE := 24
 const LABEL_ORIGIN := Vector2(-52.0, -72.0)
 
-var _wander: SimWanderComponent
 var _movement: SimMovementComponent
 var _drawn_mode: Mode = Mode.LABELS
 
@@ -47,7 +43,6 @@ func _ready() -> void:
 	z_index = 100
 	if entity == null:
 		return
-	_wander = entity.get_component(&"wander") as SimWanderComponent
 	_movement = entity.get_component(&"movement") as SimMovementComponent
 
 func _process(_delta: float) -> void:
@@ -65,20 +60,6 @@ func _draw() -> void:
 
 	if _movement != null and _movement.is_moving():
 		draw_line(Vector2.ZERO, to_local(_movement.target()), TARGET_COLOR, 2.0)
-
-	# The leash circle is the per-instance override proof: two type1s carrying a
-	# radius override must draw visibly different circles from the default.
-	#
-	# It is centred on the SPAWN POINT, not on the entity, because that is what
-	# wander actually constrains — the entity roams inside a circle that stays
-	# put. The tether and the cross say which circle belongs to this entity, so
-	# a creature standing at the far edge of its own leash still reads clearly.
-	if mode == Mode.LEASHES and _wander != null:
-		var home := to_local(entity.home_position)
-		draw_arc(home, _wander.radius, 0.0, TAU, 64, LEASH_COLOR, 2.0)
-		draw_line(Vector2.ZERO, home, LEASH_COLOR, 1.0)
-		draw_line(home - Vector2(HOME_MARK, 0.0), home + Vector2(HOME_MARK, 0.0), HOME_COLOR, 2.0)
-		draw_line(home - Vector2(0.0, HOME_MARK), home + Vector2(0.0, HOME_MARK), HOME_COLOR, 2.0)
 
 ## The map is near-white and the sprites are pale, so the label needs an outline
 ## to stay readable against either.
