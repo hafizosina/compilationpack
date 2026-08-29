@@ -25,6 +25,27 @@ func get_def(id: StringName) -> SimEntityDef:
 		push_error("SimEntityCatalog: no blueprint with id '%s'" % id)
 	return def
 
+## Registers a blueprint at runtime — a def assembled in code rather than loaded
+## from a .tres. Use this instead of `defs.append()`: appending mutates the array
+## in place, so the setter never fires and the id index stays stale, and the new
+## blueprint is invisible to get_def().
+func add_def(def: SimEntityDef) -> void:
+	if def == null:
+		push_error("SimEntityCatalog: cannot register a null blueprint")
+		return
+	if def.id == &"":
+		push_error("SimEntityCatalog: cannot register a blueprint with an empty id")
+		return
+	defs.append(def)
+	_index_built = false
+
+## Whether a blueprint is registered under `id`. Unlike get_def() this pushes no
+## error, so a UI can check an id is free before registering one.
+func has_def(id: StringName) -> bool:
+	if not _index_built:
+		_rebuild_index()
+	return _index.has(id)
+
 ## Every blueprint id in the catalog.
 func ids() -> Array:
 	if not _index_built:
