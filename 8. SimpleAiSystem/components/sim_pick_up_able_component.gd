@@ -27,8 +27,11 @@ func is_available() -> bool:
 func take(actor: SimEntity, inventory: SimInventoryComponent) -> bool:
 	if _taken:
 		return false
+	# Only vanish if the item was actually stored — a full inventory must leave
+	# the berry in the world for someone else.
+	if not inventory.add(item_id):
+		return false
 	_taken = true
-	inventory.add(item_id)
 	picked_up.emit(actor)
 	# Detached immediately, not just queue_free()d: a queued node stays in the
 	# tree until the end of the frame, so other sensors would keep detecting a

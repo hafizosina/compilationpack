@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="SimEntityDef" format=3]
+[gd_resource type="Resource" script_class="SimEntityDef" format=3 uid="uid://dsio6li672wv2"]
 
 [ext_resource type="Script" uid="uid://ms54tio2v81x" path="res://8. SimpleAiSystem/defs/sim_entity_def.gd" id="1_def"]
 [ext_resource type="Script" uid="uid://b4qpnevkf8tls" path="res://8. SimpleAiSystem/defs/sim_component_def.gd" id="2_base"]
@@ -13,8 +13,6 @@
 [sub_resource type="Resource" id="Resource_sprite"]
 script = ExtResource("3_sprite")
 texture = ExtResource("10_tex")
-scale_factor = 0.5
-tint = Color(1, 1, 1, 1)
 
 [sub_resource type="Resource" id="Resource_movement"]
 script = ExtResource("4_movement")
@@ -27,18 +25,12 @@ radius = 420.0
 
 [sub_resource type="Resource" id="Resource_action"]
 script = ExtResource("7_action")
-radius = 56.0
 
 [sub_resource type="Resource" id="Resource_inventory"]
 script = ExtResource("8_inventory")
 
 [sub_resource type="Resource" id="Resource_brain"]
 script = ExtResource("9_brain")
-think_interval = 0.25
-wanted = &"pickupable"
-wander_radius = 420.0
-wander_pause_min = 0.3
-wander_pause_max = 1.2
 
 [resource]
 script = ExtResource("1_def")

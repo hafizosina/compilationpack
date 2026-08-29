@@ -18,7 +18,13 @@ const ENTITY_SCENE: PackedScene = preload("res://8. SimpleAiSystem/entity/sim_en
 ## Node the spawned entities are parented to.
 @export var entities_root: Node2D
 
+## Group the factory joins so components can spawn without a hard node path.
+const GROUP := &"sim_factory"
+
 var _serial: int = 0
+
+func _ready() -> void:
+	add_to_group(GROUP)
 
 ## Clears any existing entities and spawns one entity per `world.entries` row.
 func spawn_world() -> void:

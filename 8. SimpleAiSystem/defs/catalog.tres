@@ -1,10 +1,11 @@
-[gd_resource type="Resource" script_class="SimEntityCatalog" load_steps=5 format=3 uid="uid://dldvh5p25k40x"]
+[gd_resource type="Resource" script_class="SimEntityCatalog" load_steps=6 format=3 uid="uid://dldvh5p25k40x"]
 
 [ext_resource type="Script" uid="uid://btqh215v2w84h" path="res://8. SimpleAiSystem/defs/sim_entity_catalog.gd" id="1_catalog"]
 [ext_resource type="Script" uid="uid://ms54tio2v81x" path="res://8. SimpleAiSystem/defs/sim_entity_def.gd" id="2_def"]
 [ext_resource type="Resource" path="res://8. SimpleAiSystem/defs/blueprints/animal.tres" id="3_animal"]
 [ext_resource type="Resource" path="res://8. SimpleAiSystem/defs/blueprints/berry.tres" id="4_berry"]
+[ext_resource type="Resource" path="res://8. SimpleAiSystem/defs/blueprints/berry_spawner.tres" id="5_spawner"]
 
 [resource]
 script = ExtResource("1_catalog")
-defs = Array[ExtResource("2_def")]([ExtResource("3_animal"), ExtResource("4_berry")])
+defs = Array[ExtResource("2_def")]([ExtResource("3_animal"), ExtResource("4_berry"), ExtResource("5_spawner")])

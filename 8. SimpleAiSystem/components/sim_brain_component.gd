@@ -73,6 +73,12 @@ func _process(delta: float) -> void:
 		_step_wander(delta)
 
 func _think() -> void:
+	# Nowhere to put anything — no point chasing it, so just roam.
+	if _inventory != null and _inventory.is_full():
+		_target = null
+		_enter(State.WANDER)
+		return
+
 	if not _target_is_valid():
 		_target = null
 
@@ -135,8 +141,9 @@ func _wander_point() -> Vector2:
 	)
 
 func describe() -> Dictionary:
+	var full := _inventory != null and _inventory.is_full()
 	return {
-		"state": "seeking" if _state == State.SEEK else "wandering",
+		"state": ("wandering (full)" if full else "wandering") if _state == State.WANDER else "seeking",
 		"target": _target.name if _target_is_valid() else "—",
 		"collected": str(_collected),
 		"wander step": "%.0f px" % wander_radius,

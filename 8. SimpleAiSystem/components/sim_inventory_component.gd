@@ -11,6 +11,10 @@ extends SimComponent
 ## Emitted whenever the contents change, carrying the new total.
 signal changed(total: int)
 
+## How many items fit. One slot means one berry at a time — collect it, and the
+## entity has nowhere to put the next one until something empties this.
+var capacity: int = 1
+
 ## item id -> count.
 var _items: Dictionary = {}
 
@@ -21,6 +25,8 @@ func slot() -> StringName:
 ## component to reach with, if the target is out of reach, if it does not
 ## advertise pick-up, or if someone else claimed it first.
 func try_pick_up(target: SimEntity) -> bool:
+	if is_full():
+		return false
 	var action := entity.get_component(&"action") as SimActionComponent
 	if action == null:
 		return false
@@ -31,9 +37,18 @@ func try_pick_up(target: SimEntity) -> bool:
 		return false
 	return pickable.take(entity, self)
 
-func add(item_id: StringName, amount: int = 1) -> void:
+## Whether there is no room left.
+func is_full() -> bool:
+	return total() >= capacity
+
+## Stores `amount` of `item_id`. Returns false, changing nothing, when it will
+## not fit — the caller must not consume anything it could not hand over.
+func add(item_id: StringName, amount: int = 1) -> bool:
+	if total() + amount > capacity:
+		return false
 	_items[item_id] = int(_items.get(item_id, 0)) + amount
 	changed.emit(total())
+	return true
 
 func count_of(item_id: StringName) -> int:
 	return int(_items.get(item_id, 0))
@@ -45,10 +60,10 @@ func total() -> int:
 	return sum
 
 func describe() -> Dictionary:
+	var fields := {"slots": "%d / %d" % [total(), capacity]}
 	if _items.is_empty():
-		return {"carrying": "nothing"}
-	var fields := {}
+		fields["carrying"] = "nothing"
+		return fields
 	for key in _items:
 		fields[String(key)] = str(_items[key])
-	fields["total"] = str(total())
 	return fields
