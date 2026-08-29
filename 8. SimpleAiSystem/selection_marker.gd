@@ -1,22 +1,27 @@
 class_name SimSelectionMarker
 extends Node2D
 
-## Ring around the entity currently being inspected, plus its sensor and action
-## radii — the two distances the AI actually reasons about.
+## The two ranges the AI actually reasons about, drawn around the selected
+## entity: its sensor radius (what it can see) and its action radius (what it
+## can reach). A dot marks the centre so a selection stays findable when the
+## camera is pulled far out.
 ##
 ## Drawn here rather than on every entity because a circle per creature is
 ## unreadable with a whole population on screen, and it belongs to the
 ## selection, not the debug overlay, so it shows with labels switched off.
-##
-## It lives beside the entities rather than on them so a freed entity takes
-## nothing with it — the marker just stops tracking.
+## It also lives beside the entities rather than on them, so a freed entity
+## takes nothing with it — the marker just stops tracking.
 
-const RING_COLOR := Color(0.85, 0.5, 0.08, 0.95)
-const RING_RADIUS := 42.0
-const RING_WIDTH := 3.0
+const SENSOR_COLOR := Color(0.13, 0.52, 0.75, 0.75)
+const REACH_COLOR := Color(0.95, 0.45, 0.05, 0.95)
+const CENTRE_COLOR := Color(0.95, 0.45, 0.05, 0.95)
 
-const SENSOR_COLOR := Color(0.15, 0.55, 0.75, 0.5)
-const REACH_COLOR := Color(0.9, 0.35, 0.15, 0.7)
+## Line widths in SCREEN pixels — divided by the camera zoom before drawing, so
+## the circles stay just as readable pulled out over the whole map as they are
+## up close. Without that they thin to nothing at low zoom and look missing.
+const SENSOR_WIDTH := 2.5
+const REACH_WIDTH := 3.0
+const CENTRE_RADIUS := 4.0
 
 var _target: SimEntity
 var _sensor: SimSensorComponent
@@ -47,8 +52,15 @@ func _process(_delta: float) -> void:
 func _draw() -> void:
 	if not is_instance_valid(_target):
 		return
-	draw_arc(Vector2.ZERO, RING_RADIUS, 0.0, TAU, 48, RING_COLOR, RING_WIDTH)
+	var scale_up := 1.0 / maxf(_camera_zoom(), 0.01)
 	if _sensor != null:
-		draw_arc(Vector2.ZERO, _sensor.radius, 0.0, TAU, 64, SENSOR_COLOR, 2.0)
+		draw_arc(Vector2.ZERO, _sensor.radius, 0.0, TAU, 72, SENSOR_COLOR, SENSOR_WIDTH * scale_up)
 	if _action != null:
-		draw_arc(Vector2.ZERO, _action.radius, 0.0, TAU, 48, REACH_COLOR, 2.0)
+		draw_arc(Vector2.ZERO, _action.radius, 0.0, TAU, 48, REACH_COLOR, REACH_WIDTH * scale_up)
+	draw_circle(Vector2.ZERO, CENTRE_RADIUS * scale_up, CENTRE_COLOR)
+
+## Draw scale of the active camera. Falls back to 1.0 outside the tree.
+func _camera_zoom() -> float:
+	if not is_inside_tree():
+		return 1.0
+	return get_viewport_transform().get_scale().x
