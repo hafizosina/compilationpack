@@ -1,0 +1,47 @@
+[gd_resource type="Resource" script_class="SimEntityDef" format=3]
+
+[ext_resource type="Script" uid="uid://ms54tio2v81x" path="res://8. SimpleAiSystem/defs/sim_entity_def.gd" id="1_def"]
+[ext_resource type="Script" uid="uid://b4qpnevkf8tls" path="res://8. SimpleAiSystem/defs/sim_component_def.gd" id="2_base"]
+[ext_resource type="Script" uid="uid://dtqsb3tmid1tf" path="res://8. SimpleAiSystem/defs/components/sim_sprite_def.gd" id="3_sprite"]
+[ext_resource type="Script" uid="uid://d26oxjcnja2nw" path="res://8. SimpleAiSystem/defs/components/sim_movement_def.gd" id="4_movement"]
+[ext_resource type="Script" uid="uid://njhhln7pu68q" path="res://8. SimpleAiSystem/defs/components/sim_sensor_def.gd" id="6_sensor"]
+[ext_resource type="Script" uid="uid://cjd0adnsy0s3q" path="res://8. SimpleAiSystem/defs/components/sim_action_def.gd" id="7_action"]
+[ext_resource type="Script" uid="uid://bdgcjlio76joi" path="res://8. SimpleAiSystem/defs/components/sim_inventory_def.gd" id="8_inventory"]
+[ext_resource type="Script" uid="uid://bkalxye2nfs23" path="res://8. SimpleAiSystem/defs/components/sim_brain_def.gd" id="9_brain"]
+[ext_resource type="Texture2D" uid="uid://dnk7drhg2i8xh" path="res://Global/Asset/Animal/rabbit.png" id="10_tex"]
+
+[sub_resource type="Resource" id="Resource_sprite"]
+script = ExtResource("3_sprite")
+texture = ExtResource("10_tex")
+scale_factor = 0.5
+tint = Color(1, 1, 1, 1)
+
+[sub_resource type="Resource" id="Resource_movement"]
+script = ExtResource("4_movement")
+walk_speed = 130.0
+run_speed = 260.0
+
+[sub_resource type="Resource" id="Resource_sensor"]
+script = ExtResource("6_sensor")
+radius = 420.0
+
+[sub_resource type="Resource" id="Resource_action"]
+script = ExtResource("7_action")
+radius = 56.0
+
+[sub_resource type="Resource" id="Resource_inventory"]
+script = ExtResource("8_inventory")
+
+[sub_resource type="Resource" id="Resource_brain"]
+script = ExtResource("9_brain")
+think_interval = 0.25
+wanted = &"pickupable"
+wander_radius = 420.0
+wander_pause_min = 0.3
+wander_pause_max = 1.2
+
+[resource]
+script = ExtResource("1_def")
+id = &"animal"
+display_name = "Animal"
+components = Array[ExtResource("2_base")]([SubResource("Resource_sprite"), SubResource("Resource_movement"), SubResource("Resource_sensor"), SubResource("Resource_action"), SubResource("Resource_inventory"), SubResource("Resource_brain")])

@@ -11,6 +11,6 @@ extends Resource
 ## World position to spawn at.
 @export var position: Vector2 = Vector2.ZERO
 ## Per-instance tweaks, keyed by component slot:
-## `{ "wander": { "radius": 48.0 } }`. Applied to this entity's own duplicated
+## `{ "brain": { "wander_radius": 200.0 } }`. Applied to this entity's own duplicated
 ## def before the component is built, so it never leaks to other instances.
 @export var overrides: Dictionary = {}

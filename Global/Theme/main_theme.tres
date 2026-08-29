@@ -132,6 +132,22 @@ expand_margin_top = -4.0
 expand_margin_right = -4.0
 expand_margin_bottom = -4.0
 
+[sub_resource type="StyleBoxFlat" id="sb_sim_panel"]
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+bg_color = Color(0.906, 0.839, 0.675, 0.95)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.165, 0.125, 0.086, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
 [sub_resource type="StyleBoxFlat" id="sb_tab_hovered"]
 content_margin_left = 8.0
 content_margin_top = 3.0
@@ -214,22 +230,6 @@ corner_radius_top_left = 500
 corner_radius_top_right = 500
 corner_radius_bottom_right = 500
 corner_radius_bottom_left = 500
-
-[sub_resource type="StyleBoxFlat" id="sb_sim_panel"]
-content_margin_left = 8.0
-content_margin_top = 6.0
-content_margin_right = 8.0
-content_margin_bottom = 6.0
-bg_color = Color(0.906, 0.839, 0.675, 0.95)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-border_color = Color(0.165, 0.125, 0.086, 1)
-corner_radius_top_left = 6
-corner_radius_top_right = 6
-corner_radius_bottom_right = 6
-corner_radius_bottom_left = 6
 
 [resource]
 Button/colors/font_color = Color(0.906, 0.839, 0.675, 1)

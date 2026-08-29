@@ -33,7 +33,7 @@ func spawn_world() -> void:
 	EventBus.sim_world_spawned.emit(census())
 
 ## Builds one entity of `type_id` at `pos`. `overrides` is keyed by component
-## slot, e.g. `{ "wander": { "radius": 48.0 } }`.
+## slot, e.g. `{ "brain": { "wander_radius": 200.0 } }`.
 func spawn(type_id: StringName, pos: Vector2, overrides: Dictionary = {}, entity_name: String = "") -> SimEntity:
 	var blueprint := catalog.get_def(type_id)
 	if blueprint == null:
@@ -123,11 +123,11 @@ func debug_report() -> void:
 		if not child is SimEntity:
 			continue
 		var entity: SimEntity = child
-		var wander := entity.get_component(&"wander") as SimWanderComponent
+		var sensor := entity.get_component(&"sensor") as SimSensorComponent
 		var movement := entity.get_component(&"movement") as SimMovementComponent
-		print("[sim]   %-16s slots=%s wander_radius=%s run_speed=%s" % [
+		print("[sim]   %-16s slots=%s sensor=%s walk=%s" % [
 			entity.name,
 			entity.component_slots(),
-			"-" if wander == null else str(wander.radius),
-			"-" if movement == null else str(movement.run_speed),
+			"-" if sensor == null else str(sensor.radius),
+			"-" if movement == null else str(movement.walk_speed),
 		])

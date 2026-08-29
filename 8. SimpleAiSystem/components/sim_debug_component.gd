@@ -2,15 +2,15 @@ class_name SimDebugComponent
 extends SimComponent
 
 ## Development overlay: draws an entity's name, the component slots it carries,
-## its wander leash and its current destination.
+## and its current destination.
 ##
 ## This is the only way to tell a working factory from a stuck one, so it is
 ## injected by SimEntityFactory whenever Constant.DEBUG is on rather than
 ## authored into a blueprint — it is a dev tool, not content.
 
-## How much each overlay draws. The wander leash is NOT here — it is drawn by
-## SimSelectionMarker for the selected entity only, because one circle per
-## creature is unreadable with a whole population on screen.
+## How much each overlay draws. Sensor and reach radii are NOT here — they are
+## drawn by SimSelectionMarker for the selected entity only, because a circle
+## per creature is unreadable with a whole population on screen.
 enum Mode { OFF, LABELS }
 
 ## Shared across every overlay in the scene, cycled by main.gd (F1).

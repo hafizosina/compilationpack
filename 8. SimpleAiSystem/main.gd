@@ -4,7 +4,8 @@ extends Node2D
 ## entity on screen comes out of world1.tres via the SimEntityFactory.
 ##
 ## Left-click an entity to inspect it in the bottom-left panel; the selected
-## entity also shows its wander leash. Click bare ground to clear. F1 toggles
+## entity also shows its sensor and reach radii. Click bare ground to clear.
+## F1 toggles
 ## the per-entity debug labels, F5 respawns the world (edit world1.tres, hit
 ## F5, see the change without touching code).
 
@@ -23,6 +24,9 @@ var _selected: SimEntity
 var _since_push: float = 0.0
 
 func _ready() -> void:
+	# Read the painted area off the tilemap, so repainting the map moves the
+	# wander bounds with it and there is no constant to keep in sync.
+	SimConst.adopt_bounds_from($World/TileMapLayer)
 	EventBus.sim_respawn_requested.connect(_respawn)
 	_respawn()
 
