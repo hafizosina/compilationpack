@@ -11,9 +11,22 @@ extends SimComponent
 ## Emitted whenever the contents change, carrying the new total.
 signal changed(total: int)
 
+## PROTOTYPE ONLY — REMOVE BEFORE INTEGRATING WITH OTHER SYSTEMS.
+##
 ## Carry badge: one dot per held item, floating above the entity, in the colour
 ## the item had in the world. Sizes are SCREEN pixels, divided by the camera
 ## zoom before drawing, so the badge stays readable at any zoom.
+##
+## A component that holds state should not also render it. This is here because
+## it is the fastest way to see the pick-up loop working while the AI is being
+## built, and it is deliberately self-contained so it can be deleted in one go:
+## these constants, `_colours`, the `colour` parameter on add(), `_draw()`,
+## `_camera_zoom()`, the `z_index` line in _ready(), and the colour argument
+## PickUpAbleComponent passes to add(). Nothing else refers to any of it.
+##
+## The replacement seam already exists: `changed(total)` is emitted on every
+## change, so a separate indicator node or a UI layer can subscribe to it
+## without this component knowing anything about drawing.
 const BADGE_RADIUS := 5.0
 const BADGE_GAP := 13.0
 const BADGE_HEIGHT := -46.0
@@ -57,6 +70,7 @@ func is_full() -> bool:
 
 ## Stores `amount` of `item_id`. Returns false, changing nothing, when it will
 ## not fit — the caller must not consume anything it could not hand over.
+## `colour` feeds the prototype carry badge only — drop the parameter with it.
 func add(item_id: StringName, amount: int = 1, colour: Color = Color.WHITE) -> bool:
 	if total() + amount > capacity:
 		return false
@@ -84,8 +98,8 @@ func describe() -> Dictionary:
 		fields[String(key)] = str(_items[key])
 	return fields
 
-## One dot per carried item. Nothing held draws nothing, so an empty animal is
-## visually identical to one with no inventory at all.
+## PROTOTYPE ONLY (see the note at the top). One dot per carried item; nothing
+## held draws nothing, so an empty animal looks like one with no inventory.
 func _draw() -> void:
 	var dots: Array[Color] = []
 	for key in _items:

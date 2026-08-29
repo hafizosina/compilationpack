@@ -29,8 +29,9 @@ func take(actor: SimEntity, inventory: SimInventoryComponent) -> bool:
 		return false
 	# Only vanish if the item was actually stored — a full inventory must leave
 	# the berry in the world for someone else.
-	# Hand over the colour it had in the world, so the carrier's badge shows what
-	# it is carrying without anything having to know a berry from a rock.
+	# The colour is for the PROTOTYPE carry badge only — when that goes, drop the
+	# third argument here too. It is passed so the badge can show what is being
+	# carried without anything having to know a berry from a rock.
 	if not inventory.add(item_id, 1, entity.sprite.modulate):
 		return false
 	_taken = true
