@@ -8,6 +8,9 @@ extends SimSensorComponent
 ## Pairing rule: an action fires only if the TARGET advertises it (has the
 ## affordance component) AND the ACTOR has the paired component. Pick-up needs
 ## the target's PickUpAble and the actor's Inventory. No type checks anywhere.
+##
+## Deliberately reports nothing to the entity inspector — the reach circle is
+## drawn around the selected entity instead.
 
 func slot() -> StringName:
 	return &"action"
@@ -30,9 +33,3 @@ func try_pick_up(target: SimEntity) -> bool:
 	if pickable == null:
 		return false
 	return pickable.take(entity, inventory)
-
-func describe() -> Dictionary:
-	return {
-		"reach": "%.0f px" % radius,
-		"in reach": "%d" % get_detected().size(),
-	}

@@ -7,6 +7,9 @@ extends SimComponent
 ##
 ## Phase 2 adds `follow(target, gait)` for chases: re-read the target's position
 ## each tick, fall back to its last known position, then emit `lost_target`.
+##
+## Deliberately reports nothing to the entity inspector — where a thing is going
+## is already visible on screen, and the brain's tab says why.
 
 enum Gait { WALK, RUN }
 
@@ -49,15 +52,6 @@ func target() -> Vector2:
 ## Speed of the gait currently in use.
 func current_speed() -> float:
 	return run_speed if _gait == Gait.RUN else walk_speed
-
-func describe() -> Dictionary:
-	var gait_name := "run" if _gait == Gait.RUN else "walk"
-	return {
-		"walk / run": "%.0f / %.0f px/s" % [walk_speed, run_speed],
-		"state": "moving (%s)" % gait_name if _has_target else "idle",
-		"target": "%.0f, %.0f" % [_target.x, _target.y] if _has_target else "—",
-		"arrive at": "%.0f px" % arrive_radius,
-	}
 
 func _physics_process(_delta: float) -> void:
 	if entity == null:

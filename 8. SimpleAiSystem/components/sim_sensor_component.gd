@@ -6,6 +6,10 @@ extends SimComponent
 ## It finds things and nothing else — travelling is MovementComponent's job and
 ## acting is ActionComponent's. It detects entities through their own physics
 ## body, so anything the factory spawns is visible without extra setup.
+##
+## Deliberately reports nothing to the entity inspector: SimSelectionMarker
+## already draws this radius around the selected entity, which reads better than
+## a number.
 
 ## Detection radius in pixels.
 var radius: float = 360.0
@@ -43,12 +47,6 @@ func nearest_with(wanted_slot: StringName) -> SimEntity:
 			best_distance = distance
 			best = candidate
 	return best
-
-func describe() -> Dictionary:
-	return {
-		"radius": "%.0f px" % radius,
-		"in range": "%d" % get_detected().size(),
-	}
 
 ## Shared by Sensor and Action: a monitoring-only circular area on the entity.
 func _build_area(area_radius: float, area_name: String) -> Area2D:
