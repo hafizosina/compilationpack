@@ -175,13 +175,13 @@ Entity is the **mediator**. Components are dumb state holders; the Brain is the 
 
 **Fatigue — how rested** (high = good; this *is* the "energy" that movement and actions spend).
 - Drained by movement (walk 0.5/grid, run 2/grid) and costed actions.
-- `= 0` → **collapse**: take **20** Health damage once, then **forced sleep in place** (no bed needed).
+- `= 0` → **collapse**: **forced sleep in place**, no health penalty. The cost of exhaustion is the helpless window itself, not damage.
 - Sleeping restores **+1/sec**, always in place. There is no bed: sleep is self-directed, so it needs no target and no travel.
 - `= 100` → **auto-wake**.
 
 **Health.**
 - `= 100` → healthy (max). `= 0` → `died` → becomes a **Corpse**.
-- Damaged by: starvation, `AttackComponent` hits, and the −20 collapse penalty.
+- Damaged by: starvation and `AttackComponent` hits. Collapse costs no health.
 - Regenerates **+1/sec whenever Hunger > 50**.
 
 **Danger — threat awareness** (Type1 only for now; Type2's input is empty → stays 0).
@@ -191,7 +191,9 @@ Entity is the **mediator**. Components are dumb state holders; the Brain is the 
 
 **Sleep state:** the entity carries `is_sleeping`. **There is no Bed entity — an animal sleeps wherever it stands.** Sleep is self-directed: `FatigueComponent` is the only component involved, there is nothing to path to and nothing to advertise it. What separates the two kinds is the *price*, not the place:
 - **Voluntary** (chose to Rest): interruptible every tick — the Brain compares *continue sleeping* (remaining Rest need) vs the best *waking* goal (Flee from Danger, or eat if starving) and wakes if a waking goal wins. Restores +1/sec, auto-wakes at 100. Has energy on hand → can run when it bolts.
-- **Collapse** (Fatigue hit 0): a **−20 HP penalty**, then **sleep-locked** — Danger and hunger **cannot** wake it — until Fatigue recovers to **50%**. ~50s of true helplessness. This is the only difference that matters between the two kinds: choosing to rest is free and interruptible, being forced to costs health and control. At 50% the lock releases → it becomes a normal voluntary sleeper (able to wake and flee with ≥50 energy to actually run, or rest on to 100).
+- **Collapse** (Fatigue hit 0): **sleep-locked** — Danger and hunger **cannot** wake it — until Fatigue recovers to **50**. ~50s of true helplessness. That lost control *is* the price; there is no health penalty. The difference that matters between the two kinds is authorship: voluntary rest is a choice the brain makes and can interrupt, collapse is not a decision at all.
+
+  **Collapse is owned by `FatigueComponent`, not the Brain.** Running out of energy is not something to weigh against other goals, so the component puts the entity to sleep itself, switches the Brain off, watches its own value, and switches the Brain back on at 50. The Brain holds no sleep code and never learns it happened.
 
 **The 50 line is the pivot:** a need `< 50` activates its goal (§7); Hunger `> 50` enables Health regen. So sub-50 hunger both drives eating *and* halts regen — a starving creature can't heal until it eats back above 50.
 
@@ -431,7 +433,9 @@ world/  Main.tscn / Main.gd
 - ~~Collapse-sleep helpless window~~ → resolved: collapse is sleep-locked (un-wakeable) until Fatigue 50 (~50s helpless), then normal interruptible sleep with ≥50 energy on wake.
 - Danger rise/decay rates; danger→flee curve shape; does extreme hunger also wake a safe sleeper?
 - **Experiment to watch:** Type1 vs Type3 survival on one map — does awareness or speed win?
-- ~~Bed vs collapse~~ → resolved: **no Bed at all.** Animals sleep where they stand; voluntary rest is free and interruptible, collapse costs 20 HP and sleep-locks until 50% energy.
+- ~~Bed vs collapse~~ → resolved: **no Bed at all.** Animals sleep where they stand.
+- ~~Collapse penalty~~ → resolved: **no health penalty.** Collapse is forced sleep, locked until energy reaches 50; the helpless window is the whole cost. Triggered by `FatigueComponent`, not the Brain.
+- ~~Does hunger keep draining while asleep?~~ → resolved: yes, at a reduced rate. Sleep state lives on the entity (`is_sleeping`) so Hunger reads it without depending on Fatigue.
 - Passive Fatigue drain, or only movement/actions? (idle well-fed entity otherwise never tires)
 - Wander radius/interval; smoothed vs pure random heading.
 - ~~Pickup model~~ → resolved: harvest spawns Items in-world, ActionComponent auto-picks diet-matching Items in reach.

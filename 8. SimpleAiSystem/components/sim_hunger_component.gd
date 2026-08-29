@@ -11,6 +11,10 @@ extends SimBarComponent
 var well_fed_above: float = 50.0
 ## Health lost per second while completely empty.
 var starve_damage_per_second: float = 2.0
+## Drain multiplier while the entity is asleep — a sleeping animal still gets
+## hungry, just slower. Read from the entity's own `is_sleeping` flag, so this
+## never touches FatigueComponent and the two bars stay independent.
+var sleep_drain_scale: float = 0.25
 
 func slot() -> StringName:
 	return &"hunger"
@@ -26,6 +30,9 @@ func is_well_fed() -> bool:
 ## Whether the entity should be looking for food.
 func is_hungry() -> bool:
 	return value <= well_fed_above
+
+func drain_scale() -> float:
+	return sleep_drain_scale if entity != null and entity.is_sleeping else 1.0
 
 func _process(delta: float) -> void:
 	super(delta)

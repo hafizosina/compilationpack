@@ -27,8 +27,8 @@ If all six are visible, the foundation (factory + components + actions + GOAP) i
 
 ## 1. Build order (do it in this sequence — each step runs before the next is added)
 
-> **Progress:** 1 ✅ · 2 ✅ · 3 ⬜ · 4 ◐ (Action/Inventory/PickUpAble built; no Eatable, no
-> Harvestable, actions not yet `ActionDef` data) · 5 ⬜ · 6 ⬜ · 7 ◐ (sensor only).
+> **Progress:** 1 ✅ · 2 ✅ · 3 ✅ · 4 ◐ (Action/Inventory/PickUpAble built; no Eatable, no
+> Harvestable, actions not yet `ActionDef` data) · 5 ⬜ · 6 ◐ (collapse built; voluntary Rest goal not) · 7 ◐ (sensor only).
 > Steps 4 and 7's sensor were pulled forward ahead of 3 on purpose — see §11.
 
 1. **Bare Entity + Factory + one component.** `Entity.tscn`, `EntityFactory`, `EntityDef`/`ComponentDef`, and a `SpriteComponent`. Spawn 30 from `world1.tres`. Success: 30 colored dots at their positions.
@@ -36,7 +36,7 @@ If all six are visible, the foundation (factory + components + actions + GOAP) i
 3. **Bars.** Add `HungerComponent`, `FatigueComponent`, `HealthComponent` that drain/tick. Debug overlay shows the numbers. No behavior yet — just draining.
 4. **Actions + affordances.** Add `ActionComponent`, `InventoryComponent`, and the target components (`Eatable`, `Harvestable`, `PickUpAble`, `Receiver`). Hard-call one action manually to confirm the perform→receiver→effect handshake.
 5. **GOAP — hunger only.** Add `BrainComponent` with the planner and the `[harvest, pickUp, eat]` chain. Success: herbivores feed themselves.
-6. **Sleep goal.** Add the Rest goal, sleeping in place, plus the collapse penalty. Success: tired entities sleep.
+6. **Sleep goal.** Add the Rest goal (brain-chosen, interruptible). Collapse is already built and is NOT a brain concern — `FatigueComponent` owns it. Success: tired entities choose to rest before they drop.
 7. **Sensor + Flee + predation.** Add `SensorComponent`, `Danger`, `AttackComponent` do-side, and the live-harvest damage. Success: predators hunt, prey flee.
 
 Ship nothing past step 7 for this milestone.
@@ -106,7 +106,7 @@ All bars 0–100. Tick from a shared `_process(delta)` per component (self-ticki
 | `SpriteComponent` | — | — | (texture/tint from def) |
 | `MovementComponent` | — | — | `walk=120 px/s`, `run=240` (Type1); gait set by Brain; spends energy per grid; `move_to(pos)` fixed point + `follow(entity)` chase (re-reads target pos each tick, falls back to last-known then emits `lost_target`) |
 | `HungerComponent` | eat | — | `hunger=100`, drain **1.0/s**; `<50` → SatisfyHunger goal; `=0` → −**2 hp/s** starvation |
-| `FatigueComponent` | sleep | — | `energy=100`, drain **0.5/s** idle + movement cost; `=0` → −20 hp once + collapse, sleep-locked until 50% |
+| `FatigueComponent` | sleep | — | `energy=100`, drain **0.5/s** idle + movement cost; `=0` → collapse (no damage), sleep-locked until 50, self-managed |
 | `HealthComponent` | — | attack | `hp=100`; regen **+1/s while hunger>50**; `=0` → died → disable Movement+Brain (harvestable in place) |
 | `InventoryComponent` | pickUp | — | `items: Array` (item-data, def refs) |
 | `ActionComponent` | harvest | — | `reach=40 px`; runs the chosen ActionDef |
@@ -243,8 +243,20 @@ Each component decides how it appears via `describe()` / `describe_label()`; ret
 which Movement, Sensor and Action do. Tabs are generated from whatever reports, so a new component
 gets a tab for free.
 
+### Bars
+Health, Hunger and Fatigue exist. They report to the inspector's **main** tab through
+`describe_summary()` rather than claiming a tab each, and Health/Hunger draw a small bar under the
+sprite (prototype rendering, same caveat as the carry badge).
+
+Couplings run one way and are asked for, never pushed: Health asks Hunger `is_well_fed()`; Fatigue
+asks Movement `is_moving()`; Hunger reads the entity's own `is_sleeping` flag. No bar depends on
+another bar's component.
+
+**Collapse is owned by `FatigueComponent`**, not the brain — at zero it sleeps the entity, switches
+the brain off, and wakes it at 50. No health penalty. Voluntary Rest (a brain decision) is still step 6.
+
 ### Not yet built
-Bars (Hunger / Fatigue / Health), `Eatable`, `Harvestable`, `Attack`, actions as `ActionDef` data,
+`Eatable`, `Harvestable`, `Attack`, actions as `ActionDef` data,
 GOAP, the utility goal layer, sleep, Danger, flee and predation.
 
 Verify with F1 (toggle the per-entity labels), a left-click on any entity (inspector plus that

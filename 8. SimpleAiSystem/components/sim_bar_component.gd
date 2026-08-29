@@ -42,7 +42,7 @@ func bar_label() -> String:
 	return String(slot())
 
 func _process(delta: float) -> void:
-	var rate := drain_per_second + extra_drain()
+	var rate := (drain_per_second + extra_drain()) * drain_scale()
 	if rate != 0.0:
 		spend(rate * delta)
 
@@ -50,6 +50,11 @@ func _process(delta: float) -> void:
 ## movement. Returns units per second.
 func extra_drain() -> float:
 	return 0.0
+
+## Multiplier applied to the whole drain. Hunger overrides this to slow down
+## while the entity sleeps. 1.0 is the normal rate.
+func drain_scale() -> float:
+	return 1.0
 
 func fraction() -> float:
 	return 0.0 if max_value <= 0.0 else clampf(value / max_value, 0.0, 1.0)

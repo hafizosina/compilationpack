@@ -18,8 +18,14 @@ extends CharacterBody2D
 ## A Sensor's detection radius and an Action's reach are their own areas on the
 ## *actor*, and vary per def — they are never this shape.
 
-## Blueprint id this entity was spawned from (e.g. &"type1").
+## Blueprint id this entity was spawned from (e.g. &"animal").
 var def_id: StringName = &""
+
+## Whether the entity is asleep. Set by whatever put it to sleep — currently
+## only FatigueComponent's collapse. It lives here, not on Fatigue, so that any
+## component can react to sleep without depending on Fatigue: Hunger slows its
+## drain by reading this flag, and the two bars stay independent of each other.
+var is_sleeping: bool = false
 ## slot (StringName) -> component node. Populated by SimComponentDef.build_into().
 var _components: Dictionary = {}
 

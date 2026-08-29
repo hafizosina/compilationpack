@@ -33,10 +33,10 @@ before GOAP arrives.
 |---|---|
 | 1. Bare Entity + Factory + one component | **done** |
 | 2. Movement + wander | **done** — wander now lives inside the brain, not its own component |
-| 3. Bars — Hunger, Fatigue, Health | **not started** |
+| 3. Bars — Hunger, Fatigue, Health | **done** — plus collapse, which `FatigueComponent` owns |
 | 4. Actions + affordances | **half** — Action / Inventory / PickUpAble exist; no Eatable, no Harvestable, and actions are not yet `ActionDef` data |
 | 5. GOAP — hunger only | **not started** |
-| 6. Sleep goal | **not started** |
+| 6. Sleep goal | **half** — collapse built (fatigue-owned); the voluntary Rest goal is not |
 | 7. Sensor + Flee + predation | **sensor only** |
 
 **What runs today:** 5 animals wander a 3648×2240 map, flocking with their own kind. A berry
@@ -59,7 +59,9 @@ yet** — nothing consumes what is carried. That is what step 3 unlocks.
 | **Actor asks, target resolves** | `InventoryComponent.try_pick_up()` asks `ActionComponent` "can I reach?" and the target's `PickUpAbleComponent` "take yourself". Action is *the hand* — it knows no specific action, so a future `AttackComponent` reuses it. Movement is *the legs*. |
 | **Wander inside the brain** | Wander was its own component driving movement, which meant arbitrating with the brain. Folding it in deleted the problem instead of solving it. |
 | **Traits** | `SimBrainDef.traits: Array[SimTrait]` — behaviour modifiers consulted at defined hooks. No traits = default behaviour. This is how entities sharing one brain behave differently, with no subclass and no branch. `SimFlockTrait` is the first. |
-| **No Bed** | Sleep is self-directed, so nothing to path to and nothing to advertise it. Voluntary rest is free and interruptible; collapse at 0 fatigue costs 20 HP and sleep-locks until 50% energy. |
+| **No Bed** | Sleep is self-directed, so nothing to path to and nothing to advertise it. |
+| **Collapse is not a decision** | `FatigueComponent` owns it end to end: at zero it sets the entity's `is_sleeping`, switches the brain off, watches its own value, and switches the brain back on at 50. No health penalty — the helpless window is the cost. The brain holds no sleep code. |
+| **Sleep state on the entity** | `SimEntity.is_sleeping` is a flag any component may read. Hunger slows its drain from it without ever touching Fatigue, so the two bars stay independent. |
 
 ---
 
