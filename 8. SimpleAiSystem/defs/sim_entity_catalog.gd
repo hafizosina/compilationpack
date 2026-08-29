@@ -26,7 +26,8 @@ func get_def(id: StringName) -> SimEntityDef:
 	return def
 
 ## Registers a blueprint at runtime — a def assembled in code rather than loaded
-## from a .tres. Use this instead of `defs.append()`: appending mutates the array
+## from a .tres. Nothing in this prototype calls it; it exists so a menu can
+## author new entity types while the game runs. Use this instead of `defs.append()`: appending mutates the array
 ## in place, so the setter never fires and the id index stays stale, and the new
 ## blueprint is invisible to get_def().
 func add_def(def: SimEntityDef) -> void:

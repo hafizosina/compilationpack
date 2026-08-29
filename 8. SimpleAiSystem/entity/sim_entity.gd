@@ -80,7 +80,10 @@ func describe() -> Dictionary:
 		"components": reported,
 	}
 
-## Actions this entity can PERFORM, unioned across its components (Phase 2).
+## Actions this entity can PERFORM, unioned across its components.
+## Phase 2 fills these in; unused in this prototype, but they are the declared
+## interface for the do-intersect-receive resolver (COLONY_SIM_CONCEPT.md §2),
+## not leftovers — leave them.
 func do_actions() -> Array[StringName]:
 	return []
 

@@ -10,7 +10,8 @@ extends SimComponent
 ## What lands in the picker's inventory.
 var item_id: StringName = &"item"
 
-## Emitted just before the entity removes itself.
+## Emitted just before the entity removes itself. No listeners in this
+## prototype; kept as component API for effects, scoring or logging later.
 signal picked_up(actor: SimEntity)
 
 var _taken: bool = false

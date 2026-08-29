@@ -184,6 +184,11 @@ Deliberate, small, and safe to leave — but they'll bite eventually.
   the `colour` parameter on `add()`, `_draw()`, the `z_index` line, and the
   colour argument `SimPickUpAbleComponent` passes. The `changed(total)` signal is the seam a
   proper indicator or UI layer should use instead.
+- **Some API is intentionally unused — do not "clean" it.** A dead-code scan will flag
+  `SimEntity.do_actions()` / `receive_actions()` (the do-intersect-receive interface from
+  `COLONY_SIM_CONCEPT.md` §2), `SimMovementComponent.arrived`, `SimPickUpAbleComponent.picked_up`,
+  `SimInventoryComponent.changed`, and `SimEntityCatalog.add_def()` / `has_def()`. All are declared
+  design surface with no consumer *yet*; each is marked in place.
 - No tests, no build scripts — the editor is the toolchain, per `CLAUDE.md`.
 
 ---

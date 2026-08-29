@@ -14,6 +14,8 @@ extends SimComponent
 enum Gait { WALK, RUN }
 
 ## Emitted once the entity reaches within `arrive_radius` of its destination.
+## No listeners in this prototype — the brain polls is_moving() instead. Kept as
+## component API for whatever needs to react to arrival later.
 signal arrived(target: Vector2)
 
 ## Speed in px/sec at each gait. Set from SimMovementDef.
