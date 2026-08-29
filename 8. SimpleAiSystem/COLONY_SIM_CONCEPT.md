@@ -24,7 +24,7 @@ Both creatures are **gather-then-eat** (multi-step), so they share one brain (se
 
 ## 1. Scene Structure
 
-Rule: **everything is an Entity** — creatures, props (bush, bed), *and* items (berry, meat). There is one bare base scene, one factory, and one def format. No Interactable or Item families.
+Rule: **everything is an Entity** — creatures, props (bush), *and* items (berry, meat). There is one bare base scene, one factory, and one def format. No Interactable or Item families.
 
 ```
 Main.tscn                     ← entry point / world root
@@ -94,14 +94,13 @@ The three creatures become **pure data** — "basically the same" made literal:
 
 Props and items are just entities with small component sets:
 - `berrybush.tres`: `HarvestableComponent` (harvest → spawns berry) — no Health/Movement/Brain (always clean-harvest; add Health later to deplete it)
-- `bed.tres`: `ReceiverComponent {sleep → +energy}`
 - `berry.tres` / `meat.tres`: `EatableComponent` (eat) + `PickUpAbleComponent` (pickUp) — no Health/Movement/Brain
 
 Adding Type4 = copy a `.tres`, change two fields. **Tradeoff:** no per-type scene to open/tweak in the editor (all wiring in code) and a little more scaffolding before first pixel — the right trade when the variation *is* data.
 
 ### Blueprints vs placements — two lists, not one flat file
 So 10 Type1s don't each repeat their component block (edit-once, no drift):
-- **EntityCatalog** — the *blueprints*: `id → EntityDef {texture, components + default settings}`. One per **type** (type1/2/3, bed, berry, meat, bush).
+- **EntityCatalog** — the *blueprints*: `id → EntityDef {texture, components + default settings}`. One per **type** (creature types, berry, meat, bush).
 - **WorldDef** — the *placement list* (the "long list"): each entry `{name, type, position, overrides?}`. References a blueprint by `type`, specifies only what's unique — position, plus any per-instance tweak (e.g. one Type1 starting at `{hunger: 30}`).
 
 ```gdscript
@@ -132,7 +131,6 @@ Entity is the **mediator**. Components are dumb state holders; the Brain is the 
 | `EatableComponent` *(target logic)* | `food_type`, `hunger_value` | `eaten(actor)` | resolves **eat**: `actor.hunger.feed(hunger_value)` + self-destroy; pairs with actor `HungerComponent` |
 | `HarvestableComponent` | `harvest: ActionDef` (drops which entity, count, damage, cost) | `harvested(actor)` | advertises **harvest** — spawns another entity |
 | `PickUpAbleComponent` | `item_data` | `picked_up(actor)` | advertises **pickUp** — pairs with actor `InventoryComponent`; destroys self, stores data |
-| `ReceiverComponent` | `misc: {action_id → ActionDef}` | `received(id, actor)` | the escape hatch — actions not yet promoted to their own component (sleep, ride) |
 | `SensorComponent` | perceived bodies | `perception_updated` | `get_interactables()`, `get_prey()`, `get_threats()` |
 | `BrainComponent` | current goal + plan | — | `_on_think()` |
 | `AttackComponent` *(actor capability)* | `action_id="attack"`, `damage` | `attacked(target)` | declares capability + damage; **no logic** — target's `HealthComponent` resolves |
@@ -152,7 +150,6 @@ Entity is the **mediator**. Components are dumb state holders; the Brain is the 
 | `ActionComponent` | harvest* | — |
 | `HarvestableComponent` | — | harvest |
 | `FatigueComponent` | sleep | — |
-| `ReceiverComponent` | — | sleep, ride… |
 
 \* harvest's do-side is the generic performer (`ActionComponent`) for now — promote to a `HarvesterComponent` if it ever needs its own data.
 
@@ -174,7 +171,7 @@ Entity is the **mediator**. Components are dumb state holders; the Brain is the 
 **Fatigue — how rested** (high = good; this *is* the "energy" that movement and actions spend).
 - Drained by movement (walk 0.5/grid, run 2/grid) and costed actions.
 - `= 0` → **collapse**: take **20** Health damage once, then **forced sleep in place** (no bed needed).
-- Sleeping restores **+1/sec** — voluntary on a Bed, or forced collapse anywhere.
+- Sleeping restores **+1/sec**, always in place. There is no bed: sleep is self-directed, so it needs no target and no travel.
 - `= 100` → **auto-wake**.
 
 **Health.**
@@ -187,9 +184,9 @@ Entity is the **mediator**. Components are dumb state holders; the Brain is the 
 - **Decays** toward 0 when no enemy in range — the inertia gives hysteresis (no sleep/wake flicker when a predator hovers at the edge).
 - Feeds the **Flee** consideration in the utility layer (§7) — it competes, it doesn't hard-override.
 
-**Sleep state:** the entity carries `is_sleeping`. Two kinds:
+**Sleep state:** the entity carries `is_sleeping`. **There is no Bed entity — an animal sleeps wherever it stands.** Sleep is self-directed: `FatigueComponent` is the only component involved, there is nothing to path to and nothing to advertise it. What separates the two kinds is the *price*, not the place:
 - **Voluntary** (chose to Rest): interruptible every tick — the Brain compares *continue sleeping* (remaining Rest need) vs the best *waking* goal (Flee from Danger, or eat if starving) and wakes if a waking goal wins. Restores +1/sec, auto-wakes at 100. Has energy on hand → can run when it bolts.
-- **Collapse** (Fatigue hit 0): −20 HP, then **sleep-locked** — Danger and hunger **cannot** wake it — until Fatigue recovers to **50**. ~50s of true helplessness (the price of total exhaustion). At 50 the lock releases → becomes a normal voluntary sleeper (can now wake to flee with ≥50 energy to actually run, or rest on to 100).
+- **Collapse** (Fatigue hit 0): a **−20 HP penalty**, then **sleep-locked** — Danger and hunger **cannot** wake it — until Fatigue recovers to **50%**. ~50s of true helplessness. This is the only difference that matters between the two kinds: choosing to rest is free and interruptible, being forced to costs health and control. At 50% the lock releases → it becomes a normal voluntary sleeper (able to wake and flee with ≥50 energy to actually run, or rest on to 100).
 
 **The 50 line is the pivot:** a need `< 50` activates its goal (§7); Hunger `> 50` enables Health regen. So sub-50 hunger both drives eating *and* halts regen — a starving creature can't heal until it eats back above 50.
 
@@ -246,7 +243,6 @@ var mode:   Mode             # ONE_TIME | OVER_TIME
 BerryBush.HarvestableComponent --harvest--> SpawnOutput: berry entities at bush   (ONE_TIME, cost 10 energy)
 Berry.PickUpAbleComponent      --pickUp-->  ItemOutput:  berry data → inventory, world entity freed
 Berry.EatableComponent         --eat-->     StatOutput:  +5 hunger to actor        (ONE_TIME, diet-gated)
-Bed.ReceiverComponent          --sleep-->   StatOutput:  +1 energy/sec to actor    (OVER_TIME)
 ```
 Harvesting a **living** target adds a `StatOutput {−damage to target Health}` (see §5); a bush/dead body has no Movement, so no damage — same `harvest`, mobility decides.
 
@@ -305,13 +301,13 @@ DANGER_DECAY         = ...                 # per sec, always draining — Flee p
 | Type2 | predator | 1× | 1.4× R | — |
 | Type3 | prey — fast | 0.7× | ~2× R | outrunning |
 
-**Follow mode** (`follow(entity, gait)`): re-reads the target entity's position each tick and steers toward it — no pathfinding, just walk/run straight at it. Used by the predator to chase prey. If the target leaves the follower's sight (out of Sensor range / destroyed), Movement falls back to the **last known position**, drives there, then emits `lost_target` and stops (the Brain replans from there). `move_to(pos)` remains the fixed-point version for going to a bush/bed.
+**Follow mode** (`follow(entity, gait)`): re-reads the target entity's position each tick and steers toward it — no pathfinding, just walk/run straight at it. Used by the predator to chase prey. If the target leaves the follower's sight (out of Sensor range / destroyed), Movement falls back to the **last known position**, drives there, then emits `lost_target` and stops (the Brain replans from there). `move_to(pos)` remains the fixed-point version for going to a bush.
 
 Rules:
 - **Walk speed is equal** for all types; only **run speed** differs (Type2 = 1.4× Type1).
 - `energy_drain_per_sec = (speed_px_per_sec / GRID_SIZE) * energy_per_grid`. Running drains far faster per second (higher speed *and* higher per-grid cost).
 - **Exhaustion lock:** at energy 0 the entity **cannot run** — forced to walk. A creature that flees too long gets caught.
-- Gait by goal: Flee / Hunt → **run**; Wander / travel-to-food / travel-to-bed → **walk**.
+- Gait by goal: Flee / Hunt → **run**; Wander / travel-to-food → **walk**. Rest needs no travel.
 
 ### Chase balance (open decision — see §9)
 Type2 run (1.4×) > Type1 run, so a committed predator **always wins a straight chase** in the open. Fleeing only buys time. Type1 survives only via: Type2 exhausting its own energy and giving up, lost line of sight, or an early head start. **Counterweight (Danger + detection):** Type1 detects at **1.3× Type2's range**, so a vigilant prey spots the predator first and gets a head start. Predator-dominance becomes *situational* — the 1.4× speed edge only pays off if Type2 closes before Type1 notices, or while the prey is distracted (eating, sleeping, exhausted).
@@ -329,7 +325,7 @@ Score each goal by need curves + threat; pick the max. If the winner is below an
 |---|---|---|---|
 | **Flee** *(prey)* | **Danger bar** — active while `> 0` (persists after enemy leaves sight) | high danger → high score — **weighed, not absolute** | RUN |
 | **SatisfyHunger** | hunger (lower → higher) | critical hunger can out-score low danger | WALK to food |
-| **Rest** | fatigue (lower → higher); while asleep = "continue sleeping" | vs waking goals during sleep | WALK to bed |
+| **Rest** | fatigue (lower → higher); while asleep = "continue sleeping" | vs waking goals during sleep | none — sleeps in place |
 | **Wander** *(idle)* | low constant | wins only when nothing urgent | WALK (drunkard's) |
 
 The interesting arbitration lives here: *hungry AND threatened* → Hunger score vs Flee score, higher wins; *asleep AND threat nearing* → continue-Rest vs Flee, higher wins (this is how the sleeper decides to bolt).
@@ -390,7 +386,7 @@ entities/
       HealthDef  HungerDef  FatigueDef  InventoryDef  MovementDef  SensorDef
       ActionCompDef  AttackDef  EatableDef  HarvestableDef  PickUpAbleDef  ReceiverDef  BrainDef
     type1.tres  type2.tres  type3.tres        # creatures
-    berrybush.tres  bed.tres  berry.tres  meat.tres   # props + items
+    berrybush.tres  berry.tres  meat.tres              # props + items
 
 components/
   HealthComponent.gd  HungerComponent.gd  FatigueComponent.gd
@@ -427,11 +423,11 @@ world/  Main.tscn / Main.gd
 - ~~Collapse-sleep helpless window~~ → resolved: collapse is sleep-locked (un-wakeable) until Fatigue 50 (~50s helpless), then normal interruptible sleep with ≥50 energy on wake.
 - Danger rise/decay rates; danger→flee curve shape; does extreme hunger also wake a safe sleeper?
 - **Experiment to watch:** Type1 vs Type3 survival on one map — does awareness or speed win?
-- **Bed vs collapse:** does the Bed rest faster/safer, or is it just *where* voluntary Rest happens?
+- ~~Bed vs collapse~~ → resolved: **no Bed at all.** Animals sleep where they stand; voluntary rest is free and interruptible, collapse costs 20 HP and sleep-locks until 50% energy.
 - Passive Fatigue drain, or only movement/actions? (idle well-fed entity otherwise never tires)
 - Wander radius/interval; smoothed vs pure random heading.
 - ~~Pickup model~~ → resolved: harvest spawns Items in-world, ActionComponent auto-picks diet-matching Items in reach.
-- ~~Interactables & Items as separate scenes~~ → resolved: **everything is an entity** (bush/bed/dead-body/berry/meat), built from defs.
+- ~~Interactables & Items as separate scenes~~ → resolved: **everything is an entity** (bush/dead-body/berry/meat), built from defs.
 - ~~Generic Receiver for everything~~ → resolved: common affordances are typed components (Food/Harvestable/PickUpAble); Receiver holds only not-yet-promoted actions (sleep, ride).
 - Actions are `ActionDef` resources (input/time/output/mode); ONE_TIME vs OVER_TIME; output = stat-bar / spawn / inventory.
 - Two-sided actions: actor component = capability marker (+ actor data), target component = resolution logic. (`FoodComponent` renamed `EatableComponent`.)

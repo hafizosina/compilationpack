@@ -16,7 +16,7 @@
 Press play and watch, with a debug overlay on each entity showing its current **goal**:
 1. 30+ entities spawn from `world1.tres` at their positions, correct sprites/colors per type.
 2. Type1/Type3 (herbivores) whose hunger drops path to a **bush**, harvest a berry, eat it → hunger recovers.
-3. Any entity whose fatigue drops paths to a **bed** (or collapses in place at 0) and sleeps → fatigue recovers.
+3. Any entity whose fatigue drops **sleeps where it stands** (or collapses at 0) → fatigue recovers.
 4. Type2 (predator) whose hunger drops hunts a live Type1/Type3: repeated **harvest** deals damage until the prey dies, drops meat, then eats it.
 5. A herbivore that senses a Type2 in range **flees** (runs away) until its Danger bar drains.
 6. Entities that run out of energy while fleeing **collapse**; starving entities lose health and can **die → become harvestable in place**.
@@ -32,7 +32,7 @@ If all six are visible, the foundation (factory + components + actions + GOAP) i
 3. **Bars.** Add `HungerComponent`, `FatigueComponent`, `HealthComponent` that drain/tick. Debug overlay shows the numbers. No behavior yet — just draining.
 4. **Actions + affordances.** Add `ActionComponent`, `InventoryComponent`, and the target components (`Eatable`, `Harvestable`, `PickUpAble`, `Receiver`). Hard-call one action manually to confirm the perform→receiver→effect handshake.
 5. **GOAP — hunger only.** Add `BrainComponent` with the planner and the `[harvest, pickUp, eat]` chain. Success: herbivores feed themselves.
-6. **Sleep goal.** Add Rest goal + Bed/collapse. Success: tired entities sleep.
+6. **Sleep goal.** Add the Rest goal, sleeping in place, plus the collapse penalty. Success: tired entities sleep.
 7. **Sensor + Flee + predation.** Add `SensorComponent`, `Danger`, `AttackComponent` do-side, and the live-harvest damage. Success: predators hunt, prey flee.
 
 Ship nothing past step 7 for this milestone.
@@ -102,7 +102,7 @@ All bars 0–100. Tick from a shared `_process(delta)` per component (self-ticki
 | `SpriteComponent` | — | — | (texture/tint from def) |
 | `MovementComponent` | — | — | `walk=120 px/s`, `run=240` (Type1); gait set by Brain; spends energy per grid; `move_to(pos)` fixed point + `follow(entity)` chase (re-reads target pos each tick, falls back to last-known then emits `lost_target`) |
 | `HungerComponent` | eat | — | `hunger=100`, drain **1.0/s**; `<50` → SatisfyHunger goal; `=0` → −**2 hp/s** starvation |
-| `FatigueComponent` | sleep | — | `energy=100`, drain **0.5/s** idle + movement cost; `=0` → −20 hp once + collapse |
+| `FatigueComponent` | sleep | — | `energy=100`, drain **0.5/s** idle + movement cost; `=0` → −20 hp once + collapse, sleep-locked until 50% |
 | `HealthComponent` | — | attack | `hp=100`; regen **+1/s while hunger>50**; `=0` → died → disable Movement+Brain (harvestable in place) |
 | `InventoryComponent` | pickUp | — | `items: Array` (item-data, def refs) |
 | `ActionComponent` | harvest | — | `reach=40 px`; runs the chosen ActionDef |
@@ -110,13 +110,12 @@ All bars 0–100. Tick from a shared `_process(delta)` per component (self-ticki
 | `EatableComponent` | — | eat | `food_type`, `hunger_value=25` → `actor.hunger.feed(25)` + free self |
 | `HarvestableComponent` | — | harvest | see §5 for yield/damage numbers |
 | `PickUpAbleComponent` | — | pickUp | `item_data` → store in actor inventory + free self |
-| `ReceiverComponent` | — | sleep | `sleep` ActionDef → `+2 energy/s` OVER_TIME to actor (the Bed) |
 | `SensorComponent` | — | — | Area2D radius = detection (per type §6); `get_threats/get_prey/get_food` |
 | `BrainComponent` | — | — | GOAP; think tick **0.3s** |
 
 Movement energy: `walk 0.5/grid`, `run 2.0/grid`, `GRID=64px` (one painted tile). Exhaustion lock at energy 0 → can't run.
 
-**Follow mode (chase):** `follow(target)` re-reads the target's position every tick and steers straight at it — **no pathfinding** for this milestone. If the target leaves Sensor range, it drives to the **last-known position**, then emits `lost_target` and stops so the Brain replans. Predators use this to chase prey; `move_to(pos)` stays the fixed-point version for bushes/beds.
+**Follow mode (chase):** `follow(target)` re-reads the target's position every tick and steers straight at it — **no pathfinding** for this milestone. If the target leaves Sensor range, it drives to the **last-known position**, then emits `lost_target` and stops so the Brain replans. Predators use this to chase prey; `move_to(pos)` stays the fixed-point version for bushes.
 
 ---
 
@@ -127,7 +126,7 @@ Movement energy: `walk 0.5/grid`, `run 2.0/grid`, `GRID=64px` (one painted tile)
 | `harvest` | ONE_TIME | 10 energy | 0.5s | SpawnOutput: yield entities at target; **if target Movement enabled → StatOutput −35 hp target** | bush yields 1 berry clean; live prey yields **2 meat + 35 dmg**; dead prey yields remaining meat clean |
 | `pickUp` | ONE_TIME | — | 0.1s | ItemOutput: target data → actor inventory; free target | auto-performed on in-reach diet-matching food |
 | `eat` | ONE_TIME | 1 food item | 0.5s | StatOutput +25 hunger to actor | diet-gated: `food_type ∈ actor.diet` |
-| `sleep` | OVER_TIME | — | until 100 / interrupt | StatOutput +2 energy/s to actor | Bed provides it; collapse provides it in place |
+| `sleep` | OVER_TIME | — | until 100 / interrupt | StatOutput +2 energy/s to actor | self-directed, in place; no target |
 | `attack` | ONE_TIME | — | 0.5s | StatOutput −`AttackComponent.damage` hp target | pure damage, no yield (predation uses harvest instead) |
 
 **Predation via harvest (confirmed):** Type2 harvests a live Type1 → −10 energy, +2 meat, prey −35 hp. Prey (hp 100) dies in **3 harvests**; predator nets ~6 meat, then eats. On death, Movement disables → subsequent harvests are clean.
@@ -142,7 +141,6 @@ Movement energy: `walk 0.5/grid`, `run 2.0/grid`, `GRID=64px` (one painted tile)
 | `type2` | full stack **+ Attack(20)** | 200 | **336** (1.4×) | MEAT | red |
 | `type3` | full stack, no Attack | **140** | **480** (2×) | VEGIE | blue |
 | `berrybush` | Harvestable(→berry) only | — | — | — | dark green |
-| `bed` | Receiver(sleep) only | — | — | — | brown |
 | `berry` | Eatable(VEGIE,25) + PickUpAble | — | — | — | pink |
 | `meat` | Eatable(MEAT,25) + PickUpAble | — | — | — | maroon |
 
@@ -161,7 +159,7 @@ Base detection `D=200 px`. Base run `R=240 px/s`. Walk `120 px/s` all types.
 Goals, scored each 0.3s tick; highest wins, below threshold → Wander:
 - **Flee** — score from Danger bar (herbivores only; rises w/ nearest Type2 proximity in detection range, decays ~15/s; Flee active while Danger>0). RUN away.
 - **SatisfyHunger** — score rises as hunger drops below 50. Plan: `[harvest(source), pickUp, eat]`, or `[eat]` if food already in inventory.
-- **Rest** — score rises as energy drops below 50. Plan: `[goto(bed), sleep]`, or collapse if energy hits 0 first.
+- **Rest** — score rises as energy drops below 50. Plan: `[sleep]` — self-directed, no travel — or a forced collapse if energy hits 0 first.
 - **Wander** — idle fallback, drunkard's walk.
 
 Planner: backward/forward chain over the actor's available actions (from `do ∩ receive` against sensed targets) to reach the goal's desired world-state; **replan on failure** (bush gone, prey fled). Plans here are 1–3 steps — a tiny A* or even a hardcoded chooser is acceptable; the point is proving the *structure* (preconditions from components/inventory, effects, replan), not planner sophistication.
@@ -177,7 +175,7 @@ entity (`entity_name`, `type`, `position`, optional `overrides`). 31 rows. Distr
 data, not something the factory generates — a placement algorithm can write this list later, but the
 factory only reads it. Current mix:
 - 10 × `type1`, 4 × `type3`, 3 × `type2`
-- 8 × `berrybush`, 4 × `bed`
+- 8 × `berrybush`
 - (berries/meat are spawned at runtime by harvest, not placed)
 
 Each entry: `{ name, type, position: Vector2, overrides: {} }`. Scatter positions; give 2–3 herbivores an override like `{hunger: {start: 40}}` so feeding behavior fires immediately on run.

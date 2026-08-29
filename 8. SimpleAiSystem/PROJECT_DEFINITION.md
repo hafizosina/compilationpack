@@ -84,7 +84,7 @@ components and actions from Phase 1. Full loop: **hunger, sleep, flee/predation.
 **Done when:**
 1. Herbivores feed themselves from bushes; hunger recovers.
 2. Predators execute `[kill, harvest, eat]` against live prey — the conditional chain plans correctly.
-3. Tired entities sleep (bed or collapse); threatened prey flee until safe.
+3. Tired entities sleep in place (voluntarily, or a forced collapse); threatened prey flee until safe.
 4. Debug overlay shows each entity's current **goal**, so a working planner is visibly distinguishable from a stuck one.
 
 ---

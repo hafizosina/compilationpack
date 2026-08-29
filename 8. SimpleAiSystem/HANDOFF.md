@@ -118,7 +118,10 @@ Recorded in `MILESTONE_1_SPEC.md` §11:
   handshake by hard-calling one action.
 - **Step 5 — GOAP, hunger only.** `SimBrainComponent` + planner, the `[harvest, pickUp, eat]` chain.
   Success: herbivores feed themselves.
-- **Step 6 — Sleep goal.** Rest goal + Bed/collapse.
+- **Step 6 — Sleep goal.** Rest goal, sleeping in place, plus the collapse penalty. There is no Bed
+  entity: sleep is self-directed, so nothing to path to and nothing to advertise it. Voluntary rest
+  is free and interruptible; collapse at 0 fatigue costs **20 HP** and is **sleep-locked until 50%
+  energy**.
 - **Step 7 — Sensor + Flee + predation.** `SimSensorComponent` (Area2D radius per type: 260 / 200 /
   140 after the 64px rebase), the Danger bar, `AttackComponent` do-side, live-harvest damage.
 
@@ -144,7 +147,6 @@ Still unresolved in `COLONY_SIM_CONCEPT.md` §9 — worth deciding before or dur
 - `Hunt` instant vs damage-over-work-time (must out-pace the +1/s regen; burst is fine).
 
 **Needed for step 6–7 (sleep, flee, predation)**
-- Bed vs collapse: does a Bed rest faster/safer, or is it just *where* voluntary Rest happens?
 - Danger rise/decay rates; the danger → flee curve shape.
 - Does extreme hunger wake a safe sleeper?
 - **Chase balance:** Type2 runs 1.4× Type1, so a committed predator always wins a straight chase.
@@ -157,7 +159,7 @@ Still unresolved in `COLONY_SIM_CONCEPT.md` §9 — worth deciding before or dur
 
 **New, from Phase 1**
 - Wander currently leashes to the **spawn point** permanently. Should `home_position` ever migrate
-  (e.g. to a bed the entity claims), or stay fixed for the whole run?
+  or stay fixed for the whole run?
 - Wander radius/interval per type, and smoothed vs pure-random heading (currently pure random).
 
 ---
