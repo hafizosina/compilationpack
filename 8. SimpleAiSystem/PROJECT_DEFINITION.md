@@ -5,7 +5,11 @@
 > expandable base where new content is authored as **data** (resource files), not code.
 > Project folder: `project/godot/compilationpack`
 
-Companion docs: `COLONY_SIM_CONCEPT.md` (full architecture reference) · `MILESTONE_1_SPEC.md` (buildable spec + numbers).
+Companion docs: `COLONY_SIM_CONCEPT.md` (full architecture reference) · `MILESTONE_1_SPEC.md` (buildable spec + numbers) · `HANDOFF.md` (**what is actually built right now**).
+
+> **Status:** Phase 1 is complete. Phase 2 is under way but deliberately out of order — the
+> component interaction layer (sensor, action, inventory, pick-up, a simple brain) was built before
+> the bars, so the loop could be exercised before GOAP. See `HANDOFF.md` §2.
 
 ---
 

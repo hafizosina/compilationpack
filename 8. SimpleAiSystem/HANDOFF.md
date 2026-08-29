@@ -1,11 +1,11 @@
 # Module 8 — Handoff Brief
 
 > Continuation context for **CompilationPack / `8. SimpleAiSystem`** (Godot 4.7, GDScript).
-> Phase 1 is complete and committed. This doc is what a fresh conversation needs to
-> pick up Phase 2 without re-reading the code.
+> This is the state-of-the-project doc: what actually exists right now.
 >
-> Companion docs in the same folder: `PROJECT_DEFINITION.md` (why / scope),
-> `COLONY_SIM_CONCEPT.md` (architecture reference), `MILESTONE_1_SPEC.md` (buildable spec + numbers).
+> Companion docs in the same folder describe the *target* design, not the current build:
+> `PROJECT_DEFINITION.md` (why / scope) · `COLONY_SIM_CONCEPT.md` (architecture reference) ·
+> `MILESTONE_1_SPEC.md` (spec + numbers; §11 is the as-built record).
 
 ---
 
@@ -14,46 +14,52 @@
 A **data-driven node-composition ECS foundation** for a colony sim — not the game, the groundwork.
 Two pillars from `PROJECT_DEFINITION.md`:
 
-- **Focus 1 — EntityFactory:** one `WorldDef` resource → 30+ entities, each assembled from an
-  `EntityDef` blueprint's component list. New content = a new `.tres`, never new code.
-- **Focus 2 — GOAP AI:** a planner reasoning over those same components, proving the structure
-  actually feeds behaviour.
+- **Focus 1 — EntityFactory:** one `WorldDef` resource → entities assembled from an `EntityDef`
+  blueprint's component list. New content = a new `.tres`, never new code.
+- **Focus 2 — GOAP AI:** a planner reasoning over those same components.
 
-Design rules the foundation must uphold: everything is an Entity (creatures, props, items alike);
-what a thing *is* = which components it has; capability = component presence; content is data.
+Rules the foundation upholds: everything is an Entity; what a thing *is* = which components it has;
+capability = component presence; content is data.
 
 ---
 
-## 2. Status — Phase 1 complete
+## 2. Current state
 
-All four done-criteria from `PROJECT_DEFINITION.md` verified by running the game:
+**Phase 1 is complete.** Phase 2 is partly done, and deliberately out of order: the component
+interaction layer was built *before* the bars, so the pick-up loop could be exercised end to end
+before GOAP arrives.
 
-| Criterion | Result |
+| Build-order step (`MILESTONE_1_SPEC.md` §1) | Status |
 |---|---|
-| 30+ entities from `world1.tres` | **31** — 12 type1, 4 type3, 3 type2, 8 berrybush, 4 bed |
-| Editing `.tres` changes the result, no code | Bumped a scatter count and added a whole new Type4 → 42 entities with its own art/tint/radius, zero code touched |
-| No shared-state bug | Two type1s with wander overrides + the default read **48 / 256 / 400** — three distinct radii |
-| A component attaches and ticks | Over 3s: **19 moved, 12 still** — the 12 are exactly the props, which have no movement component |
+| 1. Bare Entity + Factory + one component | **done** |
+| 2. Movement + wander | **done** — wander now lives inside the brain, not its own component |
+| 3. Bars — Hunger, Fatigue, Health | **not started** |
+| 4. Actions + affordances | **half** — Action / Inventory / PickUpAble exist; no Eatable, no Harvestable, and actions are not yet `ActionDef` data |
+| 5. GOAP — hunger only | **not started** |
+| 6. Sleep goal | **not started** |
+| 7. Sensor + Flee + predation | **sensor only** |
 
-Runs at 60 fps, Vulkan Forward Mobile.
-
-**Phase 1 covered `MILESTONE_1_SPEC.md` §1 build-order steps 1–2 plus the debug overlay.**
-Steps 3–7 are Phase 2 and are NOT started.
+**What runs today:** 5 animals wander a 3648×2240 map, flocking with their own kind. A berry
+spawner drips berries into the world. An animal that senses a berry walks to it and picks it up;
+its one inventory slot then fills, and it wanders permanently. **There is no back edge to the loop
+yet** — nothing consumes what is carried. That is what step 3 unlocks.
 
 ---
 
 ## 3. Locked architecture decisions
 
-Decided during Phase 1, with reasons — do not silently revisit these.
-
 | Decision | Choice and why |
 |---|---|
-| **Naming** | Every global `class_name` is `Sim`-prefixed (`SimEntity`, `SimComponentDef`, `SimMovementComponent`). `Entity` and `InventoryComponent` were already taken by `Global/Scene/`, and `ComponentDef` subclasses *need* a global `class_name` to appear in the inspector's resource picker. |
-| **World authoring** | `SimWorldDef` is a flat `entries` list — one `SimPlacement` per entity (`type`, `position`, optional `overrides`). Bulk scatter rules were tried and removed: distribution will come from a purpose-built algorithm later, and the factory should only ever *read* a placement list, never generate one. |
-| **Scale** | Rebased on the 64px painted tilemap: `GRID_SIZE 64`, walk 120, run 240, sprite scale 0.5, `WORLD_BOUNDS = Rect2(-192, -192, 2048, 1216)`. Energy-per-grid costs unchanged, so one "grid" is now one visible tile. Spec docs updated to match. |
-| **Component lookup** | `SimEntity.components` is keyed by **slot** (`&"movement"`), not class name — the slot is already the override key, so one identifier does both jobs. |
-| **No `Body` Area2D** | The concept doc gave each entity a separate Area2D for presence. Removed: an Area2D sensor detects a `CharacterBody2D` directly via `body_entered` / `get_overlapping_bodies()` (verified live). The body's own `BodyShape` is the presence — `collision_layer` keeps it detectable, `collision_mask = 0` stops entities shoving each other. Sensor radius and action reach stay separate areas on the *actor*. |
-| **Self-description** | Each component owns how it appears in the inspector via `describe() -> Dictionary` and `describe_label() -> String`. `SimEntity.describe()` only aggregates and never inspects the contents. Adding a component kind adds its inspector tab for free. |
+| **Naming** | Every global `class_name` is `Sim`-prefixed. `Entity` and `InventoryComponent` were taken by `Global/Scene/`, and `ComponentDef` subclasses need a global `class_name` to appear in the inspector's resource picker. |
+| **World authoring** | `SimWorldDef` is a flat `entries` list — one `SimPlacement` per entity. Scatter rules were tried and removed: distribution will come from a purpose-built algorithm later, and the factory should only ever *read* a placement list. |
+| **World bounds** | Read off the `TileMapLayer` at startup (`SimConst.adopt_bounds_from`). Repaint the map and wander bounds follow; no constant to keep in sync. |
+| **Component lookup** | `SimEntity.components` is keyed by **slot** (`&"movement"`), not class name — the slot is already the override key. |
+| **No `Body` Area2D** | An Area2D sensor detects a `CharacterBody2D` directly via `body_entered` / `get_overlapping_bodies()`. The body's own `BodyShape` is the presence: `collision_layer` keeps it detectable, `collision_mask = 0` stops entities shoving each other. |
+| **Self-description** | Each component owns how it appears in the inspector via `describe()` / `describe_label()`. Returning `{}` opts out — Movement, Sensor and Action do exactly that. Adding a component adds its inspector tab for free. |
+| **Actor asks, target resolves** | `InventoryComponent.try_pick_up()` asks `ActionComponent` "can I reach?" and the target's `PickUpAbleComponent` "take yourself". Action is *the hand* — it knows no specific action, so a future `AttackComponent` reuses it. Movement is *the legs*. |
+| **Wander inside the brain** | Wander was its own component driving movement, which meant arbitrating with the brain. Folding it in deleted the problem instead of solving it. |
+| **Traits** | `SimBrainDef.traits: Array[SimTrait]` — behaviour modifiers consulted at defined hooks. No traits = default behaviour. This is how entities sharing one brain behave differently, with no subclass and no branch. `SimFlockTrait` is the first. |
+| **No Bed** | Sleep is self-directed, so nothing to path to and nothing to advertise it. Voluntary rest is free and interruptible; collapse at 0 fatigue costs 20 HP and sleep-locks until 50% energy. |
 
 ---
 
@@ -61,139 +67,136 @@ Decided during Phase 1, with reasons — do not silently revisit these.
 
 ```
 8. SimpleAiSystem/
-  sim_const.gd                 static consts (grid, speeds, world bounds); NOT an autoload
-  main.gd / main.tscn          entry point, click-to-select, F1/F5
-  selection_marker.gd          selection ring + the selected entity's wander leash
+  sim_const.gd                 speeds, sprite scale, entity layer, edge margin, world_bounds
+  main.gd / main.tscn          entry point, click-to-select, F1 labels, F5 respawn
+  selection_marker.gd          selection ring + the selected entity's sensor and reach circles
   entity/
     sim_entity.gd/.tscn        bare base: CharacterBody2D + Sprite2D + BodyShape
-    sim_entity_factory.gd      spawn_world(), deep-dup defs, per-instance overrides
+    sim_entity_factory.gd      spawn_world(), deep-dup defs, per-instance overrides, group "sim_factory"
   components/
-    sim_component.gd           base: resolves entity from parent; slot(), describe(), describe_label()
-    sim_movement_component.gd  move_to/stop/is_moving, arrived signal
-    sim_wander_component.gd    drunkard's walk leashed to home_position
-    sim_debug_component.gd     per-entity labels (F1), factory-injected under Constant.DEBUG
+    sim_component.gd           base: entity from parent; slot(), describe(), describe_label()
+    sim_movement_component.gd  move_to / stop / is_moving, arrived signal
+    sim_sensor_component.gd    Area2D; get_detected(), nearest_with(slot)
+    sim_action_component.gd    extends Sensor; in_reach() only — the hand
+    sim_inventory_component.gd capacity, try_pick_up(), carry badge (PROTOTYPE)
+    sim_pick_up_able_component.gd  target side of pick-up
+    sim_brain_component.gd     seek / wander state machine, consults traits
+    sim_entity_spawner_component.gd  periodic spawn (TEMPORARY, stands in for a bush)
+    sim_debug_component.gd     per-entity labels (F1), injected under Constant.DEBUG
   defs/
-    sim_component_def.gd       abstract: slot(), build_into()
-    sim_entity_def.gd  sim_entity_catalog.gd
+    sim_component_def.gd  sim_entity_def.gd  sim_entity_catalog.gd
     sim_placement.gd  sim_world_def.gd
-    components/                sim_sprite_def, sim_movement_def, sim_wander_def
-    blueprints/                type1 type2 type3 berrybush bed
+    components/   sprite, movement, sensor, action, inventory, pick_up_able, brain, entity_spawner
+    traits/       sim_trait.gd  sim_flock_trait.gd
+    blueprints/   animal.tres  berry.tres  berry_spawner.tres
     catalog.tres  world1.tres
   ui/ui.gd / ui.tscn           top-right world stats; bottom-left tabbed entity inspector
 ```
 
-Shared code touched outside the module: `System/EventBus.gd` gained
-`sim_world_spawned(census)`, `sim_respawn_requested()`, `sim_entity_inspected(details)`;
-`Global/Theme/main_theme.tres` gained `TabBar` styles.
+Shared code touched outside the module: `System/EventBus.gd` gained `sim_world_spawned(census)`,
+`sim_respawn_requested()`, `sim_entity_inspected(details)`. `Global/Theme/main_theme.tres` gained
+`TabBar` styles and the `SimLabel` / `SimTitle` / `SimPanel` / `SimVBox` / `SimHBox` type variations
+(scoped to the sim inspector; modules 1–7 untouched).
 
-**Controls:** left-click an entity to inspect it (+ its wander leash); click bare ground to clear;
-**F1** toggles per-entity debug labels; **F5** respawns from `world1.tres`.
-
----
-
-## 5. Deviations from the spec docs
-
-Recorded in `MILESTONE_1_SPEC.md` §11:
-
-1. `Sim` prefix on every global `class_name`.
-2. `SimSpriteDef` adds no node — it configures the `Sprite2D` the base scene already owns and
-   registers it under the `sprite` slot, so the factory has zero special cases.
-3. The factory `add_child`s **before** building components (the spec pseudo-code does the reverse);
-   `@onready` members are null until the entity is in the tree.
-4. No `Body` Area2D on the base scene (see §3 above).
+**Controls:** left-click an entity to inspect it (+ its sensor and reach circles); click bare ground
+to clear; **F1** toggles per-entity debug labels; **F5** respawns from `world1.tres`.
 
 ---
 
-## 6. Phase 2 — what's next
+## 5. The two blueprints
 
-`MILESTONE_1_SPEC.md` §1 build order, remaining steps. Each must run before the next is added.
+| | `animal` | `berry` | `berry_spawner` |
+|---|---|---|---|
+| Art | `Animal/monkey.png` @ 0.5 | `CircleButtonFull.png` @ 0.32, pink | `CircleButtonFull.png` @ 0.7, green |
+| Components | sprite, movement, sensor, action, inventory, brain | sprite, pickupable | sprite, spawner |
+| Tuning | walk 130 / run 260, sensor 420, reach 56, capacity 1, think 0.25 s, wander step 420 | item `berry` | spawns `berry`, radius 1000, every 5 s, max 40 alive |
+| Traits | `SimFlockTrait` (weight 0.55, separation 110) | — | — |
 
-- **Step 3 — Bars.** `SimHungerDef/Component`, `SimFatigueDef/Component`, `SimHealthDef/Component`
-  that drain and tick. Starter numbers in §4 of the spec: hunger 100 draining 1.0/s, `=0` → −2 hp/s;
-  fatigue 100 draining 0.5/s idle + movement cost, `=0` → −20 hp once + collapse; health 100,
-  regen +1/s while hunger > 50. **Each gets an inspector tab for free** via `describe()`.
-- **Step 4 — Actions + affordances.** `ActionDef` resources (input / time / output / mode),
-  `SimActionComponent`, `SimInventoryComponent`, and the target-side components
-  (`Eatable`, `Harvestable`, `PickUpAble`, `Receiver`). Prove the perform → receiver → effect
-  handshake by hard-calling one action.
-- **Step 5 — GOAP, hunger only.** `SimBrainComponent` + planner, the `[harvest, pickUp, eat]` chain.
-  Success: herbivores feed themselves.
-- **Step 6 — Sleep goal.** Rest goal, sleeping in place, plus the collapse penalty. There is no Bed
-  entity: sleep is self-directed, so nothing to path to and nothing to advertise it. Voluntary rest
-  is free and interruptible; collapse at 0 fatigue costs **20 HP** and is **sleep-locked until 50%
-  energy**.
-- **Step 7 — Sensor + Flee + predation.** `SimSensorComponent` (Area2D radius per type: 260 / 200 /
-  140 after the 64px rebase), the Danger bar, `AttackComponent` do-side, live-harvest damage.
-
-Ship nothing past step 7 for this milestone.
-
-**Suggested starting point: step 3.** GOAP, flee and the sensor all read from the bars, and the
-sensor's filtering should key off *which components a target has* (a threat is anything with an
-`AttackComponent`), which needs the bars and affordances to exist first.
+`world1.tres`: 5 × `animal`, 1 × `berry_spawner`. **No pre-placed berries** — the spawner supplies them.
 
 ---
 
-## 7. Open design questions
+## 6. Deliberately temporary
 
-Still unresolved in `COLONY_SIM_CONCEPT.md` §9 — worth deciding before or during the steps that need them:
+- **`SimEntitySpawnerComponent`** stands in for a berry bush. The real bush is a
+  `HarvestableComponent` whose `ActionDef` carries a `SpawnOutput`, and that needs the action system
+  first. The spawner itself is generic (any catalog blueprint) and may well survive as a nest or
+  resource node.
+- **The carry badge** in `SimInventoryComponent` — a component that holds state should not also
+  render. Marked `PROTOTYPE ONLY` in place, with a removal checklist. `changed(total)` is the seam a
+  real indicator should use.
 
-**Needed for step 3 (bars)**
-- Hunger / energy drain rates and starvation damage per tick — spec has starter numbers, are they right?
-- Passive fatigue drain, or only movement and actions? (An idle well-fed entity otherwise never tires.)
+---
 
-**Needed for step 4–5 (actions, food loop)**
+## 7. What's next
+
+**Recommended: step 3, but scoped to closing the loop — Hunger + eat.**
+
+Animals currently fill their one slot and stop forever. One bar and one affordance turn that into a
+living cycle: `hungry → seek → pick up → eat → hungry again`. It also gives GOAP a goal state
+(`hunger_satisfied`) to plan toward, which it otherwise lacks.
+
+Roughly: `SimHungerComponent` (drains, `feed()`), `SimEatableComponent` (target side, same
+actor-asks/target-resolves shape as pick-up), and an eat branch in the brain.
+
+**The decision it forces:** pick-up stores a bare `StringName`, so the inventory cannot know a
+berry's food value. Items must become **data** — a small `SimItemDef` (id, colour, food value) that
+`PickUpAbleDef` carries and the inventory stores. `COLONY_SIM_CONCEPT.md` §2 already specifies this
+(`items: Array[ItemData]`, def refs not nodes). It also removes the carry badge's colour parameter,
+since the item's own data would carry its colour.
+
+**Two things to settle before step 5:**
+- Does GOAP *replace* `SimBrainComponent`, or sit behind it as the planner with the current state
+  machine as executor? Worth deciding before more brain code is written.
+- Actions are still hardcoded. Step 4 is not finished until `ActionDef {input, time, output, mode}`
+  exists, because that is what a planner reads preconditions and effects from.
+
+---
+
+## 8. Open design questions
+
+Unresolved in `COLONY_SIM_CONCEPT.md` §9, grouped by the step that needs them.
+
+**Step 3 (bars)**
+- Hunger / energy drain rates and starvation damage per tick.
+- Passive fatigue drain, or only movement and actions?
+
+**Steps 4–5 (actions, food loop)**
 - Do berry bushes deplete (give them a `HealthComponent`) or stay infinite? Regrowth timer?
-- Live-harvest numbers (10 energy / 2 meat / 35 dmg) — tunable per def, but what defaults?
-- `Hunt` instant vs damage-over-work-time (must out-pace the +1/s regen; burst is fine).
+- Live-harvest numbers (10 energy / 2 meat / 35 dmg) — defaults?
+- `Hunt` instant vs damage-over-work-time.
 
-**Needed for step 6–7 (sleep, flee, predation)**
+**Steps 6–7 (sleep, flee, predation)**
 - Danger rise/decay rates; the danger → flee curve shape.
 - Does extreme hunger wake a safe sleeper?
-- **Chase balance:** Type2 runs 1.4× Type1, so a committed predator always wins a straight chase.
-  Give Type2 an aggro/give-up mechanic (energy or timeout), or keep predator dominance and rely on
-  Type1's 1.3× detection for the counterweight?
+- **Chase balance:** predators run 1.4× prey, so a committed chase always wins. Aggro/give-up
+  mechanic, or rely on prey's 1.3× detection as the counterweight?
 
-**The experiment the whole thing exists to run**
-- Type1 (vigilant, slow) vs Type3 (oblivious, fast) on one map, same predator — does awareness or
-  speed win? Needs step 7 before it can be observed.
-
-**New, from Phase 1**
-- Wander radius/interval per type, and smoothed vs pure-random heading (currently pure random).
+**Deferred from the prototype**
+- The three-creature design (vigilant vs fast prey, one predator) still stands in the concept doc.
+  The current two-type world exists to test component interaction, not to replace it.
+- Wander is a pure random walk; no memory of where an entity has already searched. The last berry
+  on a large map can take minutes to find.
 
 ---
 
-## 8. Known rough edges
+## 9. Known rough edges
 
-Deliberate, small, and safe to leave — but they'll bite eventually.
-
-- **The entity scene's `CircleShape2D` is a shared sub-resource.** Every instance of
-  `sim_entity.tscn` shares it. Nothing resizes it today, but the moment a def wants a per-type body
-  size it must `duplicate()` the shape first — the same shared-state bug the factory's
-  `duplicate(true)` guards against, just relocated.
-- **Inspector scrollbar is Godot default grey**, not the medieval palette. Theming `VScrollBar`
-  would go in the shared `main_theme.tres`, which `7. JoyStick/inventory_panel.tscn` also uses —
-  so it would restyle module 7's inventory too. Left alone on purpose.
-- **Inspector panel is a fixed 300×300**, so sparse tabs show visible parchment slack. The
-  alternative (hug content, cap at a maximum) is a small change if the slack annoys.
-- **Debug labels cost frames.** 31 entities each drawing outlined text every frame is fine now;
-  it was the leash circles (19 arcs/frame, 60 → 44 fps) that hurt, which is why the leash now draws
-  only for the selected entity.
-- **`SimInventoryComponent` draws a carry badge — PROTOTYPE ONLY, remove before integrating.**
-  A component that holds state should not also render it. It exists to make the pick-up loop
-  visible while the AI is being built, and is self-contained: the badge constants, `_colours`,
-  the `colour` parameter on `add()`, `_draw()`, the `z_index` line, and the
-  colour argument `SimPickUpAbleComponent` passes. The `changed(total)` signal is the seam a
-  proper indicator or UI layer should use instead.
+- **The entity scene's `CircleShape2D` is a shared sub-resource.** Nothing resizes it today, but a
+  def wanting per-type body sizes must `duplicate()` it first — the shared-state bug the factory's
+  `duplicate(true)` guards against, relocated.
 - **Some API is intentionally unused — do not "clean" it.** A dead-code scan will flag
-  `SimEntity.do_actions()` / `receive_actions()` (the do-intersect-receive interface from
-  `COLONY_SIM_CONCEPT.md` §2), `SimMovementComponent.arrived`, `SimPickUpAbleComponent.picked_up`,
-  `SimInventoryComponent.changed`, and `SimEntityCatalog.add_def()` / `has_def()`. All are declared
-  design surface with no consumer *yet*; each is marked in place.
+  `SimEntity.do_actions()` / `receive_actions()`, `SimMovementComponent.arrived`,
+  `SimPickUpAbleComponent.picked_up`, `SimInventoryComponent.changed`, and
+  `SimEntityCatalog.add_def()` / `has_def()`. All are declared design surface with no consumer *yet*;
+  each is marked in place.
+- **Inspector scrollbar is Godot default grey**, not the medieval palette. Theming `VScrollBar`
+  would also restyle module 7's inventory, which shares the theme.
 - No tests, no build scripts — the editor is the toolchain, per `CLAUDE.md`.
 
 ---
 
-## 9. How to run and verify
+## 10. How to run and verify
 
 The Godot editor is installed via Steam and is **not on PATH**:
 
@@ -207,10 +210,15 @@ GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.
 "$GODOT" --headless --editor --quit --path . 2>&1 | grep -iE "error|invalid|uid"
 ```
 
-Hand-edited scene/resource files are this repo's main breakage risk: `.tscn`/`.tres` reference each
-other by `uid://`, every `.gd` has a sibling `.gd.uid`, and a wrong uid **fails silently in-editor**.
-Write `.gd` files first, run the headless import once so Godot generates the `.uid` siblings, read
-those uids, *then* write the `.tscn`/`.tres` that reference them.
+Hand-edited scene/resource files are this repo's main breakage risk. Two traps hit during this work:
+
+1. Write `.gd` files first, run the headless import once so Godot generates the `.uid` siblings,
+   read those uids, *then* write the `.tscn`/`.tres` that reference them. A guessed uid resolves by
+   path with only a warning.
+2. **A parse failure can delete a declaration.** When a hand-written `traits =` line failed to parse,
+   the editor's next save pruned the now-orphaned `ext_resource` for that script — so fixing the line
+   alone left it referencing an id that no longer existed. Check `load_steps` and the `ext_resource`
+   block after any failed parse.
 
 Conventions: typed GDScript (`:=`, typed params/returns), `##` doc comments on every `@export` and
 public method, conventional one-line commit messages on `main` with no trailers.

@@ -3,6 +3,11 @@
 > Simple colony sim built to prototype AI (Utility + GOAP) on a shared entity model.
 > Godot 4 · node-composition ECS · **concept only, no optimization yet**
 > Project folder: `project/godot/compilationpack`
+>
+> **This document describes the TARGET design, not what is built.** The running prototype has two
+> entity types (`animal`, `berry`) and a temporary spawner, and exists to exercise component
+> interaction before GOAP lands. The three-creature experiment, predation, bars and the planner
+> below are all still ahead. For what actually exists today, read `HANDOFF.md`.
 
 ---
 
@@ -372,6 +377,9 @@ Builds *both* paradigms, each doing what it's best at; Type1/Type2 stay one brai
 ---
 
 ## 8. Class / File Map
+
+**Target layout** (below). The built layout is `Sim`-prefixed and lives under
+`8. SimpleAiSystem/`; see `HANDOFF.md` §4 for the real tree.
 
 ```
 autoload/

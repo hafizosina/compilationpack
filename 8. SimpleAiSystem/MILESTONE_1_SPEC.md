@@ -27,6 +27,10 @@ If all six are visible, the foundation (factory + components + actions + GOAP) i
 
 ## 1. Build order (do it in this sequence — each step runs before the next is added)
 
+> **Progress:** 1 ✅ · 2 ✅ · 3 ⬜ · 4 ◐ (Action/Inventory/PickUpAble built; no Eatable, no
+> Harvestable, actions not yet `ActionDef` data) · 5 ⬜ · 6 ⬜ · 7 ◐ (sensor only).
+> Steps 4 and 7's sensor were pulled forward ahead of 3 on purpose — see §11.
+
 1. **Bare Entity + Factory + one component.** `Entity.tscn`, `EntityFactory`, `EntityDef`/`ComponentDef`, and a `SpriteComponent`. Spawn 30 from `world1.tres`. Success: 30 colored dots at their positions.
 2. **Movement + Wander.** Add `MovementComponent` + a trivial wander so the dots move. Success: 30 dots drifting.
 3. **Bars.** Add `HungerComponent`, `FatigueComponent`, `HealthComponent` that drain/tick. Debug overlay shows the numbers. No behavior yet — just draining.
@@ -195,28 +199,53 @@ Systems (vs self-ticking), spatial queries, serialization/save-load, event-bus s
 
 ---
 
-## 11. Phase 1 as built
+## 11. As built
 
-Phase 1 (steps 1–2 plus the overlay) is implemented in `8. SimpleAiSystem/`. Three notes where the
-code and this document differ:
+The running prototype, and where it departs from the spec above. For the full current-state
+picture — file tree, tuning values, next steps — read `HANDOFF.md`.
 
-- **`Sim` prefix on every global `class_name`** — `SimEntity`, `SimComponentDef`, `SimMovementComponent`…
-  `Entity` and `InventoryComponent` are already taken by `Global/Scene/`, and `ComponentDef`
-  subclasses need a global `class_name` to be creatable from the inspector's resource picker.
-- **`SimSpriteDef` adds no node.** It still lives in the blueprint's `components` array — so
-  everything about an entity is authored in one list — but it configures the `Sprite2D` the bare
-  entity scene already owns and registers it under the `sprite` slot. The factory therefore has no
-  special cases at all.
-- **The factory `add_child`s before building components**, not after. `SimEntity`'s `@onready`
-  members are null until it is in the tree, so `build_into()` would otherwise get a detached node.
-- **No `Body` Area2D on the base scene.** §1 of the concept doc gave the entity a separate Area2D for
-  its presence; that turned out to be redundant, because an Area2D sensor already detects a
-  `CharacterBody2D` through `body_entered` / `get_overlapping_bodies()`. The body's own `BodyShape`
-  is the presence: `collision_layer` keeps it detectable, `collision_mask = 0` keeps entities from
-  shoving each other. Sensor radius and action reach remain separate areas on the *actor*.
+### Naming and structure
+- **`Sim` prefix on every global `class_name`.** `Entity` and `InventoryComponent` were taken by
+  `Global/Scene/`, and `ComponentDef` subclasses need a global `class_name` to be creatable from the
+  inspector's resource picker.
+- **`SimSpriteDef` adds no node.** It configures the `Sprite2D` the base scene already owns and
+  registers it under the `sprite` slot, so the factory has no special cases.
+- **The factory `add_child`s before building components**, not after; `@onready` members are null
+  until the entity is in the tree.
+- **No `Body` Area2D.** An Area2D sensor detects a `CharacterBody2D` directly through
+  `body_entered` / `get_overlapping_bodies()`, so the body's own shape is the presence.
+- **`SimEntity.components` is keyed by slot**, not class name — the slot is already the override key.
+- **`home_position` was removed.** Wander is free-roam now, so nothing referenced it.
 
-`SimEntity.components` is keyed by **slot** (`&"movement"`, `&"wander"`) rather than class name: the
-slot is already needed as the override key, so one identifier does both jobs.
+### World
+- `SimWorldDef` is a flat `entries` list. Bulk scatter rules existed briefly and were removed:
+  distribution will come from a purpose-built algorithm, and the factory should only *read* a list.
+- World bounds are read off the `TileMapLayer` at startup rather than held as a constant.
+- The map is **57 × 35 tiles = 3648 × 2240 px**, not the 1200 × 800 assumed in §8.
 
-Verify with F1 (toggle the per-entity labels), a left-click on any entity (inspector panel plus
-that entity's wander leash) and F5 (respawn from `world1.tres`).
+### Components that exist
+`sprite`, `movement`, `sensor`, `action`, `inventory`, `pickupable`, `brain`, `spawner`, `debug`.
+
+- **Wander lives inside the brain**, not its own component — that removed the need to arbitrate
+  between two things driving movement.
+- **`ActionComponent` is only the hand.** It answers `in_reach()` and knows no specific action.
+  Pick-up belongs to `InventoryComponent`, which asks the hand for reach and the target's
+  `PickUpAbleComponent` to resolve. An entity with a hand and no pockets carries no pick-up code.
+- **`SimEntitySpawnerComponent` is temporary** — a stand-in for the berry bush until `harvest` and
+  its `SpawnOutput` exist.
+- **Brain traits.** `SimBrainDef.traits: Array[SimTrait]` are behaviour modifiers consulted at
+  defined hooks; no traits means default behaviour. `SimFlockTrait` (same-blueprint boids, applied
+  only while wandering) is the first. This is how entities sharing one brain differ without a
+  subclass or a branch.
+
+### Inspector
+Each component decides how it appears via `describe()` / `describe_label()`; returning `{}` opts out,
+which Movement, Sensor and Action do. Tabs are generated from whatever reports, so a new component
+gets a tab for free.
+
+### Not yet built
+Bars (Hunger / Fatigue / Health), `Eatable`, `Harvestable`, `Attack`, actions as `ActionDef` data,
+GOAP, the utility goal layer, sleep, Danger, flee and predation.
+
+Verify with F1 (toggle the per-entity labels), a left-click on any entity (inspector plus that
+entity's sensor and reach circles) and F5 (respawn from `world1.tres`).
