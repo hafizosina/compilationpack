@@ -99,10 +99,9 @@ func _on_respawn_pressed() -> void:
 ## described itself — heading, fields and field order all come from it.
 func _sections_from(details: Dictionary) -> Dictionary:
 	var sections := {}
-	var own := {}
-	for key in ["type", "position", "slots"]:
-		own[key] = str(details.get(key, "—"))
-	sections["entity"] = {"label": "Entity", "fields": own}
+	# Whatever the entity reported, in the order it reported it — components that
+	# contribute a summary land here without the UI naming any of them.
+	sections["entity"] = {"label": "Entity", "fields": details.get("fields", {})}
 
 	var components: Dictionary = details.get("components", {})
 	for slot in components:

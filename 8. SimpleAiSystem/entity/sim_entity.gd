@@ -70,13 +70,21 @@ func describe() -> Dictionary:
 			"fields": fields,
 		}
 	var slot_names: Array[String] = []
+	var fields := {"type": String(def_id)}
 	for key in _components:
 		slot_names.append(String(key))
+		var node: Node = _components[key]
+		# Components that chose the main tab rather than one of their own.
+		if node.has_method("describe_summary"):
+			var summary: Dictionary = node.describe_summary()
+			for field in summary:
+				fields[field] = summary[field]
+	fields["position"] = "%.0f, %.0f" % [global_position.x, global_position.y]
+	fields["slots"] = ", ".join(slot_names)
 	return {
 		"name": name,
 		"type": String(def_id),
-		"position": "%.0f, %.0f" % [global_position.x, global_position.y],
-		"slots": ", ".join(slot_names),
+		"fields": fields,
 		"components": reported,
 	}
 

@@ -36,3 +36,14 @@ func describe() -> Dictionary:
 ## name; override to present something other than the raw key.
 func describe_label() -> String:
 	return String(slot()).capitalize()
+
+## Fields merged into the inspector's MAIN "Entity" tab instead of a tab of this
+## component's own. Same contract as describe(): already formatted, {} to stay
+## out. A component may use either hook, both, or neither — where it appears is
+## its own decision, and nothing above it has an opinion.
+##
+## Use this for a one-line reading someone wants at a glance next to the
+## entity's identity (a bar's current value); use describe() when a component
+## has enough to say to earn its own tab.
+func describe_summary() -> Dictionary:
+	return {}
