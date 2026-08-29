@@ -13,24 +13,32 @@ signal changed(total: int)
 
 ## PROTOTYPE ONLY — REMOVE BEFORE INTEGRATING WITH OTHER SYSTEMS.
 ##
-## Carry badge: one dot per held item, floating above the entity, in the colour
-## the item had in the world. Sizes are SCREEN pixels, divided by the camera
-## zoom before drawing, so the badge stays readable at any zoom.
+## Carry badge: one dot per held item, tucked into the TOP-RIGHT of the sprite's
+## own area, in a darkened shade of the colour the item had in the world. Positions and sizes are
+## world pixels, not screen pixels, so the badge scales with the sprite and stays
+## in its corner at every zoom — it reads as part of the entity rather than as an
+## overlay floating above it.
 ##
 ## A component that holds state should not also render it. This is here because
 ## it is the fastest way to see the pick-up loop working while the AI is being
 ## built, and it is deliberately self-contained so it can be deleted in one go:
-## these constants, `_colours`, the `colour` parameter on add(), `_draw()`,
-## `_camera_zoom()`, the `z_index` line in _ready(), and the colour argument
-## PickUpAbleComponent passes to add(). Nothing else refers to any of it.
+## these constants, `_colours`, the `colour` parameter on add(), `_draw()`, the
+## `z_index` line in _ready(), and the colour argument PickUpAbleComponent
+## passes to add(). Nothing else refers to any of it.
 ##
 ## The replacement seam already exists: `changed(total)` is emitted on every
 ## change, so a separate indicator node or a UI layer can subscribe to it
 ## without this component knowing anything about drawing.
-const BADGE_RADIUS := 5.0
-const BADGE_GAP := 13.0
-const BADGE_HEIGHT := -46.0
+## Top-right corner of the 64px sprite box, inset so the dot sits fully inside.
+const BADGE_ANCHOR := Vector2(19.0, -19.0)
+const BADGE_RADIUS := 7.0
+const BADGE_OUTLINE_WIDTH := 2.0
+## Extra dots stack leftward from the corner.
+const BADGE_GAP := 15.0
 const BADGE_OUTLINE := Color(0.09, 0.08, 0.1, 0.9)
+## Carried items draw darker than the same item lying in the world, so a berry
+## on a rabbit's shoulder never reads as a berry on the ground behind it.
+const BADGE_DARKEN := 0.32
 
 ## How many items fit. One slot means one berry at a time — collect it, and the
 ## entity has nowhere to put the next one until something empties this.
@@ -107,17 +115,7 @@ func _draw() -> void:
 			dots.append(_colours.get(key, Color.WHITE))
 	if dots.is_empty():
 		return
-	var scale_up := 1.0 / maxf(_camera_zoom(), 0.01)
-	var radius := BADGE_RADIUS * scale_up
-	var gap := BADGE_GAP * scale_up
-	var start := -(dots.size() - 1) * gap * 0.5
 	for i in dots.size():
-		var at := Vector2(start + i * gap, BADGE_HEIGHT * scale_up)
-		draw_circle(at, radius + 1.5 * scale_up, BADGE_OUTLINE)
-		draw_circle(at, radius, dots[i])
-
-## Draw scale of the active camera. Falls back to 1.0 outside the tree.
-func _camera_zoom() -> float:
-	if not is_inside_tree():
-		return 1.0
-	return get_viewport_transform().get_scale().x
+		var at := BADGE_ANCHOR - Vector2(i * BADGE_GAP, 0.0)
+		draw_circle(at, BADGE_RADIUS + BADGE_OUTLINE_WIDTH, BADGE_OUTLINE)
+		draw_circle(at, BADGE_RADIUS, dots[i].darkened(BADGE_DARKEN))

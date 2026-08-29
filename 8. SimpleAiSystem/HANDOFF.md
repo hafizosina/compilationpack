@@ -183,7 +183,7 @@ Deliberate, small, and safe to leave — but they'll bite eventually.
 - **`SimInventoryComponent` draws a carry badge — PROTOTYPE ONLY, remove before integrating.**
   A component that holds state should not also render it. It exists to make the pick-up loop
   visible while the AI is being built, and is self-contained: the badge constants, `_colours`,
-  the `colour` parameter on `add()`, `_draw()`, `_camera_zoom()`, the `z_index` line, and the
+  the `colour` parameter on `add()`, `_draw()`, the `z_index` line, and the
   colour argument `SimPickUpAbleComponent` passes. The `changed(total)` signal is the seam a
   proper indicator or UI layer should use instead.
 - No tests, no build scripts — the editor is the toolchain, per `CLAUDE.md`.
