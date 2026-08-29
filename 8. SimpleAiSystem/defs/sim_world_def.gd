@@ -4,8 +4,7 @@ extends Resource
 ## The placement list — one world, authored as data. Blueprints live in the
 ## SimEntityCatalog; this file only says what goes where.
 
-## Explicitly placed entities. Use these for anything whose position matters or
-## that carries a per-instance override.
+## Every entity in this world, one row each: type, position and any
+## per-instance overrides. Distribution is authored here rather than generated —
+## a placement algorithm can write this list, but the factory only reads it.
 @export var entries: Array[SimPlacement] = []
-## Bulk scatter rules, expanded after `entries`. Use these for filler population.
-@export var scatters: Array[SimScatter] = []

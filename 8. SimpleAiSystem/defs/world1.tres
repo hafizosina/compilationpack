@@ -2,66 +2,203 @@
 
 [ext_resource type="Script" uid="uid://bed27uqyvu6ix" path="res://8. SimpleAiSystem/defs/sim_world_def.gd" id="1_world"]
 [ext_resource type="Script" uid="uid://cxh6wmbcf1dfa" path="res://8. SimpleAiSystem/defs/sim_placement.gd" id="2_placement"]
-[ext_resource type="Script" uid="uid://dxrt1flnxshws" path="res://8. SimpleAiSystem/defs/sim_scatter.gd" id="3_scatter"]
 
-[sub_resource type="Resource" id="Resource_leash_tight"]
+[sub_resource type="Resource" id="Resource_e00"]
 script = ExtResource("2_placement")
 entity_name = "leash_tight"
 type = &"type1"
-position = Vector2(384, 384)
+position = Vector2(384.0, 384.0)
 overrides = {
 "wander": {
 "radius": 48.0
 }
 }
 
-[sub_resource type="Resource" id="Resource_leash_loose"]
+[sub_resource type="Resource" id="Resource_e01"]
 script = ExtResource("2_placement")
 entity_name = "leash_loose"
 type = &"type1"
-position = Vector2(1408, 768)
+position = Vector2(1408.0, 768.0)
 overrides = {
 "wander": {
 "radius": 400.0
 }
 }
 
-[sub_resource type="Resource" id="Resource_scatter_type1"]
-script = ExtResource("3_scatter")
+[sub_resource type="Resource" id="Resource_e02"]
+script = ExtResource("2_placement")
+entity_name = "type1_2"
 type = &"type1"
-count = 10
-area = Rect2(-100, -100, 1860, 1030)
-rng_seed = 1
+position = Vector2(513.0, 184.9)
 
-[sub_resource type="Resource" id="Resource_scatter_type3"]
-script = ExtResource("3_scatter")
+[sub_resource type="Resource" id="Resource_e03"]
+script = ExtResource("2_placement")
+entity_name = "type1_3"
+type = &"type1"
+position = Vector2(848.2, 664.3)
+
+[sub_resource type="Resource" id="Resource_e04"]
+script = ExtResource("2_placement")
+entity_name = "type1_4"
+type = &"type1"
+position = Vector2(874.4, -51.1)
+
+[sub_resource type="Resource" id="Resource_e05"]
+script = ExtResource("2_placement")
+entity_name = "type1_5"
+type = &"type1"
+position = Vector2(1152.0, 656.7)
+
+[sub_resource type="Resource" id="Resource_e06"]
+script = ExtResource("2_placement")
+entity_name = "type1_6"
+type = &"type1"
+position = Vector2(38.6, 874.7)
+
+[sub_resource type="Resource" id="Resource_e07"]
+script = ExtResource("2_placement")
+entity_name = "type1_7"
+type = &"type1"
+position = Vector2(1317.4, 793.7)
+
+[sub_resource type="Resource" id="Resource_e08"]
+script = ExtResource("2_placement")
+entity_name = "type1_8"
+type = &"type1"
+position = Vector2(38.6, 649.5)
+
+[sub_resource type="Resource" id="Resource_e09"]
+script = ExtResource("2_placement")
+entity_name = "type1_9"
+type = &"type1"
+position = Vector2(1298.5, 659.9)
+
+[sub_resource type="Resource" id="Resource_e10"]
+script = ExtResource("2_placement")
+entity_name = "type1_10"
+type = &"type1"
+position = Vector2(1467.9, 613.3)
+
+[sub_resource type="Resource" id="Resource_e11"]
+script = ExtResource("2_placement")
+entity_name = "type1_11"
+type = &"type1"
+position = Vector2(716.8, 482.1)
+
+[sub_resource type="Resource" id="Resource_e12"]
+script = ExtResource("2_placement")
+entity_name = "type3_12"
 type = &"type3"
-count = 4
-area = Rect2(-100, -100, 1860, 1030)
-rng_seed = 2
+position = Vector2(1207.4, 434.9)
 
-[sub_resource type="Resource" id="Resource_scatter_type2"]
-script = ExtResource("3_scatter")
+[sub_resource type="Resource" id="Resource_e13"]
+script = ExtResource("2_placement")
+entity_name = "type3_13"
+type = &"type3"
+position = Vector2(297.1, 887.2)
+
+[sub_resource type="Resource" id="Resource_e14"]
+script = ExtResource("2_placement")
+entity_name = "type3_14"
+type = &"type3"
+position = Vector2(381.7, 452.8)
+
+[sub_resource type="Resource" id="Resource_e15"]
+script = ExtResource("2_placement")
+entity_name = "type3_15"
+type = &"type3"
+position = Vector2(2.0, 461.8)
+
+[sub_resource type="Resource" id="Resource_e16"]
+script = ExtResource("2_placement")
+entity_name = "type2_16"
 type = &"type2"
-count = 3
-area = Rect2(-100, -100, 1860, 1030)
-rng_seed = 3
+position = Vector2(829.1, 636.4)
 
-[sub_resource type="Resource" id="Resource_scatter_bush"]
-script = ExtResource("3_scatter")
+[sub_resource type="Resource" id="Resource_e17"]
+script = ExtResource("2_placement")
+entity_name = "type2_17"
+type = &"type2"
+position = Vector2(527.0, 146.8)
+
+[sub_resource type="Resource" id="Resource_e18"]
+script = ExtResource("2_placement")
+entity_name = "type2_18"
+type = &"type2"
+position = Vector2(1476.6, 351.2)
+
+[sub_resource type="Resource" id="Resource_e19"]
+script = ExtResource("2_placement")
+entity_name = "berrybush_19"
 type = &"berrybush"
-count = 8
-area = Rect2(-100, -100, 1860, 1030)
-rng_seed = 4
+position = Vector2(1574.3, 191.8)
 
-[sub_resource type="Resource" id="Resource_scatter_bed"]
-script = ExtResource("3_scatter")
+[sub_resource type="Resource" id="Resource_e20"]
+script = ExtResource("2_placement")
+entity_name = "berrybush_20"
+type = &"berrybush"
+position = Vector2(1259.8, 148.7)
+
+[sub_resource type="Resource" id="Resource_e21"]
+script = ExtResource("2_placement")
+entity_name = "berrybush_21"
+type = &"berrybush"
+position = Vector2(816.1, 505.9)
+
+[sub_resource type="Resource" id="Resource_e22"]
+script = ExtResource("2_placement")
+entity_name = "berrybush_22"
+type = &"berrybush"
+position = Vector2(376.7, 370.2)
+
+[sub_resource type="Resource" id="Resource_e23"]
+script = ExtResource("2_placement")
+entity_name = "berrybush_23"
+type = &"berrybush"
+position = Vector2(1043.5, 742.9)
+
+[sub_resource type="Resource" id="Resource_e24"]
+script = ExtResource("2_placement")
+entity_name = "berrybush_24"
+type = &"berrybush"
+position = Vector2(1248.7, 896.7)
+
+[sub_resource type="Resource" id="Resource_e25"]
+script = ExtResource("2_placement")
+entity_name = "berrybush_25"
+type = &"berrybush"
+position = Vector2(92.8, 766.7)
+
+[sub_resource type="Resource" id="Resource_e26"]
+script = ExtResource("2_placement")
+entity_name = "berrybush_26"
+type = &"berrybush"
+position = Vector2(1613.2, 796.3)
+
+[sub_resource type="Resource" id="Resource_e27"]
+script = ExtResource("2_placement")
+entity_name = "bed_27"
 type = &"bed"
-count = 4
-area = Rect2(-100, -100, 1860, 1030)
-rng_seed = 5
+position = Vector2(943.0, 760.1)
+
+[sub_resource type="Resource" id="Resource_e28"]
+script = ExtResource("2_placement")
+entity_name = "bed_28"
+type = &"bed"
+position = Vector2(422.8, 910.1)
+
+[sub_resource type="Resource" id="Resource_e29"]
+script = ExtResource("2_placement")
+entity_name = "bed_29"
+type = &"bed"
+position = Vector2(1487.2, 644.1)
+
+[sub_resource type="Resource" id="Resource_e30"]
+script = ExtResource("2_placement")
+entity_name = "bed_30"
+type = &"bed"
+position = Vector2(1408.8, -27.8)
 
 [resource]
 script = ExtResource("1_world")
-entries = Array[ExtResource("2_placement")]([SubResource("Resource_leash_tight"), SubResource("Resource_leash_loose")])
-scatters = Array[ExtResource("3_scatter")]([SubResource("Resource_scatter_type1"), SubResource("Resource_scatter_type3"), SubResource("Resource_scatter_type2"), SubResource("Resource_scatter_bush"), SubResource("Resource_scatter_bed")])
+entries = Array[ExtResource("2_placement")]([SubResource("Resource_e00"), SubResource("Resource_e01"), SubResource("Resource_e02"), SubResource("Resource_e03"), SubResource("Resource_e04"), SubResource("Resource_e05"), SubResource("Resource_e06"), SubResource("Resource_e07"), SubResource("Resource_e08"), SubResource("Resource_e09"), SubResource("Resource_e10"), SubResource("Resource_e11"), SubResource("Resource_e12"), SubResource("Resource_e13"), SubResource("Resource_e14"), SubResource("Resource_e15"), SubResource("Resource_e16"), SubResource("Resource_e17"), SubResource("Resource_e18"), SubResource("Resource_e19"), SubResource("Resource_e20"), SubResource("Resource_e21"), SubResource("Resource_e22"), SubResource("Resource_e23"), SubResource("Resource_e24"), SubResource("Resource_e25"), SubResource("Resource_e26"), SubResource("Resource_e27"), SubResource("Resource_e28"), SubResource("Resource_e29"), SubResource("Resource_e30")])

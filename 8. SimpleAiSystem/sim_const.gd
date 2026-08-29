@@ -24,7 +24,7 @@ const RUN_MULT_FAST_PREY: float = 2.0
 const SPRITE_SCALE: float = 0.5
 
 ## Extents of the painted TileMapLayer in world space (tiles x -3..28, y -3..15).
-## Wander targets and scatter placements are clamped to this.
+## Wander targets are clamped to this.
 const WORLD_BOUNDS: Rect2 = Rect2(-192.0, -192.0, 2048.0, 1216.0)
 
 ## Energy spent per grid travelled at each gait. Unused until Phase 2 adds Fatigue.

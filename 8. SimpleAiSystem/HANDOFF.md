@@ -49,7 +49,7 @@ Decided during Phase 1, with reasons — do not silently revisit these.
 | Decision | Choice and why |
 |---|---|
 | **Naming** | Every global `class_name` is `Sim`-prefixed (`SimEntity`, `SimComponentDef`, `SimMovementComponent`). `Entity` and `InventoryComponent` were already taken by `Global/Scene/`, and `ComponentDef` subclasses *need* a global `class_name` to appear in the inspector's resource picker. |
-| **World authoring** | `SimWorldDef` has both `entries` (explicit `SimPlacement`, for position-specific or overridden entities) and `scatters` (`{type, count, area, rng_seed}`, expanded by the factory with a seeded RNG). Keeps a 31-entity world a short file; changing a population is one field. |
+| **World authoring** | `SimWorldDef` is a flat `entries` list — one `SimPlacement` per entity (`type`, `position`, optional `overrides`). Bulk scatter rules were tried and removed: distribution will come from a purpose-built algorithm later, and the factory should only ever *read* a placement list, never generate one. |
 | **Scale** | Rebased on the 64px painted tilemap: `GRID_SIZE 64`, walk 120, run 240, sprite scale 0.5, `WORLD_BOUNDS = Rect2(-192, -192, 2048, 1216)`. Energy-per-grid costs unchanged, so one "grid" is now one visible tile. Spec docs updated to match. |
 | **Component lookup** | `SimEntity.components` is keyed by **slot** (`&"movement"`), not class name — the slot is already the override key, so one identifier does both jobs. |
 | **No `Body` Area2D** | The concept doc gave each entity a separate Area2D for presence. Removed: an Area2D sensor detects a `CharacterBody2D` directly via `body_entered` / `get_overlapping_bodies()` (verified live). The body's own `BodyShape` is the presence — `collision_layer` keeps it detectable, `collision_mask = 0` stops entities shoving each other. Sensor radius and action reach stay separate areas on the *actor*. |
@@ -75,7 +75,7 @@ Decided during Phase 1, with reasons — do not silently revisit these.
   defs/
     sim_component_def.gd       abstract: slot(), build_into()
     sim_entity_def.gd  sim_entity_catalog.gd
-    sim_placement.gd  sim_scatter.gd  sim_world_def.gd
+    sim_placement.gd  sim_world_def.gd
     components/                sim_sprite_def, sim_movement_def, sim_wander_def
     blueprints/                type1 type2 type3 berrybush bed
     catalog.tres  world1.tres

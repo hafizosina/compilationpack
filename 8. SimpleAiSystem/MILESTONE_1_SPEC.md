@@ -172,10 +172,10 @@ WorldState is read from components + inventory: `has_vegie/has_meat` (inventory)
 
 ## 8. World file (starter `world1.tres`)
 
-A `WorldDef` covering the painted **2048×1216** map. It carries two lists: explicit `entries`
-(a `SimPlacement` each — used where position matters or a per-instance override is wanted) and
-bulk `scatters` (`{type, count, area, rng_seed}`, expanded by the factory with a seeded RNG), so a
-31-entity world stays a short file and changing a population is a one-field edit. Current mix:
+A `WorldDef` covering the painted **2048×1216** map: a flat `entries` list, one `SimPlacement` per
+entity (`entity_name`, `type`, `position`, optional `overrides`). 31 rows. Distribution is authored
+data, not something the factory generates — a placement algorithm can write this list later, but the
+factory only reads it. Current mix:
 - 10 × `type1`, 4 × `type3`, 3 × `type2`
 - 8 × `berrybush`, 4 × `bed`
 - (berries/meat are spawned at runtime by harvest, not placed)

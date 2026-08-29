@@ -20,8 +20,7 @@ const ENTITY_SCENE: PackedScene = preload("res://8. SimpleAiSystem/entity/sim_en
 
 var _serial: int = 0
 
-## Clears any existing entities and spawns the whole world from `world`.
-## Explicit `entries` are placed first, then each `scatters` rule is expanded.
+## Clears any existing entities and spawns one entity per `world.entries` row.
 func spawn_world() -> void:
 	if catalog == null or world == null or entities_root == null:
 		push_error("SimEntityFactory: catalog, world and entities_root must all be set")
@@ -31,10 +30,6 @@ func spawn_world() -> void:
 		if placement == null:
 			continue
 		spawn(placement.type, placement.position, placement.overrides, placement.entity_name)
-	for scatter in world.scatters:
-		if scatter == null:
-			continue
-		_spawn_scatter(scatter)
 	EventBus.sim_world_spawned.emit(census())
 
 ## Builds one entity of `type_id` at `pos`. `overrides` is keyed by component
@@ -95,17 +90,6 @@ func census() -> Dictionary:
 			counts[id] = int(counts.get(id, 0)) + 1
 	return counts
 
-func _spawn_scatter(scatter: SimScatter) -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = scatter.rng_seed
-	var area := scatter.area
-	for i in scatter.count:
-		var pos := Vector2(
-			rng.randf_range(area.position.x, area.end.x),
-			rng.randf_range(area.position.y, area.end.y)
-		)
-		spawn(scatter.type, pos, scatter.overrides)
-
 ## Dictionary keys authored in the inspector come back as String, while slot()
 ## returns StringName — look the slot up under both spellings.
 func _overrides_for(overrides: Dictionary, slot: StringName) -> Variant:
@@ -133,8 +117,8 @@ func _has_property(object: Object, property: StringName) -> bool:
 func debug_report() -> void:
 	if entities_root == null:
 		return
-	print("[sim] %d entities from %d entries + %d scatter rules"
-		% [entities_root.get_child_count(), world.entries.size(), world.scatters.size()])
+	print("[sim] %d entities from %d entries"
+		% [entities_root.get_child_count(), world.entries.size()])
 	for child in entities_root.get_children():
 		if not child is SimEntity:
 			continue
