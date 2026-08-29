@@ -133,10 +133,10 @@ expand_margin_right = -4.0
 expand_margin_bottom = -4.0
 
 [sub_resource type="StyleBoxFlat" id="sb_tab_hovered"]
-content_margin_left = 12.0
-content_margin_top = 5.0
-content_margin_right = 12.0
-content_margin_bottom = 5.0
+content_margin_left = 8.0
+content_margin_top = 3.0
+content_margin_right = 8.0
+content_margin_bottom = 3.0
 bg_color = Color(0.867, 0.788, 0.612, 1)
 border_width_bottom = 2
 border_color = Color(0.725, 0.541, 0.196, 1)
@@ -144,10 +144,10 @@ corner_radius_top_left = 6
 corner_radius_top_right = 6
 
 [sub_resource type="StyleBoxFlat" id="sb_tab_selected"]
-content_margin_left = 12.0
-content_margin_top = 5.0
-content_margin_right = 12.0
-content_margin_bottom = 5.0
+content_margin_left = 8.0
+content_margin_top = 3.0
+content_margin_right = 8.0
+content_margin_bottom = 3.0
 bg_color = Color(0.373, 0.247, 0.133, 1)
 border_width_left = 2
 border_width_top = 2
@@ -157,10 +157,10 @@ corner_radius_top_left = 6
 corner_radius_top_right = 6
 
 [sub_resource type="StyleBoxFlat" id="sb_tab_unselected"]
-content_margin_left = 12.0
-content_margin_top = 5.0
-content_margin_right = 12.0
-content_margin_bottom = 5.0
+content_margin_left = 8.0
+content_margin_top = 3.0
+content_margin_right = 8.0
+content_margin_bottom = 3.0
 bg_color = Color(0.808, 0.729, 0.557, 1)
 border_width_bottom = 2
 border_color = Color(0.165, 0.125, 0.086, 0.45)
@@ -215,6 +215,22 @@ corner_radius_top_right = 500
 corner_radius_bottom_right = 500
 corner_radius_bottom_left = 500
 
+[sub_resource type="StyleBoxFlat" id="sb_sim_panel"]
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+bg_color = Color(0.906, 0.839, 0.675, 0.95)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.165, 0.125, 0.086, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
 [resource]
 Button/colors/font_color = Color(0.906, 0.839, 0.675, 1)
 Button/colors/font_hover_color = Color(1, 0.949, 0.827, 1)
@@ -234,9 +250,22 @@ RoundButton/colors/icon_pressed_color = Color(0.165, 0.125, 0.086, 1)
 RoundButton/styles/hover = SubResource("sb_round_hover")
 RoundButton/styles/normal = SubResource("sb_round_normal")
 RoundButton/styles/pressed = SubResource("sb_round_pressed")
+SimHBox/base_type = &"HBoxContainer"
+SimHBox/constants/separation = 6
+SimLabel/base_type = &"Label"
+SimLabel/colors/font_color = Color(0.165, 0.125, 0.086, 1)
+SimLabel/font_sizes/font_size = 11
+SimPanel/base_type = &"PanelContainer"
+SimPanel/styles/panel = SubResource("sb_sim_panel")
+SimTitle/base_type = &"Label"
+SimTitle/colors/font_color = Color(0.165, 0.125, 0.086, 1)
+SimTitle/font_sizes/font_size = 13
+SimVBox/base_type = &"VBoxContainer"
+SimVBox/constants/separation = 1
 TabBar/colors/font_hovered_color = Color(0.165, 0.125, 0.086, 1)
 TabBar/colors/font_selected_color = Color(0.906, 0.839, 0.675, 1)
 TabBar/colors/font_unselected_color = Color(0.165, 0.125, 0.086, 0.7)
+TabBar/font_sizes/font_size = 11
 TabBar/styles/tab_hovered = SubResource("sb_tab_hovered")
 TabBar/styles/tab_selected = SubResource("sb_tab_selected")
 TabBar/styles/tab_unselected = SubResource("sb_tab_unselected")

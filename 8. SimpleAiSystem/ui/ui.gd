@@ -18,7 +18,7 @@ extends CanvasLayer
 ## respawn button asks for a rebuild the same way.
 
 ## Width reserved for the key column so values line up.
-const KEY_WIDTH := 104.0
+const KEY_WIDTH := 84.0
 
 @onready var counts_label: Label = %CountsLabel
 @onready var fps_label: Label = %FpsLabel
@@ -153,11 +153,14 @@ func _clear_rows() -> void:
 ## Adds one key/value row and hands back the Label its value lives in.
 func _add_row(key: String) -> Label:
 	var row := HBoxContainer.new()
+	row.theme_type_variation = &"SimHBox"
 	var key_label := Label.new()
+	key_label.theme_type_variation = &"SimLabel"
 	key_label.text = key
 	key_label.custom_minimum_size = Vector2(KEY_WIDTH, 0.0)
 	key_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	var value_label := Label.new()
+	value_label.theme_type_variation = &"SimLabel"
 	value_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	# Long values (the slot list) wrap instead of widening the panel.
 	value_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
