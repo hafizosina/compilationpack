@@ -10,7 +10,7 @@
 [ext_resource type="Script" uid="uid://bkalxye2nfs23" path="res://8. SimpleAiSystem/defs/components/sim_brain_def.gd" id="9_brain"]
 [ext_resource type="Script" uid="uid://df17ueb32jm5q" path="res://8. SimpleAiSystem/defs/traits/sim_trait.gd" id="10_trait"]
 [ext_resource type="Script" uid="uid://drm3kbgoykxqn" path="res://8. SimpleAiSystem/defs/traits/sim_flock_trait.gd" id="11_flock"]
-[ext_resource type="Texture2D" uid="uid://dnk7drhg2i8xh" path="res://Global/Asset/Animal/rabbit.png" id="12_tex"]
+[ext_resource type="Texture2D" uid="uid://dbllxupj5653t" path="res://Global/Asset/Animal/monkey.png" id="12_tex"]
 
 [sub_resource type="Resource" id="Resource_sprite"]
 script = ExtResource("3_sprite")

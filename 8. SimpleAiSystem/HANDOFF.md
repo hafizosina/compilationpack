@@ -158,8 +158,6 @@ Still unresolved in `COLONY_SIM_CONCEPT.md` §9 — worth deciding before or dur
   speed win? Needs step 7 before it can be observed.
 
 **New, from Phase 1**
-- Wander currently leashes to the **spawn point** permanently. Should `home_position` ever migrate
-  or stay fixed for the whole run?
 - Wander radius/interval per type, and smoothed vs pure-random heading (currently pure random).
 
 ---

@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="SimWorldDef" format=3 uid="uid://wdyc5afntjkk"]
+[gd_resource type="Resource" script_class="SimWorldDef" load_steps=9 format=3 uid="uid://wdyc5afntjkk"]
 
 [ext_resource type="Script" uid="uid://bed27uqyvu6ix" path="res://8. SimpleAiSystem/defs/sim_world_def.gd" id="1_world"]
 [ext_resource type="Script" uid="uid://cxh6wmbcf1dfa" path="res://8. SimpleAiSystem/defs/sim_placement.gd" id="2_placement"]
@@ -33,126 +33,6 @@ entity_name = "animal_4"
 type = &"animal"
 position = Vector2(-419.2, 352.6)
 
-[sub_resource type="Resource" id="Resource_e05"]
-script = ExtResource("2_placement")
-entity_name = "berry_0"
-type = &"berry"
-position = Vector2(-311.5, -305.8)
-
-[sub_resource type="Resource" id="Resource_e06"]
-script = ExtResource("2_placement")
-entity_name = "berry_1"
-type = &"berry"
-position = Vector2(868.8, 1107.6)
-
-[sub_resource type="Resource" id="Resource_e07"]
-script = ExtResource("2_placement")
-entity_name = "berry_2"
-type = &"berry"
-position = Vector2(-132, -51.4)
-
-[sub_resource type="Resource" id="Resource_e08"]
-script = ExtResource("2_placement")
-entity_name = "berry_3"
-type = &"berry"
-position = Vector2(1544.1, 1339.6)
-
-[sub_resource type="Resource" id="Resource_e09"]
-script = ExtResource("2_placement")
-entity_name = "berry_4"
-type = &"berry"
-position = Vector2(1376.6, 281.6)
-
-[sub_resource type="Resource" id="Resource_e10"]
-script = ExtResource("2_placement")
-entity_name = "berry_5"
-type = &"berry"
-position = Vector2(2705, -390.6)
-
-[sub_resource type="Resource" id="Resource_e11"]
-script = ExtResource("2_placement")
-entity_name = "berry_6"
-type = &"berry"
-position = Vector2(2313, 76)
-
-[sub_resource type="Resource" id="Resource_e12"]
-script = ExtResource("2_placement")
-entity_name = "berry_7"
-type = &"berry"
-position = Vector2(-63.9, -253.8)
-
-[sub_resource type="Resource" id="Resource_e13"]
-script = ExtResource("2_placement")
-entity_name = "berry_8"
-type = &"berry"
-position = Vector2(482.6, 1087)
-
-[sub_resource type="Resource" id="Resource_e14"]
-script = ExtResource("2_placement")
-entity_name = "berry_9"
-type = &"berry"
-position = Vector2(57.5, 636.7)
-
-[sub_resource type="Resource" id="Resource_e15"]
-script = ExtResource("2_placement")
-entity_name = "berry_10"
-type = &"berry"
-position = Vector2(1582.3, 235)
-
-[sub_resource type="Resource" id="Resource_e16"]
-script = ExtResource("2_placement")
-entity_name = "berry_11"
-type = &"berry"
-position = Vector2(1278.9, -359.4)
-
-[sub_resource type="Resource" id="Resource_e17"]
-script = ExtResource("2_placement")
-entity_name = "berry_12"
-type = &"berry"
-position = Vector2(-345.6, -84.6)
-
-[sub_resource type="Resource" id="Resource_e18"]
-script = ExtResource("2_placement")
-entity_name = "berry_13"
-type = &"berry"
-position = Vector2(1720.4, 341)
-
-[sub_resource type="Resource" id="Resource_e19"]
-script = ExtResource("2_placement")
-entity_name = "berry_14"
-type = &"berry"
-position = Vector2(501.5, 644.3)
-
-[sub_resource type="Resource" id="Resource_e20"]
-script = ExtResource("2_placement")
-entity_name = "berry_15"
-type = &"berry"
-position = Vector2(964.2, 95.6)
-
-[sub_resource type="Resource" id="Resource_e21"]
-script = ExtResource("2_placement")
-entity_name = "berry_16"
-type = &"berry"
-position = Vector2(2099.7, 862.1)
-
-[sub_resource type="Resource" id="Resource_e22"]
-script = ExtResource("2_placement")
-entity_name = "berry_17"
-type = &"berry"
-position = Vector2(268.4, 622.9)
-
-[sub_resource type="Resource" id="Resource_e23"]
-script = ExtResource("2_placement")
-entity_name = "berry_18"
-type = &"berry"
-position = Vector2(1203.9, 1200.3)
-
-[sub_resource type="Resource" id="Resource_e24"]
-script = ExtResource("2_placement")
-entity_name = "berry_19"
-type = &"berry"
-position = Vector2(1883.6, 72.8)
-
 [sub_resource type="Resource" id="Resource_spawner"]
 script = ExtResource("2_placement")
 entity_name = "berry_spawner_0"
@@ -161,4 +41,4 @@ position = Vector2(1120, 480)
 
 [resource]
 script = ExtResource("1_world")
-entries = Array[ExtResource("2_placement")]([SubResource("Resource_e00"), SubResource("Resource_e01"), SubResource("Resource_e02"), SubResource("Resource_e03"), SubResource("Resource_e04"), SubResource("Resource_e05"), SubResource("Resource_e06"), SubResource("Resource_e07"), SubResource("Resource_e08"), SubResource("Resource_e09"), SubResource("Resource_e10"), SubResource("Resource_e11"), SubResource("Resource_e12"), SubResource("Resource_e13"), SubResource("Resource_e14"), SubResource("Resource_e15"), SubResource("Resource_e16"), SubResource("Resource_e17"), SubResource("Resource_e18"), SubResource("Resource_e19"), SubResource("Resource_e20"), SubResource("Resource_e21"), SubResource("Resource_e22"), SubResource("Resource_e23"), SubResource("Resource_e24"), SubResource("Resource_spawner")])
+entries = Array[ExtResource("2_placement")]([SubResource("Resource_e00"), SubResource("Resource_e01"), SubResource("Resource_e02"), SubResource("Resource_e03"), SubResource("Resource_e04"), SubResource("Resource_spawner")])

@@ -54,8 +54,6 @@ func spawn(type_id: StringName, pos: Vector2, overrides: Dictionary = {}, entity
 	# Added to the tree BEFORE the components are built, so the entity's @onready
 	# members (sprite, body) are resolved by the time build_into() touches them.
 	entities_root.add_child(entity)
-	# Global space, matching how movement and the overlay read positions.
-	entity.home_position = entity.global_position
 
 	for component_def in blueprint.components:
 		if component_def == null:

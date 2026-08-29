@@ -100,7 +100,7 @@ func _on_respawn_pressed() -> void:
 func _sections_from(details: Dictionary) -> Dictionary:
 	var sections := {}
 	var own := {}
-	for key in ["type", "position", "home", "from home", "slots"]:
+	for key in ["type", "position", "slots"]:
 		own[key] = str(details.get(key, "—"))
 	sections["entity"] = {"label": "Entity", "fields": own}
 

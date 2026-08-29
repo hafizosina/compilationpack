@@ -20,10 +20,6 @@ extends CharacterBody2D
 
 ## Blueprint id this entity was spawned from (e.g. &"type1").
 var def_id: StringName = &""
-## Where the entity was spawned, in GLOBAL space. Wander leashes to this so
-## nothing drifts off-map.
-var home_position: Vector2 = Vector2.ZERO
-
 ## slot (StringName) -> component node. Populated by SimComponentDef.build_into().
 var _components: Dictionary = {}
 
@@ -80,8 +76,6 @@ func describe() -> Dictionary:
 		"name": name,
 		"type": String(def_id),
 		"position": "%.0f, %.0f" % [global_position.x, global_position.y],
-		"home": "%.0f, %.0f" % [home_position.x, home_position.y],
-		"from home": "%.0f px" % global_position.distance_to(home_position),
 		"slots": ", ".join(slot_names),
 		"components": reported,
 	}
