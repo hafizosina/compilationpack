@@ -8,11 +8,13 @@
 [ext_resource type="Script" uid="uid://cjd0adnsy0s3q" path="res://8. SimpleAiSystem/defs/components/sim_action_def.gd" id="7_action"]
 [ext_resource type="Script" uid="uid://bdgcjlio76joi" path="res://8. SimpleAiSystem/defs/components/sim_inventory_def.gd" id="8_inventory"]
 [ext_resource type="Script" uid="uid://bkalxye2nfs23" path="res://8. SimpleAiSystem/defs/components/sim_brain_def.gd" id="9_brain"]
-[ext_resource type="Texture2D" uid="uid://dnk7drhg2i8xh" path="res://Global/Asset/Animal/rabbit.png" id="10_tex"]
+[ext_resource type="Script" uid="uid://df17ueb32jm5q" path="res://8. SimpleAiSystem/defs/traits/sim_trait.gd" id="10_trait"]
+[ext_resource type="Script" uid="uid://drm3kbgoykxqn" path="res://8. SimpleAiSystem/defs/traits/sim_flock_trait.gd" id="11_flock"]
+[ext_resource type="Texture2D" uid="uid://dnk7drhg2i8xh" path="res://Global/Asset/Animal/rabbit.png" id="12_tex"]
 
 [sub_resource type="Resource" id="Resource_sprite"]
 script = ExtResource("3_sprite")
-texture = ExtResource("10_tex")
+texture = ExtResource("12_tex")
 
 [sub_resource type="Resource" id="Resource_movement"]
 script = ExtResource("4_movement")
@@ -29,8 +31,12 @@ script = ExtResource("7_action")
 [sub_resource type="Resource" id="Resource_inventory"]
 script = ExtResource("8_inventory")
 
+[sub_resource type="Resource" id="Resource_flock"]
+script = ExtResource("11_flock")
+
 [sub_resource type="Resource" id="Resource_brain"]
 script = ExtResource("9_brain")
+traits = Array[ExtResource("10_trait")]([SubResource("Resource_flock")])
 
 [resource]
 script = ExtResource("1_def")
