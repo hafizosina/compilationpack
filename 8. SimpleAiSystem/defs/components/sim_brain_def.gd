@@ -15,6 +15,12 @@ extends SimComponentDef
 @export var wander_pause_min: float = 0.3
 @export var wander_pause_max: float = 1.2
 
+## How strongly flockmates pull a wander destination. 0 disables flocking
+## entirely; only entities of the SAME blueprint ever count as flockmates.
+@export_range(0.0, 1.0) var flock_weight: float = 0.55
+## Neighbours closer than this push back, keeping the flock from collapsing.
+@export var flock_separation: float = 110.0
+
 func slot() -> StringName:
 	return &"brain"
 
@@ -26,5 +32,7 @@ func build_into(entity: SimEntity) -> void:
 	component.wander_radius = wander_radius
 	component.wander_pause_min = wander_pause_min
 	component.wander_pause_max = wander_pause_max
+	component.flock_weight = flock_weight
+	component.flock_separation = flock_separation
 	entity.add_child(component)
 	entity.register_component(slot(), component)
