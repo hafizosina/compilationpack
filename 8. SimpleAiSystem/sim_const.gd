@@ -4,9 +4,6 @@ extends RefCounted
 ## Tunable constants for the colony sim (module 8). Static-only helper class —
 ## deliberately NOT an autoload, since nothing outside this module reads it.
 
-## Side length of one world tile, in pixels.
-const GRID_SIZE: float = 64.0
-
 ## Baseline speeds in px/sec.
 const WALK_SPEED: float = 120.0
 const RUN_SPEED: float = 240.0

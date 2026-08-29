@@ -46,12 +46,6 @@ func has_def(id: StringName) -> bool:
 		_rebuild_index()
 	return _index.has(id)
 
-## Every blueprint id in the catalog.
-func ids() -> Array:
-	if not _index_built:
-		_rebuild_index()
-	return _index.keys()
-
 func _rebuild_index() -> void:
 	_index.clear()
 	for def in defs:

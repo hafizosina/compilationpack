@@ -88,9 +88,6 @@ func add(item_id: StringName, amount: int = 1, colour: Color = Color.WHITE) -> b
 	queue_redraw()
 	return true
 
-func count_of(item_id: StringName) -> int:
-	return int(_items.get(item_id, 0))
-
 func total() -> int:
 	var sum := 0
 	for key in _items:
