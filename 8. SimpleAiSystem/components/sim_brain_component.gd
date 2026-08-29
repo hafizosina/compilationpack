@@ -35,6 +35,7 @@ var wander_pause_max: float = 1.2
 
 var _sensor: SimSensorComponent
 var _action: SimActionComponent
+var _inventory: SimInventoryComponent
 var _movement: SimMovementComponent
 var _target: SimEntity
 var _state: State = State.WANDER
@@ -52,6 +53,7 @@ func _ready() -> void:
 		return
 	_sensor = entity.get_component(&"sensor") as SimSensorComponent
 	_action = entity.get_component(&"action") as SimActionComponent
+	_inventory = entity.get_component(&"inventory") as SimInventoryComponent
 	_movement = entity.get_component(&"movement") as SimMovementComponent
 	if _sensor == null or _movement == null:
 		push_warning("SimBrainComponent on '%s' needs a sensor and movement component" % entity.name)
@@ -82,8 +84,10 @@ func _think() -> void:
 		_enter(State.WANDER)
 		return
 
+	# Reach is asked of the hand; the pick-up itself is asked of the inventory,
+	# which owns that action.
 	if _action != null and _action.in_reach(_target):
-		if _action.try_pick_up(_target):
+		if _inventory != null and _inventory.try_pick_up(_target):
 			_collected += 1
 		# Taken by us or beaten to it — either way this target is done with.
 		_target = null

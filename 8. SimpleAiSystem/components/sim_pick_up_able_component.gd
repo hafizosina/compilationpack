@@ -3,9 +3,9 @@ extends SimComponent
 
 ## Target-side affordance: this entity can be picked up.
 ##
-## Actor declares, target resolves — the actor's ActionComponent is a thin
-## capability marker, and this component owns what actually happens: the item
-## lands in the actor's inventory and the world entity removes itself.
+## Actor declares, target resolves — the actor's InventoryComponent asks, and
+## this component owns what actually happens: the item lands in that inventory
+## and the world entity removes itself.
 
 ## What lands in the picker's inventory.
 var item_id: StringName = &"item"
