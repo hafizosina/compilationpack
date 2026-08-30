@@ -7,7 +7,7 @@
 [ext_resource type="Script" uid="uid://njhhln7pu68q" path="res://8. SimpleAiSystem/defs/components/sim_sensor_def.gd" id="6_sensor"]
 [ext_resource type="Script" uid="uid://cjd0adnsy0s3q" path="res://8. SimpleAiSystem/defs/components/sim_action_def.gd" id="7_action"]
 [ext_resource type="Script" uid="uid://bdgcjlio76joi" path="res://8. SimpleAiSystem/defs/components/sim_inventory_def.gd" id="8_inventory"]
-[ext_resource type="Script" uid="uid://bkalxye2nfs23" path="res://8. SimpleAiSystem/defs/components/sim_brain_def.gd" id="9_brain"]
+[ext_resource type="Script" uid="uid://d0kljcrs6xxno" path="res://8. SimpleAiSystem/defs/components/sim_brain_fsm_def.gd" id="9_brain"]
 [ext_resource type="Script" uid="uid://df17ueb32jm5q" path="res://8. SimpleAiSystem/defs/traits/sim_trait.gd" id="10_trait"]
 [ext_resource type="Script" uid="uid://drm3kbgoykxqn" path="res://8. SimpleAiSystem/defs/traits/sim_flock_trait.gd" id="11_flock"]
 [ext_resource type="Texture2D" uid="uid://dbllxupj5653t" path="res://Global/Asset/Animal/monkey.png" id="12_tex"]

@@ -5,9 +5,8 @@ extends Node2D
 ##
 ## Left-click an entity to inspect it in the bottom-left panel; the selected
 ## entity also shows its sensor and reach radii. Click bare ground to clear.
-## F1 toggles
-## the per-entity debug labels, F5 respawns the world (edit world1.tres, hit
-## F5, see the change without touching code).
+## F1 toggles the per-entity debug labels, F5 respawns the world (edit
+## world1.tres, hit F5, see the change without touching code).
 
 ## Physics layer entities sit on, and the layer picking queries against.
 const SELECT_MASK := 1
@@ -29,30 +28,6 @@ func _ready() -> void:
 	SimConst.adopt_bounds_from($World/TileMapLayer)
 	EventBus.sim_respawn_requested.connect(_respawn)
 	_respawn()
-	_loop_probe()
-
-func _loop_probe() -> void:
-	await get_tree().create_timer(0.5).timeout
-	for step in 13:
-		await get_tree().create_timer(15.0).timeout
-		var alive := 0; var dead := 0; var asleep := 0
-		var hu := 0.0; var he := 0.0
-		var eaten := 0; var berries := 0
-		for c in $World/Entities.get_children():
-			if c.def_id == &"berry":
-				berries += 1
-			elif c.def_id == &"animal":
-				var h := c.get_component(&"health") as SimHealthComponent
-				he += h.value
-				hu += (c.get_component(&"hunger") as SimHungerComponent).value
-				eaten += (c.get_component(&"brain") as SimBrainComponent)._collected
-				if c.is_sleeping: asleep += 1
-				if h.is_dead(): dead += 1
-				else: alive += 1
-		var n := maxf(float(alive + dead), 1.0)
-		print("[probe] t=%3ds hp=%5.1f hun=%5.1f | eaten=%2d berries=%2d alive=%d asleep=%d dead=%d"
-			% [(step + 1) * 15, he / n, hu / n, eaten, berries, alive, asleep, dead])
-	get_tree().quit()
 
 func _process(delta: float) -> void:
 	if _selected == null:

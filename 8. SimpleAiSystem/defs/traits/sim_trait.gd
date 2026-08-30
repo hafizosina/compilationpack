@@ -1,7 +1,7 @@
 class_name SimTrait
 extends Resource
 
-## A behaviour modifier on SimBrainComponent. Every creature shares one brain;
+## A behaviour modifier on a brain. Every creature shares one brain class;
 ## traits are what make two of them act differently without a second brain,
 ## a subclass, or an `if` in the brain.
 ##
@@ -10,7 +10,7 @@ extends Resource
 ## never breaks existing traits. No trait means default behaviour — an entity
 ## with no flock trait wanders randomly, and nothing has to check for that.
 ##
-## `brain` is deliberately untyped: SimBrainComponent holds an Array of these,
+## `brain` is deliberately untyped: the brain holds an Array of these,
 ## so annotating it would make the two scripts reference each other in a cycle.
 ## Reach the world through `brain.entity`, `brain.sensor()` and the brain's
 ## public tuning fields.

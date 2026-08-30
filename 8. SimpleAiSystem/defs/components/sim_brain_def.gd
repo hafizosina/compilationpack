@@ -1,36 +1,44 @@
 class_name SimBrainDef
 extends SimComponentDef
 
-## Blueprint for SimBrainComponent — the simple AI, which owns both seeking and
-## wandering. Requires sensor and movement defs; action and inventory defs are
-## what let it actually pick anything up.
-
-## Seconds between decisions.
-@export var think_interval: float = 0.25
-## Which affordance the brain seeks out.
-@export var wanted: StringName = &"pickupable"
-## Behaviour modifiers. Leave empty for plain default behaviour; add a
-## SimFlockTrait to make this type herd, and so on. This is how two blueprints
-## sharing the one brain end up behaving differently.
-@export var traits: Array[SimTrait] = []
-## How far one wander step may travel from where the entity stands.
-@export var wander_radius: float = 420.0
-## Seconds idled after arriving, before choosing the next wander destination.
-@export var wander_pause_min: float = 0.3
-@export var wander_pause_max: float = 1.2
-
+## Base blueprint for every brain. Subclasses pick which brain to build; this
+## owns the rule that applies to all of them.
+##
+## **One brain per entity.** Two brains sharing one set of legs would fight over
+## every move_to, so a second one is refused outright rather than allowed to
+## produce behaviour nobody can debug. The check lives here so every brain kind
+## inherits it, including ones that do not exist yet.
 
 func slot() -> StringName:
 	return &"brain"
 
+## Subclasses return the brain to build.
+func _make() -> SimBrainComponent:
+	push_error("SimBrainDef._make() not implemented by %s" % _script_name(self))
+	return null
+
 func build_into(entity: SimEntity) -> void:
-	var component := SimBrainComponent.new()
+	var existing := entity.get_component(slot())
+	if existing != null:
+		push_error("'%s' already has a brain (%s); an entity may hold only one, so %s was not built"
+			% [entity.name, _script_name(existing), _script_name(self)])
+		return
+	var component := _make()
+	if component == null:
+		return
 	component.name = "BrainComponent"
-	component.think_interval = think_interval
-	component.wanted = wanted
-	component.wander_radius = wander_radius
-	component.wander_pause_min = wander_pause_min
-	component.wander_pause_max = wander_pause_max
-	component.traits = traits
+	_configure(component)
 	entity.add_child(component)
 	entity.register_component(slot(), component)
+
+## Hook for subclass-specific fields.
+func _configure(_brain: SimBrainComponent) -> void:
+	pass
+
+## get_class() reports the engine type (Node2D, Resource), which says nothing
+## about which brain this is. The script filename is what a reader needs.
+static func _script_name(object: Object) -> String:
+	var script: Script = object.get_script()
+	if script == null:
+		return object.get_class()
+	return script.resource_path.get_file()

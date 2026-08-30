@@ -61,6 +61,8 @@ yet** — nothing consumes what is carried. That is what step 3 unlocks.
 | **Inventory is a preference, not a requirement** | The brain looks in the pocket first because it costs no travel, then at the world. An entity with no inventory just skips the first half and eats off the ground — which is also what happens when its pocket is empty. |
 | **Actor asks, target resolves** | `InventoryComponent.try_pick_up()` asks `ActionComponent` "can I reach?" and the target's `PickUpAbleComponent` "take yourself". Action is *the hand* — it knows no specific action, so a future `AttackComponent` reuses it. Movement is *the legs*. |
 | **Wander inside the brain** | Wander was its own component driving movement, which meant arbitrating with the brain. Folding it in deleted the problem instead of solving it. |
+| **`brain` is a component TYPE** | The slot is the type; each concrete brain is one way of filling it. `SimBrainComponent` is the abstract base, `SimBrainFSMComponent` the state-machine implementation, and a GOAP planner will be another occupying the same slot — so nothing that talks to "the brain" changes when it arrives. |
+| **One brain per entity** | `SimBrainDef.build_into()` refuses to build a second brain and pushes an error naming both scripts. Two brains sharing one set of legs would fight over every `move_to`. The check lives on the base def, so every future brain kind inherits it. |
 | **Traits** | `SimBrainDef.traits: Array[SimTrait]` — behaviour modifiers consulted at defined hooks. No traits = default behaviour. This is how entities sharing one brain behave differently, with no subclass and no branch. `SimFlockTrait` is the first. |
 | **No Bed** | Sleep is self-directed, so nothing to path to and nothing to advertise it. |
 | **Collapse is not a decision** | `FatigueComponent` owns it end to end: at zero it sets the entity's `is_sleeping`, switches the brain off, watches its own value, and switches the brain back on at 50. No health penalty — the helpless window is the cost. The brain holds no sleep code. |
@@ -90,7 +92,8 @@ yet** — nothing consumes what is carried. That is what step 3 unlocks.
     sim_bar_component.gd       base for the three needs
     sim_health_component.gd / sim_hunger_component.gd / sim_fatigue_component.gd
     sim_pick_up_able_component.gd  target side of pick-up
-    sim_brain_component.gd     seek / wander state machine, consults traits
+    sim_brain_component.gd     abstract base: the `brain` slot, is_thinking()
+    sim_brain_fsm_component.gd seek / feed / wander state machine, consults traits
     sim_entity_spawner_component.gd  periodic spawn (TEMPORARY, stands in for a bush)
     sim_debug_component.gd     per-entity labels (F1), injected under Constant.DEBUG
   defs/
