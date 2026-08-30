@@ -15,12 +15,16 @@ const MAX_PICK_HITS := 32
 ## How often the selected entity's snapshot is pushed to the panel. The values
 ## are read by a person, so 5 Hz is plenty and costs nothing.
 const INSPECT_INTERVAL := 0.2
+## How often the entity count is pushed to the stats panel. The spawner changes
+## it continuously, so a spawn-time figure would be stale within seconds.
+const CENSUS_INTERVAL := 0.5
 
 @onready var factory: SimEntityFactory = $EntityFactory
 @onready var selection_marker: SimSelectionMarker = $World/SelectionMarker
 
 var _selected: SimEntity
 var _since_push: float = 0.0
+var _since_census: float = 0.0
 
 func _ready() -> void:
 	# Read the painted area off the tilemap, so repainting the map moves the
@@ -30,6 +34,11 @@ func _ready() -> void:
 	_respawn()
 
 func _process(delta: float) -> void:
+	_since_census += delta
+	if _since_census >= CENSUS_INTERVAL:
+		_since_census = 0.0
+		EventBus.sim_world_census.emit(factory.live_count())
+
 	if _selected == null:
 		return
 	if not is_instance_valid(_selected):

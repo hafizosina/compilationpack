@@ -36,7 +36,6 @@ func spawn_world() -> void:
 		if placement == null:
 			continue
 		spawn(placement.type, placement.position, placement.overrides, placement.entity_name)
-	EventBus.sim_world_spawned.emit(census())
 
 ## Builds one entity of `type_id` at `pos`. `overrides` is keyed by component
 ## slot, e.g. `{ "brain": { "wander_radius": 200.0 } }`.
@@ -84,19 +83,10 @@ func clear() -> void:
 		child.queue_free()
 	_serial = 0
 
-## Live entity count per blueprint id, for the stats panel and debug reports.
-func census() -> Dictionary:
-	var counts: Dictionary = {}
-	if entities_root == null:
-		return counts
-	for child in entities_root.get_children():
-		if child is SimEntity:
-			var id: StringName = child.def_id
-			counts[id] = int(counts.get(id, 0)) + 1
-	return counts
+## How many entities are alive right now.
+func live_count() -> int:
+	return 0 if entities_root == null else entities_root.get_child_count()
 
-## Dictionary keys authored in the inspector come back as String, while slot()
-## returns StringName — look the slot up under both spellings.
 func _overrides_for(overrides: Dictionary, slot: StringName) -> Variant:
 	if overrides.has(slot):
 		return overrides[slot]

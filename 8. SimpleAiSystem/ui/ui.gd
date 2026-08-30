@@ -1,6 +1,6 @@
 extends CanvasLayer
 
-## Two read-outs for the running world: population counts top-right, and a
+## Two read-outs for the running world: a bare entity count top-right, and a
 ## bottom-left inspector for whichever entity is currently selected. They are
 ## anchored to opposite corners rather than sharing a column, so neither can
 ## push or cover the other however tall the inspector grows.
@@ -20,7 +20,7 @@ extends CanvasLayer
 ## Width reserved for the key column so values line up.
 const KEY_WIDTH := 84.0
 
-@onready var counts_label: Label = %CountsLabel
+@onready var count_label: Label = %CountLabel
 @onready var fps_label: Label = %FpsLabel
 @onready var respawn_button: Button = %RespawnButton
 @onready var name_label: Label = %NameLabel
@@ -38,7 +38,7 @@ var _row_keys: Array[String] = []
 var _row_values: Dictionary = {}
 
 func _ready() -> void:
-	EventBus.sim_world_spawned.connect(_on_world_spawned)
+	EventBus.sim_world_census.connect(_on_census)
 	EventBus.sim_entity_inspected.connect(_on_entity_inspected)
 	respawn_button.pressed.connect(_on_respawn_pressed)
 	tabs.tab_changed.connect(_on_tab_changed)
@@ -47,15 +47,8 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	fps_label.text = "%d fps" % Engine.get_frames_per_second()
 
-func _on_world_spawned(census: Dictionary) -> void:
-	var lines: Array[String] = []
-	var total := 0
-	for id in census:
-		var count: int = census[id]
-		total += count
-		lines.append("%s   %d" % [id, count])
-	lines.append("total   %d" % total)
-	counts_label.text = "\n".join(lines)
+func _on_census(count: int) -> void:
+	count_label.text = "%d entities" % count
 
 ## Rebuilds the inspector from a snapshot; an empty dictionary means nothing is
 ## selected. Snapshots arrive several times a second, so the tab strip is only

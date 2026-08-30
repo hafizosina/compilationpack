@@ -10,9 +10,11 @@ signal mana_change(value: float)
 ## slot array (entries are ItemStack or null); the inventory UI rebuilds from it.
 signal inventory_changed(slots: Array)
 
-## Emitted by module 8's SimEntityFactory once a world has been spawned. Carries
-## a blueprint-id -> live-count census; the sim stats panel rebuilds from it.
-signal sim_world_spawned(census: Dictionary)
+## Emitted periodically by module 8's main scene with the number of entities
+## currently alive. Pushed rather than polled so the stats panel never reaches
+## into the world; sent on an interval rather than on spawn because the berry
+## spawner changes the count continuously.
+signal sim_world_census(count: int)
 
 ## Emitted by the sim stats panel to ask for the world to be rebuilt from its
 ## SimWorldDef. Module 8's main scene performs the respawn.

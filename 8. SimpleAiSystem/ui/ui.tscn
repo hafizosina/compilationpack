@@ -19,20 +19,17 @@ theme = ExtResource("2_theme")
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -216.0
+offset_left = -16.0
 offset_top = 16.0
 offset_right = -16.0
-offset_bottom = 216.0
+offset_bottom = 16.0
 grow_horizontal = 0
 
 [node name="Stats" type="VBoxContainer" parent="Root/StatsPanel"]
 
-[node name="TitleLabel" type="Label" parent="Root/StatsPanel/Stats"]
-text = "World"
-
-[node name="CountsLabel" type="Label" parent="Root/StatsPanel/Stats"]
+[node name="CountLabel" type="Label" parent="Root/StatsPanel/Stats"]
 unique_name_in_owner = true
-text = "—"
+text = "— entities"
 
 [node name="FpsLabel" type="Label" parent="Root/StatsPanel/Stats"]
 unique_name_in_owner = true
