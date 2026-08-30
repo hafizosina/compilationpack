@@ -7,6 +7,11 @@ extends SimComponent
 ##
 ## Actor declares, target resolves: HungerComponent asks, and this decides what
 ## eating actually does — top the eater up, then destroy itself.
+##
+## This is the WORLD side. Once something is picked up the entity is gone, and
+## the carrier holds a blueprint snapshot instead; eating from a pocket reads
+## `hunger_value` off the SimFoodDef in that snapshot. Both paths use the same
+## authored number, and in both "is it food?" is answered by component presence.
 
 ## Hunger restored when eaten.
 var hunger_value: float = 35.0

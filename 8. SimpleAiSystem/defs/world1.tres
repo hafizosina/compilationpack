@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="SimWorldDef" load_steps=9 format=3 uid="uid://wdyc5afntjkk"]
+[gd_resource type="Resource" script_class="SimWorldDef" format=3 uid="uid://wdyc5afntjkk"]
 
 [ext_resource type="Script" uid="uid://bed27uqyvu6ix" path="res://8. SimpleAiSystem/defs/sim_world_def.gd" id="1_world"]
 [ext_resource type="Script" uid="uid://cxh6wmbcf1dfa" path="res://8. SimpleAiSystem/defs/sim_placement.gd" id="2_placement"]

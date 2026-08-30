@@ -1,11 +1,11 @@
-[gd_resource type="Resource" script_class="SimEntityDef" load_steps=10 format=3 uid="uid://bwkfno26w1dol"]
+[gd_resource type="Resource" script_class="SimEntityDef" format=3 uid="uid://bwkfno26w1dol"]
 
 [ext_resource type="Script" uid="uid://ms54tio2v81x" path="res://8. SimpleAiSystem/defs/sim_entity_def.gd" id="1_def"]
 [ext_resource type="Script" uid="uid://b4qpnevkf8tls" path="res://8. SimpleAiSystem/defs/sim_component_def.gd" id="2_base"]
 [ext_resource type="Script" uid="uid://dtqsb3tmid1tf" path="res://8. SimpleAiSystem/defs/components/sim_sprite_def.gd" id="3_sprite"]
 [ext_resource type="Script" uid="uid://bcoqgepwu8n06" path="res://8. SimpleAiSystem/defs/components/sim_pick_up_able_def.gd" id="4_pickup"]
-[ext_resource type="Script" uid="uid://b5377j5lkgwi6" path="res://8. SimpleAiSystem/defs/components/sim_food_def.gd" id="6_food"]
 [ext_resource type="Texture2D" uid="uid://dlfyft0lv6p2h" path="res://Global/Asset/CircleButtonFull.png" id="5_tex"]
+[ext_resource type="Script" uid="uid://b5377j5lkgwi6" path="res://8. SimpleAiSystem/defs/components/sim_food_def.gd" id="6_food"]
 
 [sub_resource type="Resource" id="Resource_sprite"]
 script = ExtResource("3_sprite")
@@ -18,7 +18,6 @@ script = ExtResource("4_pickup")
 
 [sub_resource type="Resource" id="Resource_food"]
 script = ExtResource("6_food")
-hunger_value = 35.0
 
 [resource]
 script = ExtResource("1_def")

@@ -25,10 +25,17 @@ func is_available() -> bool:
 func take(actor: SimEntity, inventory: SimInventoryComponent) -> bool:
 	if _taken:
 		return false
-	if not inventory.store(entity):
+	if not inventory.store(entity.to_resource()):
 		return false
 	_taken = true
 	picked_up.emit(actor)
+	# Detached immediately, not just queue_free()d: a queued node stays in the
+	# tree until the end of the frame, so other sensors would keep detecting a
+	# berry that is already gone.
+	var parent := entity.get_parent()
+	if parent != null:
+		parent.remove_child(entity)
+	entity.queue_free()
 	return true
 
 func describe() -> Dictionary:

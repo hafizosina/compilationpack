@@ -43,9 +43,9 @@ func drain_scale() -> float:
 ## pick-up: it is the component with the appetite, as Inventory is the one with
 ## the pocket.
 ##
-## Nothing here knows what a berry is. It asks the inventory for a held entity
-## carrying a `food` component — the same "find by capability" question the
-## sensor asks of the world — and that component decides what eating does.
+## Nothing here knows what a berry is. It asks the inventory for a held
+## blueprint carrying a `food` def — the same "find by capability" question the
+## sensor asks of the world — and that def says how nourishing it is.
 ##
 ## Called from _process for now: with no planner, "eat what you are carrying" is
 ## not much of a decision. GOAP takes it over as a real action in step 5, at
@@ -54,15 +54,14 @@ func try_eat() -> bool:
 	var inventory := entity.get_component(&"inventory") as SimInventoryComponent
 	if inventory == null:
 		return false
-	var carried := inventory.held_with(&"food")
-	if carried == null:
+	var snapshot := inventory.held_with(&"food")
+	if snapshot == null:
 		return false
-	var food := carried.get_component(&"food") as SimFoodComponent
-	if food == null or not food.is_available():
+	var food := snapshot.component_def(&"food") as SimFoodDef
+	if food == null:
 		return false
-	if not food.consume(entity, self):
-		return false
-	inventory.release(carried)
+	restore(food.hunger_value)
+	inventory.release(snapshot)
 	return true
 
 func _process(delta: float) -> void:

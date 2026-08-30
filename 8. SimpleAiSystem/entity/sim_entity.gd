@@ -28,12 +28,40 @@ var def_id: StringName = &""
 var is_sleeping: bool = false
 ## slot (StringName) -> component node. Populated by SimComponentDef.build_into().
 var _components: Dictionary = {}
+## The per-instance component defs this entity was actually built from,
+## overrides included. Kept so the entity can hand back a blueprint of itself.
+var _source_defs: Array[SimComponentDef] = []
 
 @onready var sprite: Sprite2D = $Sprite2D
 ## Extent of the entity's presence. The shape is a sub-resource shared by every
 ## instance of the scene, so a def that resizes it per entity must duplicate()
 ## it first — the same rule SimComponentDef states for live mutable state.
 @onready var body_shape: CollisionShape2D = $BodyShape
+
+## Records the def a component was built from. Called by SimEntityFactory with
+## the already-duplicated, already-overridden copy, so the entity remembers what
+## it actually is rather than what its type generally is.
+func remember_def(component_def: SimComponentDef) -> void:
+	if component_def != null:
+		_source_defs.append(component_def)
+
+## A blueprint of this entity, as a resource — everything needed to rebuild it,
+## and nothing tied to the node. Used when something is picked up: the carrier
+## keeps this and the world entity destroys itself, so no hidden nodes linger in
+## the tree and what a carried thing *is* is still decided by which component
+## defs it has.
+##
+## The defs are deep-copied, so the snapshot cannot be changed by, or change,
+## the entity it came from.
+func to_resource() -> SimEntityDef:
+	var blueprint := SimEntityDef.new()
+	blueprint.id = def_id
+	blueprint.display_name = String(def_id)
+	var copies: Array[SimComponentDef] = []
+	for component_def in _source_defs:
+		copies.append(component_def.duplicate(true))
+	blueprint.components = copies
+	return blueprint
 
 ## Records a component under its slot key. Called by SimComponentDef.build_into()
 ## after the node has been added as a child.

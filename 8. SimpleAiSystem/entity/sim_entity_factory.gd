@@ -65,6 +65,7 @@ func spawn(type_id: StringName, pos: Vector2, overrides: Dictionary = {}, entity
 		var slot_overrides: Variant = _overrides_for(overrides, instance_def.slot())
 		if slot_overrides is Dictionary:
 			_apply_overrides(instance_def, slot_overrides)
+		entity.remember_def(instance_def)
 		instance_def.build_into(entity)
 
 	if Constant.DEBUG:
