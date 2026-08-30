@@ -212,8 +212,10 @@ picture — file tree, tuning values, next steps — read `HANDOFF.md`.
   registers it under the `sprite` slot, so the factory has no special cases.
 - **The factory `add_child`s before building components**, not after; `@onready` members are null
   until the entity is in the tree.
-- **No `Body` Area2D.** An Area2D sensor detects a `CharacterBody2D` directly through
-  `body_entered` / `get_overlapping_bodies()`, so the body's own shape is the presence.
+- **`SimEntity` is a plain `Node2D` with a `Body` Area2D for presence.** It was a
+  `CharacterBody2D`, but nothing ever collided (`collision_mask = 0`), so `move_and_slide()` was
+  only integrating position by hand — movement now does that directly. Sensors and click-picking
+  both query the `Body` area, so one shape serves both.
 - **`SimEntity.components` is keyed by slot**, not class name — the slot is already the override key.
 - **`home_position` was removed.** Wander is free-roam now, so nothing referenced it.
 

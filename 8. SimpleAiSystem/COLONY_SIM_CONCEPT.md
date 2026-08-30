@@ -37,16 +37,15 @@ Main.tscn                     ← entry point / world root
                                  EntityFactory from EntityCatalog blueprints + a WorldDef list
 
 Entity.tscn                   ← BARE BASE (no per-type scenes)
-└── CharacterBody2D  (class_name Entity)
+└── Node2D  (class_name Entity)
     ├── Sprite2D                  ← texture set from def
-    └── BodyShape (CollisionShape2D) ← the entity's PRESENCE: how OTHER sensors
-                                       detect it, and what OTHER actions reach.
-                                       No separate Area2D — an Area2D sensor picks
-                                       a CharacterBody2D up via body_entered /
-                                       get_overlapping_bodies(), so the physics
-                                       body IS the presence. collision_layer keeps
-                                       it detectable, collision_mask = 0 stops
-                                       entities shoving each other.
+    └── Body (Area2D + CollisionShape2D) ← the entity's PRESENCE: how OTHER
+                                       sensors detect it, and what OTHER actions
+                                       reach. The base is a plain Node2D — nothing
+                                       collides, so a physics body earned nothing;
+                                       movement integrates position itself. The
+                                       area is monitorABLE but not monitorING: it
+                                       exists to be found, not to find.
     # ALL behavior components (Health, Hunger, Fatigue, Inventory, Movement,
     # Sensor, Action, Brain, [Attack]) are added AT RUNTIME by EntityFactory,
     # per the EntityDef's component list. Sensor's own detection radius and

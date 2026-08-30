@@ -54,7 +54,8 @@ yet** — nothing consumes what is carried. That is what step 3 unlocks.
 | **World authoring** | `SimWorldDef` is a flat `entries` list — one `SimPlacement` per entity. Scatter rules were tried and removed: distribution will come from a purpose-built algorithm later, and the factory should only ever *read* a placement list. |
 | **World bounds** | Read off the `TileMapLayer` at startup (`SimConst.adopt_bounds_from`). Repaint the map and wander bounds follow; no constant to keep in sync. |
 | **Component lookup** | `SimEntity.components` is keyed by **slot** (`&"movement"`), not class name — the slot is already the override key. |
-| **No `Body` Area2D** | An Area2D sensor detects a `CharacterBody2D` directly via `body_entered` / `get_overlapping_bodies()`. The body's own `BodyShape` is the presence: `collision_layer` keeps it detectable, `collision_mask = 0` stops entities shoving each other. |
+| **`SimEntity` is a plain `Node2D`** | It was a `CharacterBody2D`, but with `collision_mask = 0` nothing ever collided, so `move_and_slide()` reduced to integrating position by hand — no sliding, no floor detection, none of what that node exists for. Movement integrates directly now; `velocity` is a plain field on the entity, kept there because the flock trait reads its neighbours' headings. |
+| **Presence is a `Body` Area2D** | With no physics body there is nothing for a sensor to detect, so the entity carries a monitor-**able** but not monitor-**ing** `Body` area. Sensors use `get_overlapping_areas()` and click-picking queries areas; `SimEntity.of(presence)` maps an area back to its entity. One shape serves both, so there is no second set of hitboxes. |
 | **Self-description** | Each component owns how it appears in the inspector via `describe()` / `describe_label()`. Returning `{}` opts out — Movement, Sensor and Action do exactly that. Adding a component adds its inspector tab for free. |
 | **Stubs — the verb vocabulary** | Components declare which inventory verbs they offer: `consume` (Consumable), `equip` (Equipment), `place_item` (PlaceAble), `throw_item` (PickUpAble). Declared on both `SimComponent.stubs()` and `SimComponentDef.stubs()`, because a thing in the world is a live entity while a thing in a pocket is a blueprint snapshot — the same question must be answerable of both. A holder asks "what can I do with this?" and never checks a type. |
 | **Nobody disposes of someone else's item** | `SimHungerComponent.eat(target)` accepts a world entity *or* a carried snapshot and only restores itself. A live target resolves and frees itself; a snapshot can't, so hunger announces `SimEntity.thing_used(verb, target)` and whatever holds it drops it. Hunger never references Inventory, Inventory never references Hunger — the entity mediates. |
@@ -78,7 +79,7 @@ yet** — nothing consumes what is carried. That is what step 3 unlocks.
   main.gd / main.tscn          entry point, click-to-select, F1 labels, F5 respawn
   selection_marker.gd          selection ring + the selected entity's sensor and reach circles
   entity/
-    sim_entity.gd/.tscn        bare base: CharacterBody2D + Sprite2D + BodyShape
+    sim_entity.gd/.tscn        bare base: Node2D + Sprite2D + Body(Area2D)
     sim_entity_factory.gd      spawn_world(), deep-dup defs, per-instance overrides, group "sim_factory"
   components/
     sim_component.gd           base: entity from parent; slot(), describe(), describe_label()

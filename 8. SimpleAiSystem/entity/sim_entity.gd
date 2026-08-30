@@ -1,22 +1,29 @@
 class_name SimEntity
-extends CharacterBody2D
+extends Node2D
 
 ## The bare base every sim entity is built from — creatures, props and items
 ## alike. It carries no behaviour of its own: what a thing *is* is decided
 ## entirely by which components SimEntityFactory attached from its blueprint.
 ##
 ## Scene layout (sim_entity.tscn):
-##   SimEntity (CharacterBody2D)
+##   SimEntity (Node2D)
 ##   ├── Sprite2D      texture/scale/tint set by SimSpriteDef
-##   └── BodyShape     this entity's PRESENCE — how other entities' sensors detect
-##                     it, and what their actions reach (Phase 2)
+##   └── Body (Area2D) this entity's PRESENCE — how other entities' sensors
+##       └── BodyShape detect it, and what their actions reach
 ##
-## The CharacterBody2D *is* the presence: an Area2D sensor picks entities up
-## through `body_entered` / `get_overlapping_bodies()`, so no second Area2D is
-## needed here. `collision_layer` keeps an entity detectable while
-## `collision_mask = 0` stops the population from shoving itself around.
-## A Sensor's detection radius and an Action's reach are their own areas on the
-## *actor*, and vary per def — they are never this shape.
+## A plain Node2D, not a CharacterBody2D: nothing here needs collision response,
+## floor detection or sliding, and with everything walking through everything
+## else `move_and_slide()` was only ever integrating position by hand anyway.
+## Movement does that directly now.
+##
+## `Body` is monitor-ABLE but not monitorING — it exists to be found, not to
+## find. A Sensor's detection radius and an Action's reach are their own areas
+## on the *actor*, and vary per def; they are never this shape.
+
+## Where the entity is heading, in px/sec. Set by MovementComponent, which also
+## integrates it; kept on the entity because other components read it — the
+## flock trait aligns with its neighbours' headings.
+var velocity: Vector2 = Vector2.ZERO
 
 ## Blueprint id this entity was spawned from (e.g. &"animal").
 var def_id: StringName = &""
@@ -43,10 +50,17 @@ var _components: Dictionary = {}
 var _source_defs: Array[SimComponentDef] = []
 
 @onready var sprite: Sprite2D = $Sprite2D
-## Extent of the entity's presence. The shape is a sub-resource shared by every
-## instance of the scene, so a def that resizes it per entity must duplicate()
-## it first — the same rule SimComponentDef states for live mutable state.
-@onready var body_shape: CollisionShape2D = $BodyShape
+## The entity's presence to sensors and to click-picking.
+@onready var body: Area2D = $Body
+## Extent of that presence. The shape is a sub-resource shared by every instance
+## of the scene, so a def that resizes it per entity must duplicate() it first —
+## the same rule SimComponentDef states for live mutable state.
+@onready var body_shape: CollisionShape2D = $Body/BodyShape
+
+## The entity behind a presence area. Sensors and click-picking get an Area2D
+## back from the physics server and need the entity that owns it.
+static func of(presence: Node) -> SimEntity:
+	return null if presence == null else presence.get_parent() as SimEntity
 
 ## Records the def a component was built from. Called by SimEntityFactory with
 ## the already-duplicated, already-overridden copy, so the entity remembers what

@@ -4,8 +4,8 @@ extends SimComponent
 ## Perception: an Area2D that reports which other entities are within `radius`.
 ##
 ## It finds things and nothing else — travelling is MovementComponent's job and
-## acting is ActionComponent's. It detects entities through their own physics
-## body, so anything the factory spawns is visible without extra setup.
+## acting is ActionComponent's. It detects entities through their `Body` presence
+## area, so anything the factory spawns is visible without extra setup.
 ##
 ## Deliberately reports nothing to the entity inspector: SimSelectionMarker
 ## already draws this radius around the selected entity, which reads better than
@@ -28,9 +28,10 @@ func get_detected() -> Array:
 	var found: Array = []
 	if _area == null:
 		return found
-	for body in _area.get_overlapping_bodies():
-		if body is SimEntity and body != entity:
-			found.append(body)
+	for presence in _area.get_overlapping_areas():
+		var other := SimEntity.of(presence)
+		if other != null and other != entity:
+			found.append(other)
 	return found
 
 ## The closest detected entity carrying `wanted_slot`, or null. This is how the

@@ -55,7 +55,7 @@ func target() -> Vector2:
 func current_speed() -> float:
 	return run_speed if _gait == Gait.RUN else walk_speed
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if entity == null:
 		return
 	if not _has_target:
@@ -70,6 +70,8 @@ func _physics_process(_delta: float) -> void:
 		return
 
 	entity.velocity = to_target.normalized() * current_speed()
-	entity.move_and_slide()
+	# Integrated by hand: with nothing to collide against there is no sweep or
+	# depenetration to do, which is all move_and_slide() would have added.
+	entity.position += entity.velocity * delta
 	if not is_zero_approx(entity.velocity.x):
 		entity.sprite.flip_h = entity.velocity.x < 0.0

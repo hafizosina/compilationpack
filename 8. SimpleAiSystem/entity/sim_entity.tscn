@@ -1,15 +1,18 @@
-[gd_scene format=3 uid="uid://bh5hb6snmj5ku"]
+[gd_scene load_steps=3 format=3 uid="uid://bh5hb6snmj5ku"]
 
 [ext_resource type="Script" uid="uid://be0voauil5h4b" path="res://8. SimpleAiSystem/entity/sim_entity.gd" id="1_entity"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_body"]
 radius = 32.0
 
-[node name="SimEntity" type="CharacterBody2D" unique_id=391442376]
-collision_mask = 0
+[node name="SimEntity" type="Node2D" unique_id=391442376]
 script = ExtResource("1_entity")
 
 [node name="Sprite2D" type="Sprite2D" parent="." unique_id=1797402050]
 
-[node name="BodyShape" type="CollisionShape2D" parent="." unique_id=691741282]
+[node name="Body" type="Area2D" parent="." unique_id=221368104]
+collision_mask = 0
+monitoring = false
+
+[node name="BodyShape" type="CollisionShape2D" parent="Body" unique_id=691741282]
 shape = SubResource("CircleShape2D_body")

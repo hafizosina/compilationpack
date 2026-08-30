@@ -65,9 +65,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_respawn()
 			get_viewport().set_input_as_handled()
 
-## The entity under `world_pos`, or null for bare ground. Picks against the
-## entity's own physics body — the same shape a Phase 2 sensor will detect,
-## so there is no second set of hitboxes to keep in sync.
+## The entity under `world_pos`, or null for bare ground. Picks against each
+## entity's `Body` presence area — the same shape sensors detect, so there is no
+## second set of hitboxes to keep in sync.
 ##
 ## Entities overlap freely (nothing collides), and intersect_point returns hits
 ## in no particular order, so the nearest centre wins. Without that, clicking a
@@ -77,16 +77,15 @@ func _entity_at(world_pos: Vector2) -> SimEntity:
 	var query := PhysicsPointQueryParameters2D.new()
 	query.position = world_pos
 	query.collision_mask = SELECT_MASK
-	query.collide_with_bodies = true
-	query.collide_with_areas = false
+	query.collide_with_bodies = false
+	query.collide_with_areas = true
 
 	var closest: SimEntity = null
 	var closest_distance := INF
 	for hit in get_world_2d().direct_space_state.intersect_point(query, MAX_PICK_HITS):
-		var collider: Object = hit.get("collider")
-		if not (collider is SimEntity):
+		var entity := SimEntity.of(hit.get("collider") as Node)
+		if entity == null:
 			continue
-		var entity: SimEntity = collider
 		var distance := entity.global_position.distance_squared_to(world_pos)
 		if distance < closest_distance:
 			closest_distance = distance
