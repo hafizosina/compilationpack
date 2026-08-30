@@ -35,33 +35,39 @@ func is_hungry() -> bool:
 func drain_scale() -> float:
 	return sleep_drain_scale if entity != null and entity.is_sleeping else 1.0
 
-## Consumes `target`, whatever it is and wherever it came from.
+## Consumes `target` — a blueprint snapshot out of a pocket, or a live entity in
+## the world. There is ONE eating path: whatever is passed in is reduced to a
+## snapshot first, and everything after that is identical, so the two cases
+## cannot drift apart in what they restore or what they announce.
 ##
-## It accepts either a live entity in the world or a blueprint snapshot out of
-## someone's pocket, and in both cases asks the same question — does this offer
-## the `consume` stub? — rather than checking what it is.
+## Nothing here knows what a berry is. It asks whether the thing offers the
+## `consume` stub — the same question the sensor and the inventory ask — and
+## reads the amount from that def.
 ##
-## Hunger never touches Inventory. A live target resolves itself and disappears;
-## a snapshot cannot, so this announces `thing_used` on the entity and whoever
-## is holding it drops it. That announcement is the only coupling, and it points
-## at nobody in particular.
+## Hunger never touches Inventory. It announces `thing_used` on its own entity;
+## if an inventory happened to hold the thing, that inventory drops it.
 func eat(target) -> bool:
+	var snapshot := _claim(target)
+	if snapshot == null:
+		return false
+	var def := snapshot.find_with_stub(&"consume") as SimConsumableDef
+	if def == null:
+		return false
+	restore(def.nourishment)
+	entity.thing_used.emit(&"consume", snapshot)
+	return true
+
+## Reduces either kind of target to a snapshot. A carried one already is one; a
+## live one is asked to give itself up, which takes it out of the world. This is
+## the only place the two cases differ.
+func _claim(target) -> SimEntityDef:
+	if target is SimEntityDef:
+		return target
 	if target is SimEntity:
 		var consumable := target.find_with_stub(&"consume") as SimConsumableComponent
-		if consumable == null or not consumable.is_available():
-			return false
-		# The live component resolves it: restores this bar and frees itself.
-		return consumable.consume(entity, self)
-
-	if target is SimEntityDef:
-		var def := target.find_with_stub(&"consume") as SimConsumableDef
-		if def == null:
-			return false
-		restore(def.nourishment)
-		entity.thing_used.emit(&"consume", target)
-		return true
-
-	return false
+		if consumable != null and consumable.is_available():
+			return consumable.claim(entity)
+	return null
 
 func _process(delta: float) -> void:
 	super(delta)

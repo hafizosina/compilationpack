@@ -2,9 +2,9 @@ class_name SimConsumableDef
 extends SimComponentDef
 
 ## Blueprint for SimConsumableComponent — what makes an entity edible, and how
-## nourishing it is. The same number serves both paths: the live component uses
-## it when something is eaten off the ground, and this def is what a carrier
-## reads when eating from its own pocket.
+## nourishing it is. This def is the ONLY place the number lives: eating reads
+## it from here whether the thing came off the ground or out of a pocket, so the
+## two cannot drift apart.
 
 ## Hunger restored when consumed.
 @export var nourishment: float = 35.0
@@ -18,6 +18,5 @@ func stubs() -> Array[StringName]:
 func build_into(entity: SimEntity) -> void:
 	var component := SimConsumableComponent.new()
 	component.name = "ConsumableComponent"
-	component.nourishment = nourishment
 	entity.add_child(component)
 	entity.register_component(slot(), component)
