@@ -48,6 +48,22 @@ func nearest_with(wanted_slot: StringName) -> SimEntity:
 			best = candidate
 	return best
 
+## The closest detected entity offering `verb`. The world-side counterpart of
+## SimInventoryComponent.find_with_stub(): the same "what can I do with this?"
+## question, asked of what is in range rather than what is carried.
+func nearest_with_stub(verb: StringName) -> SimEntity:
+	var best: SimEntity = null
+	var best_distance := INF
+	for candidate in get_detected():
+		var found: SimEntity = candidate
+		if not found.offers(verb):
+			continue
+		var distance: float = entity.global_position.distance_squared_to(found.global_position)
+		if distance < best_distance:
+			best_distance = distance
+			best = found
+	return best
+
 ## Shared by Sensor and Action: a monitoring-only circular area on the entity.
 func _build_area(area_radius: float, area_name: String) -> Area2D:
 	var area := Area2D.new()

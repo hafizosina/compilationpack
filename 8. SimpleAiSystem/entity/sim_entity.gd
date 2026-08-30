@@ -21,6 +21,16 @@ extends CharacterBody2D
 ## Blueprint id this entity was spawned from (e.g. &"animal").
 var def_id: StringName = &""
 
+## Emitted when one of this entity's components has finished using something —
+## a carried snapshot or a thing in the world. Whoever is holding the target is
+## responsible for disposing of it, and listens here to do so.
+##
+## This is what keeps Hunger from knowing Inventory exists: Hunger announces
+## that it consumed something, and the Inventory, if it happens to hold that
+## thing, drops it. The entity is the mediator; neither component references the
+## other.
+signal thing_used(verb: StringName, target)
+
 ## Whether the entity is asleep. Set by whatever put it to sleep — currently
 ## only FatigueComponent's collapse. It lives here, not on Fatigue, so that any
 ## component can react to sleep without depending on Fatigue: Hunger slows its
@@ -121,6 +131,19 @@ func describe() -> Dictionary:
 		"fields": fields,
 		"components": reported,
 	}
+
+## The first component offering `verb`, or null. The world-side mirror of
+## SimEntityDef.find_with_stub().
+func find_with_stub(verb: StringName) -> Node:
+	for key in _components:
+		var node: Node = _components[key]
+		if node.has_method("stubs") and verb in node.stubs():
+			return node
+	return null
+
+## Whether any component offers `verb`.
+func offers(verb: StringName) -> bool:
+	return find_with_stub(verb) != null
 
 ## Actions this entity can PERFORM, unioned across its components.
 ## Phase 2 fills these in; unused in this prototype, but they are the declared

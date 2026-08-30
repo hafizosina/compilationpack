@@ -47,6 +47,14 @@ func slot() -> StringName:
 func _ready() -> void:
 	super()
 	z_index = 50
+	# Whatever used a carried thing announces it on the entity; if it was one of
+	# ours, we are the one that drops it. Nothing tells us who did the using.
+	if entity != null:
+		entity.thing_used.connect(_on_thing_used)
+
+func _on_thing_used(_verb: StringName, target) -> void:
+	if target is SimEntityDef and _held.has(target):
+		release(target)
 
 ## Attempts to pick `target` up. Returns false if this entity has no action
 ## component to reach with, if the target is out of reach, if it does not
@@ -80,12 +88,13 @@ func store(snapshot: SimEntityDef) -> bool:
 	queue_redraw()
 	return true
 
-## The first held blueprint carrying `wanted_slot`, or null. This is the pocket's
-## version of the sensor's `nearest_with()` — the same "which components does it
-## have" question, asked of what is carried rather than what is in range.
-func held_with(wanted_slot: StringName) -> SimEntityDef:
+## The first held blueprint offering `verb` — `&"consume"`, `&"equip"`, and so
+## on. The pocket's version of the sensor's `nearest_with()`: the same "what can
+## I do with this?" question, asked of what is carried rather than what is in
+## range. The inventory itself does not implement any of those verbs.
+func find_with_stub(verb: StringName) -> SimEntityDef:
 	for snapshot in _held:
-		if snapshot != null and snapshot.has_component_def(wanted_slot):
+		if snapshot != null and snapshot.offers(verb):
 			return snapshot
 	return null
 

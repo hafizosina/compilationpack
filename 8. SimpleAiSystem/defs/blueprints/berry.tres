@@ -5,7 +5,7 @@
 [ext_resource type="Script" uid="uid://dtqsb3tmid1tf" path="res://8. SimpleAiSystem/defs/components/sim_sprite_def.gd" id="3_sprite"]
 [ext_resource type="Script" uid="uid://bcoqgepwu8n06" path="res://8. SimpleAiSystem/defs/components/sim_pick_up_able_def.gd" id="4_pickup"]
 [ext_resource type="Texture2D" uid="uid://dlfyft0lv6p2h" path="res://Global/Asset/CircleButtonFull.png" id="5_tex"]
-[ext_resource type="Script" uid="uid://b5377j5lkgwi6" path="res://8. SimpleAiSystem/defs/components/sim_food_def.gd" id="6_food"]
+[ext_resource type="Script" uid="uid://cxmq73nsj25hj" path="res://8. SimpleAiSystem/defs/components/sim_consumable_def.gd" id="6_consumable"]
 
 [sub_resource type="Resource" id="Resource_sprite"]
 script = ExtResource("3_sprite")
@@ -16,11 +16,11 @@ tint = Color(1, 0.36, 0.42, 1)
 [sub_resource type="Resource" id="Resource_pickup"]
 script = ExtResource("4_pickup")
 
-[sub_resource type="Resource" id="Resource_food"]
-script = ExtResource("6_food")
+[sub_resource type="Resource" id="Resource_consumable"]
+script = ExtResource("6_consumable")
 
 [resource]
 script = ExtResource("1_def")
 id = &"berry"
 display_name = "Berry"
-components = Array[ExtResource("2_base")]([SubResource("Resource_sprite"), SubResource("Resource_pickup"), SubResource("Resource_food")])
+components = Array[ExtResource("2_base")]([SubResource("Resource_sprite"), SubResource("Resource_pickup"), SubResource("Resource_consumable")])

@@ -16,6 +16,10 @@ var _taken: bool = false
 func slot() -> StringName:
 	return &"pickupable"
 
+## A thing that could be picked up can also be thrown back out of a pocket.
+func stubs() -> Array[StringName]:
+	return [&"throw_item"]
+
 ## False once someone has claimed this, even if it is still in the tree.
 func is_available() -> bool:
 	return not _taken

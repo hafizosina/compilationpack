@@ -34,7 +34,7 @@ before GOAP arrives.
 | 1. Bare Entity + Factory + one component | **done** |
 | 2. Movement + wander | **done** — wander now lives inside the brain, not its own component |
 | 3. Bars — Hunger, Fatigue, Health | **done** — plus collapse, which `FatigueComponent` owns |
-| 4. Actions + affordances | **half** — Action / Inventory / PickUpAble exist; no Eatable, no Harvestable, and actions are not yet `ActionDef` data |
+| 4. Actions + affordances | **most** — Action, Inventory, PickUpAble, Consumable and the stub vocabulary exist; eating works from pocket and ground. No Harvestable, and actions are still not `ActionDef` data |
 | 5. GOAP — hunger only | **not started** |
 | 6. Sleep goal | **half** — collapse built (fatigue-owned); the voluntary Rest goal is not |
 | 7. Sensor + Flee + predation | **sensor only** |
@@ -56,6 +56,9 @@ yet** — nothing consumes what is carried. That is what step 3 unlocks.
 | **Component lookup** | `SimEntity.components` is keyed by **slot** (`&"movement"`), not class name — the slot is already the override key. |
 | **No `Body` Area2D** | An Area2D sensor detects a `CharacterBody2D` directly via `body_entered` / `get_overlapping_bodies()`. The body's own `BodyShape` is the presence: `collision_layer` keeps it detectable, `collision_mask = 0` stops entities shoving each other. |
 | **Self-description** | Each component owns how it appears in the inspector via `describe()` / `describe_label()`. Returning `{}` opts out — Movement, Sensor and Action do exactly that. Adding a component adds its inspector tab for free. |
+| **Stubs — the verb vocabulary** | Components declare which inventory verbs they offer: `consume` (Consumable), `equip` (Equipment), `place_item` (PlaceAble), `throw_item` (PickUpAble). Declared on both `SimComponent.stubs()` and `SimComponentDef.stubs()`, because a thing in the world is a live entity while a thing in a pocket is a blueprint snapshot — the same question must be answerable of both. A holder asks "what can I do with this?" and never checks a type. |
+| **Nobody disposes of someone else's item** | `SimHungerComponent.eat(target)` accepts a world entity *or* a carried snapshot and only restores itself. A live target resolves and frees itself; a snapshot can't, so hunger announces `SimEntity.thing_used(verb, target)` and whatever holds it drops it. Hunger never references Inventory, Inventory never references Hunger — the entity mediates. |
+| **Inventory is a preference, not a requirement** | The brain looks in the pocket first because it costs no travel, then at the world. An entity with no inventory just skips the first half and eats off the ground — which is also what happens when its pocket is empty. |
 | **Actor asks, target resolves** | `InventoryComponent.try_pick_up()` asks `ActionComponent` "can I reach?" and the target's `PickUpAbleComponent` "take yourself". Action is *the hand* — it knows no specific action, so a future `AttackComponent` reuses it. Movement is *the legs*. |
 | **Wander inside the brain** | Wander was its own component driving movement, which meant arbitrating with the brain. Folding it in deleted the problem instead of solving it. |
 | **Traits** | `SimBrainDef.traits: Array[SimTrait]` — behaviour modifiers consulted at defined hooks. No traits = default behaviour. This is how entities sharing one brain behave differently, with no subclass and no branch. `SimFlockTrait` is the first. |
@@ -80,7 +83,12 @@ yet** — nothing consumes what is carried. That is what step 3 unlocks.
     sim_movement_component.gd  move_to / stop / is_moving, arrived signal
     sim_sensor_component.gd    Area2D; get_detected(), nearest_with(slot)
     sim_action_component.gd    extends Sensor; in_reach() only — the hand
-    sim_inventory_component.gd capacity, try_pick_up(), carry badge (PROTOTYPE)
+    sim_inventory_component.gd capacity, try_pick_up(), find_with_stub(), carry badge (PROTOTYPE)
+    sim_consumable_component.gd    world-side `consume`; nourishment
+    sim_equipment_component.gd     `equip` — DECLARED, NOT IMPLEMENTED
+    sim_place_able_component.gd    `place_item` — DECLARED, NOT IMPLEMENTED
+    sim_bar_component.gd       base for the three needs
+    sim_health_component.gd / sim_hunger_component.gd / sim_fatigue_component.gd
     sim_pick_up_able_component.gd  target side of pick-up
     sim_brain_component.gd     seek / wander state machine, consults traits
     sim_entity_spawner_component.gd  periodic spawn (TEMPORARY, stands in for a bush)

@@ -17,6 +17,17 @@ func _ready() -> void:
 	else:
 		push_error("%s must be a child of a SimEntity" % get_class())
 
+## Inventory verbs this component makes available on whatever carries it —
+## `&"consume"`, `&"equip"`, `&"place_item"`, `&"throw_item"`. A holder asks
+## "what can I do with this?" by looking for a stub, never by checking a type,
+## so a new consumable needs no change anywhere that offers food.
+##
+## Declared here AND on the matching SimComponentDef, because a thing in the
+## world is a live entity while a thing in a pocket is a blueprint snapshot —
+## the same question has to be answerable of both.
+func stubs() -> Array[StringName]:
+	return []
+
 ## Slot key this component occupies on its entity. Override in every subclass;
 ## must match the matching SimComponentDef.slot().
 func slot() -> StringName:

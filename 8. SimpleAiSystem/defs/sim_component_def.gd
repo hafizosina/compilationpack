@@ -16,6 +16,12 @@ extends Resource
 ##   `build_into()`, not referenced. Immutable config (a Texture2D, later an
 ##   ActionDef) may be shared freely.
 
+## Inventory verbs the built component makes available. Mirrors
+## SimComponent.stubs() so a carried snapshot can be asked the same question as
+## a live entity in the world.
+func stubs() -> Array[StringName]:
+	return []
+
 ## Slot key this def builds into. Override in every subclass.
 func slot() -> StringName:
 	return &""

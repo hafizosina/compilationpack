@@ -9,8 +9,6 @@ extends SimBarDef
 @export var starve_damage_per_second: float = 2.0
 ## Drain multiplier while the entity is asleep.
 @export var sleep_drain_scale: float = 0.25
-## Eats whenever hunger is below this. 100 = eat as soon as it carries food.
-@export var eat_below: float = 100.0
 
 func slot() -> StringName:
 	return &"hunger"
@@ -23,4 +21,3 @@ func _configure(component: SimBarComponent) -> void:
 	hunger.well_fed_above = well_fed_above
 	hunger.starve_damage_per_second = starve_damage_per_second
 	hunger.sleep_drain_scale = sleep_drain_scale
-	hunger.eat_below = eat_below

@@ -23,3 +23,14 @@ func component_def(wanted_slot: StringName) -> SimComponentDef:
 
 func has_component_def(wanted_slot: StringName) -> bool:
 	return component_def(wanted_slot) != null
+
+## The first component def offering `verb`, or null. Lets a holder ask what it
+## can do with a carried snapshot without knowing what the snapshot is.
+func find_with_stub(verb: StringName) -> SimComponentDef:
+	for def in components:
+		if def != null and verb in def.stubs():
+			return def
+	return null
+
+func offers(verb: StringName) -> bool:
+	return find_with_stub(verb) != null

@@ -6,6 +6,9 @@ extends SimComponentDef
 func slot() -> StringName:
 	return &"pickupable"
 
+func stubs() -> Array[StringName]:
+	return [&"throw_item"]
+
 func build_into(entity: SimEntity) -> void:
 	var component := SimPickUpAbleComponent.new()
 	component.name = "PickUpAbleComponent"
