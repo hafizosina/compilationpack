@@ -3,15 +3,12 @@ extends SimComponent
 
 ## Target-side affordance: this entity can be picked up.
 ##
-## Actor declares, target resolves — the actor's InventoryComponent asks, and
-## this component owns what actually happens: the item lands in that inventory
-## and the world entity removes itself.
+## Being carried does not destroy the entity — it is **moved into the carrier's
+## inventory**, keeping its components alive. That is what lets a berry still be
+##食 food after it has been pocketed: nothing had to copy its hunger value out
+## into item data, because the entity that owns the FoodComponent still exists.
 
-## What lands in the picker's inventory.
-var item_id: StringName = &"item"
-
-## Emitted just before the entity removes itself. No listeners in this
-## prototype; kept as component API for effects, scoring or logging later.
+## Emitted just before the entity leaves the world.
 signal picked_up(actor: SimEntity)
 
 var _taken: bool = false
@@ -19,7 +16,7 @@ var _taken: bool = false
 func slot() -> StringName:
 	return &"pickupable"
 
-## False once someone has claimed this, even if the node has not been freed yet.
+## False once someone has claimed this, even if it is still in the tree.
 func is_available() -> bool:
 	return not _taken
 
@@ -28,26 +25,11 @@ func is_available() -> bool:
 func take(actor: SimEntity, inventory: SimInventoryComponent) -> bool:
 	if _taken:
 		return false
-	# Only vanish if the item was actually stored — a full inventory must leave
-	# the berry in the world for someone else.
-	# The colour is for the PROTOTYPE carry badge only — when that goes, drop the
-	# third argument here too. It is passed so the badge can show what is being
-	# carried without anything having to know a berry from a rock.
-	if not inventory.add(item_id, 1, entity.sprite.modulate):
+	if not inventory.store(entity):
 		return false
 	_taken = true
 	picked_up.emit(actor)
-	# Detached immediately, not just queue_free()d: a queued node stays in the
-	# tree until the end of the frame, so other sensors would keep detecting a
-	# berry that is already gone.
-	var parent := entity.get_parent()
-	if parent != null:
-		parent.remove_child(entity)
-	entity.queue_free()
 	return true
 
 func describe() -> Dictionary:
-	return {
-		"item": String(item_id),
-		"state": "available" if is_available() else "taken",
-	}
+	return {"state": "available" if is_available() else "carried"}

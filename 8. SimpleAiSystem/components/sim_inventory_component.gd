@@ -4,50 +4,40 @@ extends SimComponent
 ## Somewhere to put what gets collected — and the owner of the pick-up action,
 ## since pick-up is the thing an inventory does.
 ##
+## It holds **entities**, not copies of their data. A picked-up berry is moved
+## out of the world and parented here with its components intact, so what you
+## can do with a carried thing is still decided by which components it has —
+## the same rule as everything else. Nothing maps ids to values.
+##
 ## No inventory means the entity cannot pick anything up, and no action
 ## component means it cannot reach far enough to try. The dependency runs one
 ## way: inventory needs a hand, the hand knows nothing about inventories.
 
-## Emitted whenever the contents change, carrying the new total.
+## Emitted whenever the contents change, carrying the new count.
+## No listeners in this prototype; it is the seam a real carry indicator or a
+## UI layer should use instead of the badge below.
 signal changed(total: int)
+
+## How many entities fit. One slot means one berry at a time.
+var capacity: int = 1
 
 ## PROTOTYPE ONLY — REMOVE BEFORE INTEGRATING WITH OTHER SYSTEMS.
 ##
-## Carry badge: one dot per held item, tucked into the TOP-RIGHT of the sprite's
-## own area, in a darkened shade of the colour the item had in the world. Positions and sizes are
-## world pixels, not screen pixels, so the badge scales with the sprite and stays
-## in its corner at every zoom — it reads as part of the entity rather than as an
-## overlay floating above it.
+## Carry badge: one dot per held entity, tucked into the TOP-RIGHT of the
+## sprite's own area, in a darkened shade of the held entity's own colour.
+## World pixels, so it scales with the sprite and stays in its corner.
 ##
-## A component that holds state should not also render it. This is here because
-## it is the fastest way to see the pick-up loop working while the AI is being
-## built, and it is deliberately self-contained so it can be deleted in one go:
-## these constants, `_colours`, the `colour` parameter on add(), `_draw()`, the
-## `z_index` line in _ready(), and the colour argument PickUpAbleComponent
-## passes to add(). Nothing else refers to any of it.
-##
-## The replacement seam already exists: `changed(total)` is emitted on every
-## change, so a separate indicator node or a UI layer can subscribe to it
-## without this component knowing anything about drawing.
-## Top-right corner of the 64px sprite box, inset so the dot sits fully inside.
+## A component that holds state should not also render it. Self-contained so it
+## can be deleted in one go: these constants, `_draw()`, and the `z_index` line
+## in `_ready()`. Nothing else refers to it.
 const BADGE_ANCHOR := Vector2(19.0, -19.0)
 const BADGE_RADIUS := 7.0
 const BADGE_OUTLINE_WIDTH := 2.0
-## Extra dots stack leftward from the corner.
 const BADGE_GAP := 15.0
 const BADGE_OUTLINE := Color(0.09, 0.08, 0.1, 0.9)
-## Carried items draw darker than the same item lying in the world, so a berry
-## on a rabbit's shoulder never reads as a berry on the ground behind it.
 const BADGE_DARKEN := 0.32
 
-## How many items fit. One slot means one berry at a time — collect it, and the
-## entity has nowhere to put the next one until something empties this.
-var capacity: int = 1
-
-## item id -> count.
-var _items: Dictionary = {}
-## item id -> the colour it had in the world, for the carry badge.
-var _colours: Dictionary = {}
+var _held: Array[SimEntity] = []
 
 func slot() -> StringName:
 	return &"inventory"
@@ -72,47 +62,73 @@ func try_pick_up(target: SimEntity) -> bool:
 		return false
 	return pickable.take(entity, self)
 
-## Whether there is no room left.
 func is_full() -> bool:
-	return total() >= capacity
+	return _held.size() >= capacity
 
-## Stores `amount` of `item_id`. Returns false, changing nothing, when it will
-## not fit — the caller must not consume anything it could not hand over.
-## `colour` feeds the prototype carry badge only — drop the parameter with it.
-func add(item_id: StringName, amount: int = 1, colour: Color = Color.WHITE) -> bool:
-	if total() + amount > capacity:
+func total() -> int:
+	return _held.size()
+
+## Takes `carried` out of the world and into this inventory. Returns false,
+## moving nothing, when there is no room — the caller must not consider a thing
+## carried that it could not hand over.
+##
+## The entity is detached rather than freed, hidden, taken off its collision
+## layer so no sensor can still see it, and stopped from processing so its own
+## components go quiet in the pocket.
+func store(carried: SimEntity) -> bool:
+	if carried == null or is_full():
 		return false
-	_items[item_id] = int(_items.get(item_id, 0)) + amount
-	_colours[item_id] = colour
+	var parent := carried.get_parent()
+	if parent != null:
+		parent.remove_child(carried)
+	carried.visible = false
+	carried.collision_layer = 0
+	carried.process_mode = Node.PROCESS_MODE_DISABLED
+	add_child(carried)
+	_held.append(carried)
 	changed.emit(total())
 	queue_redraw()
 	return true
 
-func total() -> int:
-	var sum := 0
-	for key in _items:
-		sum += int(_items[key])
-	return sum
+## Hands back the first held entity carrying `wanted_slot`, still parented here.
+## The caller resolves what to do with it through that component — this only
+## finds it, exactly as the sensor does for things in the world.
+func held_with(wanted_slot: StringName) -> SimEntity:
+	for carried in _held:
+		if is_instance_valid(carried) and carried.has_component(wanted_slot):
+			return carried
+	return null
+
+## Drops `carried` from the ledger once something has consumed it.
+func release(carried: SimEntity) -> void:
+	_held.erase(carried)
+	changed.emit(total())
+	queue_redraw()
 
 func describe() -> Dictionary:
 	var fields := {"slots": "%d / %d" % [total(), capacity]}
-	if _items.is_empty():
+	if _held.is_empty():
 		fields["carrying"] = "nothing"
 		return fields
-	for key in _items:
-		fields[String(key)] = str(_items[key])
+	for carried in _held:
+		if is_instance_valid(carried):
+			fields[String(carried.def_id)] = ", ".join(_slot_names(carried))
 	return fields
 
-## PROTOTYPE ONLY (see the note at the top). One dot per carried item; nothing
-## held draws nothing, so an empty animal looks like one with no inventory.
+func _slot_names(carried: SimEntity) -> Array:
+	var names: Array = []
+	for key in carried.component_slots():
+		if key != &"debug":
+			names.append(String(key))
+	return names
+
+## PROTOTYPE ONLY (see the note at the top).
 func _draw() -> void:
-	var dots: Array[Color] = []
-	for key in _items:
-		for i in int(_items[key]):
-			dots.append(_colours.get(key, Color.WHITE))
-	if dots.is_empty():
+	if _held.is_empty():
 		return
-	for i in dots.size():
+	for i in _held.size():
+		if not is_instance_valid(_held[i]):
+			continue
 		var at := BADGE_ANCHOR - Vector2(i * BADGE_GAP, 0.0)
 		draw_circle(at, BADGE_RADIUS + BADGE_OUTLINE_WIDTH, BADGE_OUTLINE)
-		draw_circle(at, BADGE_RADIUS, dots[i].darkened(BADGE_DARKEN))
+		draw_circle(at, BADGE_RADIUS, _held[i].sprite.modulate.darkened(BADGE_DARKEN))
