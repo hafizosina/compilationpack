@@ -16,6 +16,12 @@ var starve_damage_per_second: float = 2.0
 ## never touches FatigueComponent and the two bars stay independent.
 var sleep_drain_scale: float = 0.25
 
+func slot() -> StringName:
+	return &"hunger"
+
+func bar_label() -> String:
+	return "hunger"
+
 ## Whether Health may regenerate. Health asks this rather than reading the
 ## number, so the threshold lives with the bar that owns it.
 func is_well_fed() -> bool:
