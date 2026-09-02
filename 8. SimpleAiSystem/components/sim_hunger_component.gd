@@ -35,23 +35,19 @@ func is_hungry() -> bool:
 func drain_scale() -> float:
 	return sleep_drain_scale if entity != null and entity.is_sleeping else 1.0
 
-## Consumes `snapshot` — a blueprint of something edible.
+## Consumes `snapshot` — a blueprint of something edible, and the ONE place
+## nourishment is ever applied. Food out of a pocket arrives here directly; food
+## off the ground arrives through eat_entity(), which only resolves where it came
+## from. Two entry points, one implementation, so the two sources cannot drift
+## apart in what they restore or what they announce.
 ##
-## There is ONE eating path because there is only one kind of argument. Whoever
-## calls this has already resolved the thing into a snapshot: a pocket holds one
-## outright, and something on the ground is won through
-## SimEntity.claim_snapshot() first. That decision belongs to the caller, which
-## already knows which of the two it is looking at, so nothing here has to ask
-## what it was handed.
-##
-## Nothing here knows what a berry is either. It asks whether the thing offers
-## the `consume` stub — the same question the sensor and the inventory ask — and
-## reads the amount from that def, so ground-eating and pocket-eating cannot
-## drift apart.
+## Nothing here knows what a berry is. It asks whether the thing offers the
+## `consume` stub — the same question the sensor and the inventory ask — and
+## reads the amount from that def.
 ##
 ## Hunger never touches Inventory. It announces `thing_used` on its own entity;
 ## if an inventory happened to hold the thing, that inventory drops it.
-func eat(snapshot: SimEntityDef) -> bool:
+func eat_snapshot(snapshot: SimEntityDef) -> bool:
 	if snapshot == null:
 		return false
 	var def := snapshot.find_with_stub(&"consume") as SimConsumableDef
@@ -60,6 +56,22 @@ func eat(snapshot: SimEntityDef) -> bool:
 	restore(def.nourishment)
 	entity.thing_used.emit(&"consume", snapshot)
 	return true
+
+## Wins `target` out of the world and consumes it. The same actor-asks/
+## target-resolves shape as SimInventoryComponent.try_pick_up(): this side finds
+## the affordance, the target hands itself over.
+##
+## A thin adapter, deliberately — it resolves where the food is coming from and
+## then does nothing eat_snapshot() does not, so there is no second helping of
+## logic here to fall out of step. It needs no race guard of its own either:
+## a lost race makes claim() return null, and eat_snapshot(null) is false.
+func eat_entity(target: SimEntity) -> bool:
+	if target == null:
+		return false
+	var consumable := target.find_with_stub(&"consume") as SimConsumableComponent
+	if consumable == null:
+		return false
+	return eat_snapshot(consumable.claim(entity))
 
 func _process(delta: float) -> void:
 	super(delta)

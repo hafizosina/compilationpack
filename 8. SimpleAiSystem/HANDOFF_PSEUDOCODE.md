@@ -432,13 +432,9 @@ SimHungerComponent extends SimBarComponent:     slot = "hunger"
         # [SEAM] reads the ENTITY's flag, never FatigueComponent,
         # so the two bars stay independent
 
-    eat(snapshot: SimEntityDef) -> bool:
-        # ONE eating path, because there is ONE kind of argument. Whoever calls
-        # this already resolved the thing into a snapshot: a pocket holds one
-        # outright, something on the ground is won via claim_snapshot() first.
-        # The caller always knows which case it is in — the brain has separate
-        # branches for exactly that — so nothing here asks what it was handed.
-        # No type switch, no Variant.
+    eat_snapshot(snapshot: SimEntityDef) -> bool:
+        # THE ONE PLACE nourishment is ever applied. Pocket food arrives here
+        # directly; ground food arrives through eat_entity() below.
         if snapshot == null: return false
         def = snapshot.find_with_stub("consume")   or return false
         restore(def.nourishment)             # amount lives ONLY on the def
@@ -446,6 +442,23 @@ SimHungerComponent extends SimBarComponent:     slot = "hunger"
         return true
         # [SEAM] Hunger never touches Inventory. It ANNOUNCES. If an inventory
         # happens to hold that snapshot, that inventory drops it.
+
+    eat_entity(target: SimEntity) -> bool:
+        # Wins it out of the world, then delegates. Same actor-asks/
+        # target-resolves shape as Inventory.try_pick_up().
+        if target == null: return false
+        c = target.find_with_stub("consume")   or return false
+        return eat_snapshot(c.claim(entity))
+        #
+        # [SEAM] TWO ENTRY POINTS, ONE IMPLEMENTATION. GDScript has no
+        # overloading, and the caller always knows which case it is in, so the
+        # two sources are named rather than sniffed. An adapter with no logic
+        # of its own cannot drift from what it delegates to — the danger was
+        # never two entry points, it was two implementations reached by
+        # throwing away what the caller knew.
+        #
+        # No race guard needed: a lost race makes claim() return null, and
+        # eat_snapshot(null) is false.
 
     _process(dt):
         super(dt)
@@ -691,7 +704,7 @@ SimBrainFSMComponent extends SimBrainComponent:
         if inventory:
             carried = inventory.find_with_stub("consume")
             if carried:
-                hunger.eat(carried)          # nothing to walk to
+                hunger.eat_snapshot(carried)   # nothing to walk to, already won
                 enter WANDER; return true
 
         # then the world
@@ -699,12 +712,8 @@ SimBrainFSMComponent extends SimBrainComponent:
         if not found: return false
         _target = found
         if action and action.in_reach(found):
-            c = found.find_with_stub("consume")
-            hunger.eat(c.claim(self.entity)) # WON first, then eaten. What comes
-            enter WANDER; return true        # back is exactly what a pocket
-                                             # holds, which is why eat() needs
-                                             # only one path. Never enters the
-                                             # inventory.
+            hunger.eat_entity(found)         # eaten where it lies; never
+            enter WANDER; return true        # enters the inventory
         enter FEED; movement.move_to(found.position, WALK)
         return true
 
@@ -909,12 +918,13 @@ brain._feed_if_hungry()
   hunger.is_hungry()?  yes
 
   POCKET:  inventory.find_with_stub("consume") -> snapshot
-           hunger.eat(snapshot)                       # already won
+           hunger.eat_snapshot(snapshot)              # already won
   GROUND:  sensor.nearest_with_stub("consume") -> berry entity
-           walk to it, then
-           hunger.eat(berry.consumable.claim(animal)) # win it, THEN eat
+           walk to it, then hunger.eat_entity(berry)
+               -> berry.consumable.claim(animal) -> claim_snapshot()
+               -> delegates to eat_snapshot()
 
-  hunger.eat(snapshot):        # ONE argument type; the caller resolved it
+  hunger.eat_snapshot(snapshot):     # the one implementation
       def = snapshot.find_with_stub("consume")
       restore(def.nourishment)                   # SAME number both ways
       entity.thing_used.emit("consume", snapshot)
@@ -946,16 +956,22 @@ report availability from `entity.is_claimed()`, so they cannot disagree.
 The same change removed the type switch from `Hunger.eat()`. It had been taking an
 untyped `target` and re-deriving with `is` checks whether it was a snapshot or a world
 entity — information the **caller already had**, since the brain has separate pocket
-and ground branches. `eat()` now takes a `SimEntityDef` and nothing else; the ground
-branch wins the entity first and passes the snapshot.
+and ground branches. That became two named entry points, `eat_snapshot(def)` and
+`eat_entity(target)`, the second a thin adapter delegating to the first. GDScript has
+no overloading (a second `func eat` is a parse error), so the split has to be by name —
+and by name is the better shape anyway, since it puts the choice where the knowledge
+already is. `eat_entity` also restores symmetry with
+`SimInventoryComponent.try_pick_up()`: both affordances now live on the actor's own
+component instead of one leaking into the brain.
 
-**Verified** with a throwaway headless harness (21 assertions), covering: both doors
-report the same availability; a second claim returns null; an eat and a take in the
-same frame produce exactly one winner and nothing stored for the loser; a full
-inventory refuses without destroying the berry; pocket and ground both restore exactly
-+35.0; a claimed entity is detached from the tree in the same frame and invisible to
-sensors immediately, freed by the next; `eat()` refuses null and refuses a non-food
-snapshot without touching the bar.
+**Verified** with throwaway headless harnesses (40 assertions across the two rounds),
+covering: both doors report the same availability; a second claim returns null; an eat
+and a take in the same frame produce exactly one winner and nothing stored for the
+loser; a full inventory refuses without destroying the berry; pocket and ground restore
+exactly +35.0 and agree; a claimed entity is detached from the tree in the same frame
+and invisible to sensors immediately, freed by the next; `eat_entity` refuses null, a
+non-food entity and an already-claimed one; `eat_snapshot` refuses null and a non-food
+snapshot; no refusal moves the bar.
 
 **Still true, unchanged:** `remove_child()` before `queue_free()` is load-bearing. A
 queued node stays in the tree until end of frame, so without the detach every sensor
