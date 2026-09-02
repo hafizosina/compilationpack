@@ -3,15 +3,18 @@ extends SimComponent
 
 ## Target-side affordance: this entity can be picked up.
 ##
-## Being carried does not destroy the entity — it is **moved into the carrier's
-## inventory**, keeping its components alive. That is what lets a berry still be
-##食 food after it has been pocketed: nothing had to copy its hunger value out
-## into item data, because the entity that owns the FoodComponent still exists.
+## Being carried DOES remove the entity from the world: the carrier keeps a
+## blueprint snapshot of it and the node destroys itself, so nothing sits hidden
+## in the scene tree still running its components. What a carried thing can do is
+## still decided by which component defs the snapshot holds — the same rule as
+## everything else, asked of a blueprint instead of a live node.
+##
+## Like SimConsumableComponent this is a DOOR, not a mechanism: leaving the world
+## belongs to SimEntity.claim_snapshot(), shared by every affordance that takes a
+## thing. This adds only what is specific to carrying.
 
-## Emitted just before the entity leaves the world.
+## Emitted once this entity has been taken by `actor`.
 signal picked_up(actor: SimEntity)
-
-var _taken: bool = false
 
 func slot() -> StringName:
 	return &"pickupable"
@@ -20,26 +23,23 @@ func slot() -> StringName:
 func stubs() -> Array[StringName]:
 	return [&"throw_item"]
 
-## False once someone has claimed this, even if it is still in the tree.
+## False once someone has claimed this, through this door or any other.
 func is_available() -> bool:
-	return not _taken
+	return entity != null and not entity.is_claimed()
 
-## Resolves a pick-up by `actor`. The guard matters: several animals can be
-## converging on the same berry, and only the first may have it.
+## Resolves a pick-up by `actor`, into `inventory`.
+##
+## Capacity is checked BEFORE the entity gives itself up, because
+## claim_snapshot() is irreversible: a full inventory that claimed first would
+## destroy the thing and store nothing.
 func take(actor: SimEntity, inventory: SimInventoryComponent) -> bool:
-	if _taken:
+	if inventory == null or inventory.is_full():
 		return false
-	if not inventory.store(entity.to_resource()):
+	var snapshot := entity.claim_snapshot()
+	if snapshot == null:
 		return false
-	_taken = true
+	inventory.store(snapshot)
 	picked_up.emit(actor)
-	# Detached immediately, not just queue_free()d: a queued node stays in the
-	# tree until the end of the frame, so other sensors would keep detecting a
-	# berry that is already gone.
-	var parent := entity.get_parent()
-	if parent != null:
-		parent.remove_child(entity)
-	entity.queue_free()
 	return true
 
 func describe() -> Dictionary:

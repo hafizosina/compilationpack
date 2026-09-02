@@ -4,9 +4,9 @@ extends SimComponent
 ## Somewhere to put what gets collected — and the owner of the pick-up action,
 ## since pick-up is the thing an inventory does.
 ##
-## It holds **blueprints**, not nodes: picking something up takes a resource
-## snapshot of the entity (`SimEntity.to_resource()`) and the world entity then
-## destroys itself. What you can do with a carried thing is still decided by
+## It holds **blueprints**, not nodes: picking something up wins a resource
+## snapshot of the entity (`SimEntity.claim_snapshot()`) and the world entity
+## destroys itself in the same breath. What you can do with a carried thing is still decided by
 ## which component defs it carries — the same rule as everything else, asked of
 ## a blueprint instead of a live node. Nothing maps ids to values, and nothing
 ## sits hidden in the scene tree.

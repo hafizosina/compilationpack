@@ -35,19 +35,23 @@ func is_hungry() -> bool:
 func drain_scale() -> float:
 	return sleep_drain_scale if entity != null and entity.is_sleeping else 1.0
 
-## Consumes `target` — a blueprint snapshot out of a pocket, or a live entity in
-## the world. There is ONE eating path: whatever is passed in is reduced to a
-## snapshot first, and everything after that is identical, so the two cases
-## cannot drift apart in what they restore or what they announce.
+## Consumes `snapshot` — a blueprint of something edible.
 ##
-## Nothing here knows what a berry is. It asks whether the thing offers the
-## `consume` stub — the same question the sensor and the inventory ask — and
-## reads the amount from that def.
+## There is ONE eating path because there is only one kind of argument. Whoever
+## calls this has already resolved the thing into a snapshot: a pocket holds one
+## outright, and something on the ground is won through
+## SimEntity.claim_snapshot() first. That decision belongs to the caller, which
+## already knows which of the two it is looking at, so nothing here has to ask
+## what it was handed.
+##
+## Nothing here knows what a berry is either. It asks whether the thing offers
+## the `consume` stub — the same question the sensor and the inventory ask — and
+## reads the amount from that def, so ground-eating and pocket-eating cannot
+## drift apart.
 ##
 ## Hunger never touches Inventory. It announces `thing_used` on its own entity;
 ## if an inventory happened to hold the thing, that inventory drops it.
-func eat(target) -> bool:
-	var snapshot := _claim(target)
+func eat(snapshot: SimEntityDef) -> bool:
 	if snapshot == null:
 		return false
 	var def := snapshot.find_with_stub(&"consume") as SimConsumableDef
@@ -56,18 +60,6 @@ func eat(target) -> bool:
 	restore(def.nourishment)
 	entity.thing_used.emit(&"consume", snapshot)
 	return true
-
-## Reduces either kind of target to a snapshot. A carried one already is one; a
-## live one is asked to give itself up, which takes it out of the world. This is
-## the only place the two cases differ.
-func _claim(target) -> SimEntityDef:
-	if target is SimEntityDef:
-		return target
-	if target is SimEntity:
-		var consumable := target.find_with_stub(&"consume") as SimConsumableComponent
-		if consumable != null and consumable.is_available():
-			return consumable.claim(entity)
-	return null
 
 func _process(delta: float) -> void:
 	super(delta)

@@ -146,8 +146,12 @@ func _feed_if_hungry() -> bool:
 
 	_target = found
 	if _action != null and _action.in_reach(found):
-		# Eaten where it lies; it never enters the inventory.
-		_hunger.eat(found)
+		# Won first, then eaten. Claiming is what takes it out of the world, and
+		# what comes back is exactly the kind of thing a pocket holds — which is
+		# why eat() needs only one path. It never enters the inventory.
+		var consumable := found.find_with_stub(&"consume") as SimConsumableComponent
+		if consumable != null:
+			_hunger.eat(consumable.claim(entity))
 		_target = null
 		_enter(State.WANDER)
 		return true

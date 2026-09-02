@@ -66,8 +66,9 @@ lacks is a planner deciding any of it — the FSM hardcodes the priority order.
 | **Presence is a `Body` Area2D** | With no physics body there is nothing for a sensor to detect, so the entity carries a monitor-**able** but not monitor-**ing** `Body` area. Sensors use `get_overlapping_areas()` and click-picking queries areas; `SimEntity.of(presence)` maps an area back to its entity. One shape serves both, so there is no second set of hitboxes. |
 | **Self-description** | Each component owns how it appears in the inspector via `describe()` / `describe_label()`. Returning `{}` opts out — Movement, Sensor and Action do exactly that. Adding a component adds its inspector tab for free. |
 | **Stubs — the verb vocabulary** | Components declare which inventory verbs they offer: `consume` (Consumable), `equip` (Equipment), `place_item` (PlaceAble), `throw_item` (PickUpAble). Declared on both `SimComponent.stubs()` and `SimComponentDef.stubs()`, because a thing in the world is a live entity while a thing in a pocket is a blueprint snapshot — the same question must be answerable of both. A holder asks "what can I do with this?" and never checks a type. |
-| **One eating path** | `SimHungerComponent.eat(target)` reduces a live world entity *or* a carried snapshot to a snapshot first (`_claim()`), then runs one identical sequence. `SimConsumableComponent` only hands itself over (`claim()`); it never applies nourishment. The amount lives solely on `SimConsumableDef`, so ground-eating and pocket-eating cannot drift apart — verified identical at +35.0 each. |
-| **Nobody disposes of someone else's item** | `SimHungerComponent.eat(target)` accepts a world entity *or* a carried snapshot and only restores itself. A live target resolves and frees itself; a snapshot can't, so hunger announces `SimEntity.thing_used(verb, target)` and whatever holds it drops it. Hunger never references Inventory, Inventory never references Hunger — the entity mediates. |
+| **One claim, on the entity** | Leaving the world is `SimEntity.claim_snapshot()` — one flag, one route, shared by every affordance that takes a thing. `PickUpAbleComponent` and `ConsumableComponent` are **doors**, not mechanisms: each adds only its own verb and signal. Previously they held independent flags (`_taken`, `_used`), so one berry could be won twice in a frame. Callers must do all their failing first — `take()` checks inventory capacity *before* claiming, because a claim cannot be undone. |
+| **One eating path** | `SimHungerComponent.eat(snapshot)` takes a `SimEntityDef` and nothing else. The caller already knows whether it is holding a pocket snapshot or looking at something on the ground — the brain has separate branches for exactly that — so it resolves the thing and hands over a snapshot. No type switch, no `Variant`. `SimConsumableComponent` only hands itself over; it never applies nourishment. The amount lives solely on `SimConsumableDef`, so ground-eating and pocket-eating cannot drift apart — verified identical at +35.0 each. |
+| **Nobody disposes of someone else's item** | `SimHungerComponent.eat(snapshot)` only restores itself, then announces `SimEntity.thing_used(verb, target)`; whatever holds that snapshot drops it. Hunger never references Inventory, Inventory never references Hunger — the entity mediates. |
 | **Inventory is a preference, not a requirement** | The brain looks in the pocket first because it costs no travel, then at the world. An entity with no inventory just skips the first half and eats off the ground — which is also what happens when its pocket is empty. |
 | **Actor asks, target resolves** | `InventoryComponent.try_pick_up()` asks `ActionComponent` "can I reach?" and the target's `PickUpAbleComponent` "take yourself". Action is *the hand* — it knows no specific action, so a future `AttackComponent` reuses it. Movement is *the legs*. |
 | **Wander inside the brain** | Wander was its own component driving movement, which meant arbitrating with the brain. Folding it in deleted the problem instead of solving it. |
@@ -166,14 +167,6 @@ what step 5 needs, and the only reason to build it before GOAP rather than along
 
 It also unblocks the real berry bush: `HarvestableComponent` is an `ActionDef` carrying a
 `SpawnOutput`, which is what retires the `[TEMP]` `SimEntitySpawnerComponent`.
-
-**Fix first — the double-claim bug.** A berry carries two independent claim flags
-(`SimPickUpAbleComponent._taken` and `SimConsumableComponent._used`) and nothing links them, so in
-one frame two animals can each pass their own guard and get a berry that existed once. Moving the
-claim onto `SimEntity` (`claim_snapshot()`) gives it one flag and collapses the verbatim duplication
-between `take()` and `claim()`. Note that `take()` checks inventory capacity *before* destroying the
-entity — with a shared route that check has to move earlier, or a full inventory deletes the berry
-and stores nothing.
 
 **Two things to settle before step 5:**
 - Does GOAP *replace* `SimBrainComponent`, or sit behind it as the planner with the current state

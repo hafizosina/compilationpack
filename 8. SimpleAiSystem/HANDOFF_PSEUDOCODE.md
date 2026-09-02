@@ -8,7 +8,8 @@
 > decisions) · `PROJECT_DEFINITION.md` (why / scope) ·
 > `COLONY_SIM_CONCEPT.md` (target architecture) · `MILESTONE_1_SPEC.md` (spec + numbers).
 >
-> Matches commit `ef851ba`. If the code has moved on, this doc has not.
+> Matches the working tree as of the `claim_snapshot()` refactor. If the code has
+> moved on, this doc has not.
 
 ---
 
@@ -111,12 +112,32 @@ SimEntity extends Node2D:
         _source_defs.append(component_def)      # the OVERRIDDEN copy, not the type
 
     to_resource() -> SimEntityDef:
-        # A blueprint of itself. Used when picked up or consumed: the carrier
-        # keeps this, the world node destroys itself, no hidden nodes linger.
+        # A blueprint of itself. The carrier keeps this, the world node
+        # destroys itself, no hidden nodes linger.
         blueprint = new SimEntityDef
         blueprint.id = def_id
         blueprint.components = deep_copy_each(_source_defs)
         return blueprint
+
+    _claimed = false
+    is_claimed() -> bool
+
+    claim_snapshot() -> SimEntityDef?:
+        # [SEAM] THE ONE ROUTE OUT OF THE WORLD, shared by every affordance
+        # that takes a thing. One flag, on the entity, because the claim is
+        # about the entity's EXISTENCE rather than about any one affordance:
+        # a berry that is both pick-up-able and edible must not be winnable
+        # twice by asking through two different doors.
+        if _claimed: return null
+        _claimed = true
+        snapshot = to_resource()
+        parent.remove_child(self)   # detach IMMEDIATELY (see below)
+        queue_free()
+        return snapshot
+        #
+        # Callers must do all their own failing FIRST. Once this returns the
+        # entity is gone, so a caller that then discovers it cannot accept the
+        # snapshot has destroyed something and stored nothing.
 
     find_with_stub(verb) -> node?:
         first component whose stubs() contains verb
@@ -411,25 +432,20 @@ SimHungerComponent extends SimBarComponent:     slot = "hunger"
         # [SEAM] reads the ENTITY's flag, never FatigueComponent,
         # so the two bars stay independent
 
-    eat(target) -> bool:
-        # ONE eating path. target may be a carried SNAPSHOT or a live WORLD
-        # entity; it is reduced to a snapshot first and everything after is
-        # identical, so the two cases cannot drift apart.
-        snapshot = _claim(target)            or return false
+    eat(snapshot: SimEntityDef) -> bool:
+        # ONE eating path, because there is ONE kind of argument. Whoever calls
+        # this already resolved the thing into a snapshot: a pocket holds one
+        # outright, something on the ground is won via claim_snapshot() first.
+        # The caller always knows which case it is in — the brain has separate
+        # branches for exactly that — so nothing here asks what it was handed.
+        # No type switch, no Variant.
+        if snapshot == null: return false
         def = snapshot.find_with_stub("consume")   or return false
         restore(def.nourishment)             # amount lives ONLY on the def
         entity.thing_used.emit("consume", snapshot)
         return true
         # [SEAM] Hunger never touches Inventory. It ANNOUNCES. If an inventory
         # happens to hold that snapshot, that inventory drops it.
-
-    _claim(target) -> SimEntityDef?:
-        # the ONLY place the two cases differ
-        if target is SimEntityDef:  return target           # already a snapshot
-        if target is SimEntity:
-            c = target.find_with_stub("consume")
-            if c and c.is_available(): return c.claim(entity)
-        return null
 
     _process(dt):
         super(dt)
@@ -535,22 +551,21 @@ SimPickUpAbleComponent extends SimComponent:    slot = "pickupable"
 
     signal picked_up(actor)     # [OPEN] no listeners
     stubs() -> ["throw_item"]   # what could be picked up can be thrown back out
-    _taken = false
 
-    is_available() -> not _taken
+    is_available() -> not entity.is_claimed()   # agrees with every other door
 
     take(actor, inventory) -> bool:
-        if _taken: return false
-        if not inventory.store(entity.to_resource()): return false
-        _taken = true
+        if inventory == null or inventory.is_full(): return false
+            # capacity FIRST: claim_snapshot() is irreversible, so a full
+            # inventory that claimed first would destroy the thing and
+            # store nothing
+        snapshot = entity.claim_snapshot()   or return false
+        inventory.store(snapshot)
         emit picked_up(actor)
-        parent.remove_child(entity)     # detach IMMEDIATELY, not just
-        entity.queue_free()             # queue_free: a queued node stays in the
-        return true                     # tree till end of frame, so other
-                                        # sensors keep detecting a gone berry
+        return true
 
-    # The guard matters: several animals converge on one berry;
-    # only the first may have it.
+    # A DOOR, not a mechanism. Winning the entity belongs to
+    # SimEntity.claim_snapshot(); this adds only what is specific to carrying.
 ```
 
 ### SimConsumableComponent — target side of eating
@@ -560,22 +575,18 @@ SimConsumableComponent extends SimComponent:    slot = "consumable"
 
     signal consumed(actor)
     stubs() -> ["consume"]
-    _used = false
 
-    is_available() -> not _used
+    is_available() -> not entity.is_claimed()   # agrees with every other door
 
     claim(actor) -> SimEntityDef?:
-        if _used: return null
-        _used = true
-        snapshot = entity.to_resource()
-        emit consumed(actor)
-        parent.remove_child(entity); entity.queue_free()
+        snapshot = entity.claim_snapshot()
+        if snapshot: emit consumed(actor)
         return snapshot
 
-    # [SEAM] The WORLD side does exactly ONE thing: hand over a snapshot and
-    # leave. It deliberately does NOT apply nourishment — ground-eating and
-    # pocket-eating must be identical, so both go through Hunger.eat(), and the
-    # number comes from SimConsumableDef either way.
+    # [SEAM] Also a DOOR. It deliberately does NOT apply nourishment —
+    # ground-eating and pocket-eating must be identical, so both hand the same
+    # snapshot to Hunger.eat(), and the number comes from SimConsumableDef
+    # either way.
 ```
 
 ### Declared but not implemented
@@ -688,8 +699,12 @@ SimBrainFSMComponent extends SimBrainComponent:
         if not found: return false
         _target = found
         if action and action.in_reach(found):
-            hunger.eat(found)                # eaten where it lies;
-            enter WANDER; return true        # it never enters the inventory
+            c = found.find_with_stub("consume")
+            hunger.eat(c.claim(self.entity)) # WON first, then eaten. What comes
+            enter WANDER; return true        # back is exactly what a pocket
+                                             # holds, which is why eat() needs
+                                             # only one path. Never enters the
+                                             # inventory.
         enter FEED; movement.move_to(found.position, WALK)
         return true
 
@@ -876,10 +891,14 @@ brain._think()
       is_full()?           no
       action.in_reach()?   yes
       berry.pickupable.take(animal, inventory)
-          _taken?  -> if already true, returns false. Race lost, harmlessly.
-          inventory.store(berry.to_resource())     # capacity checked BEFORE
-          _taken = true                            # anything is destroyed
-          detach + free the berry node
+          inventory.is_full()?  -> capacity checked BEFORE anything is
+                                   destroyed, because the next line cannot
+                                   be undone
+          berry.claim_snapshot()
+              _claimed?  -> if already true, returns null. Race lost,
+                            harmlessly, no matter WHICH door won it.
+              detach + free the berry node, hand back the snapshot
+          inventory.store(snapshot)
   brain: _target = null, enter WANDER
 ```
 
@@ -890,14 +909,12 @@ brain._feed_if_hungry()
   hunger.is_hungry()?  yes
 
   POCKET:  inventory.find_with_stub("consume") -> snapshot
-           hunger.eat(snapshot)
+           hunger.eat(snapshot)                       # already won
   GROUND:  sensor.nearest_with_stub("consume") -> berry entity
-           walk to it, then hunger.eat(berry)
+           walk to it, then
+           hunger.eat(berry.consumable.claim(animal)) # win it, THEN eat
 
-  hunger.eat(target):
-      snapshot = _claim(target)
-          snapshot in  -> returned as-is
-          entity in    -> consumable.claim() detaches + frees, returns snapshot
+  hunger.eat(snapshot):        # ONE argument type; the caller resolved it
       def = snapshot.find_with_stub("consume")
       restore(def.nourishment)                   # SAME number both ways
       entity.thing_used.emit("consume", snapshot)
@@ -909,49 +926,40 @@ brain._feed_if_hungry()
 
 ---
 
-## 11. Known bug
+## 11. Fixed: the double-claim bug
 
-**Two independent claim flags on the same entity.** A berry carries both
-`PickUpAbleComponent._taken` and `ConsumableComponent._used`. Nothing links them.
+**What it was.** A berry carried two independent claim flags —
+`PickUpAbleComponent._taken` and `ConsumableComponent._used` — and nothing linked them:
 
 ```
 frame N:  animal A -> consumable.claim()   # _used = false -> passes
           animal B -> pickupable.take()    # _taken = false -> ALSO passes
-          => to_resource() runs twice, queue_free() runs twice,
-             two animals get a berry that existed once
+          => to_resource() ran twice, queue_free() ran twice,
+             two animals got a berry that existed once
 ```
 
-Rare (both must act in the same frame, before `remove_child` lands), but real.
+**The fix.** The claim moved onto `SimEntity` as `claim_snapshot()` — one flag, one
+route out of the world, shared by every affordance. `PickUpAbleComponent` and
+`ConsumableComponent` became doors: each adds only its own verb and signal, and both
+report availability from `entity.is_claimed()`, so they cannot disagree.
 
-**Proposed fix — move the claim to the entity, so there is ONE flag:**
+The same change removed the type switch from `Hunger.eat()`. It had been taking an
+untyped `target` and re-deriving with `is` checks whether it was a snapshot or a world
+entity — information the **caller already had**, since the brain has separate pocket
+and ground branches. `eat()` now takes a `SimEntityDef` and nothing else; the ground
+branch wins the entity first and passes the snapshot.
 
-```
-SimEntity:
-    _claimed = false
-    claim_snapshot() -> SimEntityDef?:
-        if _claimed: return null
-        _claimed = true
-        snapshot = to_resource()
-        parent.remove_child(self); queue_free()
-        return snapshot
-```
+**Verified** with a throwaway headless harness (21 assertions), covering: both doors
+report the same availability; a second claim returns null; an eat and a take in the
+same frame produce exactly one winner and nothing stored for the loser; a full
+inventory refuses without destroying the berry; pocket and ground both restore exactly
++35.0; a claimed entity is detached from the tree in the same frame and invisible to
+sensors immediately, freed by the next; `eat()` refuses null and refuses a non-food
+snapshot without touching the bar.
 
-Both affordances then shrink to a few lines: one asks and stores the result, the
-other asks and returns it. That also kills the verbatim duplication between
-`take()` and `claim()` — same guard, same snapshot, same signal, same
-detach-then-free.
-
-**Catch:** `take()` currently checks inventory capacity *before* destroying the
-entity. With a shared `claim_snapshot()` the entity is already gone by the time
-`store()` runs, so the capacity check must move earlier — otherwise a full
-inventory deletes the berry and stores nothing.
-
-**Also stale, in the same two files:**
-- `sim_pick_up_able_component.gd:4-9` — a stray `食`, a reference to the deleted
-  `FoodComponent`, and it describes the *old* design where the inventory held
-  the live entity. The code below does the opposite.
-- `sim_consumable_component.gd:5-6` — "how nourishing it is lives here with it"
-  is false; `nourishment` moved to `SimConsumableDef`, as lines 11-15 correctly say.
+**Still true, unchanged:** `remove_child()` before `queue_free()` is load-bearing. A
+queued node stays in the tree until end of frame, so without the detach every sensor
+would keep reporting a berry that is already spoken for.
 
 ---
 

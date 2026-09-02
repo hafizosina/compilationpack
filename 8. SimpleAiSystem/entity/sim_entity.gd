@@ -48,6 +48,11 @@ var _components: Dictionary = {}
 ## The per-instance component defs this entity was actually built from,
 ## overrides included. Kept so the entity can hand back a blueprint of itself.
 var _source_defs: Array[SimComponentDef] = []
+## Whether something has already claimed this entity out of the world. ONE flag,
+## on the entity, because the claim is about the entity's existence rather than
+## about any one affordance: a berry that can be both picked up and eaten must
+## not be winnable twice by asking through two different doors.
+var _claimed: bool = false
 
 @onready var sprite: Sprite2D = $Sprite2D
 ## The entity's presence to sensors and to click-picking.
@@ -86,6 +91,36 @@ func to_resource() -> SimEntityDef:
 		copies.append(component_def.duplicate(true))
 	blueprint.components = copies
 	return blueprint
+
+## Whether this entity has already been claimed out of the world. Affordances
+## report their own availability from this, so they all agree.
+func is_claimed() -> bool:
+	return _claimed
+
+## Hands over a blueprint of this entity and removes it from the world, or
+## returns null if something already claimed it. Exactly once, ever.
+##
+## This is the ONE route out of the world, shared by every affordance that takes
+## a thing: pick-up and eating differ in what they do with the snapshot, never in
+## how they win it. The guard matters — several animals can be converging on the
+## same berry, and only the first may have it.
+##
+## Callers must do all of their own failing FIRST. Once this returns, the entity
+## is gone; a caller that then finds it cannot accept the snapshot has destroyed
+## something and stored nothing.
+func claim_snapshot() -> SimEntityDef:
+	if _claimed:
+		return null
+	_claimed = true
+	var snapshot := to_resource()
+	# Detached immediately, not just queue_free()d: a queued node stays in the
+	# tree until the end of the frame, so other sensors would keep detecting a
+	# berry that is already gone.
+	var parent := get_parent()
+	if parent != null:
+		parent.remove_child(self)
+	queue_free()
+	return snapshot
 
 ## Records a component under its slot key. Called by SimComponentDef.build_into()
 ## after the node has been added as a child.
