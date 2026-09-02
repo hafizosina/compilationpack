@@ -6,6 +6,9 @@
 > Companion docs in the same folder describe the *target* design, not the current build:
 > `PROJECT_DEFINITION.md` (why / scope) · `COLONY_SIM_CONCEPT.md` (architecture reference) ·
 > `MILESTONE_1_SPEC.md` (spec + numbers; §11 is the as-built record).
+>
+> `HANDOFF_PSEUDOCODE.md` is the companion to *this* doc: every component as
+> pseudocode, self-contained enough to paste into a chat and argue about.
 
 ---
 
@@ -40,9 +43,14 @@ before GOAP arrives.
 | 7. Sensor + Flee + predation | **sensor only** |
 
 **What runs today:** 5 animals wander a 3648×2240 map, flocking with their own kind. A berry
-spawner drips berries into the world. An animal that senses a berry walks to it and picks it up;
-its one inventory slot then fills, and it wanders permanently. **There is no back edge to the loop
-yet** — nothing consumes what is carried. That is what step 3 unlocks.
+spawner drips berries into the world. An animal that senses a berry walks to it and picks it up,
+filling its one inventory slot. Hunger drains at 1.0/s; below 50 the animal eats — from its pocket
+if it is carrying something, off the ground if not — and goes back to collecting. Fatigue drains at
+0.5/s idle and 1.5/s more while travelling; at zero the animal collapses where it stands and wakes
+at 50. Health regenerates only while hunger is above 50, and drains while hunger is empty.
+
+**The loop closes.** `hungry → seek → pick up → eat → hungry again` runs unattended. What it still
+lacks is a planner deciding any of it — the FSM hardcodes the priority order.
 
 ---
 
@@ -118,14 +126,18 @@ to clear; **F1** toggles per-entity debug labels; **F5** respawns from `world1.t
 
 ---
 
-## 5. The two blueprints
+## 5. The three blueprints
 
 | | `animal` | `berry` | `berry_spawner` |
 |---|---|---|---|
 | Art | `Animal/monkey.png` @ 0.5 | `CircleButtonFull.png` @ 0.32, pink | `CircleButtonFull.png` @ 0.7, green |
-| Components | sprite, movement, sensor, action, inventory, brain | sprite, pickupable | sprite, spawner |
-| Tuning | walk 130 / run 260, sensor 420, reach 56, capacity 1, think 0.25 s, wander step 420 | item `berry` | spawns `berry`, radius 1000, every 5 s, max 40 alive |
+| Components | sprite, movement, sensor, action, inventory, health, hunger, fatigue, brain | sprite, pickupable, consumable | sprite, spawner |
+| Tuning | walk 130 / run 260, sensor 420, reach 56, capacity 1, think 0.25 s, wander step 420 | nourishment 35 | spawns `berry`, radius 1000, every 5 s, max 40 alive |
+| Bars | health 100 (regen 1/s while fed), hunger 100 (drain **1.0/s**), fatigue 100 (drain **0.5/s** idle, **+1.5/s** moving, wakes at 50) | — | — |
 | Traits | `SimFlockTrait` (weight 0.55, separation 110) | — | — |
+
+Everything not listed under Tuning is the def's own default — only the values above are authored in
+the `.tres`. Component *order* in the list is build order.
 
 `world1.tres`: 5 × `animal`, 1 × `berry_spawner`. **No pre-placed berries** — the spawner supplies them.
 
@@ -145,26 +157,33 @@ to clear; **F1** toggles per-entity debug labels; **F5** respawns from `world1.t
 
 ## 7. What's next
 
-**Recommended: step 3, but scoped to closing the loop — Hunger + eat.**
+Step 3 is done and the food loop closes, so the next move is **finishing step 4 — actions as data**.
 
-Animals currently fill their one slot and stop forever. One bar and one affordance turn that into a
-living cycle: `hungry → seek → pick up → eat → hungry again`. It also gives GOAP a goal state
-(`hunger_satisfied`) to plan toward, which it otherwise lacks.
+**Why that one:** the FSM currently hardcodes its priority order, and every affordance is a method
+someone knows to call. A planner cannot read either. `ActionDef {input, time, output, mode}` is what
+turns "pick up" and "eat" into things with declared preconditions and effects — which is exactly
+what step 5 needs, and the only reason to build it before GOAP rather than alongside.
 
-Roughly: `SimHungerComponent` (drains, `feed()`), `SimEatableComponent` (target side, same
-actor-asks/target-resolves shape as pick-up), and an eat branch in the brain.
+It also unblocks the real berry bush: `HarvestableComponent` is an `ActionDef` carrying a
+`SpawnOutput`, which is what retires the `[TEMP]` `SimEntitySpawnerComponent`.
 
-**The decision it forces:** pick-up stores a bare `StringName`, so the inventory cannot know a
-berry's food value. Items must become **data** — a small `SimItemDef` (id, colour, food value) that
-`PickUpAbleDef` carries and the inventory stores. `COLONY_SIM_CONCEPT.md` §2 already specifies this
-(`items: Array[ItemData]`, def refs not nodes). It also removes the carry badge's colour parameter,
-since the item's own data would carry its colour.
+**Fix first — the double-claim bug.** A berry carries two independent claim flags
+(`SimPickUpAbleComponent._taken` and `SimConsumableComponent._used`) and nothing links them, so in
+one frame two animals can each pass their own guard and get a berry that existed once. Moving the
+claim onto `SimEntity` (`claim_snapshot()`) gives it one flag and collapses the verbatim duplication
+between `take()` and `claim()`. Note that `take()` checks inventory capacity *before* destroying the
+entity — with a shared route that check has to move earlier, or a full inventory deletes the berry
+and stores nothing.
 
 **Two things to settle before step 5:**
 - Does GOAP *replace* `SimBrainComponent`, or sit behind it as the planner with the current state
   machine as executor? Worth deciding before more brain code is written.
 - Actions are still hardcoded. Step 4 is not finished until `ActionDef {input, time, output, mode}`
   exists, because that is what a planner reads preconditions and effects from.
+
+**Still open, lower priority:** items are not data. Pick-up stores a whole `SimEntityDef` snapshot,
+which works but is heavier than needed; `COLONY_SIM_CONCEPT.md` §2 specifies a small `SimItemDef`
+(id, colour, food value) instead. That would also remove the carry badge's colour lookup.
 
 ---
 
