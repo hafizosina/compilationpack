@@ -12,8 +12,10 @@ extends SimComponent
 ## sits hidden in the scene tree.
 ##
 ## No inventory means the entity cannot pick anything up, and no action
-## component means it cannot reach far enough to try. The dependency runs one
-## way: inventory needs a hand, the hand knows nothing about inventories.
+## component means it cannot reach far enough to try. The dependencies run one
+## way in both directions: inventory needs a hand and the hand knows nothing
+## about inventories, and the thing being picked up knows nothing about them
+## either — it is asked only to hand itself over.
 
 ## Emitted whenever the contents change, carrying the new count.
 ## No listeners in this prototype; it is the seam a real carry indicator or a
@@ -58,7 +60,11 @@ func _on_thing_used(_verb: StringName, target) -> void:
 
 ## Attempts to pick `target` up. Returns false if this entity has no action
 ## component to reach with, if the target is out of reach, if it does not
-## advertise pick-up, or if someone else claimed it first.
+## advertise pick-up, if there is no room, or if someone else claimed it first.
+##
+## Every reason THIS entity might refuse is checked here, before the target is
+## asked, because asking destroys it. Each side resolves only what it alone can
+## know: capacity and reach are ours, availability is the target's.
 func try_pick_up(target: SimEntity) -> bool:
 	if is_full():
 		return false
@@ -70,7 +76,8 @@ func try_pick_up(target: SimEntity) -> bool:
 	var pickable := target.get_component(&"pickupable") as SimPickUpAbleComponent
 	if pickable == null:
 		return false
-	return pickable.take(entity, self)
+	# store() refuses a null snapshot, which is what a lost race returns.
+	return store(pickable.claim(entity))
 
 func is_full() -> bool:
 	return _held.size() >= capacity

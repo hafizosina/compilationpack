@@ -527,13 +527,18 @@ SimInventoryComponent extends SimComponent:     slot = "inventory"
         # did the using — only that something we hold was used.
 
     try_pick_up(target) -> bool:
-        if is_full(): return false
+        if is_full(): return false                     # MY capacity
         action = entity.get_component("action")   or return false
-        if not action.in_reach(target): return false
+        if not action.in_reach(target): return false   # MY reach
         pickable = target.get_component("pickupable")  or return false
-        return pickable.take(entity, self)
-        # [SEAM] "actor asks, target resolves". The dependency runs ONE way:
-        # inventory needs a hand; the hand knows nothing about inventories.
+        return store(pickable.claim(entity))           # ITS availability
+        #
+        # [SEAM] EACH SIDE RESOLVES ONLY WHAT IT ALONE CAN KNOW. Every reason
+        # THIS entity might refuse is checked here, before the target is asked,
+        # because asking destroys it. The target has no opinion about pockets
+        # and cannot see them.
+        #
+        # store() refuses a null snapshot, which is what a lost race returns.
 
     is_full()  -> _held.size >= capacity
     total()    -> _held.size
@@ -567,18 +572,16 @@ SimPickUpAbleComponent extends SimComponent:    slot = "pickupable"
 
     is_available() -> not entity.is_claimed()   # agrees with every other door
 
-    take(actor, inventory) -> bool:
-        if inventory == null or inventory.is_full(): return false
-            # capacity FIRST: claim_snapshot() is irreversible, so a full
-            # inventory that claimed first would destroy the thing and
-            # store nothing
-        snapshot = entity.claim_snapshot()   or return false
-        inventory.store(snapshot)
-        emit picked_up(actor)
-        return true
+    claim(actor) -> SimEntityDef?:
+        snapshot = entity.claim_snapshot()
+        if snapshot: emit picked_up(actor)
+        return snapshot
 
-    # A DOOR, not a mechanism. Winning the entity belongs to
-    # SimEntity.claim_snapshot(); this adds only what is specific to carrying.
+    # It asks the actor NOTHING. Room to carry and nearness to take are the
+    # actor's facts, checked by the actor before it asks.
+    #
+    # Note this is now byte-for-byte the shape of Consumable.claim() — an
+    # affordance is only ever A VERB PLUS A CLAIM.
 ```
 
 ### SimConsumableComponent — target side of eating
@@ -897,17 +900,16 @@ brain._think()
   sensor.nearest_with("pickupable")   -> berry
   action.in_reach(berry)?             -> yes
   inventory.try_pick_up(berry)
-      is_full()?           no
-      action.in_reach()?   yes
-      berry.pickupable.take(animal, inventory)
-          inventory.is_full()?  -> capacity checked BEFORE anything is
-                                   destroyed, because the next line cannot
-                                   be undone
+      is_full()?           no      <- my fact, and every reason I might
+      action.in_reach()?   yes        refuse is settled BEFORE I ask,
+                                      because asking destroys the target
+      berry.pickupable.claim(animal)
           berry.claim_snapshot()
               _claimed?  -> if already true, returns null. Race lost,
                             harmlessly, no matter WHICH door won it.
               detach + free the berry node, hand back the snapshot
-          inventory.store(snapshot)
+      inventory.store(snapshot)      <- store(null) is false, so a lost
+                                        race costs nothing
   brain: _target = null, enter WANDER
 ```
 

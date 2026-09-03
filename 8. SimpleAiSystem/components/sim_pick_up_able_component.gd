@@ -11,7 +11,9 @@ extends SimComponent
 ##
 ## Like SimConsumableComponent this is a DOOR, not a mechanism: leaving the world
 ## belongs to SimEntity.claim_snapshot(), shared by every affordance that takes a
-## thing. This adds only what is specific to carrying.
+## thing. This adds only what is specific to carrying — the `throw_item` verb and
+## the `picked_up` signal. The two affordances are deliberately the same shape,
+## because an affordance is only ever a verb plus a claim.
 
 ## Emitted once this entity has been taken by `actor`.
 signal picked_up(actor: SimEntity)
@@ -27,20 +29,19 @@ func stubs() -> Array[StringName]:
 func is_available() -> bool:
 	return entity != null and not entity.is_claimed()
 
-## Resolves a pick-up by `actor`, into `inventory`.
+## Hands over a snapshot of this entity and removes it from the world, or null if
+## something already claimed it — through this door or any other.
 ##
-## Capacity is checked BEFORE the entity gives itself up, because
-## claim_snapshot() is irreversible: a full inventory that claimed first would
-## destroy the thing and store nothing.
-func take(actor: SimEntity, inventory: SimInventoryComponent) -> bool:
-	if inventory == null or inventory.is_full():
-		return false
+## It asks the actor NOTHING. Whether there is room to carry this, and whether
+## the actor is near enough to take it, are the actor's own facts and its own
+## business; this component has no opinion on either and cannot see them. Since
+## a claim cannot be undone, everything that could refuse must refuse before the
+## actor asks — which is why the check lives where the knowledge is.
+func claim(actor: SimEntity) -> SimEntityDef:
 	var snapshot := entity.claim_snapshot()
-	if snapshot == null:
-		return false
-	inventory.store(snapshot)
-	picked_up.emit(actor)
-	return true
+	if snapshot != null:
+		picked_up.emit(actor)
+	return snapshot
 
 func describe() -> Dictionary:
 	return {"state": "available" if is_available() else "carried"}
