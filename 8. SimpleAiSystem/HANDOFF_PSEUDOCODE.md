@@ -8,8 +8,11 @@
 > decisions) · `PROJECT_DEFINITION.md` (why / scope) ·
 > `COLONY_SIM_CONCEPT.md` (target architecture) · `MILESTONE_1_SPEC.md` (spec + numbers).
 >
-> Matches the working tree as of the `claim_snapshot()` refactor. If the code has
-> moved on, this doc has not.
+> **Matches commit `0b7424f` (3 Sep 2026)** — the end of a three-round refactor
+> of the affordance layer (§11). If the code has moved on, this doc has not.
+>
+> §12 is a **proposal, not built code**. It is the argument this doc most wants
+> to have.
 
 ---
 
@@ -55,7 +58,7 @@ do with this?"* and never checks a type.
 
 | Verb | Declared by | Implemented? |
 |---|---|---|
-| `consume` | ConsumableComponent / ConsumableDef | yes — HungerComponent.eat() |
+| `consume` | ConsumableComponent / ConsumableDef | yes — `HungerComponent.eat_snapshot()` |
 | `throw_item` | PickUpAbleComponent / PickUpAbleDef | no |
 | `equip` | EquipmentComponent / EquipmentDef | no — vocabulary only |
 | `place_item` | PlaceAbleComponent / PlaceAbleDef | no — vocabulary only |
@@ -601,8 +604,8 @@ SimConsumableComponent extends SimComponent:    slot = "consumable"
 
     # [SEAM] Also a DOOR. It deliberately does NOT apply nourishment —
     # ground-eating and pocket-eating must be identical, so both hand the same
-    # snapshot to Hunger.eat(), and the number comes from SimConsumableDef
-    # either way.
+    # snapshot to Hunger.eat_snapshot(), and the number comes from
+    # SimConsumableDef either way.
 ```
 
 ### Declared but not implemented
@@ -938,50 +941,271 @@ brain._feed_if_hungry()
 
 ---
 
-## 11. Fixed: the double-claim bug
+## 11. The refactor arc — three rounds on one shape
 
-**What it was.** A berry carried two independent claim flags —
-`PickUpAbleComponent._taken` and `ConsumableComponent._used` — and nothing linked them:
+Three consecutive passes over the affordance layer. Each fixed a different symptom
+of the same root cause: **knowledge being reconstructed somewhere it did not live.**
+
+### Round 1 — the double-claim bug  (`c3459d5`)
+
+A berry carried two independent claim flags — `PickUpAbleComponent._taken` and
+`ConsumableComponent._used` — and nothing linked them:
 
 ```
-frame N:  animal A -> consumable.claim()   # _used = false -> passes
+frame N:  animal A -> consumable.claim()   # _used  = false -> passes
           animal B -> pickupable.take()    # _taken = false -> ALSO passes
           => to_resource() ran twice, queue_free() ran twice,
              two animals got a berry that existed once
 ```
 
-**The fix.** The claim moved onto `SimEntity` as `claim_snapshot()` — one flag, one
-route out of the world, shared by every affordance. `PickUpAbleComponent` and
-`ConsumableComponent` became doors: each adds only its own verb and signal, and both
-report availability from `entity.is_claimed()`, so they cannot disagree.
+**Fix.** The claim moved onto `SimEntity` as `claim_snapshot()` — one flag, one route
+out of the world, shared by every affordance. `PickUpAbleComponent` and
+`ConsumableComponent` became **doors**: each adds only its own verb and signal, and
+both report availability from `entity.is_claimed()`, so they cannot disagree.
 
-The same change removed the type switch from `Hunger.eat()`. It had been taking an
-untyped `target` and re-deriving with `is` checks whether it was a snapshot or a world
-entity — information the **caller already had**, since the brain has separate pocket
-and ground branches. That became two named entry points, `eat_snapshot(def)` and
-`eat_entity(target)`, the second a thin adapter delegating to the first. GDScript has
-no overloading (a second `func eat` is a parse error), so the split has to be by name —
-and by name is the better shape anyway, since it puts the choice where the knowledge
-already is. `eat_entity` also restores symmetry with
-`SimInventoryComponent.try_pick_up()`: both affordances now live on the actor's own
-component instead of one leaking into the brain.
+*Root cause:* the fact "this entity has been won" is about the **entity's existence**,
+and it was being stored on the affordances instead.
 
-**Verified** with throwaway headless harnesses (40 assertions across the two rounds),
-covering: both doors report the same availability; a second claim returns null; an eat
-and a take in the same frame produce exactly one winner and nothing stored for the
-loser; a full inventory refuses without destroying the berry; pocket and ground restore
-exactly +35.0 and agree; a claimed entity is detached from the tree in the same frame
-and invisible to sensors immediately, freed by the next; `eat_entity` refuses null, a
-non-food entity and an already-claimed one; `eat_snapshot` refuses null and a non-food
-snapshot; no refusal moves the bar.
+### Round 2 — the type switch in `eat()`  (`e133baa`)
 
-**Still true, unchanged:** `remove_child()` before `queue_free()` is load-bearing. A
-queued node stays in the tree until end of frame, so without the detach every sensor
-would keep reporting a berry that is already spoken for.
+```
+# BEFORE
+eat(target):
+    if target is SimEntityDef: snapshot = target
+    if target is SimEntity:    snapshot = target.consumable.claim(self)
+    ...
+```
+
+That `is` ladder re-derived at runtime something **the caller already knew** — the brain
+has separate pocket and ground branches and is never in doubt about which it holds.
+
+**Fix.** Two named entry points, `eat_snapshot(def)` and `eat_entity(target)`, the second
+a thin adapter delegating to the first. GDScript has no overloading (a second
+`func eat` is a parse error), so the split has to be by name — and by name is the better
+shape anyway, because it puts the choice where the knowledge already is.
+
+*The danger was never two entry points; it was two **implementations** reached by
+throwing away what the caller knew.* An adapter with no logic of its own cannot drift.
+
+### Round 3 — the inversion  (`0b7424f`)
+
+`PickUpAbleComponent` was reaching into the actor:
+
+```
+# BEFORE — the target asking about the actor's pockets
+take(actor, inventory) -> bool:
+    if _taken: return false
+    if inventory.is_full(): return false     # <- the TARGET, reasoning about pockets
+    if _taken already ... order matters ...  # <- and a comment warning about it
+```
+
+**Fix.** Every actor-side check moved to `SimInventoryComponent.try_pick_up()`, and
+`take(actor, inventory)` collapsed to `claim(actor) -> SimEntityDef?` — the same four
+lines as `SimConsumableComponent.claim()`.
+
+Two things fell out of it:
+
+- **`PickUpAbleComponent.claim()` and `ConsumableComponent.claim()` are now the same
+  shape**, differing only in verb and signal. An affordance is only ever
+  **a verb plus a claim**.
+- **The ordering hazard was designed out, not managed.** The old code needed a comment
+  warning that capacity had to be checked before the irreversible claim. That comment no
+  longer exists, because every reason to refuse is now an actor-side fact checked before
+  the actor asks. You cannot get the order wrong from inside the target — the target has
+  nothing to order.
+
+*The rule this produced:* **each side resolves only what it alone can know.** The message
+between them describes an *attempt*, never an outcome. See §12b — this is the rule combat
+inherits.
+
+### Verification
+
+**57 assertions across three throwaway headless harnesses** (21 / 19 / 17), each written,
+run, and deleted in the round that needed it — never committed, because the repo has no
+test toolchain (`CLAUDE.md`: the editor *is* the toolchain).
+
+Between them they cover: both doors report the same availability; a second claim returns
+null; an eat and a take in the same frame produce exactly one winner and nothing stored
+for the loser; a full inventory refuses **without destroying the target**; out of reach
+refuses without destroying it; a non-pickupable target refuses; pocket and ground restore
+exactly +35.0 and agree; a claimed entity is detached from the tree in the same frame and
+invisible to sensors immediately, freed by the next; `eat_entity` refuses null, a non-food
+entity and an already-claimed one; `eat_snapshot` refuses null and a non-food snapshot; no
+refusal moves the bar; and an animal built **with no inventory def at all** still eats off
+the ground (hunger 10.0 -> 44.3).
+
+**Still true, unchanged:** `remove_child()` before `queue_free()` is load-bearing. A queued
+node stays in the tree until end of frame, so without the detach every sensor would keep
+reporting a berry that is already spoken for.
 
 ---
 
-## 12. Open questions worth challenging
+## 12. PROPOSAL — effects as data, and the mouth
+
+> **Nothing in this section is built.** It is the next design step, written out so it
+> can be attacked before it is code.
+
+### The problem, in one sentence
+
+`SimConsumableDef` holds a single `nourishment: float`, and `SimHungerComponent` applies
+it — so the day a mushroom restores stamina, poisons for 5 health, or grants +20% speed
+for 30 seconds, there is nowhere for that to go.
+
+Three separate faults, worth keeping apart:
+
+1. **One number cannot describe an effect.** `nourishment: float` can only ever mean hunger.
+2. **A bar owns an action.** `Hunger` is otherwise a dumb state holder that drains and
+   reports; `eat_snapshot()` / `eat_entity()` are the only decisions in the whole bar
+   layer, and they sit on the one bar that happens to benefit today.
+3. **The wrong component would answer.** If a consumable restores health, does
+   `HealthComponent` grow an `eat()` too? That is the same method on three bars.
+
+### The proposal
+
+```
+SimEffect extends Resource:               # base — one effect, applied to one actor
+    apply(actor: SimEntity) -> void:
+        error "not implemented"
+    describe() -> ""                      # for the inspector / debug label
+
+SimBarEffect extends SimEffect:           # the only concrete one needed today
+    bar    = &"hunger"                    # ANY bar slot: health, hunger, fatigue, ...
+    amount = 35.0                         # negative = damage / drain
+
+    apply(actor):
+        b = actor.get_component(bar)
+        if b: b.restore(amount)           # restore(-x) already spends
+
+SimConsumableDef:
+    effects = [SimEffect]                 # REPLACES nourishment: float
+                                          # a berry = [SimBarEffect{hunger, +35}]
+
+SimConsumerComponent extends SimComponent:    slot = "consumer"     # "the mouth"
+
+    eat_snapshot(snapshot) -> bool:
+        def = snapshot.find_with_stub("consume")   or return false
+        for e in def.effects: e.apply(entity)      # <- the ONE place effects land
+        entity.thing_used.emit("consume", snapshot)
+        return true
+
+    eat_entity(target) -> bool:               # unchanged adapter, moved wholesale
+        c = target.find_with_stub("consume")  or return false
+        return eat_snapshot(c.claim(entity))
+
+SimHungerComponent:
+    # eat_snapshot / eat_entity DELETED. Back to being a bar: drains, reports
+    # is_hungry(), slows while asleep, damages health at zero. Nothing else.
+
+SimBrainFSMComponent._feed_if_hungry():
+    # _hunger.eat_*  ->  _consumer.eat_*
+    # _hunger stays, but only to ask is_hungry(). Deciding to eat and being able
+    # to eat become two different questions asked of two different components —
+    # which is correct: a creature can be hungry and have no mouth.
+```
+
+### Why it fits what already exists
+
+- `SimBarComponent.restore()` is **already generic** and bars **already** register under
+  their own slots, so `SimBarEffect` is a slot lookup plus one call. One class covers
+  health, hunger, fatigue and any future stamina or mana bar **with no new code**.
+- Effects are Resources, so they are authored in the inspector like everything else —
+  rule 4, *content is data*, holds.
+- The claim layer is untouched. Round 3's shape survives exactly: the target still just
+  hands itself over; only what the actor *does* with the snapshot changes.
+- `capability = component presence` gets sharper, not weaker: no `consumer` slot → the
+  entity physically cannot eat, which is a thing a real design needs (a plant, a rock, a
+  sleeping infant).
+
+### What it deliberately does NOT solve
+
+**Timed stat modifiers** — "+20% speed for 30 s", "+5 attack until dawn". `SimBarEffect`
+cannot express these and should not be stretched to, because they need **two** systems
+that do not exist:
+
+1. a **status system** — something must hold the modifier, count it down, and remove it;
+2. a **stat pipeline** — `move_speed` is currently a plain field on `SimMovementComponent`
+   read directly every frame. There is no `base` vs `current`, and no place for a
+   multiplier to live.
+
+That is its own design step, after this one. Building it *into* effects now would put a
+timer system inside a Resource.
+
+### Argue with this
+
+1. **Should `SimEffect` just BE the concept doc's `StatOutput`?** `COLONY_SIM_CONCEPT.md`
+   §4 already specifies `StatOutput {bar, amount, to: actor|target}` as one of `ActionDef`'s
+   three output forms. `SimBarEffect` is that, minus the `to:` field, arriving early. If
+   actions-as-data (step 4) is coming anyway, building a second vocabulary for the same
+   idea is a mistake — but building `StatOutput` now means importing `ActionDef`'s whole
+   actor/target direction concept before there is an action system to need it.
+   **This is the most important question in this document.**
+2. **Does the actor apply the effect, or does the effect apply itself?** Written above,
+   `effect.apply(actor)` — the data reaches into the actor. The alternative is
+   `consumer.apply(effect)`, where the component switches on effect type, which is the
+   type switch of Round 2 all over again. Is a Resource that mutates a live entity the
+   right dependency direction, or is it the concept doc's `EatableComponent` (target
+   resolves, calls `actor.hunger.feed()`) wearing a different hat?
+3. **Is the mouth a component at all**, or should `consume` dispatch generically —
+   the entity finds *whichever* of its components implements the verb, the way
+   `find_with_stub()` already works on the target side? That would make the actor side
+   symmetric with the target side, at the cost of a second dispatch mechanism.
+4. **Does `SimBarEffect.bar` being a `StringName` cost too much safety?** A typo
+   (`&"hungr"`) silently does nothing, and it is authored in the inspector. The
+   alternative — each bar advertising which effects it accepts — is more code for a
+   mistake the debug labels would show immediately.
+5. **Where does diet go?** `COLONY_SIM_CONCEPT.md` §4 gates eating on
+   `FoodType ∈ actor.diet`. Under effects-as-data nothing gates anything: any creature
+   can eat any consumable. Is diet an actor-side check in `SimConsumerComponent` (an
+   actor fact — §12b says yes), or a `[SEAM]` too far?
+
+### 12b. The damage question, stated so it can be argued about
+
+The same question — *where does logic live* — but with a case where **both** sides have
+real facts to contribute. Two rules are currently on the table, and they are not the same:
+
+| | Rule | Source |
+|---|---|---|
+| **A** | "Actor declares, target resolves." The actor component is a thin capability marker with no effect logic; the target owns the resolution. | `COLONY_SIM_CONCEPT.md` §2 (the target design) |
+| **B** | "Each side resolves only what it alone can know." The message describes an *attempt*; each end computes its own half. | as built, `0b7424f` (§11 Round 3) |
+
+For **pick-up** they agree. For **damage** they come apart:
+
+```
+# Under B — the shape the working code is already in
+SimDamage extends Resource:               # a value object, not a component
+    amount, type, source
+
+attacker side  (AttackComponent):         # facts only the attacker can know
+    weapon damage, strength, crit roll, whether it is a backstab
+    -> builds a SimDamage and offers it
+
+target side    (HealthComponent):         # facts only the target can know
+    armour, resistance to `type`, dodge chance, "graze" reduction, invulnerability
+    -> decides what actually lands, then spends it
+
+# Adding a new defence NEVER touches the attacker. Adding a new weapon NEVER
+# touches the defender. Neither computes the other's half.
+```
+
+Open, and genuinely undecided:
+
+- **Where does the crit roll live?** It is an attacker fact (crit chance is on the
+  weapon), but a target with "cannot be critically hit" needs a say. Does the attacker
+  roll and send `is_crit`, and the target is free to ignore it? That is rule B — but it
+  means the message carries a partial *outcome*, which is exactly what B forbids.
+- **Is eating an exception to B, or does B just say something uncomfortable?** Under
+  rule A, `EatableComponent` would call `actor.hunger.feed(value)`. As built, the target
+  is a door and the *actor* applies the nourishment — even though the amount is target
+  data. B's answer: nourishment is a fact only the food knows, and *what a body does with
+  it* is a fact only the body knows, so the number travels and the actor applies it. Does
+  that generalise, or is it a story told after the fact?
+- **The interface is already waiting.** `SimEntity.do_actions()` / `receive_actions()`
+  exist and return `[]`, listed as intentionally-unused API. The concept doc's
+  `do ∩ receive` intersection is what fills them, and it needs `ActionDef` first.
+
+---
+
+## 13. Open questions worth challenging
 
 **Architecture**
 
@@ -989,17 +1213,28 @@ would keep reporting a berry that is already spoken for.
    front, the current FSM as executor? Decide before more brain code is written.
 2. **Actions are still hardcoded.** Step 4 is not finished until
    `ActionDef {input, time, output, mode}` exists, because that is what a
-   planner reads preconditions and effects from.
+   planner reads preconditions and effects from. See §12 question 1 — the effects
+   proposal and `ActionDef.StatOutput` may be the same thing and should probably not
+   be built twice.
 3. **Items are not data.** Pick-up stores a whole entity blueprint. A small
    `SimItemDef` (id, colour, food value) was specified in
    `COLONY_SIM_CONCEPT.md §2` and never built. It would also remove the carry
-   badge's colour parameter.
+   badge's colour parameter. Note the tension: §12 wants `effects` on the
+   *consumable def*, which is the thing a `SimItemDef` would replace.
 4. **`stubs()` is duplicated on component and def.** Justified by the
    live-vs-snapshot split — but is a snapshot that can answer questions about
    itself the right model, or should a snapshot be inflatable back into a
    throwaway entity instead?
 5. **Bars poll in `_process`.** Fourteen entities is fine; a colony is not.
    Tick-batching or a shared needs system is unexplored.
+6. **Sensor queries are recomputed per call.** `get_detected()` runs up to three times
+   per think tick, rebuilding the identical list from `get_overlapping_areas()`. Two
+   candidate fixes: memoise per frame (cheap, self-correcting), or have the sensor keep
+   a list maintained by `area_entered` / `area_exited` (faster, but hand-maintained
+   state that can go stale, and the codebase depends on entities vanishing *immediately*).
+   At ~45 entities neither is worth doing; at colony scale the real answer is a spatial
+   hash replacing N per-entity Area2Ds. `area_entered` **is** the right shape for
+   *reactive* sensing, which step 7 (flee / predation) will want.
 
 **Tuning — unresolved numbers**
 
@@ -1023,7 +1258,7 @@ would keep reporting a berry that is already spoken for.
 
 ---
 
-## 13. The world as it stands
+## 14. The world as it stands
 
 | | `animal` | `berry` | `berry_spawner` |
 |---|---|---|---|

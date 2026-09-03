@@ -226,13 +226,17 @@ picture — file tree, tuning values, next steps — read `HANDOFF.md`.
 - The map is **57 × 35 tiles = 3648 × 2240 px**, not the 1200 × 800 assumed in §8.
 
 ### Components that exist
-`sprite`, `movement`, `sensor`, `action`, `inventory`, `pickupable`, `brain`, `spawner`, `debug`.
+`sprite`, `movement`, `sensor`, `action`, `inventory`, `pickupable`, `consumable`, `health`,
+`hunger`, `fatigue`, `brain`, `spawner`, `debug` — plus `equipment` and `placeable`, which exist as
+**vocabulary only**: they declare their stubs and build nothing, so the verb list lives in one place
+instead of being invented later.
 
 - **Wander lives inside the brain**, not its own component — that removed the need to arbitrate
   between two things driving movement.
 - **`ActionComponent` is only the hand.** It answers `in_reach()` and knows no specific action.
   Pick-up belongs to `InventoryComponent`, which asks the hand for reach and the target's
-  `PickUpAbleComponent` to resolve. An entity with a hand and no pockets carries no pick-up code.
+  `PickUpAbleComponent` to hand itself over. An entity with a hand and no pockets carries no
+  pick-up code.
 - **`SimEntitySpawnerComponent` is temporary** — a stand-in for the berry bush until `harvest` and
   its `SpawnOutput` exist.
 - **Brain traits.** `SimBrainDef.traits: Array[SimTrait]` are behaviour modifiers consulted at
@@ -257,9 +261,30 @@ another bar's component.
 **Collapse is owned by `FatigueComponent`**, not the brain — at zero it sleeps the entity, switches
 the brain off, and wakes it at 50. No health penalty. Voluntary Rest (a brain decision) is still step 6.
 
+### Affordances and claims
+The spec's §2 rule was *"actor declares, target resolves."* As built it is narrower and stricter:
+**each side resolves only what it alone can know.**
+
+- **One claim, on the entity.** Leaving the world is `SimEntity.claim_snapshot()` — one flag, one
+  route, shared by every affordance. `PickUpAbleComponent` and `ConsumableComponent` are **doors**,
+  each adding only its own verb and signal, so two doors cannot hand out the same berry twice.
+  An affordance is only ever *a verb plus a claim*: the two `claim()` methods are the same four
+  lines.
+- **The actor checks its own facts first.** `InventoryComponent.try_pick_up()` asks the hand for
+  reach and itself for capacity **before** asking the target, because asking destroys the target.
+  The target has no opinion about pockets and cannot see them.
+- **Eating is not on the target.** `ConsumableComponent` does not feed the actor — the spec's
+  `EatableComponent` did. `SimHungerComponent.eat_snapshot(def)` is the one place nourishment is
+  applied, whether the food came off the ground or out of a pocket; `eat_entity(target)` is a thin
+  adapter that wins the world entity and delegates. Two entry points, one implementation.
+- **Nobody disposes of someone else's item.** Hunger restores itself and announces
+  `SimEntity.thing_used(verb, target)`; whatever holds that snapshot drops it. Hunger and Inventory
+  never reference each other.
+
 ### Not yet built
-`Eatable`, `Harvestable`, `Attack`, actions as `ActionDef` data,
-GOAP, the utility goal layer, sleep, Danger, flee and predation.
+`Harvestable`, `Attack`, actions as `ActionDef` data, GOAP, the utility goal layer, voluntary sleep,
+Danger, flee and predation. `Eatable` **is** built, as `ConsumableComponent` — with the resolution
+on the actor rather than the target (above).
 
 Verify with F1 (toggle the per-entity labels), a left-click on any entity (inspector plus that
 entity's sensor and reach circles) and F5 (respawn from `world1.tres`).

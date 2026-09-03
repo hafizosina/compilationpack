@@ -1,6 +1,8 @@
 # CompilationPack — Project Summary
 
-**Engine:** Godot 4.6 | **Renderer:** Mobile | **Viewport:** 1612 × 720 | **Target:** Android
+**Engine:** Godot 4.7 | **Renderer:** Mobile | **Viewport:** 1612 × 720 | **Target:** Android
+
+**Main scene:** `8. SimpleAiSystem/main.tscn`
 
 A numbered collection of self-contained game-system demos written in GDScript. Each folder is an isolated experiment; shared infrastructure lives in `System/` and `Global/`.
 
@@ -68,27 +70,35 @@ An in-memory graph/relational database implemented in GDScript. Supports ORM-sty
 ---
 
 ### 7. JoyStick
-Integrates the `virtual_joystick` addon for mobile input. The main scene listens to `analogic_changed(value, distance, angle, …)` and prints the direction vector — ready to wire to a player character.
+Mobile touch controls driving a full HUD — the module that grew into the project's UI reference.
 
-**Key file:** `7. JoyStick/main_joystick.gd`
+- **Input never crosses node references.** Godot 4.7's built-in `VirtualJoystick` drives InputMap *actions*: the movement stick maps to `ui_left/right/up/down`, the aim and skill sticks to the separate `aim_*` actions so dragging them never moves the player, and the Sprint button presses the `sprint` action directly.
+- **Entity + component.** `Global/Scene/base_entity.tscn` (sprite + CharacterBody2D + `PlayerControlComponent`) — sprint and double-tap dash live in the control component.
+- **UI talks to gameplay only through `EventBus`.** `InventoryComponent` emits `inventory_changed(slots)`; `InventoryPanel` rebuilds from that array and knows nothing about entities. `status_bar.gd` listens for `health_change` / `stamina_change` / `mana_change`.
+- **Items are data** — `Item` is a Resource (`items/*.tres`), `ItemStack` a runtime item+count pair.
+- Custom UI helpers: `RBoxContainer` (`@tool` radial container, used for the skill wheel) and `HoldRing` (hold-to-activate progress arc).
 
----
-
-### 8. Player Control
-Top-down player with camera follow and an EventBus-driven control interface.
-
-- `game.gd` — Camera2D tracks the player's position every frame
-- `player.gd` — Subscribes to `EventBus.control_dir` signal and applies direction
-- `ui_script.gd` — Empty CanvasLayer (UI layer, ready to populate)
-
-Uses the shared `Global/Scene/camera_2d.tscn` for richer camera behaviour.
-
-**Key files:** `8. Player Control/game.gd`, `player.gd`
+**Key files:** `7. JoyStick/ui.gd`, `inventory_panel.gd`, `status_bar.gd`, `hold_ring.gd`
 
 ---
 
-### 9. NPC AI
-Scene file exists (`main_npc.tscn`). Scripts are work-in-progress.
+### 8. SimpleAiSystem
+A **data-driven node-composition ECS foundation** for a colony sim — the largest module, and the current main scene. Two pillars: an **EntityFactory** that assembles entities from `.tres` blueprints (new content = a new resource, never new code) and a **GOAP AI** to come.
+
+Four rules hold everywhere: everything is an Entity · what a thing *is* = which components it has · capability = component presence · content is data.
+
+- **`SimEntity`** is a plain `Node2D` carrying a monitor-**able** `Body` Area2D, a component registry keyed by **slot** (`&"movement"`), and `claim_snapshot()` — the single route out of the world, so two affordances can never hand out the same berry twice.
+- **Components** for movement, sensing, reach, inventory, the three bars (health / hunger / fatigue), affordances (`pickupable`, `consumable`) and a `brain` slot filled today by an FSM and later by a planner. Traits (`SimFlockTrait`) modify behaviour as data, with no subclass and no branch.
+- **Affordance rule:** each side resolves only what it alone can know — the actor checks reach and capacity, the target checks availability and just hands itself over.
+- **What runs:** 5 animals flock across a 3648 × 2240 map, a spawner drips berries, and `hungry → seek → pick up → eat → hungry again` closes unattended. Fatigue collapses an animal where it stands and wakes it at 50.
+
+Its own docs live in the folder: `HANDOFF.md` (state of the build) · `HANDOFF_PSEUDOCODE.md` (every component as pseudocode, plus the open design arguments) · `PROJECT_DEFINITION.md` · `COLONY_SIM_CONCEPT.md` · `MILESTONE_1_SPEC.md`.
+
+**Key files:** `8. SimpleAiSystem/entity/sim_entity.gd`, `entity/sim_entity_factory.gd`, `components/sim_brain_fsm_component.gd`
+
+**Controls:** left-click an entity to inspect it · **F1** debug labels · **F5** respawn.
+
+*(The old modules 8 "Player Control" and 9 "NPC AI" were removed; their ideas live on in module 7's entity/component setup.)*
 
 ---
 
@@ -101,7 +111,7 @@ Scene file exists (`main_npc.tscn`). Scripts are work-in-progress.
 | `Constant` | `System/Constant.gd` | `DEBUG: bool = true` flag |
 | `Core` | `System/Core.gd` | Quit shortcut (Ctrl+Q debug / Escape fallback) |
 | `Global` | `System/Global.gd` | Camera state (position + zoom) |
-| `EventBus` | `System/EventBus.gd` | Signal bus — `control_dir(dir: Vector2)` |
+| `EventBus` | `System/EventBus.gd` | Signal bus — `control_dir`, `health/stamina/mana_change`, `inventory_changed`, `sim_world_census`, `sim_respawn_requested`, `sim_entity_inspected` |
 | `Utils` | `System/Utils.gd` | `screen_to_world_position()`, `zoom_scale_ratio()` |
 | `GlobalAstar2` | `3. ControlPathFinding/global_astar2.gd` | Travel-cost overlay toggle signal |
 | `GraphDb` | `6. GraphDb/GraphDb.gd` | In-memory database singleton |
@@ -123,9 +133,13 @@ Reusable Camera2D scene with:
 - **WASD / arrow keys** — keyboard pan (zoom-compensated speed)
 - **State sync** — writes `Global.camera_position` + `Global.camera_zoom` every frame
 
-### Addon
+### Addons
 
-`addons/virtual_joystick` — mobile virtual joystick with 6 texture variants. Emits `analogic_changed` signal with value, distance, and angle data.
+**None.** The third-party `addons/virtual_joystick` was removed — `VirtualJoystick` is engine-provided in Godot 4.7. Do not reintroduce it.
+
+### Theme
+
+All widget styling goes through the single theme `Global/Theme/main_theme.tres`, attached to a scene's root Control so it cascades — no `theme_override_*` on individual nodes. Medieval palette (parchment / ink / wood / brass), with `RoundButton` and `ItemSlot` type variations and the `Sim*` variations used by module 8's inspector.
 
 ---
 
@@ -137,6 +151,8 @@ Reusable Camera2D scene with:
 | `ui_right` | Arrow Right, D, Joypad D-Right, Axis-0 positive |
 | `ui_up` | Arrow Up, W, Joypad D-Up, Axis-1 negative |
 | `ui_down` | Arrow Down, S, Joypad D-Down, Axis-1 positive |
+| `aim_left` / `aim_right` / `aim_up` / `aim_down` | Aim & skill sticks (separate, so aiming never moves the player) |
+| `sprint` | Sprint button (pressed via `Input.action_press/release`) |
 | `QuitShortcut` | Ctrl+Q |
 
 ---
@@ -150,7 +166,7 @@ Reusable Camera2D scene with:
 
 ---
 
-## Development Status (as of 2026-05-16)
+## Development Status (as of 2026-09-03)
 
 | Module | Status |
 |--------|--------|
@@ -158,8 +174,7 @@ Reusable Camera2D scene with:
 | 2. PathFindingWithWeight | Complete |
 | 3. ControlPathFinding | Complete |
 | 4. SelectionSystem | Complete |
-| 5. Boid | Scaffold only — flocking WIP |
+| 5. Boid | Scaffold only — flocking WIP (the working version lives in module 8's `SimFlockTrait`) |
 | 6. GraphDb | Complete |
-| 7. JoyStick | Complete |
-| 8. Player Control | Complete |
-| 9. NPC AI | Scene stub — WIP |
+| 7. JoyStick | Complete — mobile HUD, inventory, item resources |
+| 8. SimpleAiSystem | **Active.** Factory + components + FSM brain done; food loop closes. GOAP and actions-as-data next |

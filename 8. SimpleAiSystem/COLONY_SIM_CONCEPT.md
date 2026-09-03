@@ -8,6 +8,10 @@
 > entity types (`animal`, `berry`) and a temporary spawner, and exists to exercise component
 > interaction before GOAP lands. The three-creature experiment, predation, bars and the planner
 > below are all still ahead. For what actually exists today, read `HANDOFF.md`.
+>
+> Two places where the build has already diverged, deliberately, are flagged inline as
+> **[AS BUILT]**: how eating resolves (§2) and where per-effect data lives (§4). Both are
+> argued out in `HANDOFF_PSEUDOCODE.md` §11–§12.
 
 ---
 
@@ -161,6 +165,14 @@ Entity is the **mediator**. Components are dumb state holders; the Brain is the 
 
 **Pairing rule:** an action fires only if the **target** advertises it (has the affordance component) AND the **actor** has the paired component — eat needs actor `HungerComponent`, pickUp needs actor `InventoryComponent`, attack needs actor `AttackComponent`. No type checks, only components.
 
+> **[AS BUILT — diverged]** The rule the code follows is narrower: **each side resolves only what
+> it alone can know.** The actor checks *its* facts (reach, capacity, and eventually weapon and
+> crit), the target checks *its* own (availability, and eventually armour and dodge); the message
+> between them describes an **attempt**, never an outcome. For pick-up the two rules agree. For
+> eating they do not: `ConsumableComponent` is a pure door that hands over a snapshot, and the
+> **actor's** `SimHungerComponent` applies the nourishment — the number is target data, but what a
+> body does with it is a body fact. See `HANDOFF_PSEUDOCODE.md` §11 Round 3 and §12b.
+
 **Actor declares, target resolves.** Each action is two-sided. The **actor** component is a thin capability marker (+ actor data like `damage`) with no effect logic; the **target** component owns the *resolution* — mutate a bar, spawn, or self-destroy (+ target data like `hunger_value`). `AttackComponent(damage)` → `HealthComponent` reduces hp/dies; `HungerComponent`(marker) → `EatableComponent` feeds the actor + frees itself. Add a new attackable = give it `HealthComponent`; a new food = give it `EatableComponent` — the actor side never changes.
 
 **Capability = component presence.** The Brain builds its goal set by introspecting its own components — no `HungerComponent` → no food goal, no `FatigueComponent` → no rest goal. On the target side an action's component requirements gate its effect: damage (attack, or damaging-harvest) needs the target to have a `HealthComponent` (no Health → can't be hurt); clean harvest needs the target's Movement absent or disabled. You never test "is this a plant / a corpse" — you test which components exist.
@@ -256,6 +268,12 @@ Harvesting a **living** target adds a `StatOutput {−damage to target Health}` 
 enum FoodType { VEGIE, MEAT }
 # Type1.diet = [VEGIE]   Type2.diet = [MEAT]   # eat allowed only if EatableComponent.food_type ∈ diet
 ```
+
+> **[AS BUILT — pending]** `StatOutput {bar, amount, to}` is not built; a consumable currently
+> carries a single `nourishment: float`. The queued next step (`HANDOFF_PSEUDOCODE.md` §12) replaces
+> it with `effects: Array[SimEffect]`, whose only concrete form — `SimBarEffect {bar, amount}` — is
+> `StatOutput` minus the `to:` field. **Open question:** whether that step should simply build
+> `StatOutput` itself, so this document's vocabulary is not duplicated.
 
 **Eat checks inventory first.** Before pathing anywhere, the entity checks its inventory for diet-matching item-data. If present it just eats (see §7 — GOAP: `has_vegie`/`has_meat` already true, plan collapses to `[eat]`).
 

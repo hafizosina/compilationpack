@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**CompilationPack** — a Godot **4.7** (GDScript) project that collects self-contained game-system demos in numbered folders. Mobile renderer, 1612×720 viewport, `sensor_landscape`, Android export target. Main scene is `res://7. JoyStick/main.tscn`.
+**CompilationPack** — a Godot **4.7** (GDScript) project that collects self-contained game-system demos in numbered folders. Mobile renderer, 1612×720 viewport, `sensor_landscape`, Android export target. Main scene is `res://8. SimpleAiSystem/main.tscn`.
 
 There are no tests and no build scripts; the editor is the tool chain.
 
@@ -19,7 +19,7 @@ GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.
 "$GODOT" --path .
 
 # Run one module directly (bypasses run/main_scene)
-"$GODOT" --path . "res://4. SelectionSystem/main_selection.tscn"
+"$GODOT" --path . "res://7. JoyStick/main.tscn"
 
 # Headless validation after editing .tscn / .tres by hand — always do this
 "$GODOT" --headless --editor --quit --path . 2>&1 | grep -iE "error|invalid|uid"
@@ -38,9 +38,12 @@ Hand-edited scene/resource files are the main breakage risk in this repo: `.tscn
 | `Global/Scene/` | Shared `class_name` scripts + reusable scenes (entity, components, camera, containers) |
 | `Global/Asset/`, `Global/Theme/` | Shared art and the single UI theme |
 | `<N>. <Name>/` | One isolated demo module per folder |
-| `docs/devlog/Summary.md` | Longer per-module write-up (partly stale — modules 8 & 9 and `addons/virtual_joystick` no longer exist) |
+| `docs/devlog/Summary.md` | Longer per-module write-up, one section per module |
+| `8. SimpleAiSystem/*.md` | Module 8 has its own doc set — `HANDOFF.md` is its state-of-the-build; read it before touching that folder |
 
 Keep feature work inside the module folder it belongs to; promote something to `Global/` or `System/` only when a second module needs it.
+
+**Module 8 is a world of its own.** It does not use `Global/Scene/`'s `Entity`/`EntityComponent` — it has its own `Sim`-prefixed entity/component/def layer, a `.tres`-driven factory, and components registered by **slot** rather than by class. Its rules (slots vs stubs, one claim per entity, "each side resolves only what it alone can know") are written up in `8. SimpleAiSystem/HANDOFF.md` §3 and `HANDOFF_PSEUDOCODE.md`. Do not carry patterns between module 8 and modules 1–7 in either direction without reading those first.
 
 ## Autoloads
 

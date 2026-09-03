@@ -8,7 +8,11 @@
 > `MILESTONE_1_SPEC.md` (spec + numbers; §11 is the as-built record).
 >
 > `HANDOFF_PSEUDOCODE.md` is the companion to *this* doc: every component as
-> pseudocode, self-contained enough to paste into a chat and argue about.
+> pseudocode, self-contained enough to paste into a chat and argue about. Its §12
+> holds the **next design step as an unbuilt proposal** — read that one before
+> writing any consumable code.
+>
+> **Current as of `0b7424f` (3 Sep 2026).**
 
 ---
 
@@ -51,6 +55,18 @@ at 50. Health regenerates only while hunger is above 50, and drains while hunger
 
 **The loop closes.** `hungry → seek → pick up → eat → hungry again` runs unattended. What it still
 lacks is a planner deciding any of it — the FSM hardcodes the priority order.
+
+**The affordance layer was then refactored in three rounds** (`c3459d5` → `e133baa` → `0b7424f`),
+none of which changed what the sim does — only who knows what:
+
+| Round | Symptom | Fix |
+|---|---|---|
+| 1 | Two unlinked claim flags let one berry be won twice in a frame | One claim on the entity: `SimEntity.claim_snapshot()` |
+| 2 | `eat(target)` used an `is` ladder to re-derive what the caller already knew | `eat_snapshot(def)` + `eat_entity(target)`, one implementation |
+| 3 | `PickUpAbleComponent.take()` reasoned about the **actor's** pockets | Actor checks its own facts; target only hands itself over |
+
+Verified with 57 assertions across three throwaway headless harnesses (deleted, not committed —
+the repo has no test toolchain). Full write-up in `HANDOFF_PSEUDOCODE.md` §11.
 
 ---
 
@@ -111,14 +127,16 @@ lacks is a planner deciding any of it — the FSM hardcodes the priority order.
   defs/
     sim_component_def.gd  sim_entity_def.gd  sim_entity_catalog.gd
     sim_placement.gd  sim_world_def.gd
-    components/   sprite, movement, sensor, action, inventory, pick_up_able, brain, entity_spawner
+    components/   sprite, movement, sensor, action, inventory, pick_up_able, consumable,
+                  equipment, place_able, bar (+ health/hunger/fatigue), brain (+ brain_fsm),
+                  entity_spawner
     traits/       sim_trait.gd  sim_flock_trait.gd
     blueprints/   animal.tres  berry.tres  berry_spawner.tres
     catalog.tres  world1.tres
   ui/ui.gd / ui.tscn           top-right world stats; bottom-left tabbed entity inspector
 ```
 
-Shared code touched outside the module: `System/EventBus.gd` gained `sim_world_spawned(census)`,
+Shared code touched outside the module: `System/EventBus.gd` gained `sim_world_census(count)`,
 `sim_respawn_requested()`, `sim_entity_inspected(details)`. `Global/Theme/main_theme.tres` gained
 `TabBar` styles and the `SimLabel` / `SimTitle` / `SimPanel` / `SimVBox` / `SimHBox` type variations
 (scoped to the sim inspector; modules 1–7 untouched).
@@ -159,15 +177,30 @@ the `.tres`. Component *order* in the list is build order.
 
 ## 7. What's next
 
-Step 3 is done and the food loop closes, so the next move is **finishing step 4 — actions as data**.
+Two steps are queued, and the first is smaller than it looks.
 
-**Why that one:** the FSM currently hardcodes its priority order, and every affordance is a method
-someone knows to call. A planner cannot read either. `ActionDef {input, time, output, mode}` is what
-turns "pick up" and "eat" into things with declared preconditions and effects — which is exactly
-what step 5 needs, and the only reason to build it before GOAP rather than alongside.
+**Next — effects as data, and the mouth.** `SimConsumableDef` holds one `nourishment: float`
+and `SimHungerComponent` applies it, so a consumable that touches stamina, health or speed has
+nowhere to go, and a *bar* currently owns an *action*. The proposal: `SimEffect` /
+`SimBarEffect {bar, amount}` as authorable Resources, `SimConsumableDef.effects: Array[SimEffect]`
+replacing the float, and eating moved off Hunger onto a new `SimConsumerComponent` — the mouth —
+leaving Hunger a dumb bar again. It is cheap because `SimBarComponent.restore()` is already
+generic and bars already register under their own slots, so one effect class covers every bar
+present and future. Written out in full, with five things worth attacking, in
+`HANDOFF_PSEUDOCODE.md` §12 — **including whether it should simply be the concept doc's
+`StatOutput` instead, so actions-as-data doesn't have to invent the same idea twice.**
 
-It also unblocks the real berry bush: `HarvestableComponent` is an `ActionDef` carrying a
-`SpawnOutput`, which is what retires the `[TEMP]` `SimEntitySpawnerComponent`.
+*Not* in scope there: timed modifiers (+20% speed for 30 s). Those need a status system **and** a
+stat pipeline — `move_speed` is a plain field Movement reads every frame, with no base-vs-current
+split for a multiplier to live in. Own step, after.
+
+**Then — finishing step 4, actions as data.** The FSM hardcodes its priority order and every
+affordance is a method someone knows to call; a planner can read neither.
+`ActionDef {input, time, output, mode}` is what turns "pick up" and "eat" into things with declared
+preconditions and effects — exactly what step 5 needs, and the only reason to build it before GOAP
+rather than alongside. It also unblocks the real berry bush: `HarvestableComponent` is an
+`ActionDef` carrying a `SpawnOutput`, which is what retires the `[TEMP]`
+`SimEntitySpawnerComponent`.
 
 **Two things to settle before step 5:**
 - Does GOAP *replace* `SimBrainComponent`, or sit behind it as the planner with the current state
@@ -175,13 +208,30 @@ It also unblocks the real berry bush: `HarvestableComponent` is an `ActionDef` c
 - Actions are still hardcoded. Step 4 is not finished until `ActionDef {input, time, output, mode}`
   exists, because that is what a planner reads preconditions and effects from.
 
+**Waiting on a decision, not on code:** combat. `SimEntity.do_actions()` / `receive_actions()` are
+declared and return `[]`. The shape is settled in principle — the attacker resolves attacker facts
+(weapon, crit), the target resolves target facts (armour, dodge, graze), per §3's *each side
+resolves only what it alone can know* — but where the crit roll lives is genuinely open.
+`HANDOFF_PSEUDOCODE.md` §12b states the question.
+
 **Still open, lower priority:** items are not data. Pick-up stores a whole `SimEntityDef` snapshot,
 which works but is heavier than needed; `COLONY_SIM_CONCEPT.md` §2 specifies a small `SimItemDef`
-(id, colour, food value) instead. That would also remove the carry badge's colour lookup.
+(id, colour, food value) instead. That would also remove the carry badge's colour lookup — but note
+it collides with putting `effects` on the consumable def.
 
 ---
 
 ## 8. Open design questions
+
+**Architecture** (stated at length in `HANDOFF_PSEUDOCODE.md` §12–§13)
+- Is `SimEffect` the concept doc's `StatOutput` arriving early — and should it therefore *be* it?
+- Does data reach into the entity (`effect.apply(actor)`), or does the component switch on effect
+  type? The second is Round 2's type switch again.
+- Is the mouth a component, or should `consume` dispatch generically the way `find_with_stub()`
+  does on the target side?
+- Where does the crit roll live, given that the message between attacker and target is supposed to
+  describe an attempt and never an outcome?
+- Where does diet gating go, now that nothing gates anything?
 
 Unresolved in `COLONY_SIM_CONCEPT.md` §9, grouped by the step that needs them.
 
@@ -218,6 +268,12 @@ Unresolved in `COLONY_SIM_CONCEPT.md` §9, grouped by the step that needs them.
   `SimPickUpAbleComponent.picked_up`, `SimInventoryComponent.changed`, and
   `SimEntityCatalog.add_def()` / `has_def()`. All are declared design surface with no consumer *yet*;
   each is marked in place.
+- **Sensor queries are recomputed per call.** `get_detected()` runs up to three times per think
+  tick, rebuilding the identical list from `get_overlapping_areas()`. Not worth fixing at ~45
+  entities; at colony scale the answer is a spatial hash, not a cached list. Keeping a list
+  maintained by `area_entered` / `area_exited` was considered and rejected for now — it trades a
+  self-correcting query for hand-maintained state, and the claim layer depends on entities becoming
+  invisible to sensors *immediately*.
 - **Inspector scrollbar is Godot default grey**, not the medieval palette. Theming `VScrollBar`
   would also restyle module 7's inventory, which shares the theme.
 - No tests, no build scripts — the editor is the toolchain, per `CLAUDE.md`.
