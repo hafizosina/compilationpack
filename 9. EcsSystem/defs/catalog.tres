@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="EcsEntityCatalog" format=3 uid="uid://b6piicujlpkgy"]
+
+[ext_resource type="Resource" uid="uid://b8a35jjneujto" path="res://9. EcsSystem/defs/blueprints/crocodile.tres" id="bp_crocodile"]
+[ext_resource type="Resource" uid="uid://npkk22aleu4" path="res://9. EcsSystem/defs/blueprints/dagger.tres" id="bp_dagger"]
+[ext_resource type="Resource" uid="uid://47rm6ng56roo" path="res://9. EcsSystem/defs/blueprints/monkey.tres" id="bp_monkey"]
+[ext_resource type="Resource" uid="uid://mpxtvninay8a" path="res://9. EcsSystem/defs/blueprints/rabbit.tres" id="bp_rabbit"]
+[ext_resource type="Script" uid="uid://dj08sroj0ed18" path="res://9. EcsSystem/defs/ecs_entity_catalog.gd" id="cat"]
+[ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
+
+[resource]
+script = ExtResource("cat")
+defs = Array[ExtResource("def")]([ExtResource("bp_rabbit"), ExtResource("bp_monkey"), ExtResource("bp_crocodile"), ExtResource("bp_dagger")])

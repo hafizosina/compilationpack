@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="EcsEntityDef" format=3 uid="uid://mpxtvninay8a"]
+
+[ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="base"]
+[ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
+[ext_resource type="Script" uid="uid://c62j1k5pdptjl" path="res://9. EcsSystem/components/ecs_movement_component.gd" id="s_movement"]
+[ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
+[ext_resource type="Script" uid="uid://d4puc66j4jby" path="res://9. EcsSystem/components/ecs_wander_component.gd" id="s_wander"]
+[ext_resource type="Texture2D" uid="uid://dnk7drhg2i8xh" path="res://Global/Asset/Animal/rabbit.png" id="tex_rabbit"]
+
+[sub_resource type="Resource" id="c_sprite"]
+script = ExtResource("s_sprite")
+texture = ExtResource("tex_rabbit")
+scale_factor = 0.32
+tint = Color(0.93, 0.93, 0.9, 1)
+
+[sub_resource type="Resource" id="c_movement"]
+script = ExtResource("s_movement")
+speed = 72.0
+
+[sub_resource type="Resource" id="c_wander"]
+script = ExtResource("s_wander")
+radius = 320.0
+pause_min = 0.5
+pause_max = 3.0
+
+[resource]
+script = ExtResource("def")
+id = &"rabbit"
+display_name = "Rabbit"
+components = Array[ExtResource("base")]([SubResource("c_sprite"), SubResource("c_movement"), SubResource("c_wander")])

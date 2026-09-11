@@ -1,0 +1,211 @@
+[gd_resource type="Resource" script_class="EcsWorldDef" format=3 uid="uid://bdeakl45615lh"]
+
+[ext_resource type="Script" uid="uid://ds75i3pla1ms3" path="res://9. EcsSystem/defs/ecs_placement.gd" id="place"]
+[ext_resource type="Script" uid="uid://dbk6chycnfg7p" path="res://9. EcsSystem/defs/ecs_world_def.gd" id="world"]
+
+[sub_resource type="Resource" id="p00"]
+script = ExtResource("place")
+entity_name = &"monkey_0"
+type = &"monkey"
+position = Vector2(-90, 0)
+overrides = {
+"equipped": {
+"weapon_name": &"dagger_0"
+}
+}
+
+[sub_resource type="Resource" id="p01"]
+script = ExtResource("place")
+entity_name = &"crocodile_0"
+type = &"crocodile"
+position = Vector2(90, 0)
+
+[sub_resource type="Resource" id="p02"]
+script = ExtResource("place")
+entity_name = &"dagger_0"
+type = &"dagger"
+position = Vector2(200, 0)
+
+[sub_resource type="Resource" id="p03"]
+script = ExtResource("place")
+entity_name = &"rabbit_0"
+type = &"rabbit"
+position = Vector2(427.7, -174.6)
+
+[sub_resource type="Resource" id="p04"]
+script = ExtResource("place")
+entity_name = &"rabbit_1"
+type = &"rabbit"
+position = Vector2(752.6, 222.1)
+
+[sub_resource type="Resource" id="p05"]
+script = ExtResource("place")
+entity_name = &"rabbit_2"
+type = &"rabbit"
+position = Vector2(-27, -193.7)
+
+[sub_resource type="Resource" id="p06"]
+script = ExtResource("place")
+entity_name = &"rabbit_3"
+type = &"rabbit"
+position = Vector2(23.6, -285.7)
+
+[sub_resource type="Resource" id="p07"]
+script = ExtResource("place")
+entity_name = &"rabbit_4"
+type = &"rabbit"
+position = Vector2(-438.3, 346)
+
+[sub_resource type="Resource" id="p08"]
+script = ExtResource("place")
+entity_name = &"rabbit_5"
+type = &"rabbit"
+position = Vector2(250.4, -365.9)
+
+[sub_resource type="Resource" id="p09"]
+script = ExtResource("place")
+entity_name = &"rabbit_6"
+type = &"rabbit"
+position = Vector2(-346.1, 341.4)
+
+[sub_resource type="Resource" id="p10"]
+script = ExtResource("place")
+entity_name = &"rabbit_7"
+type = &"rabbit"
+position = Vector2(-341.7, 335.5)
+
+[sub_resource type="Resource" id="p11"]
+script = ExtResource("place")
+entity_name = &"rabbit_8"
+type = &"rabbit"
+position = Vector2(370.5, -180.2)
+
+[sub_resource type="Resource" id="p12"]
+script = ExtResource("place")
+entity_name = &"rabbit_9"
+type = &"rabbit"
+position = Vector2(412.8, 216.1)
+
+[sub_resource type="Resource" id="p13"]
+script = ExtResource("place")
+entity_name = &"rabbit_10"
+type = &"rabbit"
+position = Vector2(-407.6, -113.2)
+
+[sub_resource type="Resource" id="p14"]
+script = ExtResource("place")
+entity_name = &"rabbit_11"
+type = &"rabbit"
+position = Vector2(294.6, 77.5)
+
+[sub_resource type="Resource" id="p15"]
+script = ExtResource("place")
+entity_name = &"rabbit_12"
+type = &"rabbit"
+position = Vector2(-11.3, 268)
+
+[sub_resource type="Resource" id="p16"]
+script = ExtResource("place")
+entity_name = &"rabbit_13"
+type = &"rabbit"
+position = Vector2(-706.4, -134.5)
+
+[sub_resource type="Resource" id="p17"]
+script = ExtResource("place")
+entity_name = &"rabbit_14"
+type = &"rabbit"
+position = Vector2(-36.4, -244.9)
+
+[sub_resource type="Resource" id="p18"]
+script = ExtResource("place")
+entity_name = &"rabbit_15"
+type = &"rabbit"
+position = Vector2(-386.6, -209.5)
+
+[sub_resource type="Resource" id="p19"]
+script = ExtResource("place")
+entity_name = &"rabbit_16"
+type = &"rabbit"
+position = Vector2(-724.7, -237.3)
+
+[sub_resource type="Resource" id="p20"]
+script = ExtResource("place")
+entity_name = &"rabbit_17"
+type = &"rabbit"
+position = Vector2(293.5, -278.2)
+
+[sub_resource type="Resource" id="p21"]
+script = ExtResource("place")
+entity_name = &"rabbit_18"
+type = &"rabbit"
+position = Vector2(390.1, -51.4)
+
+[sub_resource type="Resource" id="p22"]
+script = ExtResource("place")
+entity_name = &"rabbit_19"
+type = &"rabbit"
+position = Vector2(414.6, 361.8)
+
+[sub_resource type="Resource" id="p23"]
+script = ExtResource("place")
+entity_name = &"rabbit_20"
+type = &"rabbit"
+position = Vector2(-43.3, -240.7)
+
+[sub_resource type="Resource" id="p24"]
+script = ExtResource("place")
+entity_name = &"rabbit_21"
+type = &"rabbit"
+position = Vector2(132.7, 172.6)
+
+[sub_resource type="Resource" id="p25"]
+script = ExtResource("place")
+entity_name = &"rabbit_22"
+type = &"rabbit"
+position = Vector2(-220.9, 334.6)
+
+[sub_resource type="Resource" id="p26"]
+script = ExtResource("place")
+entity_name = &"rabbit_23"
+type = &"rabbit"
+position = Vector2(159.8, -323.9)
+
+[sub_resource type="Resource" id="p27"]
+script = ExtResource("place")
+entity_name = &"rabbit_24"
+type = &"rabbit"
+position = Vector2(-561.9, 257.1)
+
+[sub_resource type="Resource" id="p28"]
+script = ExtResource("place")
+entity_name = &"rabbit_25"
+type = &"rabbit"
+position = Vector2(714.3, 55.8)
+
+[sub_resource type="Resource" id="p29"]
+script = ExtResource("place")
+entity_name = &"rabbit_26"
+type = &"rabbit"
+position = Vector2(-12, -317)
+
+[sub_resource type="Resource" id="p30"]
+script = ExtResource("place")
+entity_name = &"rabbit_27"
+type = &"rabbit"
+position = Vector2(-243.2, 269.5)
+
+[sub_resource type="Resource" id="p31"]
+script = ExtResource("place")
+entity_name = &"rabbit_28"
+type = &"rabbit"
+position = Vector2(-509, -217.9)
+
+[sub_resource type="Resource" id="p32"]
+script = ExtResource("place")
+entity_name = &"rabbit_29"
+type = &"rabbit"
+position = Vector2(186.3, 330.1)
+
+[resource]
+script = ExtResource("world")
+entries = Array[ExtResource("place")]([SubResource("p00"), SubResource("p01"), SubResource("p02"), SubResource("p03"), SubResource("p04"), SubResource("p05"), SubResource("p06"), SubResource("p07"), SubResource("p08"), SubResource("p09"), SubResource("p10"), SubResource("p11"), SubResource("p12"), SubResource("p13"), SubResource("p14"), SubResource("p15"), SubResource("p16"), SubResource("p17"), SubResource("p18"), SubResource("p19"), SubResource("p20"), SubResource("p21"), SubResource("p22"), SubResource("p23"), SubResource("p24"), SubResource("p25"), SubResource("p26"), SubResource("p27"), SubResource("p28"), SubResource("p29"), SubResource("p30"), SubResource("p31"), SubResource("p32")])
