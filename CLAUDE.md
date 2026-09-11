@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**CompilationPack** — a Godot **4.7** (GDScript) project that collects self-contained game-system demos in numbered folders. Mobile renderer, 1612×720 viewport, `sensor_landscape`, Android export target. Main scene is `res://8. SimpleAiSystem/main.tscn`.
+**CompilationPack** — a Godot **4.7** (GDScript) project that collects self-contained game-system demos in numbered folders. Mobile renderer, 1612×720 viewport, `sensor_landscape`, Android export target. Main scene is `res://9. EcsSystem/main.tscn`; module 8 is the behavioural reference it is being rebuilt against.
 
 There are no tests and no build scripts; the editor is the tool chain.
 
@@ -19,6 +19,7 @@ GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.
 "$GODOT" --path .
 
 # Run one module directly (bypasses run/main_scene)
+"$GODOT" --path . "res://8. SimpleAiSystem/main.tscn"
 "$GODOT" --path . "res://7. JoyStick/main.tscn"
 
 # Headless validation after editing .tscn / .tres by hand — always do this
@@ -40,10 +41,25 @@ Hand-edited scene/resource files are the main breakage risk in this repo: `.tscn
 | `<N>. <Name>/` | One isolated demo module per folder |
 | `docs/devlog/Summary.md` | Longer per-module write-up, one section per module |
 | `8. SimpleAiSystem/*.md` | Module 8 has its own doc set — `HANDOFF.md` is its state-of-the-build; read it before touching that folder |
+| `9. EcsSystem/*.md` | Module 9 likewise — `HANDOFF.md` is its state-of-the-build, `ECS_REFACTOR_PLAN.md` the plan it follows |
 
 Keep feature work inside the module folder it belongs to; promote something to `Global/` or `System/` only when a second module needs it.
 
 **Module 8 is a world of its own.** It does not use `Global/Scene/`'s `Entity`/`EntityComponent` — it has its own `Sim`-prefixed entity/component/def layer, a `.tres`-driven factory, and components registered by **slot** rather than by class. Its rules (slots vs stubs, one claim per entity, "each side resolves only what it alone can know") are written up in `8. SimpleAiSystem/HANDOFF.md` §3 and `HANDOFF_PSEUDOCODE.md`. Do not carry patterns between module 8 and modules 1–7 in either direction without reading those first.
+
+**Module 9 is a hand-rolled ECS, and shares nothing with module 8 but its subject.**
+Entities are integer ids in an `EcsWorld`, components are field-only Resources with no
+methods, and every behaviour is an `EcsSystem` the scheduler runs in order; the
+`Sprite2D`s under `World/Entities` are a view the render system writes, not the entities.
+Three rules are non-negotiable there: components hold data only, systems hold all
+behaviour and never call each other, and nothing outside a system mutates component data
+(even the debug keys queue a command for `EcsCommandSystem`). Queries key on the script
+object — `world.query([EcsPositionComponent])` — never on a string. It is at plan steps
+0–2 plus an observability layer (selection, reflective inspector, census, HUD) the plan
+never listed; steps 3–7 are not started. Read `9. EcsSystem/HANDOFF.md` before touching
+that folder. Module 9 is now the main scene, ahead of the plan, which held that switch
+until step 6 — module 8 is untouched and remains the behavioural reference, so do not
+delete or refactor it.
 
 ## Autoloads
 

@@ -2,7 +2,7 @@
 
 **Engine:** Godot 4.7 | **Renderer:** Mobile | **Viewport:** 1612 × 720 | **Target:** Android
 
-**Main scene:** `8. SimpleAiSystem/main.tscn`
+**Main scene:** `9. EcsSystem/main.tscn` — module 8 remains the behavioural reference it is being rebuilt against.
 
 A numbered collection of self-contained game-system demos written in GDScript. Each folder is an isolated experiment; shared infrastructure lives in `System/` and `Global/`.
 
@@ -83,7 +83,7 @@ Mobile touch controls driving a full HUD — the module that grew into the proje
 ---
 
 ### 8. SimpleAiSystem
-A **data-driven node-composition ECS foundation** for a colony sim — the largest module, and the current main scene. Two pillars: an **EntityFactory** that assembles entities from `.tres` blueprints (new content = a new resource, never new code) and a **GOAP AI** to come.
+A **data-driven node-composition ECS foundation** for a colony sim — the largest module, and the main scene until module 9 took over. Two pillars: an **EntityFactory** that assembles entities from `.tres` blueprints (new content = a new resource, never new code) and a **GOAP AI** to come.
 
 Four rules hold everywhere: everything is an Entity · what a thing *is* = which components it has · capability = component presence · content is data.
 
@@ -102,6 +102,53 @@ Its own docs live in the folder: `HANDOFF.md` (state of the build) · `HANDOFF_P
 
 ---
 
+### 9. EcsSystem
+A **hand-rolled ECS** — the greenfield rewrite of module 8's foundation, and the current main scene. It shares nothing with module 8 but its subject: module 8 stays running, untouched, as the behavioural reference to diff against rather than guess at.
+
+**Why the rewrite.** Node composition was fighting the design. A stateful wielded item (a weapon with durability) and the hand-held rule "each side resolves only what it alone can know" were *manufactured* problems — the rewrite's whole job is to show ECS dissolves them structurally. It is explicitly **not** a performance exercise; at 5–40 entities the cache wins are irrelevant.
+
+**The core is ~100 lines.** Five scripts in `ecs/`: `EcsWorld` (ids, component tables, the query engine, singletons, frame events), `EcsComponent` (field-only Resource), `EcsSystem` (`run(world, delta)`), `EcsScheduler` (ordered list, drops the frame's events), `EcsEvent`. Storage is `{ Script : { entity_id : EcsComponent } }` and a query intersects the requested tables, driving the scan from the rarest. **Queries key on the script object** — `world.query([EcsPositionComponent])` — so a typo is a parse error, not a silently empty result. `EcsWorld` is 166 lines with docs, 101 without; the plan's kill criterion was "abandon past ~150".
+
+Three rules, and each is structural rather than remembered:
+
+- **Components hold data only.** The single method on `EcsComponent` is `key()`, returning a constant — identity, not behaviour.
+- **Systems hold all behaviour**, and never call each other. They coordinate through components, frame events and run order alone.
+- **Nothing outside a system mutates component data.** This holds even for input: a click writes a pick request to an `EcsSelectionComponent` singleton and a debug key appends to an `EcsCommandsComponent` singleton, which `EcsSelectionSystem` and `EcsCommandSystem` apply next frame.
+
+**Entities are ids; nodes are views.** `EcsRenderSystem` owns a `Sprite2D` pool under `World/Entities`, keyed by entity id, created when an id starts matching `[Position, Sprite]` and freed when it stops. Data flows one way, world → node; nothing reads back off a node, which is why the whole simulation runs headless. `EcsDeathSystem` darkens the *sprite component's* tint, not a node's modulate — appearance is a fact about the entity.
+
+**The data layer drops a whole layer** versus module 8. Module 8 needed a `SimComponentDef` subclass per component, because a blueprint could not hold a live component. Here a component is already pure data, so `EcsEntityDef.components` holds the components themselves and `EcsEntityFactory` (85 lines) copies them — the parallel `defs/components/*.gd` hierarchy vanished the moment behaviour left the components. Authored relationships point at **names**, not ids: `monkey_0`'s placement overrides `equipped.weapon_name` to `&"dagger_0"` and `EcsEquipSystem` resolves it against the name table once after spawning.
+
+**The pipeline**, in scheduler order — decide, act, resolve, draw, report:
+
+```
+command > equip > wander > movement > weapon_carry > aggression > attack >
+crit > damage > durability > death > selection > render > census > inspect
+```
+
+**The pain case landed.** The weapon is an entity id with a durability row, not a de-noded resource; `EcsEquippedComponent{weapon_id}` is the whole of "wielding". Each system reads only what it alone can resolve — `EcsAttackSystem` the attacker's damage, `EcsDamageSystem` the target's armour, `EcsDurabilitySystem` the weapon's wear — so module 8's hand-held discipline is now just the shape of the queries. Verified headless:
+
+- **Armour was added to a live entity and the attack code did not change** — it cannot, `EcsAttackSystem` has no way to name armour.
+- **Crits were added by writing one system and appending one line to the scheduler.** Neither attack nor damage mentions crits.
+- **A broken weapon is not a branch.** Durability strips the weapon's `EcsDamageComponent`; attack finds nothing and falls back to fists on its own. There is no `if weapon.broken` anywhere.
+- **"Attackable" is not a flag** — it is the target query asking for `EcsHealthComponent`. The 30 wandering rabbits have none, so they are invisible to aggression with no faction system and no layer mask.
+
+**An observability layer** landed on top, which the plan never listed. `EcsSelectionSystem`, `EcsInspectSystem` (5 Hz snapshot), `EcsCensusSystem` (2 Hz count) and `ui/ui.tscn`. Two of them are evidence rather than scaffolding: **picking is a query, not a physics hit** (a distance test over `EcsPositionComponent`, no second set of hitboxes), and **the inspector's tabs are built by reflection** — module 8 needed a hand-written `describe()` per component, while `EcsInspectSystem` reads `PROPERTY_USAGE_SCRIPT_VARIABLE` off `get_property_list()`. **Nothing in that file names a component type**, so a new component kind gets a tab and neither file changes. The panel holds no reference to an entity, the world or the scheduler — everything arrives on the `EventBus` already formatted.
+
+**Deliberately a placeholder:** `EcsAggressionSystem` is the step-6 brain seat — "swing at the nearest attackable thing in reach, on a timer". It consults no weapon, armour or durability and cannot tell whether the swing will land; all it writes is an `EcsAttackIntentComponent`. An FSM and then a planner write the same component, so nothing downstream changes.
+
+**What runs:** 33 entities from `world1.tres` — a monkey wielding a dagger, a crocodile, and 30 rabbits drifting in the arena.
+
+Its own docs live in the folder: `HANDOFF.md` (state of the build) · `ECS_REFACTOR_PLAN.md` (the plan it follows, with the kill criteria).
+
+**Key files:** `9. EcsSystem/ecs/ecs_world.gd`, `main.gd`, `systems/ecs_attack_system.gd`, `systems/ecs_inspect_system.gd`
+
+**Controls:** left-click an entity to inspect it and see its reach · **F2** toggle the crit stage in/out of the pipeline · **F3** toggle the crocodile's armour · **F5** rebuild the world from data.
+
+*(F2 and F3 are the acceptance test made pressable.)*
+
+---
+
 ## Shared Infrastructure
 
 ### Autoloads (`project.godot`)
@@ -111,7 +158,7 @@ Its own docs live in the folder: `HANDOFF.md` (state of the build) · `HANDOFF_P
 | `Constant` | `System/Constant.gd` | `DEBUG: bool = true` flag |
 | `Core` | `System/Core.gd` | Quit shortcut (Ctrl+Q debug / Escape fallback) |
 | `Global` | `System/Global.gd` | Camera state (position + zoom) |
-| `EventBus` | `System/EventBus.gd` | Signal bus — `control_dir`, `health/stamina/mana_change`, `inventory_changed`, `sim_world_census`, `sim_respawn_requested`, `sim_entity_inspected` |
+| `EventBus` | `System/EventBus.gd` | Signal bus — `control_dir`, `health/stamina/mana_change`, `inventory_changed`, module 8's `sim_world_census` / `sim_respawn_requested` / `sim_entity_inspected`, module 9's `ecs_world_census` / `ecs_respawn_requested` / `ecs_entity_inspected` / `ecs_pipeline_changed` |
 | `Utils` | `System/Utils.gd` | `screen_to_world_position()`, `zoom_scale_ratio()` |
 | `GlobalAstar2` | `3. ControlPathFinding/global_astar2.gd` | Travel-cost overlay toggle signal |
 | `GraphDb` | `6. GraphDb/GraphDb.gd` | In-memory database singleton |
@@ -124,6 +171,8 @@ Entity (master_entity.gd)       — base Node2D with `size: int`
     ├── SelectAbleComponent     — drag-select integration
     └── SenseComponent          — proximity sense area
 ```
+
+This is modules 1–7 only. Module 8 has its own `Sim`-prefixed entity/component layer registered by **slot**, and module 9 has no entity nodes at all — an entity there is an integer id and components are field-only Resources. Do not carry patterns between the three without reading the module's own `HANDOFF.md`.
 
 ### Global Camera (`Global/Scene/camera_2d.tscn`)
 
@@ -139,7 +188,7 @@ Reusable Camera2D scene with:
 
 ### Theme
 
-All widget styling goes through the single theme `Global/Theme/main_theme.tres`, attached to a scene's root Control so it cascades — no `theme_override_*` on individual nodes. Medieval palette (parchment / ink / wood / brass), with `RoundButton` and `ItemSlot` type variations and the `Sim*` variations used by module 8's inspector.
+All widget styling goes through the single theme `Global/Theme/main_theme.tres`, attached to a scene's root Control so it cascades — no `theme_override_*` on individual nodes. Medieval palette (parchment / ink / wood / brass), with `RoundButton` and `ItemSlot` type variations and the `Sim*` variations (`SimPanel`, `SimTitle`, `SimLabel`, `SimHBox`, `SimVBox`) used by the inspectors in modules 8 **and** 9 — module 9 reuses them as-is rather than adding an `Ecs*` set.
 
 ---
 
@@ -166,7 +215,7 @@ All widget styling goes through the single theme `Global/Theme/main_theme.tres`,
 
 ---
 
-## Development Status (as of 2026-09-03)
+## Development Status (as of 2026-09-11)
 
 | Module | Status |
 |--------|--------|
@@ -177,4 +226,5 @@ All widget styling goes through the single theme `Global/Theme/main_theme.tres`,
 | 5. Boid | Scaffold only — flocking WIP (the working version lives in module 8's `SimFlockTrait`) |
 | 6. GraphDb | Complete |
 | 7. JoyStick | Complete — mobile HUD, inventory, item resources |
-| 8. SimpleAiSystem | **Active.** Factory + components + FSM brain done; food loop closes. GOAP and actions-as-data next |
+| 8. SimpleAiSystem | Complete for its milestone, and **kept as the behavioural reference** for module 9. Factory + components + FSM brain done; food loop closes. No longer the main scene |
+| 9. EcsSystem | **Active.** Hand-rolled ECS core, data-driven factory and the weapon/durability/attack pipeline all land (plan steps 0–2), plus an unplanned observability layer. Now the main scene. Steps 3–7 — inventory, bars, sensors, FSM brain, GOAP — not started |

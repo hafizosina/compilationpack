@@ -287,8 +287,8 @@ The Godot editor is installed via Steam and is **not on PATH**:
 ```bash
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 
-# Run (run/main_scene already points at module 8)
-"$GODOT" --path .
+# Run (run/main_scene now points at module 9 — name this module explicitly)
+"$GODOT" --path . "res://8. SimpleAiSystem/main.tscn"
 
 # Headless validation — ALWAYS after hand-editing .tscn / .tres
 "$GODOT" --headless --editor --quit --path . 2>&1 | grep -iE "error|invalid|uid"
