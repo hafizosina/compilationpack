@@ -24,8 +24,8 @@ func _ready() -> void:
 	_area = _build_area(radius, "SensorArea")
 
 ## Every other entity currently inside the radius. Never includes its own owner.
-func get_detected() -> Array:
-	var found: Array = []
+func get_detected() -> Array[SimEntity]:
+	var found: Array[SimEntity] = []
 	if _area == null:
 		return found
 	for presence in _area.get_overlapping_areas():
@@ -40,7 +40,7 @@ func get_detected() -> Array:
 func nearest_with(wanted_slot: StringName) -> SimEntity:
 	var best: SimEntity = null
 	var best_distance := INF
-	for candidate in get_detected():
+	for candidate :SimEntity in get_detected():
 		if not candidate.has_component(wanted_slot):
 			continue
 		var distance: float = entity.global_position.distance_squared_to(candidate.global_position)
