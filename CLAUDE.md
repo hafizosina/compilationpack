@@ -52,14 +52,41 @@ Entities are integer ids in an `EcsWorld`, components are field-only Resources w
 methods, and every behaviour is an `EcsSystem` the scheduler runs in order; the
 `Sprite2D`s under `World/Entities` are a view the render system writes, not the entities.
 Three rules are non-negotiable there: components hold data only, systems hold all
-behaviour and never call each other, and nothing outside a system mutates component data
-(even the debug keys queue a command for `EcsCommandSystem`). Queries key on the script
-object — `world.query([EcsPositionComponent])` — never on a string. It is at plan steps
-0–2 plus an observability layer (selection, reflective inspector, census, HUD) the plan
-never listed; steps 3–7 are not started. Read `9. EcsSystem/HANDOFF.md` before touching
-that folder. Module 9 is now the main scene, ahead of the plan, which held that switch
-until step 6 — module 8 is untouched and remains the behavioural reference, so do not
-delete or refactor it.
+behaviour and never call each other, and nothing outside a system mutates component data.
+Queries key on the script object — `world.query([EcsPositionComponent])` — never on a
+string.
+
+**It is deliberately stripped to a bare-minimum core**: 6 components, 5 systems
+(`low_brain > movement > collision > render > debug`, where `EcsLowBrainSystem` is named for its
+rank in the plan's decision ladder, not for the wandering it happens to do), and a world
+of 10 entities in 2 types (5 rabbits, 5 monkeys — same component list, different authored
+values). `EcsDebugSystem` is a pure
+reader feeding one dumb view, `EcsDebugOverlay`, which annotates each entity in world
+space (name, position, velocity vector and heading, dashed line to its destination).
+`EcsShapeComponent` is the entity's body — one radius, **data not a
+CollisionShape2D**, so the sim still runs with no scene tree. Collision is **soft**:
+`EcsCollisionSystem` runs after movement and pushes overlapping pairs apart rather than
+vetoing the move, which is what lets any future position-writer be corrected for free.
+It finds the pairs with a pool of `Area2D` under `World/Bodies` — **the one deliberate
+exception to "nothing reads back off a node"**: components stay the only truth, the pool
+is a derived index rebuilt every tick, and the only thing read back is which pairs are
+near each other, never where anything is. Do not widen that exception. The pipeline
+therefore runs in **`_physics_process`** (fixed timestep; the overlap list refreshes once
+per physics step, costing one tick of lag). The overlay is **drawn via `_draw()`, not built from Controls**, which is why it sits outside the
+theme rather than carrying `theme_override_*`. **F1** toggles it. There is no screen-space
+HUD and no `EcsDebugPanel` — that was tried and removed; debug output belongs on the
+entity it describes.
+
+The plan's step-2 combat pipeline and an unplanned observability layer (selection,
+reflective inspector, census, themed HUD) were built, proved out, and then cut back out
+so the flow reads end to end — both are in git at `928b9d1` and `9. EcsSystem/HANDOFF.md` §6 says
+what was removed and how to restore it. **Do not re-add breadth to module 9 without
+being asked**; the small size is the point. Steps 3–7 are not started, and several of
+them assume the cut combat layer.
+
+Read `9. EcsSystem/HANDOFF.md` before touching that folder. Module 9 is the main scene,
+ahead of the plan, which held that switch until step 6 — module 8 is untouched and
+remains the behavioural reference, so do not delete or refactor it.
 
 ## Autoloads
 

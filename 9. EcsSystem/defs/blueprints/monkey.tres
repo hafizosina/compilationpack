@@ -2,38 +2,32 @@
 
 [ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="base"]
 [ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
-[ext_resource type="Script" uid="uid://b8syjlmxj5r1y" path="res://9. EcsSystem/components/ecs_aggression_component.gd" id="s_aggression"]
-[ext_resource type="Script" uid="uid://bmlf5cyytfvko" path="res://9. EcsSystem/components/ecs_crit_chance_component.gd" id="s_crit"]
-[ext_resource type="Script" uid="uid://cnur0n8fpc8l" path="res://9. EcsSystem/components/ecs_damage_component.gd" id="s_damage"]
-[ext_resource type="Script" uid="uid://dgkog5hpdeiap" path="res://9. EcsSystem/components/ecs_equipped_component.gd" id="s_equipped"]
-[ext_resource type="Script" uid="uid://bw7ef3iaa545l" path="res://9. EcsSystem/components/ecs_health_component.gd" id="s_health"]
+[ext_resource type="Script" uid="uid://c62j1k5pdptjl" path="res://9. EcsSystem/components/ecs_movement_component.gd" id="s_movement"]
+[ext_resource type="Script" uid="uid://dyef4lkp0cmoq" path="res://9. EcsSystem/components/ecs_shape_component.gd" id="s_shape"]
 [ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
+[ext_resource type="Script" uid="uid://d4puc66j4jby" path="res://9. EcsSystem/components/ecs_low_brain_component.gd" id="s_brain"]
 [ext_resource type="Texture2D" uid="uid://dbllxupj5653t" path="res://Global/Asset/Animal/monkey.png" id="tex_monkey"]
+
+[sub_resource type="Resource" id="c_shape"]
+script = ExtResource("s_shape")
+radius = 36.0
 
 [sub_resource type="Resource" id="c_sprite"]
 script = ExtResource("s_sprite")
 texture = ExtResource("tex_monkey")
 
-[sub_resource type="Resource" id="c_health"]
-script = ExtResource("s_health")
+[sub_resource type="Resource" id="c_movement"]
+script = ExtResource("s_movement")
+speed = 130.0
 
-[sub_resource type="Resource" id="c_damage"]
-script = ExtResource("s_damage")
-amount = 3.0
-
-[sub_resource type="Resource" id="c_aggression"]
-script = ExtResource("s_aggression")
-interval = 1.1
-
-[sub_resource type="Resource" id="c_crit"]
-script = ExtResource("s_crit")
-
-[sub_resource type="Resource" id="c_equipped"]
-script = ExtResource("s_equipped")
-offset = Vector2(34, 6)
+[sub_resource type="Resource" id="c_brain"]
+script = ExtResource("s_brain")
+radius = 420.0
+pause_min = 0.2
+pause_max = 1.2
 
 [resource]
 script = ExtResource("def")
 id = &"monkey"
 display_name = "Monkey"
-components = Array[ExtResource("base")]([SubResource("c_sprite"), SubResource("c_health"), SubResource("c_damage"), SubResource("c_aggression"), SubResource("c_crit"), SubResource("c_equipped")])
+components = Array[ExtResource("base")]([SubResource("c_shape"), SubResource("c_sprite"), SubResource("c_movement"), SubResource("c_brain")])

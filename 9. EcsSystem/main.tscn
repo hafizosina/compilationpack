@@ -4,8 +4,7 @@
 [ext_resource type="Resource" uid="uid://b6piicujlpkgy" path="res://9. EcsSystem/defs/catalog.tres" id="2_catalog"]
 [ext_resource type="Resource" uid="uid://bdeakl45615lh" path="res://9. EcsSystem/defs/world1.tres" id="3_world"]
 [ext_resource type="PackedScene" uid="uid://gctl0rjtf4op" path="res://Global/Scene/camera_2d.tscn" id="4_camera"]
-[ext_resource type="PackedScene" uid="uid://becsui0000001" path="res://9. EcsSystem/ui/ui.tscn" id="5_ui"]
-[ext_resource type="Script" uid="uid://ds334ygkjgkce" path="res://9. EcsSystem/ecs_selection_marker.gd" id="6_marker"]
+[ext_resource type="Script" uid="uid://b0j8lemo4ufcc" path="res://9. EcsSystem/ecs_debug_overlay.gd" id="5_overlay"]
 
 [node name="Main" type="Node2D" unique_id=1531045582]
 script = ExtResource("1_main")
@@ -15,17 +14,19 @@ world_def = ExtResource("3_world")
 [node name="Ground" type="Polygon2D" parent="." unique_id=547884703]
 z_index = -10
 color = Color(0.21, 0.25, 0.19, 1)
-polygon = PackedVector2Array(-800, -420, 800, -420, 800, 420, -800, 420)
+polygon = PackedVector2Array(-1600, -840, 1600, -840, 1600, 840, -1600, 840)
 
 [node name="World" type="Node2D" parent="." unique_id=164167084]
 
 [node name="Entities" type="Node2D" parent="World" unique_id=594757665]
 
-[node name="SelectionMarker" type="Node2D" parent="World" unique_id=272747656]
-script = ExtResource("6_marker")
+[node name="Bodies" type="Node2D" parent="World" unique_id=330118842]
+
+[node name="DebugOverlay" type="Node2D" parent="World" unique_id=811245903]
+z_index = 100
+script = ExtResource("5_overlay")
 
 [node name="Camera2D" parent="." unique_id=1715917671 instance=ExtResource("4_camera")]
-zoom_value = 0.8
+zoom_value = 0.4
+min_zoom = 0.3
 pan_speed = 3.0
-
-[node name="UI" parent="." unique_id=1500420645 instance=ExtResource("5_ui")]

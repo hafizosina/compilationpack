@@ -18,10 +18,8 @@ extends RefCounted
 const NO_ENTITY: int = 0
 
 var _next_id: int = 1
-var _alive: Dictionary = {}       # entity_id -> true
-var _store: Dictionary = {}       # Script -> { entity_id -> EcsComponent }
-var _singletons: Dictionary = {}  # Script -> EcsComponent
-var _events: Dictionary = {}      # Script -> Array[EcsEvent]
+var _alive: Dictionary = {}  # entity_id -> true
+var _store: Dictionary = {}  # Script -> { entity_id -> EcsComponent }
 
 # --- entities ---------------------------------------------------------------
 
@@ -32,8 +30,8 @@ func create_entity() -> int:
 	return id
 
 ## Removes the entity and every component filed against it. Ids are never
-## reused, so a stale id held by some other component's relationship field goes
-## permanently false through is_alive() instead of aliasing a new entity.
+## reused, so a stale id held somewhere else goes permanently false through
+## is_alive() instead of aliasing a new entity.
 func destroy_entity(id: int) -> void:
 	if not _alive.erase(id):
 		return
@@ -80,8 +78,11 @@ func remove(id: int, type: Script) -> void:
 ## array — safe to mutate the world while iterating the result.
 ##
 ## The scan is driven from the rarest of the requested types, so asking for
-## [Position, AttackIntent] costs the size of the intent table rather than the
-## size of the world.
+## [Position, Wander] costs the size of the wander table rather than the size
+## of the world.
+##
+## Queries key on the script object, never a string: `query([EcsPositionComponent])`
+## means a typo is a parse error instead of a silently empty result.
 func query(include: Array, exclude: Array = []) -> Array[int]:
 	var result: Array[int] = []
 	if include.is_empty():
@@ -112,55 +113,3 @@ func query(include: Array, exclude: Array = []) -> Array[int]:
 		if matched:
 			result.append(id)
 	return result
-
-## Every component filed against `id`, in the order their types first appeared
-## in the world. Exists for the inspector, which has to show an entity without
-## knowing what it is; ordinary systems ask for the components they want by
-## type and never enumerate.
-func components_of(id: int) -> Array[EcsComponent]:
-	var found: Array[EcsComponent] = []
-	for table: Dictionary in _store.values():
-		var component: EcsComponent = table.get(id)
-		if component != null:
-			found.append(component)
-	return found
-
-## How many entities carry `type`. Cheap — it is one table's size.
-func count(type: Script) -> int:
-	var table: Dictionary = _store.get(type, {})
-	return table.size()
-
-# --- singletons -------------------------------------------------------------
-
-## World-level state that belongs to no entity — the pending-command queue, and
-## later the spatial index or the tuning block.
-func add_singleton(component: EcsComponent) -> EcsComponent:
-	if component == null:
-		push_error("EcsWorld: cannot add a null singleton")
-		return null
-	_singletons[component.get_script()] = component
-	return component
-
-func get_singleton(type: Script) -> EcsComponent:
-	return _singletons.get(type)
-
-# --- events -----------------------------------------------------------------
-
-## Records an event for this frame. Every system scheduled after the emitter
-## sees it; nothing sees it next frame.
-func emit_event(event: EcsEvent) -> void:
-	if event == null:
-		return
-	var type: Script = event.get_script()
-	if not _events.has(type):
-		_events[type] = []
-	(_events[type] as Array).append(event)
-
-## This frame's events of one kind. The array is live — the crit system scaling
-## an event's amount in place is exactly the intended use.
-func events(type: Script) -> Array:
-	return _events.get(type, [])
-
-## Called by the scheduler at the end of every frame. Systems never call it.
-func clear_events() -> void:
-	_events.clear()

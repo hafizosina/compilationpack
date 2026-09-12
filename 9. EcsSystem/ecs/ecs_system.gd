@@ -2,14 +2,9 @@ class_name EcsSystem
 extends RefCounted
 
 ## Base for every system. Systems hold ALL behaviour: a system reads components
-## through `world.query()`, writes components and events, and never calls
-## another system. Coordination happens through shared components, events and
-## the scheduler's run order — nothing else.
-
-## Scheduler skips a disabled system. Used to demonstrate that a whole stage
-## (crits, say) can be pulled out of the pipeline without any other system
-## noticing.
-var enabled: bool = true
+## through `world.query()`, writes components, and never calls another system.
+## Coordination happens through shared components and the scheduler's run order
+## — nothing else.
 
 ## Short name for debug listings.
 func label() -> StringName:

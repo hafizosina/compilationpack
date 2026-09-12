@@ -16,7 +16,7 @@ const EDGE_MARGIN: float = 48.0
 ## Extents of the playable area, in global pixels. main.gd overwrites this from
 ## its exported `arena` rect at startup, so moving the ground plate moves the
 ## wander bounds with it and there is no constant to keep in sync.
-static var world_bounds: Rect2 = Rect2(-800.0, -420.0, 1600.0, 840.0)
+static var world_bounds: Rect2 = Rect2(-1600.0, -840.0, 3200.0, 1680.0)
 
 ## A point within `radius` of `origin`, kept inside the arena. Used by the
 ## wander system; kept here so the bounds rule has one home.

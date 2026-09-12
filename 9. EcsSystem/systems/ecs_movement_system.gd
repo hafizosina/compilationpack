@@ -9,7 +9,7 @@ func label() -> StringName:
 	return &"movement"
 
 func run(world: EcsWorld, delta: float) -> void:
-	for id in world.query([EcsPositionComponent, EcsMovementComponent], [EcsDeadComponent]):
+	for id in world.query([EcsPositionComponent, EcsMovementComponent]):
 		var move := world.get_component(id, EcsMovementComponent) as EcsMovementComponent
 		if not move.has_destination:
 			move.velocity = Vector2.ZERO

@@ -24,22 +24,3 @@ signal sim_respawn_requested()
 ## being inspected, or an empty dictionary when the selection is cleared. The
 ## inspector panel rebuilds from it and never touches the entity itself.
 signal sim_entity_inspected(details: Dictionary)
-
-## Emitted periodically by module 9's EcsCensusSystem with the number of
-## entities alive in its EcsWorld. Pushed rather than polled, so the stats panel
-## never reaches into the world.
-signal ecs_world_census(count: int)
-
-## Emitted by module 9's stats panel to ask for the world to be rebuilt from its
-## EcsWorldDef. Module 9's main scene performs the respawn.
-signal ecs_respawn_requested()
-
-## Emitted by module 9's EcsInspectSystem with a snapshot of the selected
-## entity, or an empty dictionary when nothing is selected. The snapshot is
-## built by reflecting over whatever components the entity happens to carry, so
-## a new component kind gets an inspector tab with nothing rewired.
-signal ecs_entity_inspected(details: Dictionary)
-
-## Emitted by module 9's main scene whenever the system pipeline is built or a
-## stage is switched on or off. Carries the run order, already formatted.
-signal ecs_pipeline_changed(text: String)

@@ -3,14 +3,12 @@
 Greenfield hand-rolled ECS, built beside `8. SimpleAiSystem` per `ECS_REFACTOR_PLAN.md`.
 Module 8 keeps running untouched as the behavioural reference.
 
-**Steps 0–2 of the plan's port order are done, plus an observability layer the plan
-never listed** (§5 below). Steps 3–7 are not started.
+**The module has been deliberately stripped to its bare minimum** — one world, one
+scheduler, four systems — so the flow reads end to end without hunting. What was cut is
+listed in §6 and is recoverable from git; nothing was lost, only set aside.
 
-`project.godot`'s main scene is **now module 9** (`uid://daecsmain0001`), so a plain run
-opens this module. That is ahead of the plan, which held the switch until module 9 had
-reproduced module 8's loop at step 6 — the swap was made because module 9 is what is
-being worked on, not because it is finished. Module 8 is untouched and still the
-behavioural reference; run either directly:
+`project.godot`'s main scene is module 9 (`uid://daecsmain0001`), so a plain run opens it.
+Run either module directly:
 
 ```bash
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
@@ -18,201 +16,165 @@ GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.
 "$GODOT" --path . "res://8. SimpleAiSystem/main.tscn"
 ```
 
-Two things outside this folder belong to module 9 and would be lost if the folder were
-moved alone: the main-scene line in `project.godot`, and four `ecs_*` signals in
-`System/EventBus.gd` (`ecs_world_census`, `ecs_respawn_requested`,
-`ecs_entity_inspected`, `ecs_pipeline_changed`).
+One thing outside this folder belongs to module 9 and would be lost if the folder were
+moved alone: the main-scene line in `project.godot`. (The four `ecs_*` signals that used
+to live in `System/EventBus.gd` went with the observability layer — module 9 now touches
+the `EventBus` not at all.)
 
 ---
 
-## 1. The core (~100 lines of code)
-
-Five scripts in `ecs/`:
-
-| Script | Role |
-|---|---|
-| `ecs_world.gd` | entity ids, component tables, the query engine, singletons, frame events |
-| `ecs_component.gd` | base: `extends Resource`, fields only |
-| `ecs_system.gd` | base: `run(world, delta)` |
-| `ecs_scheduler.gd` | ordered system list; `run_all()` then drops the frame's events |
-| `ecs_event.gd` | base for transient inter-system records |
-
-Storage is `{ Script : { entity_id : EcsComponent } }` and a query intersects the
-tables it was asked for, driving the scan from the rarest one. **Queries key on the
-script object, not a string** — `world.query([EcsPositionComponent])`, so a typo is a
-parse error rather than a silently empty result.
-
-`EcsWorld` is 166 lines with docs, **101 without**. The plan's kill criterion was
-"abandon if the query layer passes ~150 lines"; it is not close.
-
-Two API notes:
-
-- The read accessor is **`get_component()`**, not `get()` — `Object.get(property)`
-  already exists and GDScript will not let it be redefined.
-- Entity id **0 is `EcsWorld.NO_ENTITY`**, so an unresolved relationship field reads
-  false through `is_alive()` with no null dance. Ids are never reused, so a stale id
-  goes permanently false instead of aliasing a new entity.
-
-`components_of()` and `count()` exist for the inspector and the stats panel — an
-enumeration accessor for the one reader that has to show an entity without knowing what
-it is. Ordinary systems ask for the components they want by type and never enumerate.
-
-### The rules, and where each is enforced
-
-- **Components hold data only.** The single method on `EcsComponent` is `key()`, which
-  returns a constant — identity, not behaviour. It exists so a `.tres` override block
-  and the HUD can name a component; storage never uses it.
-- **Systems hold all behaviour**, and never call each other. They coordinate through
-  components, frame events and run order.
-- **Nothing outside a system mutates component data.** This survives contact with the
-  keyboard and the mouse: `main.gd`'s debug keys append to an `EcsCommandsComponent`
-  singleton and a click writes a pick request to an `EcsSelectionComponent` singleton.
-  `EcsCommandSystem` and `EcsSelectionSystem` apply them on the next frame.
-
-## 2. Entities are ids; nodes are views
-
-`EcsRenderSystem` owns a pool of `Sprite2D`s under `World/Entities`, keyed by entity id,
-created when an id starts matching `[Position, Sprite]` and freed when it stops. Data
-flows one way, world → node. Nothing reads back off a node, which is why the whole
-simulation runs headless (that is how the acceptance test below was verified).
-
-`EcsSelectionMarker` under `World/SelectionMarker` is the same deal: unlike module 8's
-marker it follows nothing, holds no entity reference and runs no `_process` —
-`EcsSelectionSystem` pushes it a position and a radius each frame.
-
-`EcsDeathSystem` darkens the *sprite component's* tint rather than a node's modulate.
-Appearance is a fact about the entity; the view just renders whatever the data says.
-
-## 3. The data layer
-
-`defs/` mirrors module 8's shape — catalog of blueprints, placement list, per-instance
-deep-duplication, overrides keyed by component — with **one layer deleted**.
-
-Module 8 needed a `SimComponentDef` subclass per component: a blueprint could not hold a
-live component, so each def carried the authored config *and* the code to build a node
-from it. Here a component is already pure data, so `EcsEntityDef.components` holds the
-components themselves and `EcsEntityFactory` copies them. The entire parallel
-`defs/components/*.gd` hierarchy vanished the moment behaviour left the components.
-`ecs_entity_factory.gd` is 85 lines (54 of code) and still never switches on component
-type.
-
-Identity and position come from the placement, not the blueprint — every entity has
-both, and neither is a property of its type. Everything else comes from the blueprint.
-
-Authored relationships point at **names**, not ids: a `.tres` cannot know a runtime id,
-so `monkey_0`'s placement overrides `equipped.weapon_name` to `&"dagger_0"` and
-`EcsEquipSystem` resolves that against the name table once, after spawning. Edit
-`world1.tres`, press **F5**, see the change with no code touched.
-
-## 4. Step 2 — the pain case, and whether it landed
-
-The pipeline, in scheduler order (`main.gd::_build`):
+## 1. The whole flow, in order
 
 ```
-command > equip > wander > movement > weapon_carry > aggression > attack >
-crit > damage > durability > death > selection > render > census > inspect
+world1.tres  ──►  EcsEntityFactory  ──►  EcsWorld          (once, at startup)
+(placements)      resolves each row       ids + component
+                  against catalog.tres    tables
+
+every frame, EcsScheduler runs four systems over that world:
+
+  low_brain  picks a destination   → writes EcsMovementComponent
+  movement   walks toward it       → writes EcsPositionComponent
+  collision  unstacks the bodies   → writes EcsPositionComponent
+             (Area2D pool under World/Bodies is a derived index)
+  render     draws where it ended  → writes Sprite2D nodes
+  debug      reports all of it     → writes the on-entity overlay
 ```
 
-Decide, then act, then resolve the consequences, then draw the result, then report it.
+Read `systems/ecs_low_brain_system.gd`, `ecs_movement_system.gd` and
+`ecs_render_system.gd` in that order and you have seen every behaviour in the module.
+Each is under 60 lines.
 
-**The weapon is an entity id with a `EcsDurabilityComponent` row.** Not a de-noded
-resource, not a value copied into its holder. `EcsEquippedComponent{weapon_id}` on the
-wielder is the whole of "wielding". Durability is mutated by the one system that queries
-it; nobody reaches into the weapon, and nobody had to agree not to.
+`EcsLowBrainSystem` / `EcsLowBrainComponent` are named for their **rank, not their
+behaviour** — they are the bottom of the decision ladder, and what they happen to do
+today is wander. The plan's step 6 puts an FSM above them and step 7 a planner; all three
+do the same single thing, write a destination into `EcsMovementComponent`, so a smarter
+brain replaces this one without movement, render or debug changing a line. Carrying the
+component is the whole of "this entity decides for itself".
 
-Each of the three systems reads exactly the part of a `EcsDamageEvent` that only it can
-resolve:
+`EcsDebugSystem` is the odd one out and deliberately so: it is a **pure reader**. It
+writes no component and creates no entity, so pulling it out of the scheduler changes the
+simulation not at all — which is the cleanest possible demonstration that a system is just
+something the scheduler calls. It feeds one dumb view, `EcsDebugOverlay`, which draws on
+the entities themselves: name, position, the velocity vector with its heading, and a
+dashed line to the ring marking the spot the low brain picked, plus the green circle of
+its `EcsShapeComponent` body. **F1** toggles it.
 
-| System | Reads | Writes |
-|---|---|---|
-| `EcsAttackSystem` | attacker's `Equipped`, weapon's `Damage` (else attacker's own) | emits `EcsDamageEvent` |
-| `EcsDamageSystem` | target's `Armor` | target's `Health` |
-| `EcsDurabilitySystem` | — | weapon's `Durability` |
+That body is **data, not a `CollisionShape2D` under a `PhysicsBody2D`** — one radius in a
+component table. Putting a real physics body there would move the truth back inside nodes
+and force every system to read it out of the view, which is the thing this module exists
+to avoid.
 
-Module 8's hand-held discipline "each side resolves only what it alone can know" is now
-just the shape of the queries. There is nothing to enforce.
+### Collision is soft, and leans on Godot's broadphase
 
-### Acceptance test — verified headless, not asserted
+`EcsCollisionSystem` runs straight after movement: movement proposes a position, collision
+corrects it, and neither knows the other exists. Overlap is **allowed to happen and then
+undone**, never prevented — no sweep test, no veto inside movement. Applying it as a
+constraint after the fact is what makes it compose: anything else that ever writes a
+position (knockback, a spawner, a debug teleport) gets cleaned up for free.
 
-Run `main.tscn`; **F3** toggles an `EcsArmorComponent` on `crocodile_0`, **F2** pulls
-`EcsCritSystem` out of the pipeline. Observed, in one run:
+**It keeps a pool of `Area2D` under `World/Bodies`, and that is a deliberate exception to
+"nothing reads back off a node".** Be precise about what it is: `EcsPositionComponent` is
+still the only truth, the pool is a *derived index* rebuilt from it every tick, and the
+only thing read back is **which pairs are near each other** — never where anything is.
+Delete the pool and the simulation is still complete. That is a different thing from
+module 8, where the node *was* the entity. If a future system starts reading state off
+these areas, that line has been crossed.
 
+Why bend the rule at all: finding which circles overlap is a spatial-index problem and
+Godot ships one in C++. Measured on this machine, per tick:
+
+| n | Area2D | the GDScript O(n²) it replaced | 60Hz tick |
+|---|---|---|---|
+| 100 | 1.56 ms | 3.82 ms | 9% |
+| 200 | 3.24 ms | 13.61 ms | 19% |
+| 400 | 6.56 ms | 52.12 ms | 39% |
+| 800 | 11.38 ms | 201.84 ms | 68% |
+| 1600 | 21.33 ms | ~800 ms | 128% |
+
+Near-linear instead of quadratic. Note where the time actually goes: the physics
+broadphase is only ~0.2 ms at 100 entities. The rest is GDScript — which is why `_sync`
+gathers component references into parallel arrays once per tick and `_resolve` then never
+touches the world. That gather is worth ~30%, and is the reason the system is shaped the
+way it is rather than calling `get_component` in the inner loop.
+
+**The pipeline runs on the physics tick**, not the render frame. A simulation wants a
+fixed timestep, and `get_overlapping_areas()` is refreshed once per physics step, so
+running faster would re-read the same answer.
+
+**One tick of lag.** The overlap list reports what the server saw at the end of the last
+step, so a correction always trails the positions that caused it — about two pixels at
+walking speed, invisible. It also means the relaxation passes the GDScript version used
+are gone: the list cannot be refreshed mid-tick, so it is one pass per tick, converging
+over a handful of ticks instead of instantly.
+`PhysicsDirectSpaceState2D.intersect_shape()` is the synchronous alternative if that ever
+matters — it works same-tick from `_physics_process`, at the cost of a query per body.
+
+Carrying an `EcsShapeComponent` is what makes an entity solid. Anything without one never
+gets a body, so it passes through everything with no `solid` flag, no layer mask and no
+branch. Every pair is reported twice, A sees B and B sees A; rather than deduplicating,
+each body moves only *itself* by half the overlap, so the double report is what makes the
+correction symmetric.
+
+Verified: the ten entities spawn piled within ~60 px and separate from 46.6 px of overlap
+to under 1 px in ten ticks; **F5** rebuilds without leaking bodies.
+
+**What soft costs:** a fast enough mover can pass through something between ticks, a body
+squeezed by two others can be pushed through a third, and there is no bounce — separation
+is positional only, velocity is untouched.
+
+## 6. What was removed, and how to get it back
+
+Everything below was built, worked, and was cut to keep the core readable. It is all in
+git at **`928b9d1`**:
+
+```bash
+git show 928b9d1 -- "9. EcsSystem"                  # see it
+git checkout 928b9d1 -- "9. EcsSystem"              # take the whole module back
+git checkout 928b9d1 -- "9. EcsSystem/systems/ecs_attack_system.gd"   # or one file
 ```
-t=3   crocodile 79.5 -> 70.5     dagger hits for 9,  wear 2/6
->>> F3: give crocodile_0 an EcsArmorComponent
-t=4   crocodile 65.5 -> 60.5     same dagger now lands 5 (9 - 4),  wear 0/6
-t=5   dagger BROKEN, damage row stripped
-t=6   crocodile 59.5 -> 56.0     monkey falls back to fists: 3 x 2.5 crit - 4 armour
->>> F2: pull EcsCritSystem out of the pipeline
-t=9   crocodile 56.0 -> 55.0     fists: 3 - 4, floored at armour minimum 1
-```
 
-- **Armour was added to a live entity and the attack code did not change.** It cannot —
-  `EcsAttackSystem` has no way to name armour.
-- **Crits were added by writing one system and appending one line to the scheduler.**
-  Neither the attack nor the damage system mentions crits.
-- **A broken weapon is not a branch.** `EcsDurabilitySystem` removes the weapon's
-  `EcsDamageComponent`; `EcsAttackSystem` then finds nothing on the weapon and falls
-  back to the attacker's own damage on its own. There is no `if weapon.broken` anywhere.
-- **"Attackable" is not a flag.** It is the target query asking for `EcsHealthComponent`.
-  The 30 wandering rabbits have none, so they are invisible to aggression with no
-  special case, no faction system and no layer mask.
+**The combat pipeline** — 10 components (`aggression`, `armor`, `attack_intent`, `broken`,
+`crit_chance`, `damage`, `dead`, `durability`, `equipped`, `health`) and 8 systems
+(`aggression`, `attack`, `crit`, `damage`, `death`, `durability`, `equip`,
+`weapon_carry`), plus `ecs/ecs_event.gd` and `events/ecs_damage_event.gd`.
 
-Per the plan's §7, step 2 landing clean means none of the kill criteria trigger.
+It was the plan's step 2 and it landed clean. Armour was added to a live entity without
+the attack code changing; crits were added by writing one system and appending one line to
+the scheduler; a broken weapon fell back to fists with no `if weapon.broken` anywhere;
+"attackable" was never a flag, only the target query asking for `EcsHealthComponent`.
+**The evidence for the rewrite is in that commit, not in the working tree.**
 
-## 5. The observability layer — not a plan step, built anyway
+**The observability layer** — `selection`/`selected`/`commands` components,
+`EcsSelectionSystem`, `EcsInspectSystem`, `EcsCensusSystem`, `EcsCommandSystem`,
+`ecs_selection_marker.gd`, `ui/ui.tscn` + `ui.gd`, and the four `ecs_*` signals in
+`System/EventBus.gd`. Two pieces of it were evidence rather than scaffolding: picking was
+a distance query over `EcsPositionComponent` rather than a physics hit, and the
+inspector's tabs were built by reflection over `PROPERTY_USAGE_SCRIPT_VARIABLE` with
+nothing in the file naming a component type.
 
-Four systems and a HUD scene landed after the plan's step 2, so the module could be read
-while it runs. They are worth knowing about because two of them are evidence for the
-rewrite rather than scaffolding around it.
+**Also trimmed from files that stayed:** `EcsWorld` lost singletons, the frame-event API
+and `components_of()`/`count()` (the enumeration accessors the inspector needed);
+`EcsSystem` lost `enabled`; `EcsScheduler` lost `find()` and the end-of-frame
+`clear_events()`. The crocodile and dagger blueprints were deleted and the monkey
+rewritten as a plain wanderer, leaving two entity types; `world1.tres` went from 33
+placements to 10 — 5 rabbits and 5 monkeys.
 
-| Piece | What it does |
-|---|---|
-| `EcsSelectionSystem` | consumes the click request, moves the `EcsSelectedComponent` tag, drives the marker |
-| `EcsInspectSystem` | 5 Hz snapshot of the tagged entity onto `EventBus.ecs_entity_inspected` |
-| `EcsCensusSystem` | 2 Hz entity count onto `EventBus.ecs_world_census` |
-| `ui/ui.tscn` + `ui.gd` | stats block, tabbed inspector, and the live pipeline read-out |
-
-- **Picking is a query, not a physics hit.** Module 8 point-queried a per-entity
-  `Area2D`; here it is a distance test over `EcsPositionComponent` with each candidate's
-  radius read off its own sprite, so there is no second set of hitboxes to keep in sync.
-  This is the plan's claim about perception collapsing into queries, arriving early.
-- **The inspector's tabs are built by reflection.** Module 8 needed a `describe()` on
-  every component, hand-written per kind and kept in step with its fields. A component
-  here is a field-only Resource, so `EcsInspectSystem` reads
-  `PROPERTY_USAGE_SCRIPT_VARIABLE` off `get_property_list()` — the script's own
-  declarations, in declaration order. **Nothing in that file names a component type**, so
-  a new component kind gets a tab with its fields and neither file changes. An int field
-  named `*_id` is rendered as the target's name, so a relationship reads as
-  "this monkey wields that dagger".
-- The panel holds no reference to an entity, the world or the scheduler. Counts,
-  snapshots and the pipeline text all arrive on the `EventBus` already formatted, and
-  the respawn button asks for a rebuild the same way.
-
-Controls: **left-click** an entity to inspect it and see the reach it can strike within,
-click bare ground to clear; **F2** toggles the crit stage, **F3** toggles the
-crocodile's armour, **F5** rebuilds the world from data.
-
-## 6. What is deliberately a placeholder
-
-`EcsAggressionSystem` is the brain seat from step 6 — "swing at the nearest attackable
-thing in reach, on a timer". It consults no weapon, no armour, no durability; it cannot
-even tell whether the swing will land. All it produces is an
-`EcsAttackIntentComponent`. Swapping it for an FSM and then a planner changes nothing
-downstream, because all three write the same intent component.
+Note one demo went with the dagger: it was the only entity with **no**
+`EcsMovementComponent`, so it showed "capability is component presence" — a prop that
+cannot move, with no `is_static` flag and no branch. Both current types move. Bringing it
+back is one blueprint plus a placement, no code.
 
 ## 7. Next, per the plan
+
+Steps 3–7 are not started. Before starting one, decide whether it is built on this
+stripped core or on `928b9d1`'s fuller one — several of them assume the combat layer.
 
 - **Step 3** — inventory and pickup as relationships (`Inventory{item_ids}`, one system
   owning the move, so double-claim is structurally impossible); eat via `ConsumeSystem`.
 - **Step 4** — hunger/fatigue/health as components with a system each.
 - **Step 5** — `SensorSystem` writing `Perceived{ids}`; perception becomes a distance
-  query over `EcsPositionComponent`, with no node areas. `EcsSelectionSystem` already
-  does this shape of query, so there is a working precedent to copy.
+  query over `EcsPositionComponent`, with no node areas.
 - **Step 6** — FSM brain writing move/attack/eat intents, reproducing module 8's
-  hungry→seek→eat loop. That is when module 8 can be retired — and the point the main
-  scene was meant to switch, which it already has.
+  hungry→seek→eat loop. That is when module 8 can be retired.
 - **Step 7** — GOAP planner as a pure function over a symbolic snapshot, run off-frame
   under a replan budget.
-
-Not started, and deliberately not designed for yet.
