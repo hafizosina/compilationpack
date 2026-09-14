@@ -16,7 +16,9 @@ extends Node2D
 ##
 ##   every frame, EcsScheduler runs three systems over that world:
 ##
-##     low_brain  picks a destination  → writes EcsMovementComponent
+##     spawner    adds new entities    → creates ids, files components
+##     forage     go get a berry       → writes EcsMovementComponent
+##     low_brain  else wander          → writes EcsMovementComponent
 ##     movement   walks toward it      → writes EcsPositionComponent
 ##     collision  unstacks the bodies  → writes EcsPositionComponent
 ##                (Area2D pool under World/Bodies is a derived index only)
@@ -92,9 +94,12 @@ func _build() -> void:
 	_scheduler = EcsScheduler.new()
 
 	_scheduler \
+		.add(EcsSpawnerSystem.new(_factory, catalog)) \
+		.add(EcsForageSystem.new()) \
 		.add(EcsLowBrainSystem.new()) \
 		.add(EcsMovementSystem.new()) \
 		.add(_collision) \
+		.add(EcsPickupSystem.new()) \
 		.add(_render) \
 		.add(EcsDebugSystem.new(_debug_overlay))
 

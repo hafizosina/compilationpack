@@ -21,5 +21,5 @@ func run(world: EcsWorld, delta: float) -> void:
 			continue
 		brain.pause_left = randf_range(brain.pause_min, brain.pause_max)
 		var here := world.get_component(id, EcsPositionComponent) as EcsPositionComponent
-		move.destination = EcsConst.wander_point(here.position, brain.radius)
+		move.destination = EcsConst.random_point_near(here.position, brain.radius, 0.25)
 		move.has_destination = true

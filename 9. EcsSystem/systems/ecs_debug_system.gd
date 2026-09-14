@@ -32,6 +32,7 @@ func run(world: EcsWorld, _delta: float) -> void:
 		var place := world.get_component(id, EcsPositionComponent) as EcsPositionComponent
 		var move := world.get_component(id, EcsMovementComponent) as EcsMovementComponent
 		var body := world.get_component(id, EcsShapeComponent) as EcsShapeComponent
+		var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
 		var brain := world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
 
 		var row := {
@@ -46,6 +47,7 @@ func run(world: EcsWorld, _delta: float) -> void:
 			"destination": Vector2.ZERO,
 			"pause_left": 0.0,
 			"radius": body.radius if body != null else 0.0,
+			"bag": "%d/%d" % [bag.items.size(), bag.capacity] if bag != null else "",
 		}
 		if move != null:
 			row["velocity"] = move.velocity

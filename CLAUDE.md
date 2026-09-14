@@ -56,8 +56,8 @@ behaviour and never call each other, and nothing outside a system mutates compon
 Queries key on the script object — `world.query([EcsPositionComponent])` — never on a
 string.
 
-**It is deliberately stripped to a bare-minimum core**: 6 components, 5 systems
-(`low_brain > movement > collision > render > debug`, where `EcsLowBrainSystem` is named for its
+**It is deliberately stripped to a bare-minimum core**: 9 components, 8 systems
+(`spawner > forage > low_brain > movement > collision > pickup > render > debug`, where `EcsLowBrainSystem` is named for its
 rank in the plan's decision ladder, not for the wandering it happens to do), and a world
 of 10 entities in 2 types (5 rabbits, 5 monkeys — same component list, different authored
 values). `EcsDebugSystem` is a pure

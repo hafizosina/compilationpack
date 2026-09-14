@@ -4,7 +4,7 @@ Greenfield hand-rolled ECS, built beside `8. SimpleAiSystem` per `ECS_REFACTOR_P
 Module 8 keeps running untouched as the behavioural reference.
 
 **The module has been deliberately stripped to its bare minimum** — one world, one
-scheduler, four systems — so the flow reads end to end without hunting. What was cut is
+scheduler, eight systems — so the flow reads end to end without hunting. What was cut is
 listed in §6 and is recoverable from git; nothing was lost, only set aside.
 
 `project.godot`'s main scene is module 9 (`uid://daecsmain0001`), so a plain run opens it.
@@ -30,12 +30,15 @@ world1.tres  ──►  EcsEntityFactory  ──►  EcsWorld          (once, at
 (placements)      resolves each row       ids + component
                   against catalog.tres    tables
 
-every frame, EcsScheduler runs four systems over that world:
+every frame, EcsScheduler runs eight systems over that world:
 
-  low_brain  picks a destination   → writes EcsMovementComponent
+  spawner    adds new entities     → creates ids, files components
+  forage     go get a berry        → writes EcsMovementComponent
+  low_brain  else wander           → writes EcsMovementComponent
   movement   walks toward it       → writes EcsPositionComponent
   collision  unstacks the bodies   → writes EcsPositionComponent
              (Area2D pool under World/Bodies is a derived index)
+  pickup     takes what it reached → removes EcsPositionComponent
   render     draws where it ended  → writes Sprite2D nodes
   debug      reports all of it     → writes the on-entity overlay
 ```
@@ -122,6 +125,79 @@ to under 1 px in ten ticks; **F5** rebuilds without leaking bodies.
 squeezed by two others can be pushed through a third, and there is no bounce — separation
 is positional only, velocity is untouched.
 
+### The berry spawner
+
+`EcsSpawnerComponent` is the settings — blueprint id, radius, interval, `max_alive` — and
+`EcsSpawnerSystem` is the doing. It runs **first**, so anything born this tick is decided
+for, moved, collided, drawn and reported in the same tick, with no frame where a berry
+exists but is invisible. Spawning mid-iteration is safe because `query()` returns a
+snapshot: new ids are not in the list being walked, and every later system picks them up.
+
+Two things it does differently from module 8's `SimEntitySpawnerComponent`:
+
+- **The component holds no behaviour.** Module 8's ran its own `_process` and did the
+  spawning itself.
+- **It tracks entity ids, not node references.** Module 8 kept nodes and pruned with
+  `is_instance_valid()`. Ids are never reused, so a harvested berry's id goes permanently
+  false through `world.is_alive()` and can never alias a later entity. The factory and
+  catalog arrive through `_init` rather than a group lookup, so the dependency is visible
+  in `main.gd`'s pipeline and cannot go missing at runtime.
+
+**A berry is a sprite and nothing else** — no shape, no movement, no brain. So it is not
+solid, cannot move, and never enters the collision query: 36 entities in the world, 12
+`Area2D` bodies. No `is_item` flag, no layer mask, no branch. That is the same trick the
+deleted dagger prop showed, arriving again for free.
+
+Nothing harvests berries yet, so each bush fills to `max_alive` (12) and stops. That is
+the cap working, not a bug.
+
+Verified: 14 entities at t=0 → 36 by t=25s, holding steady, 12 per bush, bodies constant
+at 12 throughout.
+
+### Foraging: the decision ladder, made out of run order
+
+`EcsForageSystem` has the *same shape* as `EcsLowBrainSystem` — look at an entity with
+nothing to do, write a destination — and it runs **before** it. That is the entire
+priority mechanism. Forage gets first refusal; an entity it declines (bag full) falls
+through to aimless wandering on its own. No state machine, no priority field, no brain
+arbitrating. Adding a third rung is one system and one scheduler line, and neither
+existing brain changes.
+
+Both write the same `destination` field, so movement, collision and render never learn
+that foraging exists.
+
+### Picking up is removing a component
+
+`EcsPickupSystem` takes anything within the picker's own body radius. The whole of
+"leaving the world" is `world.remove(berry, EcsPositionComponent)`:
+
+- the render query stops matching, so the view is freed — nothing was told to hide it
+- the forage query stops matching, so nobody walks toward a berry in someone's pocket
+- the spawner stops counting it against `max_loose`, so the bush resumes producing
+
+One removed component, three consequences, no `is_carried` flag to keep in step.
+
+**The berry stays a live entity.** This is the inventory version of the weapon pain case.
+Module 8's `SimInventoryComponent` could not hold a live entity, so picking something up
+took a **blueprint snapshot** of it and destroyed the world entity in the same breath — a
+carried thing was a recipe for itself rather than itself. Here nothing is snapshotted and
+nothing is destroyed: verified, a held berry reads `alive=true, has position=false,
+has sprite=true, has pickable=true`.
+
+Having an `EcsInventoryComponent` is what makes an entity forage, so a berry bush never
+goes looking for berries and nothing had to tell it not to. `EcsPickableComponent` is what
+separates a berry from the bush — both are sprites sitting in the world, only one answers
+the forager's query.
+
+Verified over 50 s: 14 entities → 54, held berries 0 → 30, 6 of 10 bags full, and **54
+entities with only 24 drawn** — the held ones have no position. Each animal's `items`
+array is its own (the factory's deep copy holds); rabbits carry 3, monkeys 5.
+
+Two known roughnesses, both fine at this scale: two animals can target the same berry and
+the loser simply re-targets next tick (module 8 needed an explicit one-claim-per-entity
+rule for this; here it self-corrects because the berry stops matching the query), and the
+nearest-berry search is O(foragers x berries) with no range cap.
+
 ## 6. What was removed, and how to get it back
 
 Everything below was built, worked, and was cut to keep the core readable. It is all in
@@ -166,15 +242,69 @@ back is one blueprint plus a placement, no code.
 
 ## 7. Next, per the plan
 
-Steps 3–7 are not started. Before starting one, decide whether it is built on this
-stripped core or on `928b9d1`'s fuller one — several of them assume the combat layer.
+**Step 3 is most of the way done.** The plan asked for "inventory and pickup as
+relationships (`Inventory{item_ids}`, one system owning the move, so double-claim is
+structurally impossible)" — that is exactly what `EcsInventoryComponent` and
+`EcsPickupSystem` are. Double-claim is not merely prevented, it stopped being a category:
+the berry drops out of the query the moment it is taken, so the second forager re-targets
+without anything arbitrating. What step 3 still wants is **eating** — a
+`EcsConsumableComponent` and a `ConsumeSystem`, which needs step 4's bars to be worth
+doing.
 
-- **Step 3** — inventory and pickup as relationships (`Inventory{item_ids}`, one system
-  owning the move, so double-claim is structurally impossible); eat via `ConsumeSystem`.
-- **Step 4** — hunger/fatigue/health as components with a system each.
+Before starting any of the rest, decide whether it builds on this stripped core or on
+`928b9d1`'s fuller one — steps 6 and 7 assume the combat layer that was cut.
+
+- **Step 3 (remainder)** — eat via `ConsumeSystem`, once there is a hunger bar to feed.
+- **Step 4** — hunger/fatigue/health as components with a system each. This is the
+  natural next step: the forage loop currently has no *reason*, and hunger is the reason.
 - **Step 5** — `SensorSystem` writing `Perceived{ids}`; perception becomes a distance
-  query over `EcsPositionComponent`, with no node areas.
-- **Step 6** — FSM brain writing move/attack/eat intents, reproducing module 8's
-  hungry→seek→eat loop. That is when module 8 can be retired.
+  query over `EcsPositionComponent`, with no node areas. `EcsForageSystem`'s nearest-berry
+  scan is already this shape and is where a range cap or spatial index belongs.
+- **Step 6** — FSM brain writing move/eat/attack intents. Note the decision ladder is
+  already here in miniature: `forage > low_brain` is priority expressed as run order, and
+  an FSM is a third rung rather than a rewrite.
 - **Step 7** — GOAP planner as a pure function over a symbolic snapshot, run off-frame
   under a replan budget.
+
+## 8. Open threads from the session that built this
+
+Neither is a defect; both are decisions deliberately deferred.
+
+- **`EcsBodyComponent`.** `EcsCollisionSystem` keeps its `Area2D` pool as private state,
+  but that pool is *read back* (overlap results), unlike `EcsRenderSystem`'s write-only
+  sprite pool. Moving the node handle into a component and splitting lifecycle from
+  behaviour would make collision pure. Costs a `Node` reference inside a component.
+- **One view node per entity.** Sprites live under `World/Entities` and bodies under
+  `World/Bodies`, each keyed by entity id, each writing position separately. Adding sound
+  or animation the same way means more parallel pools. One `Node2D` per entity with
+  concern-specific children would collapse them: position written once, children inherit
+  the transform, one lifetime. The guard if that is ever done: **the view node carries no
+  script**, so behaviour has nowhere to accumulate. Worth doing before animation and
+  sound, not after.
+
+## 9. Measured performance, on the machine that built this
+
+Intel Iris Xe, GDScript, per tick. Stale the moment the systems change; the shape is the
+durable part.
+
+| n | collision (Area2D) | collision (the O(n²) it replaced) |
+|---|---|---|
+| 100 | 1.56 ms | 3.82 ms |
+| 400 | 6.56 ms | 52.12 ms |
+| 1600 | 21.33 ms | ~800 ms |
+
+A simple linear system costs **~4–6 µs per entity per tick** (`low_brain` 4.0,
+`movement` 4.4, `render` 5.8, `debug` 13.5 — turn the overlay off when measuring anything
+else). Budget at 60 Hz: ~30–40 such systems at 100 entities, ~15–20 at 200.
+
+Two levers matter far more than optimising any system, and neither is taken yet:
+
+1. **Decouple sim tick from frame rate.** A colony sim does not need 60 Hz simulation.
+   Running the scheduler at 10–20 Hz is a 3–6x headroom multiplier and costs nothing —
+   the scheduler already takes `delta`.
+2. **Stagger systems across ticks.** Hunger does not need 20 updates a second. Slice the
+   query result and run a quarter of the entities per tick.
+
+The first tick after a world is built creates every pooled node at once: 5 ms at 100
+entities, 70 ms at 400, 345 ms at 1000 — 97% of it `Area2D` creation. Behind a loading
+screen this is free; for a mid-game spawn wave it would need a per-tick creation cap.

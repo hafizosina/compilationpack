@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="EcsEntityDef" format=3 uid="uid://bry900ecs0002"]
+
+[ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="base"]
+[ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
+[ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
+[ext_resource type="Script" uid="uid://dyef4lkp0cmoq" path="res://9. EcsSystem/components/ecs_shape_component.gd" id="s_shape"]
+[ext_resource type="Script" uid="uid://bnagwjas1rutn" path="res://9. EcsSystem/components/ecs_spawner_component.gd" id="s_spawner"]
+[ext_resource type="Texture2D" uid="uid://dlfyft0lv6p2h" path="res://Global/Asset/CircleButtonFull.png" id="tex"]
+
+[sub_resource type="Resource" id="c_sprite"]
+script = ExtResource("s_sprite")
+texture = ExtResource("tex")
+scale_factor = 0.7
+tint = Color(0.2, 0.5, 0.22, 1)
+
+[sub_resource type="Resource" id="c_shape"]
+script = ExtResource("s_shape")
+radius = 45.0
+
+[sub_resource type="Resource" id="c_spawner"]
+script = ExtResource("s_spawner")
+spawns = &"berry"
+radius = 300.0
+interval = 2.0
+max_alive = 12
+
+[resource]
+script = ExtResource("def")
+id = &"berry_bush"
+display_name = "Berry Bush"
+components = Array[ExtResource("base")]([SubResource("c_sprite"), SubResource("c_shape"), SubResource("c_spawner")])

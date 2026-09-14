@@ -68,6 +68,18 @@ entity_name = &"monkey_4"
 type = &"monkey"
 position = Vector2(30, -20)
 
+[sub_resource type="Resource" id="b0"]
+script = ExtResource("place")
+entity_name = &"berry_bush_0"
+type = &"berry_bush"
+position = Vector2(-900, -400)
+
+[sub_resource type="Resource" id="b1"]
+script = ExtResource("place")
+entity_name = &"berry_bush_1"
+type = &"berry_bush"
+position = Vector2(950, 350)
+
 [resource]
 script = ExtResource("world")
-entries = Array[ExtResource("place")]([SubResource("p0"), SubResource("p1"), SubResource("p2"), SubResource("p3"), SubResource("p4"), SubResource("p5"), SubResource("p6"), SubResource("p7"), SubResource("p8"), SubResource("p9")])
+entries = Array[ExtResource("place")]([SubResource("p0"), SubResource("p1"), SubResource("p2"), SubResource("p3"), SubResource("p4"), SubResource("p5"), SubResource("p6"), SubResource("p7"), SubResource("p8"), SubResource("p9"), SubResource("b0"), SubResource("b1")])

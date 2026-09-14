@@ -121,10 +121,10 @@ Three rules, each structural rather than remembered:
 
 **The data layer drops a whole layer** versus module 8. Module 8 needed a `SimComponentDef` subclass per component, because a blueprint could not hold a live component. Here a component is already pure data, so `EcsEntityDef.components` holds the components themselves and `EcsEntityFactory` copies them, deep-duplicated per instance — the parallel `defs/components/*.gd` hierarchy vanished the moment behaviour left the components. The factory never switches on component type.
 
-**The whole pipeline is four systems:**
+**The whole pipeline is eight systems:**
 
 ```
-low_brain > movement > collision > render > debug
+spawner > forage > low_brain > movement > collision > pickup > render > debug
 ```
 
 `EcsLowBrainSystem` picks a destination and writes `EcsMovementComponent`; movement walks toward it and writes `EcsPositionComponent`; render draws where it ended up. Read those three files in that order and you have seen every behaviour in the module.
@@ -138,6 +138,12 @@ low_brain > movement > collision > render > debug
 It keeps an `Area2D` pool under `World/Bodies`, a **deliberate exception to "nothing reads back off a node"**: the components remain the only truth, the pool is a derived index rebuilt from them every tick, and the only thing read back is *which pairs are near each other*. Measured per tick at 100/400/1600 entities: 1.56 / 6.56 / 21.33 ms, versus 3.82 / 52.12 / ~800 ms for the GDScript O(n²) it replaced — near-linear instead of quadratic. The physics broadphase is only ~0.2 ms of that at n=100; the rest is GDScript, which is why the system gathers component references into parallel arrays once per tick rather than calling `get_component` in the inner loop.
 
 The pipeline therefore runs in `_physics_process` — a sim wants a fixed timestep, and the overlap list refreshes once per physics step. That costs one tick of lag (~2 px at walking speed) and rules out mid-tick relaxation passes, so a pile converges over ~10 ticks rather than instantly. Carrying an `EcsShapeComponent` is what makes an entity solid — no `solid` flag, no layer mask, no branch. Verified: ten entities spawn piled and separate from 46.6 px of overlap to under 1 px in ten ticks, and F5 rebuilds without leaking bodies.
+
+**The berry spawner shows what a system-shaped feature costs.** `EcsSpawnerComponent` is settings (blueprint id, radius, interval, `max_alive`), `EcsSpawnerSystem` is the doing, and it runs first so anything born this tick is moved, collided and drawn in the same tick. Module 8's equivalent ran `_process` inside the component and tracked spawned **nodes** with `is_instance_valid()`; this tracks **entity ids** and prunes with `world.is_alive()` — ids are never reused, so a harvested berry can never alias a later entity. A berry is a sprite and nothing else: not solid, cannot move, never in the collision query. 36 entities, 12 bodies, no `is_item` flag anywhere.
+
+**The decision ladder is made out of run order.** `EcsForageSystem` has the same shape as `EcsLowBrainSystem` — look at an entity with nothing to do, write a destination — and runs *before* it. That is the whole priority mechanism: forage gets first refusal, anything it declines (bag full) falls through to wandering. No state machine, no priority field. A third rung is one system and one scheduler line.
+
+**Picking up is removing a component.** `world.remove(berry, EcsPositionComponent)` and three things follow for free: the render query stops matching so the view is freed, the forage query stops matching so nobody walks toward a pocketed berry, and the spawner stops counting it against `max_loose` so the bush resumes. No `is_carried` flag. And the berry stays a **live entity** — this is the inventory version of the weapon pain case, where module 8's inventory had to take a *blueprint snapshot* and destroy the world entity because it could not hold a live one. Verified over 50s: 14 entities → 54, 30 berries held, 6/10 bags full, and 54 entities with only 24 drawn.
 
 **A type is a component list, not a class.** Rabbit and monkey carry the identical `[Shape, Sprite, Movement, LowBrain]` set and share every line of code — only the authored values differ (speed 72 vs 130, wander radius 320 vs 420, body radius 22 vs 36). There is no rabbit class, no monkey class, and no base creature to inherit from; `EcsEntityDef.components` *is* the type.
 
@@ -232,4 +238,4 @@ All widget styling goes through the single theme `Global/Theme/main_theme.tres`,
 | 6. GraphDb | Complete |
 | 7. JoyStick | Complete — mobile HUD, inventory, item resources |
 | 8. SimpleAiSystem | Complete for its milestone, and **kept as the behavioural reference** for module 9. Factory + components + FSM brain done; food loop closes. No longer the main scene |
-| 9. EcsSystem | **Active.** Hand-rolled ECS core and data-driven factory, stripped back to a five-system pipeline (`low_brain > movement > collision > render > debug`) to keep the flow readable, with a drawn on-entity debug overlay on F1. Now the main scene. The combat and observability layers were built, proved out and cut; they are in git at `928b9d1`. Steps 3–7 — inventory, bars, sensors, FSM brain, GOAP — not started |
+| 9. EcsSystem | **Active.** Hand-rolled ECS core and data-driven factory, stripped back to an eight-system pipeline (`spawner > forage > low_brain > movement > collision > pickup > render > debug`) to keep the flow readable, with a drawn on-entity debug overlay on F1. Now the main scene. The combat and observability layers were built, proved out and cut; they are in git at `928b9d1`. Steps 3–7 — inventory, bars, sensors, FSM brain, GOAP — not started |

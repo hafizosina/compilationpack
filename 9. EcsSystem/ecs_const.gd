@@ -18,10 +18,18 @@ const EDGE_MARGIN: float = 48.0
 ## wander bounds with it and there is no constant to keep in sync.
 static var world_bounds: Rect2 = Rect2(-1600.0, -840.0, 3200.0, 1680.0)
 
-## A point within `radius` of `origin`, kept inside the arena. Used by the
-## wander system; kept here so the bounds rule has one home.
-static func wander_point(origin: Vector2, radius: float) -> Vector2:
-	var target := origin + Vector2.RIGHT.rotated(randf() * TAU) * randf_range(radius * 0.25, radius)
+## A point within `radius` of `origin`, kept inside the arena.
+##
+## `min_ratio` excludes an inner disc: the low brain passes 0.25 so a creature
+## never picks a destination it is already standing on, while a spawner passes
+## 0 to scatter evenly. The sqrt is what makes the scatter uniform by *area* —
+## without it everything clusters toward the middle.
+##
+## It lives here rather than in either caller because the bounds rule has one
+## home, and it grew this parameter the moment a second caller wanted it.
+static func random_point_near(origin: Vector2, radius: float, min_ratio: float = 0.0) -> Vector2:
+	var distance := radius * sqrt(randf_range(min_ratio * min_ratio, 1.0))
+	var target := origin + Vector2.RIGHT.rotated(randf() * TAU) * distance
 	var inner := world_bounds.grow(-EDGE_MARGIN)
 	return Vector2(
 		clampf(target.x, inner.position.x, inner.end.x),

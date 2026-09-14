@@ -17,6 +17,7 @@ const SPRITE_HALF := 64.0 * EcsConst.SPRITE_SCALE
 const BODY_COLOR := Color(0.45, 1.0, 0.6, 0.6)
 const NAME_COLOR := Color(1.0, 0.98, 0.9, 0.95)
 const POSITION_COLOR := Color(0.74, 0.78, 0.82, 0.9)
+const BAG_COLOR := Color(0.65, 1.0, 0.55, 0.95)
 const VELOCITY_COLOR := Color(0.35, 0.9, 1.0)
 const DESTINATION_COLOR := Color(1.0, 0.45, 0.85)
 const PAUSED_COLOR := Color(1.0, 0.85, 0.35, 0.9)
@@ -50,6 +51,7 @@ func _draw() -> void:
 	var above := -SPRITE_HALF - 10.0 * px
 	var first := SPRITE_HALF + 14.0 * px
 	var second := first + 13.0 * px
+	var third := second + 13.0 * px
 	var left := -110.0 * px
 	var width := 220.0 * px
 
@@ -67,9 +69,15 @@ func _draw() -> void:
 		_label(pos + Vector2(left, first), "(%d, %d)" % [roundi(pos.x), roundi(pos.y)],
 			10.0 * px, width, POSITION_COLOR)
 
+		# Nothing further to say about something that cannot move. It used to
+		# print "no movement component" here, which was informative when one
+		# prop sat among ten creatures and became noise the moment a spawner
+		# filled the map with berries. The absence of a velocity line says it.
+		var bag: String = row["bag"]
+		if bag != "":
+			_label(pos + Vector2(left, third), "bag " + bag, 10.0 * px, width, BAG_COLOR)
+
 		if not row["has_movement"]:
-			_label(pos + Vector2(left, second), "no movement component",
-				10.0 * px, width, PAUSED_COLOR)
 			continue
 
 		# Where it is heading: dashed line to the destination, ring on the spot.

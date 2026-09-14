@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="EcsEntityDef" format=3 uid="uid://bry900ecs0001"]
+
+[ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="base"]
+[ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
+[ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
+[ext_resource type="Script" uid="uid://bleyjpnkxl87q" path="res://9. EcsSystem/components/ecs_pickable_component.gd" id="s_pick"]
+[ext_resource type="Texture2D" uid="uid://dlfyft0lv6p2h" path="res://Global/Asset/CircleButtonFull.png" id="tex"]
+
+[sub_resource type="Resource" id="c_sprite"]
+script = ExtResource("s_sprite")
+texture = ExtResource("tex")
+scale_factor = 0.18
+tint = Color(1, 0.36, 0.42, 1)
+z_index = -1
+
+[sub_resource type="Resource" id="c_pick"]
+script = ExtResource("s_pick")
+
+[resource]
+script = ExtResource("def")
+id = &"berry"
+display_name = "Berry"
+components = Array[ExtResource("base")]([SubResource("c_sprite"), SubResource("c_pick")])
