@@ -118,7 +118,7 @@ Registered in `project.godot`, available globally:
 
 **Input flows through the InputMap, never through direct node references.** Godot 4.7's built-in `VirtualJoystick` node drives InputMap *actions*, so the movement stick maps to `ui_left/right/up/down` and `PlayerControlComponent` reads `Input.get_vector(...)` with an explicit low deadzone (the `ui_*` actions' own 0.5 deadzone is too coarse for analog sticks). The aim/skill joysticks use the separate `aim_*` actions so dragging them never moves the player, and report casts via the `released(input_vector)` / `tapped` signals. The Sprint button presses the `sprint` action directly (`Input.action_press/release`) rather than calling into the player.
 
-There is no `addons/` directory — `VirtualJoystick` is engine-provided in 4.7. Do not reintroduce the third-party addon.
+`VirtualJoystick` is engine-provided in 4.7 — do not reintroduce the third-party addon. The only thing in `addons/` is `markdown_previewer`, an **editor-only** plugin for reading this repo's `.md` docs inside Godot; it is excluded from the Android export and has no runtime role.
 
 **UI talks to gameplay only through `EventBus`.** `InventoryComponent` mutates its own `slots` and emits `inventory_changed(slots)`; `InventoryPanel` rebuilds from that array and knows nothing about entities. `status_bar.gd` likewise listens for `health_change` / `stamina_change` / `mana_change`. Follow this pattern for new HUD elements instead of wiring node paths across the scene.
 

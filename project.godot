@@ -41,6 +41,10 @@ window/stretch/mode="viewport"
 window/stretch/aspect="keep_height"
 window/handheld/orientation="sensor_landscape"
 
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/markdown_previewer/plugin.cfg")
+
 [global_group]
 
 select_able=""
