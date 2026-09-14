@@ -266,21 +266,54 @@ Before starting any of the rest, decide whether it builds on this stripped core 
 - **Step 7** — GOAP planner as a pure function over a symbolic snapshot, run off-frame
   under a replan budget.
 
-## 8. Open threads from the session that built this
+## 8. Open arguments — node structure and data structure
 
-Neither is a defect; both are decisions deliberately deferred.
+**These are unsettled and deliberately so.** Claude made recommendations during the
+session that built this; they were **not accepted**, and the author has said explicitly
+that both questions are still to be argued out. Nothing below is a plan. Treat it as the
+state of a disagreement, so the argument can resume with its context rather than be
+re-derived — and do not quietly implement any of it.
 
-- **`EcsBodyComponent`.** `EcsCollisionSystem` keeps its `Area2D` pool as private state,
-  but that pool is *read back* (overlap results), unlike `EcsRenderSystem`'s write-only
-  sprite pool. Moving the node handle into a component and splitting lifecycle from
-  behaviour would make collision pure. Costs a `Node` reference inside a component.
-- **One view node per entity.** Sprites live under `World/Entities` and bodies under
-  `World/Bodies`, each keyed by entity id, each writing position separately. Adding sound
-  or animation the same way means more parallel pools. One `Node2D` per entity with
-  concern-specific children would collapse them: position written once, children inherit
-  the transform, one lifetime. The guard if that is ever done: **the view node carries no
-  script**, so behaviour has nowhere to accumulate. Worth doing before animation and
-  sound, not after.
+### The node-structure argument
+
+What exists: one pool per concern. `EcsRenderSystem` owns `Sprite2D`s under
+`World/Entities`, `EcsCollisionSystem` owns `Area2D`s under `World/Bodies`. Each is keyed
+by entity id, each has its own lifecycle, each writes position separately.
+
+Positions on the table:
+
+- **Keep pools per concern.** Each system owns exactly what it needs and a concern can be
+  deleted in one piece; an entity pays only for the components it has.
+- **One view node per entity, children per concern.** Position written once (children
+  inherit the transform), one lifetime, one first-tick spike. Collapses to two scene
+  parents however many concerns appear. The objection: a per-entity node carrying sprite,
+  area and audio is structurally one step from module 8, where the node *was* the entity.
+- **No nodes — `PhysicsServer2D` / `RenderingServer` RIDs.** Cheapest, and an RID is
+  honest data rather than a Node reference. Costs editor visibility and manual lifetimes.
+  The author has said they want to keep using Godot nodes for collision, sprite drawing,
+  animation and sound, which argues against this — but it has not been argued *through*.
+
+Also unresolved: whether the `Area2D` pool should exist at all, given it is the one place
+the "nothing reads back off a node" rule is bent (§4).
+
+### The data-structure argument
+
+What exists: `_store = { Script : { entity_id : EcsComponent } }`, components as
+field-only `Resource` subclasses, queries intersecting tables driven from the rarest.
+
+Open questions, none settled:
+
+- Should a node or RID handle ever live **inside a component** (the `EcsBodyComponent`
+  idea)? It would make `EcsCollisionSystem` pure behaviour and split lifecycle from
+  resolution — at the cost of the data layer knowing the scene tree exists.
+- Should storage stay dictionary-of-dictionaries, or become archetype/packed arrays? The
+  API would not change (`ecs_world.gd`'s header already says so), but the measured
+  bottleneck is `get_component` call overhead, which archetypes would attack directly.
+- Should components be `Resource` at all, given `.tres` authoring only ever uses the
+  exported half and every component now carries runtime-only fields beside them?
+
+Nothing here is blocking step 4. It is blocking a decision about what module 9 *is*, which
+is a different thing and worth taking the time over.
 
 ## 9. Measured performance, on the machine that built this
 

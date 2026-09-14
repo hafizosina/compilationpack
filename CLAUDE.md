@@ -81,7 +81,14 @@ The plan's step-2 combat pipeline and an unplanned observability layer (selectio
 reflective inspector, census, themed HUD) were built, proved out, and then cut back out
 so the flow reads end to end — both are in git at `928b9d1` and `9. EcsSystem/HANDOFF.md` §6 says
 what was removed and how to restore it. **Do not re-add breadth to module 9 without
-being asked**; the small size is the point. Steps 3–7 are not started, and several of
+being asked**; the small size is the point.
+
+**Two architecture questions in module 9 are open arguments, not settled plans** —
+how the Godot nodes are structured (a pool per concern, one view node per entity, or
+server RIDs) and how component data is stored (dictionary-of-dictionaries, archetypes,
+whether a node handle may live inside a component). `9. EcsSystem/HANDOFF.md` §8 records
+the positions. The author has said explicitly he still wants to argue both out. **Do not
+implement any option from §8**; raise it for a decision instead. Steps 3–7 are not started, and several of
 them assume the cut combat layer.
 
 Read `9. EcsSystem/HANDOFF.md` before touching that folder. Module 9 is the main scene,
