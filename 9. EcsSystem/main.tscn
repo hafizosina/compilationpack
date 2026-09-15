@@ -5,6 +5,8 @@
 [ext_resource type="Resource" uid="uid://bdeakl45615lh" path="res://9. EcsSystem/defs/world1.tres" id="3_world"]
 [ext_resource type="PackedScene" uid="uid://gctl0rjtf4op" path="res://Global/Scene/camera_2d.tscn" id="4_camera"]
 [ext_resource type="Script" uid="uid://b0j8lemo4ufcc" path="res://9. EcsSystem/ecs_debug_overlay.gd" id="5_overlay"]
+[ext_resource type="Script" uid="uid://ds334ygkjgkce" path="res://9. EcsSystem/ecs_selection_marker.gd" id="6_marker"]
+[ext_resource type="PackedScene" uid="uid://becsui0000001" path="res://9. EcsSystem/ui/ui.tscn" id="7_ui"]
 
 [node name="Main" type="Node2D" unique_id=1531045582]
 script = ExtResource("1_main")
@@ -22,6 +24,9 @@ polygon = PackedVector2Array(-1600, -840, 1600, -840, 1600, 840, -1600, 840)
 
 [node name="Bodies" type="Node2D" parent="World" unique_id=330118842]
 
+[node name="SelectionMarker" type="Node2D" parent="World" unique_id=118240366]
+script = ExtResource("6_marker")
+
 [node name="DebugOverlay" type="Node2D" parent="World" unique_id=811245903]
 z_index = 100
 script = ExtResource("5_overlay")
@@ -30,3 +35,5 @@ script = ExtResource("5_overlay")
 zoom_value = 0.4
 min_zoom = 0.3
 pan_speed = 3.0
+
+[node name="UI" parent="." unique_id=1402887551 instance=ExtResource("7_ui")]

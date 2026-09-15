@@ -56,8 +56,8 @@ behaviour and never call each other, and nothing outside a system mutates compon
 Queries key on the script object — `world.query([EcsPositionComponent])` — never on a
 string.
 
-**It is deliberately stripped to a bare-minimum core**: 9 components, 8 systems
-(`spawner > forage > low_brain > movement > collision > pickup > render > debug`, where `EcsLowBrainSystem` is named for its
+**It is deliberately stripped to a bare-minimum core**: 11 components, 11 systems
+(`spawner > forage > low_brain > movement > collision > pickup > selection > render > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
 rank in the plan's decision ladder, not for the wandering it happens to do), and a world
 of 10 entities in 2 types (5 rabbits, 5 monkeys — same component list, different authored
 values). `EcsDebugSystem` is a pure
@@ -73,15 +73,28 @@ is a derived index rebuilt every tick, and the only thing read back is which pai
 near each other, never where anything is. Do not widen that exception. The pipeline
 therefore runs in **`_physics_process`** (fixed timestep; the overlap list refreshes once
 per physics step, costing one tick of lag). The overlay is **drawn via `_draw()`, not built from Controls**, which is why it sits outside the
-theme rather than carrying `theme_override_*`. **F1** toggles it. There is no screen-space
-HUD and no `EcsDebugPanel` — that was tried and removed; debug output belongs on the
+theme rather than carrying `theme_override_*`. **F1** toggles it. There is no
+`EcsDebugPanel` — that was tried and removed; per-entity debug output belongs on the
 entity it describes.
 
-The plan's step-2 combat pipeline and an unplanned observability layer (selection,
-reflective inspector, census, themed HUD) were built, proved out, and then cut back out
-so the flow reads end to end — both are in git at `928b9d1` and `9. EcsSystem/HANDOFF.md` §6 says
-what was removed and how to restore it. **Do not re-add breadth to module 9 without
-being asked**; the small size is the point.
+**Selection and the inspector are back** (restored from `928b9d1`). Left-click picks an
+entity, and the bottom-left panel shows it. The chain is strictly ECS: a click is only
+*recorded* on the `EcsSelectionComponent` singleton by `main.gd`, `EcsSelectionSystem`
+resolves it on the next tick by a distance query over `EcsPositionComponent` (no physics
+pick, no hitboxes), selection is the presence of the `EcsSelectedComponent` tag, and
+`EcsInspectSystem` pushes a formatted snapshot onto `EventBus.ecs_entity_inspected`.
+`ui/ui.tscn` is a dumb renderer that never touches the world. **The inspector builds its
+tabs by reflection** over `PROPERTY_USAGE_SCRIPT_VARIABLE`, so a new component gets a tab,
+with its fields in declaration order, without the component or the panel knowing anything
+about each other — **components stay method-free; do not add a `describe()` hook to a
+component** the way module 8 does without settling that argument first.
+
+The plan's step-2 combat pipeline was built, proved out, and then cut back out so the
+flow reads end to end; it is in git at `928b9d1`, and `9. EcsSystem/HANDOFF.md` §6 says
+what was removed and how to restore it. The observability layer was cut with it and has
+since been restored, minus its `EcsCommandSystem` and pipeline panel, which depended on
+the combat demo. **Do not re-add breadth to module 9 without being asked**; the small
+size is the point.
 
 **Two architecture questions in module 9 are open arguments, not settled plans** —
 how the Godot nodes are structured (a pool per concern, one view node per entity, or

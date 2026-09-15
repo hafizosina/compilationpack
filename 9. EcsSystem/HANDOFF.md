@@ -220,16 +220,17 @@ the scheduler; a broken weapon fell back to fists with no `if weapon.broken` any
 "attackable" was never a flag, only the target query asking for `EcsHealthComponent`.
 **The evidence for the rewrite is in that commit, not in the working tree.**
 
-**The observability layer** — `selection`/`selected`/`commands` components,
-`EcsSelectionSystem`, `EcsInspectSystem`, `EcsCensusSystem`, `EcsCommandSystem`,
-`ecs_selection_marker.gd`, `ui/ui.tscn` + `ui.gd`, and the four `ecs_*` signals in
-`System/EventBus.gd`. Two pieces of it were evidence rather than scaffolding: picking was
-a distance query over `EcsPositionComponent` rather than a physics hit, and the
-inspector's tabs were built by reflection over `PROPERTY_USAGE_SCRIPT_VARIABLE` with
-nothing in the file naming a component type.
+**The observability layer — RESTORED, see §6a.** What went out was the
+`selection`/`selected`/`commands` components, `EcsSelectionSystem`, `EcsInspectSystem`,
+`EcsCensusSystem`, `EcsCommandSystem`, `ecs_selection_marker.gd`, `ui/ui.tscn` + `ui.gd`,
+and the four `ecs_*` signals in `System/EventBus.gd`. Two pieces of it were evidence
+rather than scaffolding: picking was a distance query over `EcsPositionComponent` rather
+than a physics hit, and the inspector's tabs were built by reflection over
+`PROPERTY_USAGE_SCRIPT_VARIABLE` with nothing in the file naming a component type.
 
 **Also trimmed from files that stayed:** `EcsWorld` lost singletons, the frame-event API
-and `components_of()`/`count()` (the enumeration accessors the inspector needed);
+and `components_of()`/`count()` (the enumeration accessors the inspector needed —
+singletons and `components_of()` came back with §6a, `count()` and the event API did not);
 `EcsSystem` lost `enabled`; `EcsScheduler` lost `find()` and the end-of-frame
 `clear_events()`. The crocodile and dagger blueprints were deleted and the monkey
 rewritten as a plain wanderer, leaving two entity types; `world1.tres` went from 33
@@ -239,6 +240,55 @@ Note one demo went with the dagger: it was the only entity with **no**
 `EcsMovementComponent`, so it showed "capability is component presence" — a prop that
 cannot move, with no `is_static` flag and no branch. Both current types move. Bringing it
 back is one blueprint plus a placement, no code.
+
+## 6a. The observability layer, brought back
+
+Restored from `928b9d1` on request. What came back verbatim: `EcsSelectionComponent`
+(the click inbox singleton), `EcsSelectedComponent` (the tag), `EcsSelectionSystem`,
+`EcsInspectSystem`, `EcsCensusSystem`, `EcsSelectionMarker`, `ui/ui.tscn` + `ui.gd`, and
+three of the four EventBus signals. `EcsWorld` got `add_singleton()`/`get_singleton()`
+and `components_of()` back, and nothing else.
+
+Three deliberate differences from what was cut:
+
+- **`EcsCommandSystem` and `EcsCommandsComponent` did not come back.** They existed to
+  queue the F3 "give the crocodile armour" demo, which needs the combat layer.
+- **The pipeline panel did not come back.** It reported the run order and the F2 crit
+  toggle, and it depended on `EcsScheduler.find()` and `EcsSystem.enabled` — both removed
+  in the strip. `ecs_pipeline_changed` was dropped with it.
+- **The marker's ring shows `EcsShapeComponent.radius`, not an attack reach.**
+  `EcsAggressionComponent` is gone; the body radius is the reading that still exists. An
+  entity with no shape (a berry) gets the centre dot alone.
+
+The pipeline is now eleven stages: `selection` sits after `pickup` and before `render`,
+and `census > inspect` run last, after `debug`. All three added stages are pure readers or
+write only the selection tag, so the simulation is unchanged by their presence.
+
+**The restore is its own evidence for reflection.** The inspector was written when the
+world had `name/position/sprite/movement/wander` and a combat layer. Clicking a monkey
+now yields tabs for `shape`, `low_brain` and `inventory` — components that did not exist
+when `EcsInspectSystem` was written — with no edit to the inspector, the panel, or the
+components:
+
+```
+NAME: monkey_0 (monkey)
+ENTITY  { id: #6, blueprint: Monkey,
+          components: name, position, shape, sprite, movement, low_brain, inventory, selected }
+  Shape      { radius: 36.00 }
+  Movement   { speed: 130.00, arrive_radius: 6.00, destination: (-761, -418),
+               has_destination: true, velocity: (-115, -60) }
+  Low Brain  { radius: 420.00, pause_min: 0.20, pause_max: 1.20, pause_left: 0.00 }
+  Inventory  { capacity: 5, items: [] }
+  Selected   { }
+```
+
+**That last line is the open question made concrete.** `EcsSelectedComponent` is a pure
+tag, so reflection gives it a tab with no fields in it. Module 8 would have hidden it by
+returning `{}` from `describe()` — but that is a *method on a component*, which module 9's
+first rule forbids. If the fix is wanted, the option that keeps components method-free is
+a `const` block read via `get_script_constant_map()` (verified to work in 4.7), which is
+data rather than behaviour and can say tab / merge-into-entity / hide. **Not implemented
+— it is a presentation-policy decision that belongs with §8.**
 
 ## 7. Next, per the plan
 

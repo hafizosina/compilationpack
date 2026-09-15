@@ -6,7 +6,12 @@ extends Node2D
 ## Everything on screen is a row in an EcsWorld: an entity is an integer id, a
 ## component is a field-only Resource, and every behaviour is an EcsSystem that
 ## queries for the components it cares about. The Sprite2Ds under World/Entities
-## are views the render system writes, not the entities themselves.
+## and the ring beside them are views the systems write, not the entities.
+##
+## Left-click an entity to inspect it in the bottom-left panel; click bare
+## ground to clear. A click is not handled here beyond being written to the
+## selection singleton — a system resolves it on the next tick, so the rule that
+## only a system reads the world and writes components holds for input too.
 ##
 ## The whole flow, in the order it happens:
 ##
@@ -14,7 +19,7 @@ extends Node2D
 ##   (placements)      (resolves each row     (ids + component
 ##                      against catalog.tres)  tables)
 ##
-##   every frame, EcsScheduler runs three systems over that world:
+##   every tick, EcsScheduler runs these systems over that world, in order:
 ##
 ##     spawner    adds new entities    → creates ids, files components
 ##     forage     go get a berry       → writes EcsMovementComponent
@@ -22,11 +27,15 @@ extends Node2D
 ##     movement   walks toward it      → writes EcsPositionComponent
 ##     collision  unstacks the bodies  → writes EcsPositionComponent
 ##                (Area2D pool under World/Bodies is a derived index only)
+##     selection  resolves a click     → writes EcsSelectedComponent
 ##     render     draws where it ended → writes Sprite2D nodes
 ##     debug      reports all of it    → writes the on-entity overlay
+##     census     counts the world     → emits on the EventBus
+##     inspect    reflects the selected → emits on the EventBus
 ##
-## Read those four files in that order and you have seen the whole module. The
-## debug system is a pure reader: pull it out and nothing else notices.
+## Read low_brain, movement and render in that order and you have seen every
+## behaviour. The last three stages are pure readers: pull debug, census or
+## inspect out of the chain and the simulation does not notice.
 ##
 ## Keys:
 ##   F1  show/hide the on-entity debug overlay
@@ -44,6 +53,7 @@ extends Node2D
 @onready var _entities_root: Node2D = $World/Entities
 @onready var _bodies_root: Node2D = $World/Bodies
 @onready var _debug_overlay: EcsDebugOverlay = $World/DebugOverlay
+@onready var _marker: EcsSelectionMarker = $World/SelectionMarker
 
 var _world: EcsWorld
 var _scheduler: EcsScheduler
@@ -53,6 +63,7 @@ var _factory := EcsEntityFactory.new()
 
 func _ready() -> void:
 	EcsConst.world_bounds = arena
+	EventBus.ecs_respawn_requested.connect(_build)
 	_build()
 
 ## The pipeline runs on the physics tick, not the render frame. Two reasons:
@@ -63,6 +74,15 @@ func _physics_process(delta: float) -> void:
 	_scheduler.run_all(_world, delta)
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed \
+			and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+		# Recorded, not resolved. EcsSelectionSystem drains this next tick.
+		var selection := _world.get_singleton(EcsSelectionComponent) as EcsSelectionComponent
+		selection.pending = true
+		selection.pick_at = get_global_mouse_position()
+		get_viewport().set_input_as_handled()
+		return
+
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
 	match (event as InputEventKey).keycode:
@@ -87,6 +107,8 @@ func _build() -> void:
 	if _collision != null:
 		_collision.clear()
 	_debug_overlay.clear()
+	_marker.clear()
+	EventBus.ecs_entity_inspected.emit({})
 
 	_world = EcsWorld.new()
 	_render = EcsRenderSystem.new(_entities_root)
@@ -100,10 +122,15 @@ func _build() -> void:
 		.add(EcsMovementSystem.new()) \
 		.add(_collision) \
 		.add(EcsPickupSystem.new()) \
+		.add(EcsSelectionSystem.new(_marker)) \
 		.add(_render) \
-		.add(EcsDebugSystem.new(_debug_overlay))
+		.add(EcsDebugSystem.new(_debug_overlay)) \
+		.add(EcsCensusSystem.new()) \
+		.add(EcsInspectSystem.new())
 
+	_world.add_singleton(EcsSelectionComponent.new())
 	_factory.spawn_world(_world, catalog, world_def)
+	EventBus.ecs_world_census.emit(_world.entity_count())
 	if Constant.DEBUG:
 		_debug_report()
 

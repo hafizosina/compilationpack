@@ -20,6 +20,7 @@ const NO_ENTITY: int = 0
 var _next_id: int = 1
 var _alive: Dictionary = {}  # entity_id -> true
 var _store: Dictionary = {}  # Script -> { entity_id -> EcsComponent }
+var _singletons: Dictionary = {}  # Script -> EcsComponent
 
 # --- entities ---------------------------------------------------------------
 
@@ -113,3 +114,30 @@ func query(include: Array, exclude: Array = []) -> Array[int]:
 		if matched:
 			result.append(id)
 	return result
+
+## Every component filed against `id`, in the order their types first appeared
+## in the world. Exists for the inspector, which has to show an entity without
+## knowing what it is; ordinary systems ask for the components they want by
+## type and never enumerate.
+func components_of(id: int) -> Array[EcsComponent]:
+	var found: Array[EcsComponent] = []
+	for table: Dictionary in _store.values():
+		var component: EcsComponent = table.get(id)
+		if component != null:
+			found.append(component)
+	return found
+
+# --- singletons -------------------------------------------------------------
+
+## World-level state that belongs to no entity — currently the click inbox the
+## selection system drains. Stored beside the component tables rather than on a
+## dummy entity so it never turns up in a query.
+func add_singleton(component: EcsComponent) -> EcsComponent:
+	if component == null:
+		push_error("EcsWorld: cannot add a null singleton")
+		return null
+	_singletons[component.get_script()] = component
+	return component
+
+func get_singleton(type: Script) -> EcsComponent:
+	return _singletons.get(type)

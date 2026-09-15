@@ -121,10 +121,11 @@ Three rules, each structural rather than remembered:
 
 **The data layer drops a whole layer** versus module 8. Module 8 needed a `SimComponentDef` subclass per component, because a blueprint could not hold a live component. Here a component is already pure data, so `EcsEntityDef.components` holds the components themselves and `EcsEntityFactory` copies them, deep-duplicated per instance — the parallel `defs/components/*.gd` hierarchy vanished the moment behaviour left the components. The factory never switches on component type.
 
-**The whole pipeline is eight systems:**
+**The whole pipeline is eleven systems:**
 
 ```
-spawner > forage > low_brain > movement > collision > pickup > render > debug
+spawner > forage > low_brain > movement > collision > pickup
+        > selection > render > debug > census > inspect
 ```
 
 `EcsLowBrainSystem` picks a destination and writes `EcsMovementComponent`; movement walks toward it and writes `EcsPositionComponent`; render draws where it ended up. Read those three files in that order and you have seen every behaviour in the module.
@@ -153,9 +154,13 @@ The pipeline therefore runs in `_physics_process` — a sim wants a fixed timest
 
 Its own docs live in the folder: `HANDOFF.md` (state of the build) · `ECS_REFACTOR_PLAN.md` (the plan it follows, with the kill criteria).
 
-**Key files:** `9. EcsSystem/ecs/ecs_world.gd`, `main.gd`, `systems/ecs_low_brain_system.gd`, `ecs_entity_factory.gd`
+**Selection and inspection are queries, not machinery.** Left-click records the click on a singleton; `EcsSelectionSystem` resolves it next tick as a *distance query over `EcsPositionComponent`* — no physics pick, no hitboxes, hit radius taken from each entity's own sprite so the clickable area is whatever you can see. Being selected is the presence of `EcsSelectedComponent`, which is why the marker and the inspector both find it with an ordinary query while holding no reference to an entity.
 
-**Controls:** **F1** toggles the on-entity debug overlay · **F5** rebuilds the world from data — edit `world1.tres` or a blueprint, press F5, see the change with no code touched.
+**The inspector's tabs are built by reflection, and no component describes itself.** `EcsInspectSystem` reads `PROPERTY_USAGE_SCRIPT_VARIABLE` off each component, so fields appear in declaration order and a new component kind gets a tab with no edit to the panel, the system, or the component. Module 8 needed a hand-written `describe()` per component to do the same job; here components stay method-free, which is the rule. Proof: the inspector predates `shape`, `low_brain` and `inventory` and shows all three correctly. The cost is that a pure tag like `EcsSelectedComponent` gets an empty tab, since reflection has no way to be told "don't show me" — an open presentation question, noted in `HANDOFF.md` §6a.
+
+**Key files:** `9. EcsSystem/ecs/ecs_world.gd`, `main.gd`, `systems/ecs_low_brain_system.gd`, `systems/ecs_inspect_system.gd`, `ecs_entity_factory.gd`
+
+**Controls:** **Left-click** an entity to inspect it, bare ground to clear · **F1** toggles the on-entity debug overlay · **F5** rebuilds the world from data — edit `world1.tres` or a blueprint, press F5, see the change with no code touched.
 
 ---
 
@@ -195,11 +200,13 @@ Reusable Camera2D scene with:
 
 ### Addons
 
-**None.** The third-party `addons/virtual_joystick` was removed — `VirtualJoystick` is engine-provided in Godot 4.7. Do not reintroduce it.
+**One, editor-only.** `addons/markdown_previewer` renders this repo's `.md` docs inside the Godot editor. It is enabled in `project.godot`'s `[editor_plugins]`, excluded from the Android build by the preset's `exclude_filter="addons/*"`, and has no runtime role.
+
+The third-party `addons/virtual_joystick` was removed — `VirtualJoystick` is engine-provided in Godot 4.7. Do not reintroduce it.
 
 ### Theme
 
-All widget styling goes through the single theme `Global/Theme/main_theme.tres`, attached to a scene's root Control so it cascades — no `theme_override_*` on individual nodes. Medieval palette (parchment / ink / wood / brass), with `RoundButton` and `ItemSlot` type variations and the `Sim*` variations (`SimPanel`, `SimTitle`, `SimLabel`, `SimHBox`, `SimVBox`) used by module 8's inspector. Module 9 has no UI of its own — its HUD was cut along with the rest of the observability layer.
+All widget styling goes through the single theme `Global/Theme/main_theme.tres`, attached to a scene's root Control so it cascades — no `theme_override_*` on individual nodes. Medieval palette (parchment / ink / wood / brass), with `RoundButton` and `ItemSlot` type variations and the `Sim*` variations (`SimPanel`, `SimTitle`, `SimLabel`, `SimHBox`, `SimVBox`) used by module 8's inspector. Module 9 uses the `Sim*` variations too, for its restored inspector panel.
 
 ---
 
@@ -226,7 +233,7 @@ All widget styling goes through the single theme `Global/Theme/main_theme.tres`,
 
 ---
 
-## Development Status (as of 2026-09-11)
+## Development Status (as of 2026-09-14)
 
 | Module | Status |
 |--------|--------|
@@ -238,4 +245,4 @@ All widget styling goes through the single theme `Global/Theme/main_theme.tres`,
 | 6. GraphDb | Complete |
 | 7. JoyStick | Complete — mobile HUD, inventory, item resources |
 | 8. SimpleAiSystem | Complete for its milestone, and **kept as the behavioural reference** for module 9. Factory + components + FSM brain done; food loop closes. No longer the main scene |
-| 9. EcsSystem | **Active.** Hand-rolled ECS core and data-driven factory, stripped back to an eight-system pipeline (`spawner > forage > low_brain > movement > collision > pickup > render > debug`) to keep the flow readable, with a drawn on-entity debug overlay on F1. Now the main scene. The combat and observability layers were built, proved out and cut; they are in git at `928b9d1`. Steps 3–7 — inventory, bars, sensors, FSM brain, GOAP — not started |
+| 9. EcsSystem | **Active.** Hand-rolled ECS core and data-driven factory, stripped back to a readable pipeline (now eleven stages, `spawner > forage > low_brain > movement > collision > pickup > selection > render > debug > census > inspect`), with a drawn on-entity debug overlay on F1 and a click-to-select reflective inspector. Now the main scene. The combat and observability layers were built, proved out and cut; they are in git at `928b9d1`. **Step 3 is most of the way done** — inventory and pickup landed as relationships, leaving eating, which wants step 4's bars first. Steps 4–7 — bars, sensors, FSM brain, GOAP — not started. Two architecture questions (node structure, component storage) are recorded in `HANDOFF.md` §8 as **open arguments the author still wants to settle**, not plans; nothing there is to be implemented unasked |
