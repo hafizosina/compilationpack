@@ -2,7 +2,7 @@
 
 **Engine:** Godot 4.7 | **Renderer:** Mobile | **Viewport:** 1612 × 720 | **Target:** Android
 
-**Main scene:** `9. EcsSystem/main.tscn` — module 8 remains the behavioural reference it is being rebuilt against.
+**Main scene:** `9. EcsSystem/main.tscn`. Module 8's code has been deleted and its folder is now a design archive of five `.md` files; module 9 is the only live simulation.
 
 A numbered collection of self-contained game-system demos written in GDScript. Each folder is an isolated experiment; shared infrastructure lives in `System/` and `Global/`.
 
@@ -94,7 +94,7 @@ Four rules hold everywhere: everything is an Entity · what a thing *is* = which
 
 Its own docs live in the folder: `HANDOFF.md` (state of the build) · `HANDOFF_PSEUDOCODE.md` (every component as pseudocode, plus the open design arguments) · `PROJECT_DEFINITION.md` · `COLONY_SIM_CONCEPT.md` · `MILESTONE_1_SPEC.md`.
 
-**Key files:** `8. SimpleAiSystem/entity/sim_entity.gd`, `entity/sim_entity_factory.gd`, `components/sim_brain_fsm_component.gd`
+**Key files:** none — the code was deleted so its `Sim*` class names would stop sharing the global registry with module 9's `Ecs*` ones. The folder keeps its five design docs (`HANDOFF.md`, `HANDOFF_PSEUDOCODE.md`, `PROJECT_DEFINITION.md`, `COLONY_SIM_CONCEPT.md`, `MILESTONE_1_SPEC.md`), which is what the section above describes. Restore with `git checkout 3346b6e -- "8. SimpleAiSystem"`.
 
 **Controls:** left-click an entity to inspect it · **F1** debug labels · **F5** respawn.
 
@@ -103,7 +103,7 @@ Its own docs live in the folder: `HANDOFF.md` (state of the build) · `HANDOFF_P
 ---
 
 ### 9. EcsSystem
-A **hand-rolled ECS**, deliberately stripped to the smallest thing that still runs, so the shape of a frame is readable end to end. It is the current main scene. It shares nothing with module 8 but its subject: module 8 stays running, untouched, as the behavioural reference.
+A **hand-rolled ECS**, deliberately stripped to the smallest thing that still runs, so the shape of a frame is readable end to end. It is the current main scene. It shares nothing with module 8 but its subject; module 8's code has since been deleted, leaving its design docs as the reference.
 
 **Why the rewrite.** Node composition was fighting the design. A stateful wielded item (a weapon with durability) and the hand-held rule "each side resolves only what it alone can know" were *manufactured* problems that ECS dissolves structurally. It is explicitly **not** a performance exercise; at 5–40 entities the cache wins are irrelevant.
 
@@ -174,7 +174,7 @@ Its own docs live in the folder: `HANDOFF.md` (state of the build) · `ECS_REFAC
 | `Constant` | `System/Constant.gd` | `DEBUG: bool = true` flag |
 | `Core` | `System/Core.gd` | Quit shortcut (Ctrl+Q debug / Escape fallback) |
 | `Global` | `System/Global.gd` | Camera state (position + zoom) |
-| `EventBus` | `System/EventBus.gd` | Signal bus — `control_dir`, `health/stamina/mana_change`, `inventory_changed`, module 8's `sim_world_census` / `sim_respawn_requested` / `sim_entity_inspected`, module 9's `ecs_world_census` / `ecs_respawn_requested` / `ecs_entity_inspected` / `ecs_pipeline_changed` |
+| `EventBus` | `System/EventBus.gd` | Signal bus — `control_dir`, `health/stamina/mana_change`, `inventory_changed`, module 9's `ecs_world_census` / `ecs_respawn_requested` / `ecs_entity_inspected` / `ecs_pipeline_changed` |
 | `Utils` | `System/Utils.gd` | `screen_to_world_position()`, `zoom_scale_ratio()` |
 | `GlobalAstar2` | `3. ControlPathFinding/global_astar2.gd` | Travel-cost overlay toggle signal |
 | `GraphDb` | `6. GraphDb/GraphDb.gd` | In-memory database singleton |
@@ -188,7 +188,7 @@ Entity (master_entity.gd)       — base Node2D with `size: int`
     └── SenseComponent          — proximity sense area
 ```
 
-This is modules 1–7 only. Module 8 has its own `Sim`-prefixed entity/component layer registered by **slot**, and module 9 has no entity nodes at all — an entity there is an integer id and components are field-only Resources. Do not carry patterns between the three without reading the module's own `HANDOFF.md`.
+This is modules 1–7 only. Module 8 had its own `Sim`-prefixed entity/component layer registered by **slot** (code now deleted; see its docs), and module 9 has no entity nodes at all — an entity there is an integer id and components are field-only Resources. Do not carry patterns between the three without reading the module's own `HANDOFF.md`.
 
 ### Global Camera (`Global/Scene/camera_2d.tscn`)
 

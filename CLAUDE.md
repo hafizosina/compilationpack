@@ -4,9 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**CompilationPack** — a Godot **4.7** (GDScript) project that collects self-contained game-system demos in numbered folders. Mobile renderer, 1612×720 viewport, `sensor_landscape`, Android export target. Main scene is `res://9. EcsSystem/main.tscn`; module 8 is the behavioural reference it is being rebuilt against.
+**CompilationPack** — a Godot **4.7** (GDScript) project that collects self-contained game-system demos in numbered folders. Mobile renderer, 1612×720 viewport, `sensor_landscape`, Android export target. Main scene is `res://9. EcsSystem/main.tscn`. Module 8's code has been deleted; its folder is a design archive of five `.md` files, and module 9 is the only live simulation.
 
-There are no tests and no build scripts; the editor is the tool chain.
+There are no build scripts; the editor is the tool chain. The only tests in the repo are
+module 9's, in `9. EcsSystem/tests/`:
+
+```bash
+# 47 checks over the entity lifecycle and the sensor/action layer.
+# Exit code 0 only if all pass — run it after touching module 9's manager,
+# collision, pickup, spawner, sensor or node sync.
+"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
+
+# Population ramp: where a tick crosses 250 ms. ~4,450 entities at 4 FPS,
+# simulation only. Takes a few minutes. See HANDOFF.md §9.
+"$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"
+```
 
 ## Commands
 
@@ -19,7 +31,6 @@ GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.
 "$GODOT" --path .
 
 # Run one module directly (bypasses run/main_scene)
-"$GODOT" --path . "res://8. SimpleAiSystem/main.tscn"
 "$GODOT" --path . "res://7. JoyStick/main.tscn"
 
 # Headless validation after editing .tscn / .tres by hand — always do this
@@ -40,24 +51,70 @@ Hand-edited scene/resource files are the main breakage risk in this repo: `.tscn
 | `Global/Asset/`, `Global/Theme/` | Shared art and the single UI theme |
 | `<N>. <Name>/` | One isolated demo module per folder |
 | `docs/devlog/Summary.md` | Longer per-module write-up, one section per module |
-| `8. SimpleAiSystem/*.md` | Module 8 has its own doc set — `HANDOFF.md` is its state-of-the-build; read it before touching that folder |
-| `9. EcsSystem/*.md` | Module 9 likewise — `HANDOFF.md` is its state-of-the-build, `ECS_REFACTOR_PLAN.md` the plan it follows |
+| `8. SimpleAiSystem/*.md` | **Design archive — the code is deleted.** Five docs kept for the reasoning module 9 is built against |
+| `9. EcsSystem/*.md` | Module 9 likewise — `HANDOFF.md` is its state-of-the-build, `ECS_REFACTOR_PLAN.md` the plan it follows; `HANDOFF.md` §5 covers the entity-lifecycle model |
+| `9. EcsSystem/tests/` | The repo's only tests — module 9's lifecycle acceptance test and its population stress test |
 
 Keep feature work inside the module folder it belongs to; promote something to `Global/` or `System/` only when a second module needs it.
 
-**Module 8 is a world of its own.** It does not use `Global/Scene/`'s `Entity`/`EntityComponent` — it has its own `Sim`-prefixed entity/component/def layer, a `.tres`-driven factory, and components registered by **slot** rather than by class. Its rules (slots vs stubs, one claim per entity, "each side resolves only what it alone can know") are written up in `8. SimpleAiSystem/HANDOFF.md` §3 and `HANDOFF_PSEUDOCODE.md`. Do not carry patterns between module 8 and modules 1–7 in either direction without reading those first.
+**Module 8's code is gone — the folder is a design archive.** All 100 of its script, scene and resource files were deleted so its `Sim*` class names would stop sharing the global registry with module 9's `Ecs*` ones; its three `sim_*` signals came out of `System/EventBus.gd` with them. What remains is five `.md` files, still worth reading: the slot-vs-stub rule, one claim per entity, "each side resolves only what it alone can know" and the weapon pain case (`HANDOFF.md` §3, `HANDOFF_PSEUDOCODE.md`) are the arguments module 9 was built to answer. **Treat them as a record of a design, not a guide to files** — nothing they describe exists in the tree. To get the code back: `git checkout 3346b6e -- "8. SimpleAiSystem"`.
 
 **Module 9 is a hand-rolled ECS, and shares nothing with module 8 but its subject.**
 Entities are integer ids in an `EcsWorld`, components are field-only Resources with no
 methods, and every behaviour is an `EcsSystem` the scheduler runs in order; the
-`Sprite2D`s under `World/Entities` are a view the render system writes, not the entities.
+`Sprite2D`s under `World/Entities` are a view `EcsNodeSyncSystem` writes, not the entities.
 Three rules are non-negotiable there: components hold data only, systems hold all
 behaviour and never call each other, and nothing outside a system mutates component data.
 Queries key on the script object — `world.query([EcsPositionComponent])` — never on a
 string.
 
-**It is deliberately stripped to a bare-minimum core**: 11 components, 11 systems
-(`spawner > forage > low_brain > movement > collision > pickup > selection > render > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
+**`EcsEntityManager` is the only thing that creates or destroys an entity id, its
+component data, or its nodes**, and it does so at one instant — the `lifecycle` stage,
+first in the pipeline. A system that wants something born or killed writes a note to the
+`EcsLifecycleComponent` singleton; it never calls `create_entity`, `destroy_entity`,
+`add_child` or `queue_free` itself. The manager *creates and destroys*; it never updates.
+Per-tick writes onto nodes belong to `EcsNodeSyncSystem` (sprites) and
+`EcsCollisionSystem` (bodies). Keep that line — it is what stops the manager becoming a
+god object. A component says it needs a node by declaring `const NODE_KIND` naming a kind
+from `EcsConst`; the manager reads the constant and builds one, never switching on
+component type. A constant and not a method, because components stay method-free.
+
+**Perception and reach are physics, not arithmetic.** `EcsSensorComponent` (what it can
+see) and `EcsActionComponent` (what it can touch) each declare an area under the entity's
+container, and `EcsSensorSystem` writes what they overlap into `sensor.perceived` /
+`action.reached`. `EcsForageSystem` only chases a berry it perceives; `EcsPickupSystem`
+only takes one its action area touches. Those two read ids off components and never touch
+a node — `EcsSensorSystem` and `EcsCollisionSystem` are the **only** two files that read
+back off a node, and that is the whole of the exception. **Layer policy is declared on the
+component**, not chosen by the manager: alongside `NODE_KIND` it states `NODE_LAYER` (what
+others can detect of it) and `NODE_MASK` (what it looks for), and the manager derives
+`monitoring`/`monitorable` from those. Only `EcsShapeComponent` claims a layer
+(`EcsConst.LAYER_BODY`) — a body is the only detectable thing in the world; sensors and
+action areas carry none, so sensors are never reported to each other. Body's mask stays
+`LAYER_BODY` because soft collision *is* body-vs-body and nothing else detects bodies at a
+body's radius; it is free (measured, `HANDOFF.md` §5). Adding a new area kind is a
+component with three constants and **no edit to `EcsEntityManager`**. The overlap list is a **cull, not a verdict** — it is one tick
+stale, so pickup confirms reach against the components before acting. Keep an entity's
+action radius above its own body radius or soft collision stops it before its reach
+arrives. Solid and movable are separate: a berry has a body (so it can be seen and
+touched) but no `EcsMovementComponent`, and collision moves only what can move, or a
+forager would shove the berry it is chasing.
+
+**Nodes are grouped per entity**, not pooled per kind: `World/Entities/entity_<id>/` holds
+that entity's `Sprite2D`, `Area2dForBody` and whatever else its components declare. The
+container carries the transform and children sit at local zero, so position is written
+once per entity and one container freed takes the whole entity with it. **An `entity_<id>`
+node is a container, never an entity** — no script, no data, no state, and nothing read
+back off it. That discipline is all that separates this from module 8, where the node
+*was* the entity (see its archive); if something hangs state on a container, that line has
+been crossed.
+
+**Node lifetime tracks the entity; what a node does tracks the components.** A berry that
+is picked up loses its `EcsPositionComponent` but is not dead, so its sprite is hidden
+rather than freed and comes back if it is put down. Freeing a node is kill and only kill.
+
+**It is deliberately stripped to a bare-minimum core**: 14 components, 13 systems
+(`lifecycle > spawner > sensor > forage > low_brain > movement > collision > pickup > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
 rank in the plan's decision ladder, not for the wandering it happens to do), and a world
 of 10 entities in 2 types (5 rabbits, 5 monkeys — same component list, different authored
 values). `EcsDebugSystem` is a pure
@@ -67,10 +124,14 @@ space (name, position, velocity vector and heading, dashed line to its destinati
 CollisionShape2D**, so the sim still runs with no scene tree. Collision is **soft**:
 `EcsCollisionSystem` runs after movement and pushes overlapping pairs apart rather than
 vetoing the move, which is what lets any future position-writer be corrected for free.
-It finds the pairs with a pool of `Area2D` under `World/Bodies` — **the one deliberate
-exception to "nothing reads back off a node"**: components stay the only truth, the pool
-is a derived index rebuilt every tick, and the only thing read back is which pairs are
-near each other, never where anything is. Do not widen that exception. The pipeline
+It finds the pairs with an `Area2D` per solid entity — **the one deliberate exception to
+"nothing reads back off a node"**: components stay the only truth, the areas are a derived
+index, and the only thing read back is which pairs are near each other, never where
+anything is. Do not widen that exception. `EcsEntityManager` owns those areas (it builds
+one for any entity whose `EcsShapeComponent` declares it) and they ride their entity's
+container, so the collision system writes only the radius and whether the body is live.
+The debug overlay does **not** draw body circles — there are real `CollisionShape2D`s in
+the tree now, so Godot's Debug > Visible Collision Shapes is the viewer. The pipeline
 therefore runs in **`_physics_process`** (fixed timestep; the overlap list refreshes once
 per physics step, costing one tick of lag). The overlay is **drawn via `_draw()`, not built from Controls**, which is why it sits outside the
 theme rather than carrying `theme_override_*`. **F1** toggles it. There is no
@@ -87,7 +148,7 @@ pick, no hitboxes), selection is the presence of the `EcsSelectedComponent` tag,
 tabs by reflection** over `PROPERTY_USAGE_SCRIPT_VARIABLE`, so a new component gets a tab,
 with its fields in declaration order, without the component or the panel knowing anything
 about each other — **components stay method-free; do not add a `describe()` hook to a
-component** the way module 8 does without settling that argument first.
+component** the way module 8 did without settling that argument first.
 
 The plan's step-2 combat pipeline was built, proved out, and then cut back out so the
 flow reads end to end; it is in git at `928b9d1`, and `9. EcsSystem/HANDOFF.md` §6 says
@@ -105,8 +166,9 @@ implement any option from §8**; raise it for a decision instead. Steps 3–7 ar
 them assume the cut combat layer.
 
 Read `9. EcsSystem/HANDOFF.md` before touching that folder. Module 9 is the main scene,
-ahead of the plan, which held that switch until step 6 — module 8 is untouched and
-remains the behavioural reference, so do not delete or refactor it.
+ahead of the plan, which held that switch until step 6, and now the only simulation in the
+repo — module 8's behaviour survives as documentation, not as something to run and compare
+against.
 
 ## Autoloads
 
