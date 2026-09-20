@@ -1,19 +1,23 @@
 # Module 9 — EcsSystem: state of the build
 
 Greenfield hand-rolled ECS, built beside `8. SimpleAiSystem` per `ECS_REFACTOR_PLAN.md`.
-Module 8 keeps running untouched as the behavioural reference.
+**Module 8's code has since been deleted** — its folder is a design archive of five `.md`
+files, so the references to it below are to a recorded design, not to something you can
+run and compare against. Module 9 is the only live simulation in the repo.
 
 **The module has been deliberately stripped to its bare minimum** — one world, one
-scheduler, ten systems — so the flow reads end to end without hunting. What was cut is
+scheduler, thirteen systems — so the flow reads end to end without hunting. What was cut is
 listed in §6 and is recoverable from git; nothing was lost, only set aside.
 
-`project.godot`'s main scene is module 9 (`uid://daecsmain0001`), so a plain run opens it.
-Run either module directly:
+`project.godot`'s main scene is module 9 (`uid://daecsmain0001`), so a plain run opens it,
+or run it directly:
 
 ```bash
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 "$GODOT" --path . "res://9. EcsSystem/main.tscn"
-"$GODOT" --path . "res://8. SimpleAiSystem/main.tscn"
+
+# 49 checks over the entity lifecycle and the sensor/action layer; exit 0 only if all pass
+"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
 ```
 
 One thing outside this folder belongs to module 9 and would be lost if the folder were
@@ -31,7 +35,7 @@ world1.tres  ──►  EcsEntityManager ──►  EcsWorld          (once, at 
                   against catalog.tres,   tables
                   builds the nodes        + the nodes they declare
 
-every frame, EcsScheduler runs ten systems over that world:
+every frame, EcsScheduler runs thirteen systems over that world:
 
   lifecycle  births and deaths     → the only stage that creates or frees
   spawner    asks for a berry      → writes a note to the lifecycle inbox
@@ -42,9 +46,15 @@ every frame, EcsScheduler runs ten systems over that world:
   collision  unstacks the bodies   → writes EcsPositionComponent
              (the Area2Ds it reads overlaps off are a derived index)
   pickup     takes what it reached → removes EcsPositionComponent
-  node_sync  draws where it ended  → writes Sprite2D nodes
+  selection  resolves a click      → writes EcsSelectedComponent
+  node_sync  draws where it ended  → writes each entity_<id> container
   debug      reports all of it     → writes the on-entity overlay
+  census     counts the world      → emits on the EventBus
+  inspect    reflects the selected → emits on the EventBus
 ```
+
+The last three are pure readers: pull `debug`, `census` or `inspect` out of the chain and
+the simulation does not notice.
 
 Read `systems/ecs_low_brain_system.gd`, `ecs_movement_system.gd` and
 `ecs_node_sync_system.gd` in that order and you have seen every behaviour in the module.
@@ -364,7 +374,7 @@ shoving whatever walks over the spot it was picked up from.
 
 ### Its test
 
-`tests/lifecycle_test.tscn` — 47 checks, re-runnable, exit code 0 only if all pass:
+`tests/lifecycle_test.tscn` — 49 checks, re-runnable, exit code 0 only if all pass:
 
 ```bash
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
@@ -457,7 +467,7 @@ Three deliberate differences from what was cut:
   `EcsAggressionComponent` is gone; the body radius is the reading that still exists. An
   entity with no shape (a berry) gets the centre dot alone.
 
-The pipeline is now twelve stages: `selection` sits after `pickup` and before `node_sync`,
+The pipeline is now thirteen stages: `selection` sits after `pickup` and before `node_sync`,
 and `census > inspect` run last, after `debug`. All three added stages are pure readers or
 write only the selection tag, so the simulation is unchanged by their presence.
 

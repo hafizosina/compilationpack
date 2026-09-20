@@ -10,7 +10,7 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 47 checks over the entity lifecycle and the sensor/action layer.
+# 49 checks over the entity lifecycle and the sensor/action layer.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
