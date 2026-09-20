@@ -146,6 +146,7 @@ func _build() -> void:
 	_scheduler \
 		.add(EcsLifecycleSystem.new(_manager, catalog)) \
 		.add(EcsSpawnerSystem.new()) \
+		.add(EcsSensorSystem.new(_manager)) \
 		.add(EcsForageSystem.new()) \
 		.add(EcsLowBrainSystem.new()) \
 		.add(EcsMovementSystem.new()) \
