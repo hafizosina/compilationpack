@@ -27,6 +27,13 @@ extends EcsComponent
 
 ## Seconds until the next spawn. Runtime state.
 var cooldown: float = 0.0
+## Notes handed to EcsEntityManager and not yet fulfilled.
+##
+## Spawning is no longer something this spawner does itself, so the id does not
+## come back in the same tick it is asked for. The note does: the spawner keeps
+## it here, and harvests `born` off it on the following tick. One tick of delay
+## before a berry appears, and nothing else changes.
+var pending: Array[EcsSpawnRequest] = []
 ## Entity ids this spawner has produced and that are still alive.
 ##
 ## Module 8 kept node references here and pruned with `is_instance_valid()`.

@@ -1,10 +1,14 @@
 class_name EcsSpriteComponent
 extends EcsComponent
 
-## What the entity looks like — still data. The render system reads it and
+## What the entity looks like — still data. EcsNodeSyncSystem reads it and
 ## pushes the values onto a pooled Sprite2D; anything wanting to change an
-## entity's appearance writes here, which is why the death system darkens
-## `tint` rather than reaching for a node.
+## entity's appearance writes here rather than reaching for a node.
+
+## Declares that an entity carrying this component needs a Sprite2D.
+## EcsEntityManager reads the constant at spawn and builds one. A constant and
+## not a method: the component states what it implies and still does nothing.
+const NODE_KIND: StringName = EcsConst.NODE_SPRITE
 
 @export var texture: Texture2D
 ## Uniform scale for the texture. The ~128px animal art needs 0.5 per tile.

@@ -18,7 +18,7 @@ extends EcsComponent
 ## and nothing had to tell it not to.
 
 ## How many entities fit.
-@export var capacity: int = 5
+@export var capacity: int = 1
 
 ## Entity ids currently held. Runtime state — a .tres cannot know a runtime id.
 var items: Array[int] = []

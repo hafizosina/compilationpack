@@ -22,8 +22,6 @@ polygon = PackedVector2Array(-1600, -840, 1600, -840, 1600, 840, -1600, 840)
 
 [node name="Entities" type="Node2D" parent="World" unique_id=594757665]
 
-[node name="Bodies" type="Node2D" parent="World" unique_id=330118842]
-
 [node name="SelectionMarker" type="Node2D" parent="World" unique_id=118240366]
 script = ExtResource("6_marker")
 

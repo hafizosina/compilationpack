@@ -7,7 +7,7 @@ extends EcsComponent
 ## bottom of the decision ladder — the plan's later steps add an FSM and then a
 ## planner above it. All any of them do is write a destination into
 ## EcsMovementComponent, so a higher brain replaces this one without the
-## movement system, the render system or anything else noticing.
+## movement system, the node sync system or anything else noticing.
 ##
 ## Carrying this component is the whole of "this entity decides for itself".
 

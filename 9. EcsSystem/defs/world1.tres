@@ -7,7 +7,6 @@
 script = ExtResource("place")
 entity_name = &"rabbit_0"
 type = &"rabbit"
-position = Vector2(0, 0)
 overrides = {
 "movement": {
 "speed": 18.0

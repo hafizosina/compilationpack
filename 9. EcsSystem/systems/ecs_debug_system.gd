@@ -6,7 +6,7 @@ extends EcsSystem
 ## only one here that is purely a reader: it writes no component and creates no
 ## entity, so pulling it out of the scheduler changes the simulation not at all.
 ##
-## Run it last, after render, so what it reports is the state that was just drawn.
+## Run it last, after node_sync, so what it reports is the state just drawn.
 ##
 ## Note what it does NOT do: it never enumerates an entity's components. It asks
 ## for the three types it wants to show, by type, exactly as every other system
@@ -31,7 +31,6 @@ func run(world: EcsWorld, _delta: float) -> void:
 		var named := world.get_component(id, EcsNameComponent) as EcsNameComponent
 		var place := world.get_component(id, EcsPositionComponent) as EcsPositionComponent
 		var move := world.get_component(id, EcsMovementComponent) as EcsMovementComponent
-		var body := world.get_component(id, EcsShapeComponent) as EcsShapeComponent
 		var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
 		var brain := world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
 
@@ -46,7 +45,6 @@ func run(world: EcsWorld, _delta: float) -> void:
 			"has_destination": false,
 			"destination": Vector2.ZERO,
 			"pause_left": 0.0,
-			"radius": body.radius if body != null else 0.0,
 			"bag": "%d/%d" % [bag.items.size(), bag.capacity] if bag != null else "",
 		}
 		if move != null:

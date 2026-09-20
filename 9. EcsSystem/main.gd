@@ -6,7 +6,15 @@ extends Node2D
 ## Everything on screen is a row in an EcsWorld: an entity is an integer id, a
 ## component is a field-only Resource, and every behaviour is an EcsSystem that
 ## queries for the components it cares about. The Sprite2Ds under World/Entities
-## and the ring beside them are views the systems write, not the entities.
+## and the ring beside them are views the systems write, not the entities. An
+## `entity_<id>` node is a container, never an entity: no script, no data, and
+## nothing is ever read back off it.
+##
+## A component can declare that it implies a node — `const NODE_KIND` on
+## EcsSpriteComponent and EcsShapeComponent — and EcsEntityManager reads those
+## declarations at spawn to build exactly the nodes an entity needs. It never
+## switches on a component type, so a new node-backed component is a new
+## constant and no edit here.
 ##
 ## Left-click an entity to inspect it in the bottom-left panel; click bare
 ## ground to clear. A click is not handled here beyond being written to the
@@ -15,27 +23,48 @@ extends Node2D
 ##
 ## The whole flow, in the order it happens:
 ##
-##   world1.tres  ──►  EcsEntityFactory  ──►  EcsWorld       (once, at startup)
+##   world1.tres  ──►  EcsEntityManager ──►  EcsWorld       (once, at startup)
 ##   (placements)      (resolves each row     (ids + component
-##                      against catalog.tres)  tables)
+##                      against catalog.tres,  tables)
+##                      builds the nodes)
+##
+##   the nodes are grouped per entity, and hold nothing:
+##
+##     World/Entities/entity_7/Sprite2D
+##                             Area2dForBody      ← soft collision
+##                             Area2dForSensor    ← what it can see
+##                             Area2dForAction    ← what it can reach
 ##
 ##   every tick, EcsScheduler runs these systems over that world, in order:
 ##
-##     spawner    adds new entities    → creates ids, files components
-##     forage     go get a berry       → writes EcsMovementComponent
+##     lifecycle  births and deaths    → the only stage that creates or frees
+##     spawner    asks for a berry     → writes a note to the lifecycle inbox
+##     sensor     what can it see/reach→ writes EcsSensor/EcsActionComponent
+##     forage     go get what it sees  → writes EcsMovementComponent
 ##     low_brain  else wander          → writes EcsMovementComponent
 ##     movement   walks toward it      → writes EcsPositionComponent
 ##     collision  unstacks the bodies  → writes EcsPositionComponent
-##                (Area2D pool under World/Bodies is a derived index only)
+##                (the Area2Ds it reads overlaps off are a derived index only)
 ##     selection  resolves a click     → writes EcsSelectedComponent
-##     render     draws where it ended → writes Sprite2D nodes
+##     node_sync  draws where it ended → writes each entity_<id> container
 ##     debug      reports all of it    → writes the on-entity overlay
 ##     census     counts the world     → emits on the EventBus
 ##     inspect    reflects the selected → emits on the EventBus
 ##
-## Read low_brain, movement and render in that order and you have seen every
+## Perception is physics, not arithmetic: an entity sees what its sensor area
+## overlaps and can pick up what its action area touches, both culled by Godot's
+## broadphase in C++ rather than by measuring to every entity in GDScript. Only
+## bodies carry a collision layer, so sensors are never reported to each other.
+##
+## Read low_brain, movement and node_sync in that order and you have seen every
 ## behaviour. The last three stages are pure readers: pull debug, census or
 ## inspect out of the chain and the simulation does not notice.
+##
+## Structure is separated from behaviour on purpose. EcsEntityManager is the
+## only thing that creates or destroys an entity, its data or its nodes, and it
+## does so at one instant — the lifecycle stage — so no system ever changes the
+## shape of the world while another is walking it. Everything after that stage
+## only ever writes values.
 ##
 ## Keys:
 ##   F1  show/hide the on-entity debug overlay
@@ -51,18 +80,20 @@ extends Node2D
 @export var arena: Rect2 = Rect2(-1600.0, -840.0, 3200.0, 1680.0)
 
 @onready var _entities_root: Node2D = $World/Entities
-@onready var _bodies_root: Node2D = $World/Bodies
 @onready var _debug_overlay: EcsDebugOverlay = $World/DebugOverlay
 @onready var _marker: EcsSelectionMarker = $World/SelectionMarker
 
 var _world: EcsWorld
 var _scheduler: EcsScheduler
-var _render: EcsRenderSystem
 var _collision: EcsCollisionSystem
-var _factory := EcsEntityFactory.new()
+var _manager: EcsEntityManager
 
 func _ready() -> void:
 	EcsConst.world_bounds = arena
+	# The manager outlives any one world: it is what frees the previous world's
+	# nodes when F5 builds the next one. Everything it makes hangs under one
+	# parent, grouped per entity — World/Entities/entity_<id>/{Sprite2D, ...}.
+	_manager = EcsEntityManager.new(_entities_root)
 	EventBus.ecs_respawn_requested.connect(_build)
 	_build()
 
@@ -102,8 +133,6 @@ func _unhandled_input(event: InputEvent) -> void:
 ## its rank, not its behaviour: a smarter brain later takes EcsLowBrainSystem's
 ## place and writes the same destination field.
 func _build() -> void:
-	if _render != null:
-		_render.clear()
 	if _collision != null:
 		_collision.clear()
 	_debug_overlay.clear()
@@ -111,25 +140,26 @@ func _build() -> void:
 	EventBus.ecs_entity_inspected.emit({})
 
 	_world = EcsWorld.new()
-	_render = EcsRenderSystem.new(_entities_root)
-	_collision = EcsCollisionSystem.new(_bodies_root)
+	_collision = EcsCollisionSystem.new(_manager)
 	_scheduler = EcsScheduler.new()
 
 	_scheduler \
-		.add(EcsSpawnerSystem.new(_factory, catalog)) \
+		.add(EcsLifecycleSystem.new(_manager, catalog)) \
+		.add(EcsSpawnerSystem.new()) \
 		.add(EcsForageSystem.new()) \
 		.add(EcsLowBrainSystem.new()) \
 		.add(EcsMovementSystem.new()) \
 		.add(_collision) \
 		.add(EcsPickupSystem.new()) \
 		.add(EcsSelectionSystem.new(_marker)) \
-		.add(_render) \
+		.add(EcsNodeSyncSystem.new(_manager)) \
 		.add(EcsDebugSystem.new(_debug_overlay)) \
 		.add(EcsCensusSystem.new()) \
 		.add(EcsInspectSystem.new())
 
 	_world.add_singleton(EcsSelectionComponent.new())
-	_factory.spawn_world(_world, catalog, world_def)
+	_world.add_singleton(EcsLifecycleComponent.new())
+	_manager.spawn_world(_world, catalog, world_def)
 	EventBus.ecs_world_census.emit(_world.entity_count())
 	if Constant.DEBUG:
 		_debug_report()

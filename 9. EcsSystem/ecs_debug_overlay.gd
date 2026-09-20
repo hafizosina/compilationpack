@@ -5,16 +5,20 @@ extends Node2D
 ## position, the velocity vector with its heading, and a dashed line to the spot
 ## the low brain picked.
 ##
+## It does NOT draw bodies. EcsShapeComponent's radius reaches the screen as a
+## real CollisionShape2D under World/Bodies now, so Godot's own Debug > Visible
+## Collision Shapes draws it, and a second hand-rolled circle would only be a
+## copy that can disagree with the shape the physics server is actually using.
+##
 ## Dumb on purpose. It holds rows and draws them — it never queries the world,
 ## never reads a component and never decides anything. EcsDebugSystem hands it
-## a fresh snapshot each frame, exactly as EcsRenderSystem hands the Sprite2Ds
+## a fresh snapshot each frame, exactly as EcsNodeSyncSystem hands the Sprite2Ds
 ## their values. The overlay is a view, like the sprites are.
 
 ## Half the drawn height of the ~128px art at EcsConst.SPRITE_SCALE — how far a
 ## label must sit from an entity's centre to clear its sprite.
 const SPRITE_HALF := 64.0 * EcsConst.SPRITE_SCALE
 
-const BODY_COLOR := Color(0.45, 1.0, 0.6, 0.6)
 const NAME_COLOR := Color(1.0, 0.98, 0.9, 0.95)
 const POSITION_COLOR := Color(0.74, 0.78, 0.82, 0.9)
 const BAG_COLOR := Color(0.65, 1.0, 0.55, 0.95)
@@ -57,13 +61,6 @@ func _draw() -> void:
 
 	for row in _rows:
 		var pos: Vector2 = row["pos"]
-
-		# The body, at its true size. Only the line *width* is zoom-compensated:
-		# the radius is the entity's actual extent, not a label about it, so it
-		# has to scale with the view like the sprite does.
-		var radius: float = row["radius"]
-		if radius > 0.0:
-			draw_arc(pos, radius, 0.0, TAU, 32, BODY_COLOR, 1.5 * px)
 
 		_label(pos + Vector2(left, above), String(row["name"]), 13.0 * px, width, NAME_COLOR)
 		_label(pos + Vector2(left, first), "(%d, %d)" % [roundi(pos.x), roundi(pos.y)],

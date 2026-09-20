@@ -10,6 +10,28 @@ const WALK_SPEED: float = 90.0
 ## Scale applied to the ~128px animal art so one creature covers one tile.
 const SPRITE_SCALE: float = 0.5
 
+## Node kinds a component may ask for, declared as `const NODE_KIND` on the
+## component and built by EcsEntityManager.
+##
+## They live here rather than on either side so that neither has to import the
+## other: a data component naming the manager would point the dependency
+## backwards, and the manager naming components would make it switch on type.
+## Both just agree on a string.
+const NODE_SPRITE: StringName = &"Sprite2D"
+const NODE_BODY: StringName = &"Area2dForBody"
+const NODE_SENSOR: StringName = &"Area2dForSensor"
+const NODE_ACTION: StringName = &"Area2dForAction"
+
+## Physics layer bits. Only bodies occupy a layer; sensors and action areas are
+## pure lookers — they carry no layer at all, so nothing detects *them*.
+##
+## That is the whole answer to "does perception cost n² again": a sensor is
+## reported only the bodies it overlaps, never the other 499 sensors. Get this
+## wrong and the n² moves out of GDScript and into the physics server, which is
+## worse, because it is no longer visible in a profile you can read.
+const LAYER_NONE: int = 0
+const LAYER_BODY: int = 1
+
 ## How close to the arena edge a wander destination may be picked.
 const EDGE_MARGIN: float = 48.0
 
