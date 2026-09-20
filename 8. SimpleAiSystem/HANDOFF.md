@@ -1,5 +1,22 @@
 # Module 8 — Handoff Brief
 
+> ## ⚠ THE CODE IS GONE. THIS FOLDER IS A DESIGN ARCHIVE.
+> Module 8's 100 script, scene and resource files were deleted so its `Sim*` class names
+> would stop sharing the global registry with module 9's `Ecs*` ones. What is left is the
+> five design documents, kept because the reasoning in them is still the reference module 9
+> is built against — the slot-vs-stub rule, "each side resolves only what it alone can
+> know", the weapon pain case, the FSM design.
+>
+> **Everything below describes code that no longer exists in the working tree.** Read it as
+> a record of a design, not as a guide to files you can open. To get the code back:
+>
+> ```bash
+> git checkout 3346b6e -- "8. SimpleAiSystem"     # the last commit that had it
+> ```
+>
+> Module 9's `HANDOFF.md` is the state-of-the-build for what actually runs.
+
+
 > Continuation context for **CompilationPack / `8. SimpleAiSystem`** (Godot 4.7, GDScript).
 > This is the state-of-the-project doc: what actually exists right now.
 >
