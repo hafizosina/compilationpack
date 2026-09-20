@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://dj4yi84jp6465"]
+
+[ext_resource type="Script" uid="uid://c84k7i88alb0u" path="res://9. EcsSystem/tests/stress_test.gd" id="1_stress"]
+
+[node name="StressTest" type="Node2D"]
+script = ExtResource("1_stress")
