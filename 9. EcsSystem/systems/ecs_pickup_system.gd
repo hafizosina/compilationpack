@@ -28,14 +28,25 @@ extends EcsSystem
 ## blocked by the very thing it is reaching for — the two bodies touch and soft
 ## collision stops it before its reach ever arrives.
 ##
-## **The overlap list culls; the arithmetic below decides.** `reached` is what
-## the physics server saw at the end of the last step, so it can name something
-## that has since moved — a berry taken and dropped somewhere else is the case
-## that caught this — and acting on the list alone would take an item 400 px
-## away. So the list narrows the world to a handful of neighbours in C++, and
-## one distance check per neighbour confirms it against the components, which
-## are the only truth. That is the division of labour the areas were adopted
-## for: the cull is what must not be O(n), not the confirmation of three items.
+## **The overlap list is the verdict, and that is a deliberate decision.** This
+## used to re-check `distance <= action.radius + item.radius` against the
+## components before acting, on the grounds that `reached` describes the end of
+## the last physics step and `movement` and `collision` both write positions
+## between the sensor stage and this one. But the physics test and that
+## arithmetic are *the same condition* — the check was never a stricter rule,
+## only the same rule on fresher numbers, and the numbers differ by about a
+## pixel: a walker covers 1.2 px in a tick and a settled pair corrects by well
+## under one. Against a 48 px reach that is noise.
+##
+## So reach is now **whatever the physics server last reported**, with an
+## accepted error of roughly one tick of motion. The cost is a case that does
+## not arise yet: something that jumps position — dropped and re-placed, or
+## spawned onto someone — can be taken from where it used to be, for exactly
+## one tick. If items ever become droppable, this is the line to revisit.
+##
+## What is still checked is `EcsPositionComponent`, and that is a different
+## question: not "is it near enough" but "is it still in the world at all",
+## because something earlier in this same loop may already have taken it.
 
 func label() -> StringName:
 	return &"pickup"
@@ -47,22 +58,12 @@ func run(world: EcsWorld, _delta: float) -> void:
 			continue
 		var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
 
-		var here := (world.get_component(id, EcsPositionComponent) as EcsPositionComponent).position
-
 		for touched in action.reached:
 			if not world.has(touched, EcsPickableComponent):
 				continue
 			# Something earlier in this same loop may already have taken it.
 			if not world.has(touched, EcsPositionComponent):
 				continue
-			var there := (world.get_component(touched, EcsPositionComponent) as EcsPositionComponent).position
-			var body := world.get_component(touched, EcsBodyComponent) as EcsBodyComponent
-			# Touching means the two circles meet: reach plus the item's own
-			# body. Something with no body is a point.
-			var touching := action.radius + (body.radius if body != null else 0.0)
-			if here.distance_to(there) > touching:
-				continue
-
 			bag.items.append(touched)
 			world.remove(touched, EcsPositionComponent)
 			if bag.items.size() >= bag.capacity:

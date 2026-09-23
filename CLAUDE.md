@@ -94,8 +94,14 @@ others can detect of it) and `NODE_MASK` (what it looks for), and the manager de
 action areas carry none, so sensors are never reported to each other. Body's mask stays
 `LAYER_BODY` because soft collision *is* body-vs-body and nothing else detects bodies at a
 body's radius; it is free (measured, `HANDOFF.md` §5). Adding a new area kind is a
-component with three constants and **no edit to `EcsEntityManager`**. The overlap list is a **cull, not a verdict** — it is one tick
-stale, so pickup confirms reach against the components before acting. Keep a
+component with three constants and **no edit to `EcsEntityManager`**. **The overlap list is the verdict on reach**, and that is a decision, not an
+oversight: pickup and consume used to re-check `distance <= reach + radius` against the
+components, but that is the *same condition* the physics server already tested, on numbers
+about one tick — roughly a pixel — fresher. The accepted error is one tick of motion. What
+those systems still re-ask is whether the thing named is *still in the world*, which is a
+different question and a cheap one. If items ever become droppable, something that jumps
+position could be taken from where it used to be for one tick, and that is the line to
+revisit. Keep a
 *solid* entity's action radius above its own body radius or soft collision stops it
 before its reach arrives.
 
