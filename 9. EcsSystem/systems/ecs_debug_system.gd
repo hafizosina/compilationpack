@@ -32,7 +32,6 @@ func run(world: EcsWorld, _delta: float) -> void:
 		var place := world.get_component(id, EcsPositionComponent) as EcsPositionComponent
 		var move := world.get_component(id, EcsMovementComponent) as EcsMovementComponent
 		var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
-		var brain := world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
 
 		var row := {
 			"id": id,
@@ -41,25 +40,25 @@ func run(world: EcsWorld, _delta: float) -> void:
 			"pos": place.position,
 			"has_movement": move != null,
 			"velocity": Vector2.ZERO,
-			"heading": 0.0,
 			"has_destination": false,
 			"destination": Vector2.ZERO,
-			"pause_left": 0.0,
-			"state": "",
-			"bag": "%d/%d" % [bag.items.size(), bag.capacity] if bag != null else "",
+			"hunger": -1.0,
+			"health": -1.0,
+			"carried": bag.items.size() if bag != null else -1,
 		}
 		if move != null:
 			row["velocity"] = move.velocity
-			# Screen degrees, 0 = right and increasing clockwise, so the number
-			# matches the arrow the overlay draws.
-			row["heading"] = fposmod(rad_to_deg(move.velocity.angle()), 360.0)
 			row["has_destination"] = move.has_destination
 			row["destination"] = move.destination
-		if brain != null:
-			row["pause_left"] = maxf(brain.pause_left, 0.0)
-			# The name comes off a constant on the component, so a new state is
-			# one enum entry and one string, with nothing here to update.
-			row["state"] = EcsLowBrainComponent.STATE_NAMES[brain.state]
+		# Bars go out as ratios, never as text or pixels. Formatting is the
+		# view's business and a fraction is the honest reading — the overlay
+		# decides how long a bar that makes, and -1 means "has no such bar".
+		var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+		var health := world.get_component(id, EcsHealthComponent) as EcsHealthComponent
+		if hunger != null:
+			row["hunger"] = clampf(hunger.value / maxf(hunger.max_value, 0.01), 0.0, 1.0)
+		if health != null:
+			row["health"] = clampf(health.value / maxf(health.max_health, 0.01), 0.0, 1.0)
 		rows.append(row)
 
 	_overlay.show_rows(rows)

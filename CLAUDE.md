@@ -184,7 +184,14 @@ wandering it happens to do), and a world
 of 10 entities in 2 types (5 rabbits, 5 monkeys — a grazer and a carrier, differing by one
 component and some authored values). `EcsDebugSystem` is a pure
 reader feeding one dumb view, `EcsDebugOverlay`, which annotates each entity in world
-space (name, position, velocity vector and heading, dashed line to its destination).
+space: name, a velocity arrow, a dashed line to its destination, **hunger and health as
+bars**, and a **badge on the sprite's shoulder** when it is carrying something. Shapes
+rather than numbers, because these are readings you scan a crowd for rather than read one
+at a time — the arrow *is* the velocity, so the figures that used to sit under it said
+nothing the picture did not, and the exact numbers live in the inspector for whichever
+entity you click. The system sends **ratios and counts, never text or pixels**; what shape
+that makes is the view's business, and a sentinel (`-1`) means the entity has no such
+reading, so a berry draws no bars and an empty-handed creature no badge.
 `EcsBodyComponent` is the entity's body — a radius and `is_solid`, **data not a
 CollisionShape2D**, so the sim still runs with no scene tree. Collision is **soft**:
 `EcsCollisionSystem` runs after movement and pushes overlapping pairs apart rather than

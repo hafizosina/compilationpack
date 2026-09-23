@@ -1,9 +1,17 @@
 class_name EcsDebugOverlay
 extends Node2D
 
-## World-space debug gizmos, drawn on the entities themselves: the name, the
-## position, the velocity vector with its heading, and a dashed line to the spot
-## the low brain picked.
+## World-space debug gizmos, drawn on the entities themselves: the name, a
+## velocity arrow, a dashed line to the spot the brain picked, hunger and health
+## as bars, and a badge on the sprite's shoulder when it is carrying something.
+##
+## Shapes rather than numbers, because these are readings you scan a crowd for
+## rather than ones you read. A dozen creatures' worth of "hunger 43%" and
+## "v(62, -34) 151°" is a wall of text parsed one entity at a time; a dozen
+## part-filled bars is a picture taken in at a glance, which is the whole job of
+## an overlay. Where a number is genuinely wanted — the exact velocity, the
+## exact hunger — the inspector has it for the one entity you click, and a
+## vector is better read as the arrow anyway.
 ##
 ## It does NOT draw bodies. EcsBodyComponent's radius reaches the screen as a
 ## real CollisionShape2D under World/Bodies now, so Godot's own Debug > Visible
@@ -20,11 +28,20 @@ extends Node2D
 const SPRITE_HALF := 64.0 * EcsConst.SPRITE_SCALE
 
 const NAME_COLOR := Color(1.0, 0.98, 0.9, 0.95)
-const POSITION_COLOR := Color(0.74, 0.78, 0.82, 0.9)
 const BAG_COLOR := Color(0.65, 1.0, 0.55, 0.95)
+const BADGE_INK := Color(0.09, 0.07, 0.05, 0.95)
 const VELOCITY_COLOR := Color(0.35, 0.9, 1.0)
 const DESTINATION_COLOR := Color(1.0, 0.45, 0.85)
-const PAUSED_COLOR := Color(1.0, 0.85, 0.35, 0.9)
+
+## Bar colours, taken from the project palette so the overlay reads as part of
+## the same game: health is the palette's blood red, hunger its brass. Hunger
+## *fills* as it climbs, so a full bar is the warning, which is the opposite
+## direction to health and deliberately so — both bars are full of bad news at
+## opposite ends, and the colour is what tells them apart at a glance.
+const BAR_BACK := Color(0.165, 0.125, 0.086, 0.7)
+const BAR_EDGE := Color(0.0, 0.0, 0.0, 0.5)
+const HUNGER_COLOR := Color(0.725, 0.541, 0.196)
+const HEALTH_COLOR := Color(0.62, 0.169, 0.145)
 
 ## Snapshot rows from EcsDebugSystem. See that file for the keys.
 var _rows: Array[Dictionary] = []
@@ -53,26 +70,42 @@ func _draw() -> void:
 	# small screen-space gap, so a label neither overlaps the art when zoomed in
 	# nor floats away from it when zoomed out.
 	var above := -SPRITE_HALF - 10.0 * px
-	var first := SPRITE_HALF + 14.0 * px
-	var second := first + 13.0 * px
-	var third := second + 13.0 * px
 	var left := -110.0 * px
 	var width := 220.0 * px
+
+	# Bars sit directly under the sprite, above the text, centred on the entity.
+	var bar_width := 46.0 * px
+	var bar_height := 5.0 * px
+	var bar_left := -bar_width * 0.5
+	var bar_top := SPRITE_HALF + 3.0 * px
 
 	for row in _rows:
 		var pos: Vector2 = row["pos"]
 
 		_label(pos + Vector2(left, above), String(row["name"]), 13.0 * px, width, NAME_COLOR)
-		_label(pos + Vector2(left, first), "(%d, %d)" % [roundi(pos.x), roundi(pos.y)],
-			10.0 * px, width, POSITION_COLOR)
 
-		# Nothing further to say about something that cannot move. It used to
-		# print "no movement component" here, which was informative when one
-		# prop sat among ten creatures and became noise the moment a spawner
-		# filled the map with berries. The absence of a velocity line says it.
-		var bag: String = row["bag"]
-		if bag != "":
-			_label(pos + Vector2(left, third), "bag " + bag, 10.0 * px, width, BAG_COLOR)
+		# Only what the entity actually has. A berry carries neither bar and a
+		# bush carries no bag, and each simply draws nothing — the absence is
+		# the statement, the same way the missing velocity line below is.
+		var stacked := bar_top
+		var hunger: float = row["hunger"]
+		if hunger >= 0.0:
+			_bar(pos + Vector2(bar_left, stacked), hunger, bar_width, bar_height,
+				HUNGER_COLOR, px)
+			stacked += bar_height + 2.0 * px
+		var health: float = row["health"]
+		if health >= 0.0:
+			_bar(pos + Vector2(bar_left, stacked), health, bar_width, bar_height,
+				HEALTH_COLOR, px)
+
+		# A badge on the sprite's top-left shoulder, and only when there is
+		# something in the bag: an empty one is the common case and a "0" on
+		# every creature is noise. Nothing shown therefore means either empty
+		# hands or no inventory at all, which for scanning a crowd is the same
+		# fact — neither one is carrying anything.
+		var carried: int = row["carried"]
+		if carried > 0:
+			_badge(pos + Vector2(-SPRITE_HALF, -SPRITE_HALF), carried, px)
 
 		if not row["has_movement"]:
 			continue
@@ -87,8 +120,9 @@ func _draw() -> void:
 			draw_line(dest + Vector2(0.0, -13.0 * px), dest + Vector2(0.0, 13.0 * px),
 				DESTINATION_COLOR, 1.0 * px)
 
-		# Which way it is actually moving. The arrow is the vector; the text
-		# under the entity is the same thing in numbers.
+		# Which way it is actually moving. The arrow *is* the vector — its
+		# direction is the heading and its length is the speed — so the numbers
+		# that used to sit under it said nothing the picture did not.
 		var velocity: Vector2 = row["velocity"]
 		if velocity.length() > 0.01:
 			var head := pos + velocity * 0.35
@@ -96,19 +130,26 @@ func _draw() -> void:
 			var barb := -velocity.normalized() * 11.0 * px
 			draw_line(head, head + barb.rotated(0.45), VELOCITY_COLOR, 2.0 * px)
 			draw_line(head, head + barb.rotated(-0.45), VELOCITY_COLOR, 2.0 * px)
-			_label(pos + Vector2(left, second),
-				"v(%d, %d)  %d°" % [roundi(velocity.x), roundi(velocity.y), int(row["heading"])],
-				10.0 * px, width, VELOCITY_COLOR)
-		else:
-			_label(pos + Vector2(left, second), "pausing %.1fs" % row["pause_left"],
-				10.0 * px, width, PAUSED_COLOR)
 
-		# What the brain thinks it is doing. Worth its own line: with the FSM,
-		# "walking" and "walking *to a berry it chose*" look identical on screen
-		# and are different states.
-		var state: String = row["state"]
-		if state != "":
-			_label(pos + Vector2(left, third + 12.0 * px), state, 10.0 * px, width, PAUSED_COLOR)
+## One bar: a dark trough, a fill proportional to `ratio`, and an outline to
+## keep it legible over pale ground. Sizes arrive already scaled for the camera.
+func _bar(at: Vector2, ratio: float, width: float, height: float,
+		fill: Color, px: float) -> void:
+	var box := Rect2(at, Vector2(width, height))
+	draw_rect(box, BAR_BACK, true)
+	if ratio > 0.0:
+		draw_rect(Rect2(at, Vector2(width * ratio, height)), fill, true)
+	draw_rect(box, BAR_EDGE, false, 1.0 * px)
+
+## A small disc carrying a count, sat on the given corner of the sprite.
+func _badge(at: Vector2, count: int, px: float) -> void:
+	var radius := 9.0 * px
+	draw_circle(at, radius, BAG_COLOR)
+	draw_arc(at, radius, 0.0, TAU, 16, BADGE_INK, 1.0 * px)
+	var size := 10.0 * px
+	# draw_string puts the baseline on `at`, so nudge down by roughly a third of
+	# the glyph height to sit the digit in the middle of the disc.
+	_label(at + Vector2(-radius, size * 0.36), str(count), size, radius * 2.0, BADGE_INK)
 
 ## One line of centred text. Sizes arrive already scaled for the camera.
 func _label(at: Vector2, text: String, size: float, width: float, color: Color) -> void:
