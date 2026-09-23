@@ -140,6 +140,20 @@ func _probe_access(result: Dictionary) -> void:
 				here.position = move.destination
 				move.has_destination = false
 				move.velocity = Vector2.ZERO
+				move.time_left = 0.0
+				continue
+			# Mirrors the trip clock in EcsMovementSystem. It has to: this
+			# block is only worth timing while it is the same arithmetic the
+			# real stage does, and the moment it drifts the µs/entity below
+			# stops being comparable to the stage above it.
+			if move.time_left <= 0.0:
+				move.time_left = to_go.length() / maxf(move.speed, 0.01) \
+					* move.timeout_slack + move.timeout_grace
+			move.time_left -= TICK
+			if move.time_left <= 0.0:
+				move.has_destination = false
+				move.velocity = Vector2.ZERO
+				move.time_left = 0.0
 				continue
 			move.velocity = to_go.normalized() * move.speed
 			here.position += move.velocity * TICK
@@ -210,7 +224,7 @@ func _work_done(n: int) -> Dictionary:
 		perceived += (_world.get_component(id, EcsSensorComponent) as EcsSensorComponent).perceived.size()
 	for id in _world.query([EcsActionComponent]):
 		reached += (_world.get_component(id, EcsActionComponent) as EcsActionComponent).reached.size()
-	for id in _world.query([EcsPositionComponent, EcsShapeComponent]):
+	for id in _world.query([EcsPositionComponent, EcsBodyComponent]):
 		bodies += 1
 		var body := _manager.node_for(id, EcsConst.NODE_BODY) as Area2D
 		if body != null:

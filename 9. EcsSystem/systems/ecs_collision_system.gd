@@ -25,7 +25,7 @@ extends EcsSystem
 ## What changed with EcsEntityManager is who makes them, not what they mean.
 ## This system used to create a body the tick an id started matching its query
 ## and free it the tick it stopped. Now the manager builds one at spawn for any
-## entity whose EcsShapeComponent declares it, and frees it when the entity
+## entity whose EcsBodyComponent declares it, and frees it when the entity
 ## dies — so the node's lifetime follows the entity, while whether it collides
 ## at all still follows the components. A berry in an inventory keeps its area
 ## and has it switched off, because an entity with no position is not anywhere
@@ -53,16 +53,27 @@ extends EcsSystem
 ## a few ticks instead. `PhysicsDirectSpaceState2D.intersect_shape()` is the
 ## synchronous alternative if that ever matters; it costs a query per body.
 ##
-## Carrying an EcsShapeComponent is what makes an entity solid. Anything without
-## one never gets a body, so it passes through everything with no `solid` flag
-## and no branch.
+## ## Having a body, being solid, and being movable are three questions
 ##
-## **Solid and movable are different questions.** A berry is solid — it has a
-## body, so sensors can see it and action areas can touch it — but it has no
-## EcsMovementComponent, and a thing that cannot move cannot be pushed. Without
-## that rule a forager would shove the berry it was walking toward and chase it
-## across the arena. Again it is component presence doing the work: no
-## `is_static` flag, and the same rule will hold for a tree or a rock.
+## Carrying an EcsBodyComponent gives an entity a body: a radius, and an area on
+## the body layer so sensors can see it and action areas can reach it. That
+## component's `is_solid` is what makes the body *block* — what puts it in this
+## system's resolve at all.
+##
+## They were one question until a berry made the case for two. A berry needs a
+## body for exactly one reason, to be perceived and picked up, and being shoved
+## aside by every passing forager was never part of the deal: it held the
+## forager a body's width short of the thing it walked over to get. So ground
+## items — berries, corpses, a dropped tool — carry a body with `is_solid` off,
+## and everything walks over them.
+##
+## A non-solid body is still gathered below, because the radius written onto its
+## area each tick is what sensors detect it at. It is skipped only where it
+## would push or be pushed.
+##
+## **Movable is the third question, and it is EcsMovementComponent.** A bush is
+## solid and immovable: walkers are pushed out of it and it never yields. A
+## berry is neither. A rabbit is both.
 
 ## Where the bodies come from. They are invisible; only the physics server
 ## ever looks at them.
@@ -80,6 +91,7 @@ var _ids: Array[int] = []
 var _places: Array[EcsPositionComponent] = []
 var _radii := PackedFloat32Array()
 var _movable: Array[bool] = []
+var _solid: Array[bool] = []
 var _areas: Array[Area2D] = []
 var _slots: Dictionary = {}  # entity id -> index into the arrays above
 
@@ -102,17 +114,18 @@ func _sync(world: EcsWorld) -> void:
 	_places.clear()
 	_radii.clear()
 	_movable.clear()
+	_solid.clear()
 	_areas.clear()
 	_slots.clear()
 
-	for id in world.query([EcsPositionComponent, EcsShapeComponent]):
+	for id in world.query([EcsPositionComponent, EcsBodyComponent]):
 		var body := _manager.node_for(id, EcsConst.NODE_BODY) as Area2D
 		if body == null:
 			# The entity is gone and took its body with it.
 			_circles.erase(id)
 			continue
 
-		var shape := world.get_component(id, EcsShapeComponent) as EcsShapeComponent
+		var shape := world.get_component(id, EcsBodyComponent) as EcsBodyComponent
 		var circle: CircleShape2D = _circles.get(id)
 		if circle == null:
 			# Resolved once per entity rather than every tick: the manager
@@ -123,8 +136,14 @@ func _sync(world: EcsWorld) -> void:
 			circle.radius = shape.radius
 
 		var place := world.get_component(id, EcsPositionComponent) as EcsPositionComponent
-		if not body.monitoring:
-			body.monitoring = true
+		# A body that takes no part in collision has nothing to watch for, so it
+		# stops monitoring — but it stays monitorable, because being seen is the
+		# whole reason it has a body. That one line is the difference between a
+		# rabbit and a berry lying on the ground.
+		var solid := shape.is_solid
+		if body.monitoring != solid:
+			body.monitoring = solid
+		if not body.monitorable:
 			body.monitorable = true
 
 		_slots[id] = _ids.size()
@@ -132,14 +151,15 @@ func _sync(world: EcsWorld) -> void:
 		_places.append(place)
 		_radii.append(shape.radius)
 		_movable.append(world.has(id, EcsMovementComponent))
+		_solid.append(solid)
 		_areas.append(body)
 
 	# A body whose entity has stopped being anywhere is switched off rather
 	# than destroyed. Left on, a held berry would go on shoving whatever walked
 	# over the spot it was picked up from.
-	for id in world.query([EcsShapeComponent], [EcsPositionComponent]):
+	for id in world.query([EcsBodyComponent], [EcsPositionComponent]):
 		var body := _manager.node_for(id, EcsConst.NODE_BODY) as Area2D
-		if body != null and body.monitoring:
+		if body != null and body.monitorable:
 			body.monitoring = false
 			body.monitorable = false
 
@@ -150,15 +170,20 @@ func _sync(world: EcsWorld) -> void:
 ## report is what makes the correction symmetric, for free.
 func _resolve() -> void:
 	for i in _ids.size():
-		if not _movable[i]:
-			# It is still in the arrays, because everything else has to be
-			# pushed out of *it*. It just never moves itself.
+		if not _movable[i] or not _solid[i]:
+			# Immovable and still solid — a bush — stays in the arrays because
+			# everything else has to be pushed out of *it*; it just never moves
+			# itself. Not solid at all — a berry — is in them only so its radius
+			# reaches its area, and takes no part in this at either end.
 			continue
 		var mine := _places[i]
 		var my_radius := _radii[i]
 		for other: EcsEntityArea in _areas[i].get_overlapping_areas():
 			var slot: int = _slots.get(other.entity_id, -1)
-			if slot < 0:
+			if slot < 0 or not _solid[slot]:
+				# A ground item is overlapped, not collided with. The physics
+				# server still reports it, because a berry must stay detectable
+				# for the sensor; solidity is decided here, not by the layer.
 				continue
 
 			var apart := mine.position - _places[slot].position
@@ -179,5 +204,6 @@ func clear() -> void:
 	_places.clear()
 	_radii.clear()
 	_movable.clear()
+	_solid.clear()
 	_areas.clear()
 	_slots.clear()

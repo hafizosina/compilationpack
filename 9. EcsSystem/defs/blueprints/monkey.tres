@@ -7,12 +7,12 @@
 [ext_resource type="Script" uid="uid://d4puc66j4jby" path="res://9. EcsSystem/components/ecs_low_brain_component.gd" id="s_brain"]
 [ext_resource type="Script" uid="uid://c62j1k5pdptjl" path="res://9. EcsSystem/components/ecs_movement_component.gd" id="s_movement"]
 [ext_resource type="Script" uid="uid://dlx8sqm54mp4u" path="res://9. EcsSystem/components/ecs_sensor_component.gd" id="s_sensor"]
-[ext_resource type="Script" uid="uid://dyef4lkp0cmoq" path="res://9. EcsSystem/components/ecs_shape_component.gd" id="s_shape"]
+[ext_resource type="Script" uid="uid://occbigie8rhc" path="res://9. EcsSystem/components/ecs_body_component.gd" id="s_body"]
 [ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
 [ext_resource type="Texture2D" uid="uid://dbllxupj5653t" path="res://Global/Asset/Animal/monkey.png" id="tex_monkey"]
 
-[sub_resource type="Resource" id="c_shape"]
-script = ExtResource("s_shape")
+[sub_resource type="Resource" id="c_body"]
+script = ExtResource("s_body")
 radius = 36.0
 
 [sub_resource type="Resource" id="c_sprite"]
@@ -44,4 +44,4 @@ radius = 50.0
 script = ExtResource("def")
 id = &"monkey"
 display_name = "Monkey"
-components = Array[ExtResource("base")]([SubResource("c_shape"), SubResource("c_sprite"), SubResource("c_movement"), SubResource("c_brain"), SubResource("c_bag"), SubResource("c_sensor"), SubResource("c_action")])
+components = Array[ExtResource("base")]([SubResource("c_body"), SubResource("c_sprite"), SubResource("c_movement"), SubResource("c_brain"), SubResource("c_bag"), SubResource("c_sensor"), SubResource("c_action")])

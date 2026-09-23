@@ -3,7 +3,7 @@
 [ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="base"]
 [ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
 [ext_resource type="Script" uid="uid://bleyjpnkxl87q" path="res://9. EcsSystem/components/ecs_pickable_component.gd" id="s_pick"]
-[ext_resource type="Script" uid="uid://dyef4lkp0cmoq" path="res://9. EcsSystem/components/ecs_shape_component.gd" id="s_shape"]
+[ext_resource type="Script" uid="uid://occbigie8rhc" path="res://9. EcsSystem/components/ecs_body_component.gd" id="s_body"]
 [ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
 [ext_resource type="Texture2D" uid="uid://dlfyft0lv6p2h" path="res://Global/Asset/CircleButtonFull.png" id="tex"]
 
@@ -17,12 +17,13 @@ z_index = -1
 [sub_resource type="Resource" id="c_pick"]
 script = ExtResource("s_pick")
 
-[sub_resource type="Resource" id="c_shape"]
-script = ExtResource("s_shape")
+[sub_resource type="Resource" id="c_body"]
+script = ExtResource("s_body")
 radius = 14.0
+is_solid = false
 
 [resource]
 script = ExtResource("def")
 id = &"berry"
 display_name = "Berry"
-components = Array[ExtResource("base")]([SubResource("c_sprite"), SubResource("c_pick"), SubResource("c_shape")])
+components = Array[ExtResource("base")]([SubResource("c_sprite"), SubResource("c_pick"), SubResource("c_body")])

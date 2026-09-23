@@ -67,7 +67,9 @@ func _run() -> void:
 	await _collision_still_separates_manager_owned_bodies()
 	await _it_sees_before_it_takes()
 	await _an_immovable_body_is_not_shoved_around()
+	await _a_ground_item_is_walked_over_not_bumped_into()
 	await _it_walks_to_what_it_sees_and_takes_it()
+	await _a_trip_it_cannot_finish_is_given_up_on()
 
 ## A component's `const NODE_KIND` is what gets it a node, so a berry — sprite,
 ## no shape — must come out with a sprite and no body. And everything an entity
@@ -254,21 +256,54 @@ func _it_sees_before_it_takes() -> void:
 	_check("the one it never saw is untouched",
 		_world.has(far, EcsPositionComponent) and not bag.items.has(far))
 
-## A berry is solid so it can be perceived, but it cannot move, so a forager
-## walking into it must not shove it away and end up chasing it.
+## A bush is solid and has no EcsMovementComponent, so a walker must be pushed
+## out of it and it must not give an inch — solidity and movability are separate
+## questions and this is the pair that proves the second one.
 func _an_immovable_body_is_not_shoved_around() -> void:
 	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-2000.0, -2000.0))
-	var berry := _manager.spawn(_world, _catalog, &"berry", Vector2(-1990.0, -2000.0))
+	var bush := _manager.spawn(_world, _catalog, &"berry_bush", Vector2(-1990.0, -2000.0))
+	var bush_at := _world.get_component(bush, EcsPositionComponent) as EcsPositionComponent
+	var rabbit_at := _world.get_component(rabbit, EcsPositionComponent) as EcsPositionComponent
+	var bush_started := bush_at.position
+	var rabbit_started := rabbit_at.position
+	# Overlapping hard: 10 px apart, bodies of 22 and 45.
+	await _tick(20)
+
+	_check("the bush did not budge", bush_at.position.is_equal_approx(bush_started))
+	_check("the walker was the one pushed out",
+		not rabbit_at.position.is_equal_approx(rabbit_started))
+
+## And the other half of that split: a berry has a body so it can be seen and
+## reached, but `is_solid` off, so it is walked over rather than bumped
+## into. Nobody moves — not the walker, and not the thing on the ground.
+##
+## Its own scheduler, with no pickup in it: the rabbit taking the berry would
+## end the overlap and the test would pass without proving anything.
+func _a_ground_item_is_walked_over_not_bumped_into() -> void:
+	var loose := EcsScheduler.new()
+	loose \
+		.add(EcsCollisionSystem.new(_manager)) \
+		.add(EcsNodeSyncSystem.new(_manager))
+
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-3000.0, -3000.0))
+	var berry := _manager.spawn(_world, _catalog, &"berry", Vector2(-2990.0, -3000.0))
 	var berry_at := _world.get_component(berry, EcsPositionComponent) as EcsPositionComponent
 	var rabbit_at := _world.get_component(rabbit, EcsPositionComponent) as EcsPositionComponent
 	var berry_started := berry_at.position
 	var rabbit_started := rabbit_at.position
-	# Overlapping hard: 10 px apart, bodies of 22 and 14.
-	await _tick(20)
+	# 10 px apart with bodies of 22 and 14: deep inside each other, and under
+	# the old rule the rabbit would have been shoved 26 px clear.
+	for i in 20:
+		loose.run_all(_world, TICK)
+		await get_tree().physics_frame
 
-	_check("the berry did not budge", berry_at.position.is_equal_approx(berry_started))
-	_check("the forager was the one pushed out",
-		not rabbit_at.position.is_equal_approx(rabbit_started))
+	_check("the ground item stayed where it was dropped",
+		berry_at.position.is_equal_approx(berry_started))
+	_check("and the walker stood right on top of it, unpushed",
+		rabbit_at.position.is_equal_approx(rabbit_started))
+	_check("the berry still has a body to be seen by",
+		_world.has(berry, EcsBodyComponent)
+		and not (_world.get_component(berry, EcsBodyComponent) as EcsBodyComponent).is_solid)
 
 ## The whole loop, driven end to end: a forager spots a berry it cannot reach,
 ## walks to it, and takes it the moment its action area meets the berry's body.
@@ -309,6 +344,51 @@ func _it_walks_to_what_it_sees_and_takes_it() -> void:
 	_check("it stopped at arm's length, not on top of it",
 		at.position.distance_to(Vector2(2200.0, -2000.0)) > 20.0)
 
+## A destination it can never stand on. Soft collision holds the walker and the
+## bush 67 px apart — bodies of 22 and 45 — while its arrive radius is 6, so
+## walking at the middle of a bush is a trip that cannot end. Before the trip
+## clock it pushed at it forever, and because `has_destination` stayed true,
+## forage and low_brain both skipped it every tick: stuck for good.
+##
+## A bush and not a berry, now that a berry is walked over: this has to be a
+## thing that really does block, or the test proves nothing.
+func _a_trip_it_cannot_finish_is_given_up_on() -> void:
+	var blocked := EcsScheduler.new()
+	blocked \
+		.add(EcsMovementSystem.new()) \
+		.add(EcsCollisionSystem.new(_manager)) \
+		.add(EcsNodeSyncSystem.new(_manager))
+
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(2000.0, 2000.0))
+	var bush_at := Vector2(2160.0, 2000.0)
+	_manager.spawn(_world, _catalog, &"berry_bush", bush_at)
+	var at := _world.get_component(rabbit, EcsPositionComponent) as EcsPositionComponent
+	var move := _world.get_component(rabbit, EcsMovementComponent) as EcsMovementComponent
+	var started := at.position
+
+	# Tightened from the blueprint's defaults so the test is 3 seconds and not
+	# 8. 160 px at 72 px/sec is 2.2 sec of trip, so the budget is about 2.7.
+	move.timeout_slack = 1.0
+	move.timeout_grace = 0.5
+	move.destination = bush_at
+	move.has_destination = true
+
+	var ticks := 0
+	for i in 240:
+		blocked.run_all(_world, TICK)
+		await get_tree().physics_frame
+		ticks += 1
+		if not move.has_destination:
+			break
+
+	_check("it walked at the bush it could not stand in", at.position.x > started.x + 20.0)
+	_check("and was still held short of it", at.position.distance_to(bush_at) > move.arrive_radius)
+	_check("the trip timed out instead of pushing forever", not move.has_destination)
+	_check("it ran roughly the budget it was priced, not the whole loop",
+		ticks > 80 and ticks < 220)
+	_check("and the clock is back to zero for the next trip",
+		is_zero_approx(move.time_left))
+
 func _tick(count: int) -> void:
 	for i in count:
 		_scheduler.run_all(_world, TICK)
@@ -321,7 +401,7 @@ func _first_of(type_id: StringName) -> int:
 	return EcsWorld.NO_ENTITY
 
 func _radius_of(id: int) -> float:
-	return (_world.get_component(id, EcsShapeComponent) as EcsShapeComponent).radius
+	return (_world.get_component(id, EcsBodyComponent) as EcsBodyComponent).radius
 
 func _check(what: String, passed: bool) -> void:
 	_checks += 1

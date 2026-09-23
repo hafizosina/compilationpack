@@ -11,7 +11,7 @@ extends Node2D
 ## nothing is ever read back off it.
 ##
 ## A component can declare that it implies a node — `const NODE_KIND` on
-## EcsSpriteComponent and EcsShapeComponent — and EcsEntityManager reads those
+## EcsSpriteComponent and EcsBodyComponent — and EcsEntityManager reads those
 ## declarations at spawn to build exactly the nodes an entity needs. It never
 ## switches on a component type, so a new node-backed component is a new
 ## constant and no edit here.

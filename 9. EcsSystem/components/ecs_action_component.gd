@@ -10,7 +10,7 @@ extends EcsComponent
 ## is a real overlap of two real circles, not a distance threshold that has to
 ## be kept in step with the radii by hand.
 ##
-## Make it larger than the entity's own EcsShapeComponent radius. If it is
+## Make it larger than the entity's own EcsBodyComponent radius. If it is
 ## smaller, an entity can be blocked by the very thing it is trying to reach —
 ## the bodies touch and stop it before its reach ever does.
 

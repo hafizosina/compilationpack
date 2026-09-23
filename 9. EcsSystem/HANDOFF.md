@@ -16,7 +16,8 @@ or run it directly:
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 "$GODOT" --path . "res://9. EcsSystem/main.tscn"
 
-# 49 checks over the entity lifecycle and the sensor/action layer; exit 0 only if all pass
+# 57 checks over the entity lifecycle, the sensor/action layer, solidity and the
+# movement trip clock; exit 0 only if all pass
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
 ```
 
@@ -74,7 +75,7 @@ something the scheduler calls. It feeds one dumb view, `EcsDebugOverlay`, which 
 the entities themselves: name, position, the velocity vector with its heading, and a
 dashed line to the ring marking the spot the low brain picked. **F1** toggles it.
 
-It used to draw the `EcsShapeComponent` body as a green circle too. That is gone: since
+It used to draw the `EcsBodyComponent` body as a green circle too. That is gone: since
 §5 every solid entity carries a real `CollisionShape2D` in the tree, so Godot's own
 **Debug > Visible Collision Shapes** draws it, and a hand-rolled copy could only ever
 disagree with the shape the physics server is actually using.
@@ -130,9 +131,18 @@ over a handful of ticks instead of instantly.
 `PhysicsDirectSpaceState2D.intersect_shape()` is the synchronous alternative if that ever
 matters — it works same-tick from `_physics_process`, at the cost of a query per body.
 
-Carrying an `EcsShapeComponent` is what makes an entity solid. Anything without one never
-gets a body, so it passes through everything with no `solid` flag, no layer mask and no
-branch. Every pair is reported twice, A sees B and B sees A; rather than deduplicating,
+Carrying an `EcsBodyComponent` gives an entity a body; that component's `is_solid` is what
+makes the body block. Anything without one never gets a body at all, and a body with
+`is_solid = false` exists purely to be seen and reached — it is gathered only so its
+radius reaches its area, and skipped at both ends of the resolve.
+
+Solidity was briefly a separate tag component, `EcsSolidComponent`, on the argument that
+presence beats a flag everywhere else in this module. It was merged back in by decision:
+a radius and whether that radius blocks are one physical fact about one body, and an
+author tuning a `.tres` sets them in one block rather than remembering to attach a second
+resource. It is the module's one authored boolean of its kind — the rule it bends is
+worth knowing it bent.
+Every pair is reported twice, A sees B and B sees A; rather than deduplicating,
 each body moves only *itself* by half the overlap, so the double report is what makes the
 correction symmetric.
 
@@ -187,6 +197,39 @@ existing brain changes.
 
 Both write the same `destination` field, so movement, collision and node_sync never learn
 that foraging exists.
+
+### A destination is a budget, not a standing order
+
+The ladder above has a hole in it that only shows up once something gets in the way.
+Soft collision corrects a position *after* movement proposes it, so an entity held off
+its target — wedged in a crowd, or walking at the middle of a bush it cannot stand in —
+proposes the same step forever. `has_destination` stays true, and both rungs above skip
+it **because** it already has somewhere to be. That is the stuck entity: a livelock
+between stages, not a fault in any one of them, and nothing downstream of an intent can
+tell "still walking" from "wedged".
+
+So `EcsMovementSystem` prices every trip the tick it first sees it — the cost of a walk
+is its length over its speed — and holds the result in `time_left`:
+
+```
+time_left = distance / speed * timeout_slack + timeout_grace
+```
+
+Both tunables are exported on `EcsMovementComponent` (2.5 and 0.5 by default), so a
+patient hauler and a twitchy scout differ by authored values, not by code. Pricing from
+the distance is the point: a trip across the map gets proportionally longer to make than
+a trip next door, and one budget does not have to fit both.
+
+When it runs out the destination is dropped exactly as if it had been reached — same
+`has_destination = false`, same zeroed velocity, clock back to zero for the next trip.
+**Giving up and arriving are the same event to every other system**, which is why nothing
+else in the pipeline learned a field. The entity falls back down the ladder and decides
+again with what it knows now.
+
+What this deliberately is *not*: it does not remember what it gave up on. A forager that
+times out on a berry may pick the same berry again next tick, and if the obstruction is
+permanent it will loop. That is a re-target policy and it belongs in the brain, not in
+the legs — the note here is that the entity is free to choose, where before it was not.
 
 ### Picking up is removing a component
 
@@ -245,7 +288,7 @@ Three pieces:
   so every birth and death in a frame lands at one instant and no system changes the
   shape of the world while another is walking it.
 
-**Components declare the node they imply.** `EcsSpriteComponent` and `EcsShapeComponent`
+**Components declare the node they imply.** `EcsSpriteComponent` and `EcsBodyComponent`
 each carry `const NODE_KIND: StringName`, naming a kind from `EcsConst`. The manager reads
 that constant at spawn and builds exactly those children — it never switches on a
 component *type*, the same reflective spirit as the inspector reading
@@ -314,7 +357,7 @@ matches how every stateful component here is already written.
 
 | component | layer — findable as | mask — looks for | monitorable | monitoring |
 |---|---|---|---|---|
-| `EcsShapeComponent` | `LAYER_BODY` | `LAYER_BODY` | yes | yes |
+| `EcsBodyComponent` | `LAYER_BODY` | `LAYER_BODY` | yes | yes |
 | `EcsSensorComponent` | `LAYER_NONE` | `LAYER_BODY` | no | yes |
 | `EcsActionComponent` | `LAYER_NONE` | `LAYER_BODY` | no | yes |
 
@@ -345,13 +388,15 @@ confirmation of three items.
 
 **Two consequences worth knowing:**
 
-- **A berry now has an `EcsShapeComponent`** (radius 14). It has to: a sensor can only see
+- **A berry now has an `EcsBodyComponent`** (radius 14). It has to: a sensor can only see
   a body, and reach is the berry's body meeting the action area. "A berry is a sprite and
   nothing else" is no longer true.
-- **Solid and movable became different questions.** A berry is solid but has no
-  `EcsMovementComponent`, and `EcsCollisionSystem` now moves only what can move. Without
-  that a forager shoves the berry it is walking toward and chases it across the arena. No
-  `is_static` flag — component presence again, and the same rule will hold for a tree.
+- **Solid and movable became different questions.** A berry has a body but no
+  `EcsMovementComponent`, and `EcsCollisionSystem` moves only what can move. Without that
+  a forager shoves the berry it is walking toward and chases it across the arena. No
+  `is_static` flag — component presence, and the same rule holds for a tree.
+  **Since extended: blocking became a third question**, `EcsBodyComponent.is_solid` — see
+  "Collision is soft" in §1. A berry has a body and is not solid at all.
 
 Keep each forager's action radius above its own body radius, or soft collision stops it at
 body-touch before its reach arrives. Rabbit: body 22, reach 34. Monkey: body 36, reach 50.
@@ -374,7 +419,7 @@ shoving whatever walks over the spot it was picked up from.
 
 ### Its test
 
-`tests/lifecycle_test.tscn` — 49 checks, re-runnable, exit code 0 only if all pass:
+`tests/lifecycle_test.tscn` — 57 checks, re-runnable, exit code 0 only if all pass:
 
 ```bash
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
@@ -390,8 +435,9 @@ and two stacked bodies still push apart (2.0 → 44.0 px) through areas the coll
 no longer creates.
 
 It then covers the sensor layer: a forager sees a berry 100 px away and not one at 900,
-seeing is not reaching, an immovable berry is not shoved by the forager that walks into
-it, and — end to end, with forage and movement driving — a rabbit spots a berry 200 px
+seeing is not reaching, an immovable bush is not shoved by the walker it stops, a berry on
+the ground is walked over rather than bumped into, a trip that cannot finish is given up
+on rather than pushed at forever, and — end to end, with forage and movement driving — a rabbit spots a berry 200 px
 off, walks to it, and takes it on arrival, stopping at arm's length rather than on top
 of it.
 
@@ -463,9 +509,9 @@ Three deliberate differences from what was cut:
 - **The pipeline panel did not come back.** It reported the run order and the F2 crit
   toggle, and it depended on `EcsScheduler.find()` and `EcsSystem.enabled` — both removed
   in the strip. `ecs_pipeline_changed` was dropped with it.
-- **The marker's ring shows `EcsShapeComponent.radius`, not an attack reach.**
+- **The marker's ring shows `EcsBodyComponent.radius`, not an attack reach.**
   `EcsAggressionComponent` is gone; the body radius is the reading that still exists. An
-  entity with no shape (a berry) gets the centre dot alone.
+  entity with no body gets the centre dot alone.
 
 The pipeline is now thirteen stages: `selection` sits after `pickup` and before `node_sync`,
 and `census > inspect` run last, after `debug`. All three added stages are pure readers or
@@ -581,7 +627,9 @@ is a different thing and worth taking the time over.
 The argument ran on the assertion that "the measured bottleneck is `get_component` call
 overhead" without anything measuring it. `tests/stress_test.tscn` now probes it, on
 `EcsMovementSystem` because it is the purest per-entity stage in the pipeline — two
-components in, one position out, no neighbours. At 2,000 entities:
+components in, one position out, no neighbours. At 2,000 entities (**measured before
+the trip clock went in** — the stage now prices and decrements a budget per entity, so
+re-run before leaning on the absolute numbers; the 25/67/19 split is the durable part):
 
 | | ms | µs/entity | share of the stage |
 |---|---|---|---|

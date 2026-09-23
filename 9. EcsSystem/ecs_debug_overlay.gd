@@ -5,7 +5,7 @@ extends Node2D
 ## position, the velocity vector with its heading, and a dashed line to the spot
 ## the low brain picked.
 ##
-## It does NOT draw bodies. EcsShapeComponent's radius reaches the screen as a
+## It does NOT draw bodies. EcsBodyComponent's radius reaches the screen as a
 ## real CollisionShape2D under World/Bodies now, so Godot's own Debug > Visible
 ## Collision Shapes draws it, and a second hand-rolled circle would only be a
 ## copy that can disagree with the shape the physics server is actually using.

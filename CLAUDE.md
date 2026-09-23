@@ -10,7 +10,8 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 49 checks over the entity lifecycle and the sensor/action layer.
+# 57 checks over the entity lifecycle, the sensor/action layer, solidity
+# and the movement trip clock.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
@@ -88,17 +89,36 @@ a node — `EcsSensorSystem` and `EcsCollisionSystem` are the **only** two files
 back off a node, and that is the whole of the exception. **Layer policy is declared on the
 component**, not chosen by the manager: alongside `NODE_KIND` it states `NODE_LAYER` (what
 others can detect of it) and `NODE_MASK` (what it looks for), and the manager derives
-`monitoring`/`monitorable` from those. Only `EcsShapeComponent` claims a layer
+`monitoring`/`monitorable` from those. Only `EcsBodyComponent` claims a layer
 (`EcsConst.LAYER_BODY`) — a body is the only detectable thing in the world; sensors and
 action areas carry none, so sensors are never reported to each other. Body's mask stays
 `LAYER_BODY` because soft collision *is* body-vs-body and nothing else detects bodies at a
 body's radius; it is free (measured, `HANDOFF.md` §5). Adding a new area kind is a
 component with three constants and **no edit to `EcsEntityManager`**. The overlap list is a **cull, not a verdict** — it is one tick
-stale, so pickup confirms reach against the components before acting. Keep an entity's
-action radius above its own body radius or soft collision stops it before its reach
-arrives. Solid and movable are separate: a berry has a body (so it can be seen and
-touched) but no `EcsMovementComponent`, and collision moves only what can move, or a
-forager would shove the berry it is chasing.
+stale, so pickup confirms reach against the components before acting. Keep a
+*solid* entity's action radius above its own body radius or soft collision stops it
+before its reach arrives.
+
+**Having a body, blocking the way and being movable are three separate questions.**
+`EcsBodyComponent` is the body — a radius, and an area on the body layer, so the entity
+can be perceived and reached. Its **`is_solid`** decides whether that body takes part in
+soft collision at either end. `EcsMovementComponent` is what lets the resolve move it
+rather than only push others out of it. A bush is a solid body and no movement: seen,
+walked into, never budged. A rabbit is solid and movable. **A berry is a body with
+`is_solid = false`** — it has one for a single reason, to be seen and picked up, and
+everything walks straight over it; ground items, corpses and dropped tools set the same
+flag. Solidity is the module's one authored boolean of this kind, chosen over a tag
+component deliberately: radius and solidity are one physical fact about a body, and the
+`.tres` reads as one block.
+
+**A destination is a budget, not a standing order.** `EcsMovementSystem` prices each trip
+the tick it first sees it — distance over speed, times the component's `timeout_slack`,
+plus `timeout_grace` — and when that runs out it drops the destination exactly as if it
+had been reached, so the ladder decides again. Without it an entity that soft collision
+holds off its target keeps `has_destination` true forever, and forage and low_brain both
+skip it *because* it already has somewhere to be: a stuck entity is a livelock across
+stages, not a bug inside one. Giving up and arriving are the same event to every other
+system.
 
 **Nodes are grouped per entity**, not pooled per kind: `World/Entities/entity_<id>/` holds
 that entity's `Sprite2D`, `Area2dForBody` and whatever else its components declare. The
@@ -120,7 +140,7 @@ of 10 entities in 2 types (5 rabbits, 5 monkeys — same component list, differe
 values). `EcsDebugSystem` is a pure
 reader feeding one dumb view, `EcsDebugOverlay`, which annotates each entity in world
 space (name, position, velocity vector and heading, dashed line to its destination).
-`EcsShapeComponent` is the entity's body — one radius, **data not a
+`EcsBodyComponent` is the entity's body — a radius and `is_solid`, **data not a
 CollisionShape2D**, so the sim still runs with no scene tree. Collision is **soft**:
 `EcsCollisionSystem` runs after movement and pushes overlapping pairs apart rather than
 vetoing the move, which is what lets any future position-writer be corrected for free.
@@ -128,7 +148,7 @@ It finds the pairs with an `Area2D` per solid entity — **the one deliberate ex
 "nothing reads back off a node"**: components stay the only truth, the areas are a derived
 index, and the only thing read back is which pairs are near each other, never where
 anything is. Do not widen that exception. `EcsEntityManager` owns those areas (it builds
-one for any entity whose `EcsShapeComponent` declares it) and they ride their entity's
+one for any entity whose `EcsBodyComponent` declares it) and they ride their entity's
 container, so the collision system writes only the radius and whether the body is live.
 The debug overlay does **not** draw body circles — there are real `CollisionShape2D`s in
 the tree now, so Godot's Debug > Visible Collision Shapes is the viewer. The pipeline

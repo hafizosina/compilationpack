@@ -56,7 +56,7 @@ func run(world: EcsWorld, _delta: float) -> void:
 			if not world.has(touched, EcsPositionComponent):
 				continue
 			var there := (world.get_component(touched, EcsPositionComponent) as EcsPositionComponent).position
-			var body := world.get_component(touched, EcsShapeComponent) as EcsShapeComponent
+			var body := world.get_component(touched, EcsBodyComponent) as EcsBodyComponent
 			# Touching means the two circles meet: reach plus the item's own
 			# body. Something with no body is a point.
 			var touching := action.radius + (body.radius if body != null else 0.0)

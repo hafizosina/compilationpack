@@ -63,9 +63,9 @@ func _draw_marker(world: EcsWorld) -> void:
 		return
 	var id: int = selected[0]
 	# The ring shows the entity's own body radius. It used to show an attack
-	# reach, which went with the combat layer; EcsShapeComponent is the reading
+	# reach, which went with the combat layer; EcsBodyComponent is the reading
 	# that still exists, and a berry — which has no body — gets the dot alone.
-	var shape := world.get_component(id, EcsShapeComponent) as EcsShapeComponent
+	var shape := world.get_component(id, EcsBodyComponent) as EcsBodyComponent
 	_marker.show_at(
 		(world.get_component(id, EcsPositionComponent) as EcsPositionComponent).position,
 		0.0 if shape == null else shape.radius)
