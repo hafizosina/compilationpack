@@ -24,7 +24,7 @@ tint = Color(0.93, 0.93, 0.9, 1)
 
 [sub_resource type="Resource" id="c_movement"]
 script = ExtResource("s_movement")
-speed = 72.0
+speed = 165.0
 
 [sub_resource type="Resource" id="c_brain"]
 script = ExtResource("s_brain")

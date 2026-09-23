@@ -9,7 +9,7 @@ entity_name = &"rabbit_0"
 type = &"rabbit"
 overrides = {
 "movement": {
-"speed": 18.0
+"speed": 176.0
 }
 }
 
@@ -18,54 +18,99 @@ script = ExtResource("place")
 entity_name = &"rabbit_1"
 type = &"rabbit"
 position = Vector2(18, -10)
+overrides = {
+"movement": {
+"speed": 158.0
+}
+}
 
 [sub_resource type="Resource" id="p2"]
 script = ExtResource("place")
 entity_name = &"rabbit_2"
 type = &"rabbit"
 position = Vector2(-15, 12)
+overrides = {
+"movement": {
+"speed": 168.0
+}
+}
 
 [sub_resource type="Resource" id="p3"]
 script = ExtResource("place")
 entity_name = &"rabbit_3"
 type = &"rabbit"
 position = Vector2(10, 20)
+overrides = {
+"movement": {
+"speed": 152.0
+}
+}
 
 [sub_resource type="Resource" id="p4"]
 script = ExtResource("place")
 entity_name = &"rabbit_4"
 type = &"rabbit"
 position = Vector2(-20, -18)
+overrides = {
+"movement": {
+"speed": 163.0
+}
+}
 
 [sub_resource type="Resource" id="p5"]
 script = ExtResource("place")
 entity_name = &"monkey_0"
 type = &"monkey"
 position = Vector2(25, 5)
+overrides = {
+"movement": {
+"speed": 124.0
+}
+}
 
 [sub_resource type="Resource" id="p6"]
 script = ExtResource("place")
 entity_name = &"monkey_1"
 type = &"monkey"
 position = Vector2(-28, 0)
+overrides = {
+"movement": {
+"speed": 136.0
+}
+}
 
 [sub_resource type="Resource" id="p7"]
 script = ExtResource("place")
 entity_name = &"monkey_2"
 type = &"monkey"
 position = Vector2(5, -25)
+overrides = {
+"movement": {
+"speed": 128.0
+}
+}
 
 [sub_resource type="Resource" id="p8"]
 script = ExtResource("place")
 entity_name = &"monkey_3"
 type = &"monkey"
 position = Vector2(-8, 28)
+overrides = {
+"movement": {
+"speed": 133.0
+}
+}
 
 [sub_resource type="Resource" id="p9"]
 script = ExtResource("place")
 entity_name = &"monkey_4"
 type = &"monkey"
 position = Vector2(30, -20)
+overrides = {
+"movement": {
+"speed": 121.0
+}
+}
 
 [sub_resource type="Resource" id="b0"]
 script = ExtResource("place")

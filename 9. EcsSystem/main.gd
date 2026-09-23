@@ -173,8 +173,14 @@ func _build() -> void:
 		_debug_report()
 
 ## Prints what spawned. Speed is shown because it is authored in two places —
-## the blueprint, and a placement override on one entity — so the listing makes
-## the per-instance copy visible without opening the .tres.
+## the blueprint's default and a placement override on every animal — so the
+## listing makes the per-instance copy visible without opening the .tres.
+##
+## Ten different numbers in that column is the proof that matters: components
+## are deep-copied per entity, and if that ever broke, every animal of a type
+## would report the same speed. It used to be one deliberately crawling rabbit
+## making the same point more loudly; now the whole column says it, and the
+## individuals read as individuals while they are at it.
 func _debug_report() -> void:
 	print("[ecs] %d entities from %d placements"
 		% [_world.entity_count(), world_def.entries.size()])

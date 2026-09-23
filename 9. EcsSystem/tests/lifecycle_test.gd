@@ -364,7 +364,8 @@ func _it_walks_to_what_it_sees_and_takes_it() -> void:
 		brain.state == EcsLowBrainComponent.State.SEEK_FOOD)
 	_check("and committed to the berry it saw", brain.target == berry)
 
-	# 200 px at 72 px/sec is a bit under 3 seconds. 240 ticks is four.
+	# 200 px at the monkey's 130 px/sec is about 1.5 seconds. 240 ticks is four,
+	# and the loop breaks the moment the berry is in the bag anyway.
 	for i in 240:
 		walking.run_all(_world, TICK)
 		await get_tree().physics_frame
@@ -408,15 +409,20 @@ func _a_trip_it_cannot_finish_is_given_up_on() -> void:
 	var move := _world.get_component(rabbit, EcsMovementComponent) as EcsMovementComponent
 	var started := at.position
 
-	# Tightened from the blueprint's defaults so the test is 3 seconds and not
-	# 8. 160 px at 72 px/sec is 2.2 sec of trip, so the budget is about 2.7.
+	# Tightened from the blueprint's defaults so the test runs in a couple of
+	# seconds rather than eight. The expected budget is then derived from the
+	# component rather than written down, so retuning a creature's speed cannot
+	# quietly turn this into a test of nothing.
 	move.timeout_slack = 1.0
 	move.timeout_grace = 0.5
 	move.destination = bush_at
 	move.has_destination = true
+	var trip := bush_at.distance_to(started)
+	var budget := trip / move.speed * move.timeout_slack + move.timeout_grace
+	var expected := budget / TICK
 
 	var ticks := 0
-	for i in 240:
+	for i in roundi(expected * 2.0) + 60:
 		blocked.run_all(_world, TICK)
 		await get_tree().physics_frame
 		ticks += 1
@@ -426,8 +432,9 @@ func _a_trip_it_cannot_finish_is_given_up_on() -> void:
 	_check("it walked at the bush it could not stand in", at.position.x > started.x + 20.0)
 	_check("and was still held short of it", at.position.distance_to(bush_at) > move.arrive_radius)
 	_check("the trip timed out instead of pushing forever", not move.has_destination)
-	_check("it ran roughly the budget it was priced, not the whole loop",
-		ticks > 80 and ticks < 220)
+	_check("it ran roughly the budget it was priced (%d ticks, expected ~%d)"
+		% [ticks, roundi(expected)],
+		ticks > expected * 0.75 and ticks < expected * 1.25)
 	_check("and the clock is back to zero for the next trip",
 		is_zero_approx(move.time_left))
 
