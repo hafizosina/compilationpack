@@ -5,6 +5,7 @@
 [ext_resource type="Script" uid="uid://bleyjpnkxl87q" path="res://9. EcsSystem/components/ecs_pickable_component.gd" id="s_pick"]
 [ext_resource type="Script" uid="uid://occbigie8rhc" path="res://9. EcsSystem/components/ecs_body_component.gd" id="s_body"]
 [ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
+[ext_resource type="Script" uid="uid://dv5n5s3kxd2u1" path="res://9. EcsSystem/components/ecs_consumable_component.gd" id="s_food"]
 [ext_resource type="Texture2D" uid="uid://dlfyft0lv6p2h" path="res://Global/Asset/CircleButtonFull.png" id="tex"]
 
 [sub_resource type="Resource" id="c_sprite"]
@@ -22,8 +23,12 @@ script = ExtResource("s_body")
 radius = 14.0
 is_solid = false
 
+[sub_resource type="Resource" id="c_food"]
+script = ExtResource("s_food")
+
+
 [resource]
 script = ExtResource("def")
 id = &"berry"
 display_name = "Berry"
-components = Array[ExtResource("base")]([SubResource("c_sprite"), SubResource("c_pick"), SubResource("c_body")])
+components = Array[ExtResource("base")]([SubResource("c_food"), SubResource("c_sprite"), SubResource("c_pick"), SubResource("c_body")])

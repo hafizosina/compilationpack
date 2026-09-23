@@ -71,23 +71,30 @@ func _run() -> void:
 	await _it_walks_to_what_it_sees_and_takes_it()
 	await _a_trip_it_cannot_finish_is_given_up_on()
 	await _a_stolen_target_is_dropped_the_tick_it_vanishes()
+	await _hunger_climbs_and_gates_the_food_rung()
+	await _eating_empties_the_bag_and_ends_the_berry()
+	await _starving_costs_health_and_then_the_entity()
+	await _a_grazer_eats_off_the_ground_with_no_inventory()
 
 ## A component's `const NODE_KIND` is what gets it a node, so a berry — sprite,
 ## no shape — must come out with a sprite and no body. And everything an entity
 ## owns must hang under that entity's own container.
 func _spawn_builds_declared_nodes() -> void:
-	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(50.0, 0.0))
+	# A monkey: it carries, and the next test picks this same berry up out of
+	# the world it leaves behind. A rabbit has no inventory at all since it
+	# became a grazer.
+	var rabbit := _manager.spawn(_world, _catalog, &"monkey", Vector2(50.0, 0.0))
 	var berry := _manager.spawn(_world, _catalog, &"berry", Vector2(60.0, 0.0))
 	await _tick(1)
 
 	var box := _manager.container_for(rabbit)
 	var view := _manager.node_for(rabbit, EcsConst.NODE_SPRITE)
 	var body := _manager.node_for(rabbit, EcsConst.NODE_BODY)
-	_check("rabbit gets a container named for it",
+	_check("a creature gets a container named for it",
 		box != null and box.name == "entity_%d" % rabbit)
 	_check("the container hangs under Entities", box != null and box.get_parent() == _entities)
-	_check("rabbit gets a sprite", view != null)
-	_check("rabbit gets a body", body != null)
+	_check("a creature gets a sprite", view != null)
+	_check("a creature gets a body", body != null)
 	_check("both hang under the entity's own container",
 		view != null and body != null and view.get_parent() == box and body.get_parent() == box)
 	_check("children are named by node kind",
@@ -129,7 +136,7 @@ func _spawn_builds_declared_nodes() -> void:
 ## render system that freed the Sprite2D as a side effect of the query. Under
 ## the manager the node must survive and merely stop being drawn.
 func _pickup_hides_the_sprite_without_freeing_it() -> void:
-	var rabbit := _first_of(&"rabbit")
+	var rabbit := _first_of(&"monkey")
 	var berry := _first_of(&"berry")
 	await _tick(2)
 
@@ -163,7 +170,7 @@ func _putting_it_back_shows_it_again() -> void:
 ## Same rule one layer down: an entity that is not anywhere must not collide
 ## from wherever it last stood.
 func _a_body_with_no_position_stands_down() -> void:
-	var rabbit := _first_of(&"rabbit")
+	var rabbit := _first_of(&"monkey")
 	var body := _manager.node_for(rabbit, EcsConst.NODE_BODY) as Area2D
 	var held := _world.get_component(rabbit, EcsPositionComponent) as EcsPositionComponent
 
@@ -232,7 +239,8 @@ func _collision_still_separates_manager_owned_bodies() -> void:
 ## berry only if its sensor area overlaps it, and takes it only once its action
 ## area is touching the berry's body.
 func _it_sees_before_it_takes() -> void:
-	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(2000.0, 2000.0))
+	# A monkey, because this one ends in a pickup and only a carrier picks up.
+	var rabbit := _manager.spawn(_world, _catalog, &"monkey", Vector2(2000.0, 2000.0))
 	var near := _manager.spawn(_world, _catalog, &"berry", Vector2(2000.0, 2100.0))
 	var far := _manager.spawn(_world, _catalog, &"berry", Vector2(2000.0, 2900.0))
 	var sensor := _world.get_component(rabbit, EcsSensorComponent) as EcsSensorComponent
@@ -328,11 +336,17 @@ func _it_walks_to_what_it_sees_and_takes_it() -> void:
 
 	# Far from everything else in this file, and outside the arena the wander
 	# bounds clamp to, so no other entity drifts into the experiment.
-	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(2000.0, -2000.0))
+	# A monkey, because this one is about carrying: a rabbit has no bag at all.
+	var rabbit := _manager.spawn(_world, _catalog, &"monkey", Vector2(2000.0, -2000.0))
 	var berry := _manager.spawn(_world, _catalog, &"berry", Vector2(2200.0, -2000.0))
 	var bag := _world.get_component(rabbit, EcsInventoryComponent) as EcsInventoryComponent
 	var at := _world.get_component(rabbit, EcsPositionComponent) as EcsPositionComponent
 	var started := at.position
+	# Since step 4 the food rung has a motive gate, and a rabbit spawns sated.
+	# Hungry enough to fetch, not hungry enough to eat what it fetches — this
+	# test is about walking and taking, and eating would end the berry early.
+	var appetite := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
+	appetite.value = appetite.forage_at + 1.0
 
 	var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
 	# Not on the first tick. `sensor.perceived` is written from physics overlaps,
@@ -435,6 +449,9 @@ func _a_stolen_target_is_dropped_the_tick_it_vanishes() -> void:
 	var berry := _manager.spawn(_world, _catalog, &"berry", Vector2(-1800.0, 2000.0))
 	var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
 	var move := _world.get_component(rabbit, EcsMovementComponent) as EcsMovementComponent
+	# Hungry enough to want it; no EcsHungerSystem here, so it stays put.
+	var appetite := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
+	appetite.value = appetite.forage_at + 1.0
 
 	for i in 30:
 		thinking.run_all(_world, TICK)
@@ -459,6 +476,174 @@ func _a_stolen_target_is_dropped_the_tick_it_vanishes() -> void:
 		not move.has_destination or not move.destination.is_equal_approx(committed_to))
 	_check("with the trip clock reset, so the next one is priced fresh",
 		is_zero_approx(move.time_left) or move.has_destination)
+
+
+## Hunger is the *motive*: below its forage threshold a creature must wander
+## past food it can plainly see, and above it must go and get it. Before step 4
+## the food rung fired whenever the bag had room, which is gathering with no
+## reason behind it.
+func _hunger_climbs_and_gates_the_food_rung() -> void:
+	var living := EcsScheduler.new()
+	living \
+		.add(EcsHungerSystem.new()) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsLowBrainSystem.new()) \
+		.add(EcsMovementSystem.new()) \
+		.add(EcsNodeSyncSystem.new(_manager))
+
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-4000.0, 0.0))
+	_manager.spawn(_world, _catalog, &"berry", Vector2(-3900.0, 0.0))
+	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
+	var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
+
+	# Sated, with a berry 100 px away and well inside its 280 px sensor.
+	hunger.value = 0.0
+	var sated_state := EcsLowBrainComponent.State.SEEK_FOOD
+	for i in 20:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		sated_state = brain.state
+		if sated_state == EcsLowBrainComponent.State.SEEK_FOOD:
+			break
+	_check("a sated creature ignores food it can see",
+		sated_state != EcsLowBrainComponent.State.SEEK_FOOD)
+	_check("and hunger climbed while it did", hunger.value > 0.0)
+
+	# Now make it hungry enough to bother.
+	hunger.value = hunger.forage_at + 1.0
+	for i in 20:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		if brain.state == EcsLowBrainComponent.State.SEEK_FOOD:
+			break
+	_check("a hungry one goes after the same berry",
+		brain.state == EcsLowBrainComponent.State.SEEK_FOOD)
+
+## Eating is a kill, where picking up is not: the berry leaves the bag AND the
+## world, nodes and all, through the one owner of entity lifetime.
+func _eating_empties_the_bag_and_ends_the_berry() -> void:
+	var living := EcsScheduler.new()
+	# No EcsHungerSystem on purpose: it would add a tick's worth of hunger in
+	# the same frame the meal takes some off, and this checks the meal exactly.
+	living \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsLowBrainSystem.new()) \
+		.add(EcsConsumeSystem.new()) \
+		.add(EcsNodeSyncSystem.new(_manager))
+
+	var rabbit := _manager.spawn(_world, _catalog, &"monkey", Vector2(-4000.0, 1000.0))
+	var berry := _manager.spawn(_world, _catalog, &"berry", Vector2(-4000.0, 1100.0))
+	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
+	var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
+	var bag := _world.get_component(rabbit, EcsInventoryComponent) as EcsInventoryComponent
+	var food := _world.get_component(berry, EcsConsumableComponent) as EcsConsumableComponent
+	await _tick(1)
+
+	# Hand it the berry the way EcsPickupSystem would, and make it hungry.
+	bag.items.append(berry)
+	_world.remove(berry, EcsPositionComponent)
+	hunger.value = hunger.eat_at + 5.0
+	var before := hunger.value
+
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+	_check("it decided to eat what it was carrying",
+		brain.state == EcsLowBrainComponent.State.EAT)
+	_check("the berry left the bag", not bag.items.has(berry))
+	_check("and hunger fell by the berry's nutrition",
+		is_equal_approx(hunger.value, before - food.nutrition))
+
+	# The kill note is fulfilled at the top of the next tick, not on the spot.
+	_check("the berry is still alive this tick", _world.is_alive(berry))
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+	_check("eaten means dead, unlike being carried", not _world.is_alive(berry))
+	_check("and its nodes went with it", _manager.container_for(berry) == null)
+
+## The consequence that makes hunger more than a number: pinned at the top it
+## costs health, and health at zero is the module's first death by simulation.
+func _starving_costs_health_and_then_the_entity() -> void:
+	var living := EcsScheduler.new()
+	living \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsHungerSystem.new()) \
+		.add(EcsHealthSystem.new()) \
+		.add(EcsNodeSyncSystem.new(_manager))
+
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-4000.0, 2000.0))
+	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
+	var health := _world.get_component(rabbit, EcsHealthComponent) as EcsHealthComponent
+	await _tick(1)
+
+	# Not starving yet: one tick short of the top costs nothing.
+	hunger.value = hunger.max_value - 1.0
+	health.value = health.max_health
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+	_check("being merely hungry is free", is_equal_approx(health.value, health.max_health))
+
+	hunger.value = hunger.max_value
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+	_check("starving costs health", health.value < health.max_health)
+
+	health.value = 0.0
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+	_check("health at zero is still alive for the rest of that tick",
+		_world.is_alive(rabbit))
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+	_check("and dead at the next lifecycle stage", not _world.is_alive(rabbit))
+	_check("with its container freed", _manager.container_for(rabbit) == null)
+
+## Eating must not depend on owning a pocket. A rabbit has no
+## EcsInventoryComponent at all: it walks to the berry and eats it where it
+## lies, off the ground, through the action area it already had for reaching.
+##
+## The whole chain end to end, with nothing handed to it by the test: hunger
+## climbs, the food rung fires, it walks, the eat rung fires on arrival, and
+## the berry is killed rather than pocketed.
+func _a_grazer_eats_off_the_ground_with_no_inventory() -> void:
+	var grazing := EcsScheduler.new()
+	grazing \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsHungerSystem.new()) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsLowBrainSystem.new()) \
+		.add(EcsConsumeSystem.new()) \
+		.add(EcsMovementSystem.new()) \
+		.add(EcsCollisionSystem.new(_manager)) \
+		.add(EcsPickupSystem.new()) \
+		.add(EcsNodeSyncSystem.new(_manager))
+
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-6000.0, 0.0))
+	var berry := _manager.spawn(_world, _catalog, &"berry", Vector2(-5850.0, 0.0))
+	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
+	var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
+
+	_check("a rabbit carries nothing at all",
+		not _world.has(rabbit, EcsInventoryComponent))
+
+	# Hungry enough to fetch. Its eat_at sits *below* forage_at precisely
+	# because it cannot stockpile — it eats what it walks to, on arrival.
+	hunger.value = hunger.forage_at + 1.0
+	_check("and its thresholds say graze, not hoard", hunger.eat_at < hunger.forage_at)
+	var before := hunger.value
+
+	var ate := false
+	for i in 400:
+		grazing.run_all(_world, TICK)
+		await get_tree().physics_frame
+		if not _world.is_alive(berry):
+			ate = true
+			break
+
+	_check("it walked to the berry and ate it off the ground", ate)
+	_check("without ever holding it", not _world.has(rabbit, EcsInventoryComponent))
+	_check("hunger went down, not up", hunger.value < before)
+	_check("and its nodes went with it", _manager.container_for(berry) == null)
+	_check("it is no longer eating", brain.state != EcsLowBrainComponent.State.EAT)
 
 func _tick(count: int) -> void:
 	for i in count:

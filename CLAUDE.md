@@ -10,8 +10,8 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 66 checks over the entity lifecycle, the sensor/action layer, solidity,
-# the movement trip clock and the brain's commitments.
+# 87 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# movement trip clock, the brain's commitments and the hunger/health loop.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
@@ -111,8 +111,32 @@ flag. Solidity is the module's one authored boolean of this kind, chosen over a 
 component deliberately: radius and solidity are one physical fact about a body, and the
 `.tres` reads as one block.
 
+**Hunger is the motive, and health is the consequence** (the plan's step 4).
+`EcsHungerComponent.value` climbs 0 → `max_value`; the brain's food rung declines below
+`forage_at`, so a sated creature wanders past a berry it can plainly see, and its eat rung
+fires above `eat_at`. Pinned at the top, `EcsHungerSystem` spends `EcsHealthComponent` —
+**starvation is hunger's rule, so it lives with hunger** — and `EcsHealthSystem` owns only
+the threshold, writing a kill note at zero. Each system owns the consequences of the
+component it is named for and neither knows the other exists. Nothing regenerates health:
+starvation is the module's one damage source and regen would merely undo it.
+**Eating does not require an inventory.** "I am hungry and there is food within reach" is
+the condition, and a pocket is only one place reach can mean: a carrier eats out of its
+`EcsInventoryComponent`, a **grazer** eats what its action area is touching, off the
+ground. The two creature types are now that contrast, from authored values alone — the
+**monkey** carries (bag, `forage_at` 30 < `eat_at` 60: gather, carry, eat later) and the
+**rabbit** has no `EcsInventoryComponent` at all (`eat_at` 30 < `forage_at` 35: walk to it,
+eat it where it lies, and its hunger climbs slower to match). The brain's food rung treats
+a bag as a *cap on how much it may fetch*, never as a requirement to go. Food is
+`EcsConsumableComponent`, not `EcsPickableComponent` — a hungry animal must not chase a
+tool. **Eating is a kill, picking up is not** — a carried berry has only lost its
+`EcsPositionComponent` and comes back if put down, while an eaten one gets a kill note,
+which is the clearest case of node lifetime tracking the entity while what a node *does*
+tracks the components. The brain *decides* to eat by entering `EAT`; `EcsConsumeSystem`
+carries it out, one bite per tick. That is step 6's intent pattern in miniature, with
+`state` as the intent — **do not let the brain grow hands.**
+
 **Deciding is one system with state, not a rung per behaviour.** `EcsLowBrainSystem` is a
-small FSM — `IDLE > WANDER > SEEK_FOOD` — and `EcsLowBrainComponent` holds its `state` and
+small FSM — `IDLE > WANDER > SEEK_FOOD > EAT` — and `EcsLowBrainComponent` holds its `state` and
 its `target`. It replaced `EcsForageSystem`, which was a second decider whose priority was
 its line number in `main.gd`. That read well but was stateless: a creature's only memory
 between ticks was `has_destination`, so nothing could persist ("I am going to *that*
@@ -147,12 +171,12 @@ been crossed.
 is picked up loses its `EcsPositionComponent` but is not dead, so its sprite is hidden
 rather than freed and comes back if it is put down. Freeing a node is kill and only kill.
 
-**It is deliberately stripped to a bare-minimum core**: 14 components, 12 systems
-(`lifecycle > spawner > sensor > low_brain > movement > collision > pickup > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
+**It is deliberately stripped to a bare-minimum core**: 17 components, 15 systems
+(`lifecycle > spawner > hunger > health > sensor > low_brain > consume > movement > collision > pickup > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
 rank in the plan's decision ladder — a planner goes *above* it at step 7 — and not for the
 wandering it happens to do), and a world
-of 10 entities in 2 types (5 rabbits, 5 monkeys — same component list, different authored
-values). `EcsDebugSystem` is a pure
+of 10 entities in 2 types (5 rabbits, 5 monkeys — a grazer and a carrier, differing by one
+component and some authored values). `EcsDebugSystem` is a pure
 reader feeding one dumb view, `EcsDebugOverlay`, which annotates each entity in world
 space (name, position, velocity vector and heading, dashed line to its destination).
 `EcsBodyComponent` is the entity's body — a radius and `is_solid`, **data not a

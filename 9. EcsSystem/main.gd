@@ -39,8 +39,11 @@ extends Node2D
 ##
 ##     lifecycle  births and deaths    → the only stage that creates or frees
 ##     spawner    asks for a berry     → writes a note to the lifecycle inbox
+##     hunger     the bar climbs       → writes EcsHunger/EcsHealthComponent
+##     health     and death at zero    → writes a note to the lifecycle inbox
 ##     sensor     what can it see/reach→ writes EcsSensor/EcsActionComponent
 ##     low_brain  decides, and remembers → writes EcsMovementComponent
+##     consume    carries out "eat"    → writes EcsHunger/EcsInventoryComponent
 ##     movement   walks toward it      → writes EcsPositionComponent
 ##     collision  unstacks the bodies  → writes EcsPositionComponent
 ##                (the Area2Ds it reads overlaps off are a derived index only)
@@ -148,8 +151,11 @@ func _build() -> void:
 	_scheduler \
 		.add(EcsLifecycleSystem.new(_manager, catalog)) \
 		.add(EcsSpawnerSystem.new()) \
+		.add(EcsHungerSystem.new()) \
+		.add(EcsHealthSystem.new()) \
 		.add(EcsSensorSystem.new(_manager)) \
 		.add(EcsLowBrainSystem.new()) \
+		.add(EcsConsumeSystem.new()) \
 		.add(EcsMovementSystem.new()) \
 		.add(_collision) \
 		.add(EcsPickupSystem.new()) \

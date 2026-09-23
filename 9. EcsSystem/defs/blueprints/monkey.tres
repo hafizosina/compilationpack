@@ -9,6 +9,8 @@
 [ext_resource type="Script" uid="uid://dlx8sqm54mp4u" path="res://9. EcsSystem/components/ecs_sensor_component.gd" id="s_sensor"]
 [ext_resource type="Script" uid="uid://occbigie8rhc" path="res://9. EcsSystem/components/ecs_body_component.gd" id="s_body"]
 [ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
+[ext_resource type="Script" uid="uid://cxsykqivwrtfc" path="res://9. EcsSystem/components/ecs_hunger_component.gd" id="s_hunger"]
+[ext_resource type="Script" uid="uid://b0cqwu7rlda2j" path="res://9. EcsSystem/components/ecs_health_component.gd" id="s_health"]
 [ext_resource type="Texture2D" uid="uid://dbllxupj5653t" path="res://Global/Asset/Animal/monkey.png" id="tex_monkey"]
 
 [sub_resource type="Resource" id="c_body"]
@@ -40,8 +42,17 @@ radius = 420.0
 script = ExtResource("s_action")
 radius = 50.0
 
+[sub_resource type="Resource" id="c_hunger"]
+script = ExtResource("s_hunger")
+rate = 2.6
+forage_at = 30.0
+
+[sub_resource type="Resource" id="c_health"]
+script = ExtResource("s_health")
+
+
 [resource]
 script = ExtResource("def")
 id = &"monkey"
 display_name = "Monkey"
-components = Array[ExtResource("base")]([SubResource("c_body"), SubResource("c_sprite"), SubResource("c_movement"), SubResource("c_brain"), SubResource("c_bag"), SubResource("c_sensor"), SubResource("c_action")])
+components = Array[ExtResource("base")]([SubResource("c_health"), SubResource("c_hunger"), SubResource("c_body"), SubResource("c_sprite"), SubResource("c_movement"), SubResource("c_brain"), SubResource("c_bag"), SubResource("c_sensor"), SubResource("c_action")])

@@ -31,11 +31,12 @@ enum State {
 	IDLE,       ## Standing still, waiting out `pause_left`.
 	WANDER,     ## Walking to a point it picked for no reason.
 	SEEK_FOOD,  ## Walking to `target`, which it means to pick up.
+	EAT,        ## Standing still, eating something out of its own bag.
 }
 
 ## Display names for `state`, in enum order. A constant and not a method,
 ## because components stay method-free — the debug overlay indexes it.
-const STATE_NAMES: Array[String] = ["idle", "wander", "seek food"]
+const STATE_NAMES: Array[String] = ["idle", "wander", "seek food", "eating"]
 
 ## How far from its current spot a wander destination may be picked.
 @export var radius: float = 260.0

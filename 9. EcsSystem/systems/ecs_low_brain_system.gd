@@ -24,7 +24,8 @@ extends EcsSystem
 ##     politely skips an entity that already has somewhere to be.
 ##   - **Hysteresis.** A threshold sitting near its trigger flickers the
 ##     creature between rungs on consecutive ticks, because nothing remembers
-##     which side it was on last.
+##     which side it was on last — and step 4's hunger thresholds are exactly
+##     that shape, which is what forced the issue.
 ##
 ## So the rungs moved inside one function, where the ladder is the order of the
 ## branches and the state is a field. The priority is no less explicit for being
@@ -53,7 +54,7 @@ func run(world: EcsWorld, delta: float) -> void:
 
 		# 1. Does the standing commitment still hold?
 		if brain.state == EcsLowBrainComponent.State.SEEK_FOOD:
-			if not _still_worth_walking_to(world, brain.target):
+			if not _is_food(world, brain.target):
 				# The thing it was going to is gone — eaten, taken, killed. It
 				# is walking to a spot with nothing in it, so take the trip off
 				# it and let it choose again this same tick. *This* is what the
@@ -81,6 +82,8 @@ func run(world: EcsWorld, delta: float) -> void:
 			continue
 
 		# 3. Choose, highest rung first.
+		if _try_eat(world, id, brain, move):
+			continue
 		if _try_seek_food(world, id, brain, move):
 			continue
 		# Nothing better came up, so an existing wander simply carries on.
@@ -88,7 +91,59 @@ func run(world: EcsWorld, delta: float) -> void:
 			continue
 		_wander(world, id, brain, move, delta)
 
-## Rung 1 — go and get a berry, if there is room to put one.
+## Rung 1 — eat what it is already carrying, if it is hungry enough.
+##
+## Above fetching on purpose: a creature with food in its bag has no business
+## walking across the arena for more. It only *decides* here — the berry leaves
+## the bag in EcsConsumeSystem, which runs straight after this one and reads the
+## EAT state as its instruction. The brain deciding and a system acting is the
+## same split the module runs on everywhere, and it is what stops this file
+## growing hands.
+##
+## Eating stands still, so any trip in progress is called off. There is no
+## commitment to hold: the decision is re-made next tick from whatever hunger
+## and the food at hand then say, which is what lets one bite per tick add up
+## to a meal.
+##
+## **A bag is one way to have food at hand, not the only one.** A carrier eats
+## out of its inventory; a grazer with no EcsInventoryComponent at all eats what
+## its action area is touching, off the ground, where it stands. Both are "there
+## is food within reach", and neither is a special case of the other — which is
+## why this asks that question rather than asking about a bag.
+##
+## Reach itself is decided by the physics server and taken at its word, to
+## within about a tick of motion. What this and EcsConsumeSystem both re-ask is
+## the other question — whether the thing named is still in the world at all,
+## since it may have been eaten or pocketed since the list was written.
+func _try_eat(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
+		move: EcsMovementComponent) -> bool:
+	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+	if hunger == null or hunger.value < hunger.eat_at:
+		return false
+	if not _food_at_hand(world, id):
+		return false
+
+	_release(brain)
+	_abandon_trip(move)
+	brain.state = EcsLowBrainComponent.State.EAT
+	return true
+
+## Is there something edible it could put in its mouth right now — carried, or
+## lying under its nose?
+func _food_at_hand(world: EcsWorld, id: int) -> bool:
+	var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
+	if bag != null:
+		for item in bag.items:
+			if world.has(item, EcsConsumableComponent):
+				return true
+	var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
+	if action != null:
+		for touched in action.reached:
+			if _is_food(world, touched):
+				return true
+	return false
+
+## Rung 2 — go and get a berry, if it is hungry enough and has room to put one.
 ##
 ## The candidates are the ids in the entity's own EcsSensorComponent.perceived:
 ## what its sensor area overlapped last tick. A berry across the map does not
@@ -102,8 +157,16 @@ func run(world: EcsWorld, delta: float) -> void:
 ## needs no flag saying so.
 func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		move: EcsMovementComponent) -> bool:
+	# The motive. Without this the rung is motion with no reason — it gathered
+	# because it could, and stopped only when the bag filled. A creature below
+	# its forage threshold now wanders past food it can plainly see.
+	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+	if hunger != null and hunger.value < hunger.forage_at:
+		return false
+	# A bag caps how much it may fetch; having none does not stop it going.
+	# A grazer walks to the berry and eats it where it lies.
 	var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
-	if bag == null or bag.items.size() >= bag.capacity:
+	if bag != null and bag.items.size() >= bag.capacity:
 		return false
 	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
 	if sensor == null or sensor.perceived.is_empty():
@@ -115,7 +178,7 @@ func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	var best := EcsWorld.NO_ENTITY
 	var best_distance := INF
 	for seen in sensor.perceived:
-		if not _still_worth_walking_to(world, seen):
+		if not _is_food(world, seen):
 			continue
 		var there := (world.get_component(seen, EcsPositionComponent) as EcsPositionComponent).position
 		var distance := here.distance_squared_to(there)
@@ -130,7 +193,7 @@ func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	_set_trip(move, (world.get_component(best, EcsPositionComponent) as EcsPositionComponent).position)
 	return true
 
-## Rung 2, and the floor — drift somewhere nearby, having rested first.
+## Rung 3, and the floor — drift somewhere nearby, having rested first.
 ##
 ## The pause clock runs only here, which is why a creature that spent ten
 ## seconds walking to a berry does not then owe ten seconds of accumulated
@@ -146,16 +209,22 @@ func _wander(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	brain.state = EcsLowBrainComponent.State.WANDER
 	_set_trip(move, EcsConst.random_point_near(here.position, brain.radius, 0.25))
 
-## Is `id` still a thing this brain could walk to and pick up?
+## Is `id` still food that is somewhere?
+##
+## Consumable and not merely pickable: since hunger became the motive, the food
+## rung wants *food*, and a future carryable that is not edible — a tool, a
+## stick — must not be chased by a hungry animal. Whether it can also be carried
+## away is EcsPickupSystem's question, asked separately and for its own reasons.
 ##
 ## A berry someone else took this tick has lost its EcsPositionComponent and is
 ## no longer anywhere; one that was eaten is not alive at all. The sensor's
-## overlap list is one physics tick stale, so it is a cull and never a verdict —
-## the components are asked again before anything is committed to.
-func _still_worth_walking_to(world: EcsWorld, id: int) -> bool:
+## overlap list is a tick behind and can still name either, so *existence* is
+## re-asked of the components before anything is committed to. How far away it
+## is, by contrast, is the physics server's answer and is not second-guessed.
+func _is_food(world: EcsWorld, id: int) -> bool:
 	if id == EcsWorld.NO_ENTITY or not world.is_alive(id):
 		return false
-	return world.has(id, EcsPickableComponent) and world.has(id, EcsPositionComponent)
+	return world.has(id, EcsConsumableComponent) and world.has(id, EcsPositionComponent)
 
 ## Ends a commitment. Only the brain's own fields — whether the trip it implied
 ## is also called off is a separate decision, made above.

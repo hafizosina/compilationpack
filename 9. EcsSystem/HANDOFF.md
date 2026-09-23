@@ -16,8 +16,8 @@ or run it directly:
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 "$GODOT" --path . "res://9. EcsSystem/main.tscn"
 
-# 66 checks over the entity lifecycle, the sensor/action layer, solidity, the
-# movement trip clock and the brain's commitments; exit 0 only if all pass
+# 87 checks over the entity lifecycle, the sensor/action layer, solidity, the movement
+# trip clock, the brain's commitments and the hunger/health loop; exit 0 only if all pass
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
 ```
 
@@ -244,6 +244,74 @@ first tick, because `sensor.perceived` is written from physics overlaps that hav
 reported yet. Its opening move is therefore always a wander, preempted the tick after.
 `tests/lifecycle_test.gd` pins that down rather than papering over it.
 
+### Hunger, and what it is for
+
+Step 4, and the reason it came before anything else: **the loop had no motive.** A rabbit
+foraged because the rung said to and stopped when its bag was full — motion without a
+reason behind it. `EcsHungerComponent.value` climbs from 0 to `max_value` and two
+authored thresholds turn it into behaviour:
+
+| threshold | default | what it gates |
+|---|---|---|
+| `forage_at` | 35 | below it the brain's SEEK_FOOD rung declines — a sated creature wanders past food it can see |
+| `eat_at` | 60 | above it the EAT rung fires, if it is carrying something edible |
+
+`eat_at` sits **above** `forage_at` deliberately, so both rungs are visible in play: it
+gathers while peckish, carries, and eats when properly hungry. Swapping them makes it eat
+on arrival instead, and that is an authored value in a `.tres`, not a code change.
+
+**Starvation is hunger's rule, so it lives in `EcsHungerSystem`** — pinned at
+`max_value`, it spends `starve_damage` per second out of `EcsHealthComponent`.
+`EcsHealthSystem` owns only the other end: health at zero writes a kill note. Each system
+owns the consequences of the component it is named for, so neither has to know the other
+exists, and an entity with no health component simply starves forever. Nothing
+regenerates — starvation is the module's only damage source and regen would just undo it.
+The combat layer that used to provide a second one is in git at `928b9d1`.
+
+**Eating does not require an inventory, and that is the point.** The condition is "I am
+hungry and there is food within reach"; a pocket is one place reach can mean. So
+`EcsConsumeSystem` looks in the bag first and at `EcsActionComponent.reached` second, and
+an entity carrying the components for only one of those simply takes that one. The two
+creature types became the demonstration, and they differ by one component and some
+authored numbers:
+
+| | monkey — carrier | rabbit — grazer |
+|---|---|---|
+| `EcsInventoryComponent` | yes, capacity 1 | **none at all** |
+| `rate` | 2.6 | 1.2 — it cannot stockpile, so it gets hungry slower |
+| `forage_at` / `eat_at` | 30 / 60 — gather, carry, eat later | 35 / **30** — eat what you walked to, on arrival |
+
+`eat_at` **below** `forage_at` is what makes a grazer: with no way to stockpile, a rabbit
+that arrived at a berry and then had to wait to get hungrier would simply wander off. The
+whole difference between hoarding and grazing is those two numbers and one component —
+no `is_grazer` flag, and no branch in any system.
+
+Two related corrections went in with it. The brain's food rung treats a bag as a **cap on
+how much it may fetch**, never a requirement to set out; and food is
+`EcsConsumableComponent`, not `EcsPickableComponent`, so a future carryable that is not
+edible — a tool, a stick — is not chased by a hungry animal.
+
+**Eating is a kill; picking up is not.** This is the sharpest example in the module of
+node lifetime tracking the entity while what a node *does* tracks the components:
+
+```
+picked up  →  berry loses EcsPositionComponent  →  sprite hidden, entity alive,
+                                                   comes back if put down
+eaten      →  kill note to EcsLifecycleComponent →  data and nodes freed next tick
+```
+
+**The brain decides, `EcsConsumeSystem` acts.** `EcsLowBrainSystem` enters the `EAT`
+state; the consume system reads that as its instruction and moves the berry out of the
+bag. That split is what stops the brain growing hands, and it is step 6's intent pattern
+in miniature with `state` standing in for the intent component. One bite per tick, so a
+creature with five berries eats over five ticks and re-decides between each.
+
+Verified end to end in `tests/lifecycle_test.tscn`: a sated rabbit ignores a berry 100 px
+away, the same rabbit above `forage_at` goes after it, eating empties the bag and takes
+the nutrition off the bar, the berry is still alive that tick and dead the next, merely
+being hungry costs nothing, starving costs health, and zero health takes the entity and
+its container one lifecycle stage later.
+
 ### A destination is a budget, not a standing order
 
 The ladder above has a hole in it that only shows up once something gets in the way.
@@ -465,7 +533,7 @@ shoving whatever walks over the spot it was picked up from.
 
 ### Its test
 
-`tests/lifecycle_test.tscn` — 66 checks, re-runnable, exit code 0 only if all pass:
+`tests/lifecycle_test.tscn` — 87 checks, re-runnable, exit code 0 only if all pass:
 
 ```bash
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
@@ -591,23 +659,26 @@ data rather than behaviour and can say tab / merge-into-entity / hide. **Not imp
 
 ## 7. Next, per the plan
 
-**Where the plan actually stands: steps 3 and 5 are done, 6 is half done, 4 is next.**
+**Where the plan actually stands: steps 3, 4 and 5 are done, and 6 is half done.**
 
 **Step 3 is most of the way done.** The plan asked for "inventory and pickup as
 relationships (`Inventory{item_ids}`, one system owning the move, so double-claim is
 structurally impossible)" — that is exactly what `EcsInventoryComponent` and
 `EcsPickupSystem` are. Double-claim is not merely prevented, it stopped being a category:
 the berry drops out of the query the moment it is taken, so the second forager re-targets
-without anything arbitrating. What step 3 still wants is **eating** — a
-`EcsConsumableComponent` and a `ConsumeSystem`, which needs step 4's bars to be worth
-doing.
+without anything arbitrating. Eating closed the rest of it: `EcsConsumableComponent` and
+`EcsConsumeSystem` landed with step 4, because a bar to feed is what made them worth
+having.
 
 Before starting any of the rest, decide whether it builds on this stripped core or on
 `928b9d1`'s fuller one — steps 6 and 7 assume the combat layer that was cut.
 
-- **Step 3 (remainder)** — eat via `ConsumeSystem`, once there is a hunger bar to feed.
-- **Step 4** — hunger/fatigue/health as components with a system each. This is the
-  natural next step: the forage loop currently has no *reason*, and hunger is the reason.
+- **Step 3 — done.** `EcsConsumableComponent` + `EcsConsumeSystem`; eating is a kill.
+- **Step 4 — done for hunger and health; fatigue is not built.** The plan asked for three
+  bars with a system each. Hunger and health are in and carry the whole motive chain
+  (gate → eat → starve → die). Fatigue was left out on purpose: it needs sleep to mean
+  anything, and sleep is a brain state with no consumer yet. `FatigueSystem` and its
+  `Sleeping` component are the remainder if they are ever wanted.
 - **Step 5 — done, and not the way the plan said.** `EcsSensorSystem` writes
   `perceived`/`reached`, but off physics areas rather than a distance query: the
   broadphase does the culling in C++, which is why the brain's nearest-berry scan ranks a
