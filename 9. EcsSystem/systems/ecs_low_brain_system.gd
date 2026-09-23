@@ -1,25 +1,184 @@
 class_name EcsLowBrainSystem
 extends EcsSystem
 
-## Decides where to go, then stops caring. It writes a destination into the
-## movement component and never touches a position — the split that lets a
-## smarter brain take its place later without the movement system noticing.
+## The creature's brain: one state machine, one place to read a decision.
 ##
-## This is the first stage of the pipeline: decide, then act, then draw.
+## It reads the world and writes a destination into EcsMovementComponent. That
+## is still the only thing it says to the rest of the pipeline — movement,
+## collision and node_sync are as unaware of brains as they ever were, and a
+## planner replacing this at step 7 changes nothing downstream.
+##
+## ## Why one system and not a rung each
+##
+## Deciding used to be split: EcsForageSystem wrote a destination toward food,
+## this one wrote a destination to wander to, and priority was the order the two
+## sat in the scheduler. That is a genuinely nice property — a rung was one file
+## and one scheduler line, and neither existing rung changed when a third
+## arrived — but it bought it with statelessness, and three things fall out of
+## that which a creature needs:
+##
+##   - **Persistence.** "I am going to that berry" had nowhere to live, so it
+##     was re-derived every tick from whatever the sensor happened to report.
+##   - **Preemption.** A rung could only fill an *empty* destination slot. A
+##     wolf appearing mid-forage could not interrupt, because every rung
+##     politely skips an entity that already has somewhere to be.
+##   - **Hysteresis.** A threshold sitting near its trigger flickers the
+##     creature between rungs on consecutive ticks, because nothing remembers
+##     which side it was on last.
+##
+## So the rungs moved inside one function, where the ladder is the order of the
+## branches and the state is a field. The priority is no less explicit for being
+## a sequence of `if`s — it is arguably more so, since the whole decision reads
+## top to bottom in one place instead of across two files and a scheduler.
+##
+## The cost, stated plainly: this system reads components that are not its own
+## (sensor, inventory) and will read more as behaviours arrive, so it is the one
+## place in the module that knows about several concerns at once. That is what a
+## brain is. The line it must not cross is *doing* anything with them — it still
+## writes nothing but `state`, `target`, `pause_left` and a destination.
+##
+## ## The shape of a tick
+##
+## Validate the standing commitment, then — only if there is no commitment left
+## — decide again, highest rung first. A creature that is mid-trip falls out at
+## the first or second check and costs almost nothing.
 
 func label() -> StringName:
 	return &"low_brain"
 
 func run(world: EcsWorld, delta: float) -> void:
 	for id in world.query([EcsPositionComponent, EcsMovementComponent, EcsLowBrainComponent]):
+		var brain := world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
 		var move := world.get_component(id, EcsMovementComponent) as EcsMovementComponent
+
+		# 1. Does the standing commitment still hold?
+		if brain.state == EcsLowBrainComponent.State.SEEK_FOOD:
+			if not _still_worth_walking_to(world, brain.target):
+				# The thing it was going to is gone — eaten, taken, killed. It
+				# is walking to a spot with nothing in it, so take the trip off
+				# it and let it choose again this same tick. *This* is what the
+				# state was for: the old stateless rung could only fill an empty
+				# destination slot, never take a full one, so a forager whose
+				# berry was stolen walked to the empty grass anyway.
+				_abandon_trip(move)
+				_release(brain)
+			elif not move.has_destination:
+				# The trip ended by itself. Arrival and giving up look identical
+				# here by design — both are an empty slot — and either way this
+				# brain is no longer seeking. Whether it actually got the berry
+				# is EcsPickupSystem's business, not this one's.
+				_release(brain)
+			else:
+				continue
+
+		# 2. A commitment is not reconsidered; a wander is. This is the whole
+		# difference state makes. A creature that is walking nowhere in
+		# particular should be free to notice a berry *this* tick rather than
+		# when its aimless leg happens to end — and without a state field there
+		# was no way to tell those two trips apart, so neither could be
+		# interrupted and both ran to completion.
+		if move.has_destination and brain.state != EcsLowBrainComponent.State.WANDER:
+			continue
+
+		# 3. Choose, highest rung first.
+		if _try_seek_food(world, id, brain, move):
+			continue
+		# Nothing better came up, so an existing wander simply carries on.
 		if move.has_destination:
 			continue
-		var brain := world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
-		brain.pause_left -= delta
-		if brain.pause_left > 0.0:
+		_wander(world, id, brain, move, delta)
+
+## Rung 1 — go and get a berry, if there is room to put one.
+##
+## The candidates are the ids in the entity's own EcsSensorComponent.perceived:
+## what its sensor area overlapped last tick. A berry across the map does not
+## exist as far as this rung is concerned, and that is what keeps it from being
+## O(foragers x berries) — the broadphase culls to a handful of neighbours in
+## C++ and the ranking below sorts those few.
+##
+## Sensor and inventory are read through `get_component` rather than named in
+## the query, because they are what make this rung *possible*, not what makes
+## the brain possible: a creature with no sensor simply never takes it, and
+## needs no flag saying so.
+func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
+		move: EcsMovementComponent) -> bool:
+	var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
+	if bag == null or bag.items.size() >= bag.capacity:
+		return false
+	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
+	if sensor == null or sensor.perceived.is_empty():
+		return false
+
+	var here := (world.get_component(id, EcsPositionComponent) as EcsPositionComponent).position
+	# Nearest of what it can see wins. Squared distance: ranking needs the
+	# order, never the number, so it does not pay for the square root.
+	var best := EcsWorld.NO_ENTITY
+	var best_distance := INF
+	for seen in sensor.perceived:
+		if not _still_worth_walking_to(world, seen):
 			continue
-		brain.pause_left = randf_range(brain.pause_min, brain.pause_max)
-		var here := world.get_component(id, EcsPositionComponent) as EcsPositionComponent
-		move.destination = EcsConst.random_point_near(here.position, brain.radius, 0.25)
-		move.has_destination = true
+		var there := (world.get_component(seen, EcsPositionComponent) as EcsPositionComponent).position
+		var distance := here.distance_squared_to(there)
+		if distance < best_distance:
+			best_distance = distance
+			best = seen
+	if best == EcsWorld.NO_ENTITY:
+		return false
+
+	brain.target = best
+	brain.state = EcsLowBrainComponent.State.SEEK_FOOD
+	_set_trip(move, (world.get_component(best, EcsPositionComponent) as EcsPositionComponent).position)
+	return true
+
+## Rung 2, and the floor — drift somewhere nearby, having rested first.
+##
+## The pause clock runs only here, which is why a creature that spent ten
+## seconds walking to a berry does not then owe ten seconds of accumulated
+## rest: its pause starts when it has nothing to do.
+func _wander(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
+		move: EcsMovementComponent, delta: float) -> void:
+	brain.state = EcsLowBrainComponent.State.IDLE
+	brain.pause_left -= delta
+	if brain.pause_left > 0.0:
+		return
+	brain.pause_left = randf_range(brain.pause_min, brain.pause_max)
+	var here := world.get_component(id, EcsPositionComponent) as EcsPositionComponent
+	brain.state = EcsLowBrainComponent.State.WANDER
+	_set_trip(move, EcsConst.random_point_near(here.position, brain.radius, 0.25))
+
+## Is `id` still a thing this brain could walk to and pick up?
+##
+## A berry someone else took this tick has lost its EcsPositionComponent and is
+## no longer anywhere; one that was eaten is not alive at all. The sensor's
+## overlap list is one physics tick stale, so it is a cull and never a verdict —
+## the components are asked again before anything is committed to.
+func _still_worth_walking_to(world: EcsWorld, id: int) -> bool:
+	if id == EcsWorld.NO_ENTITY or not world.is_alive(id):
+		return false
+	return world.has(id, EcsPickableComponent) and world.has(id, EcsPositionComponent)
+
+## Ends a commitment. Only the brain's own fields — whether the trip it implied
+## is also called off is a separate decision, made above.
+func _release(brain: EcsLowBrainComponent) -> void:
+	brain.target = EcsWorld.NO_ENTITY
+	brain.state = EcsLowBrainComponent.State.IDLE
+
+## Sends an entity to a spot — the only place this system writes a destination.
+##
+## Zeroing `time_left` is not optional. EcsMovementSystem prices a trip on the
+## tick it first sees one and reads a non-zero clock as "already priced", so a
+## destination written over a trip already in progress would inherit whatever
+## was left of the old budget and time out early. Routing every write through
+## here is what makes overwriting a live destination safe, which is what
+## preemption is.
+func _set_trip(move: EcsMovementComponent, point: Vector2) -> void:
+	move.destination = point
+	move.has_destination = true
+	move.time_left = 0.0
+
+## Calls off a trip in progress — the reason a brain with state can do something
+## the old stateless rungs could not.
+func _abandon_trip(move: EcsMovementComponent) -> void:
+	move.has_destination = false
+	move.velocity = Vector2.ZERO
+	move.time_left = 0.0

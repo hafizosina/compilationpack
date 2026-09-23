@@ -10,8 +10,8 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 57 checks over the entity lifecycle, the sensor/action layer, solidity
-# and the movement trip clock.
+# 66 checks over the entity lifecycle, the sensor/action layer, solidity,
+# the movement trip clock and the brain's commitments.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
@@ -111,13 +111,27 @@ flag. Solidity is the module's one authored boolean of this kind, chosen over a 
 component deliberately: radius and solidity are one physical fact about a body, and the
 `.tres` reads as one block.
 
+**Deciding is one system with state, not a rung per behaviour.** `EcsLowBrainSystem` is a
+small FSM — `IDLE > WANDER > SEEK_FOOD` — and `EcsLowBrainComponent` holds its `state` and
+its `target`. It replaced `EcsForageSystem`, which was a second decider whose priority was
+its line number in `main.gd`. That read well but was stateless: a creature's only memory
+between ticks was `has_destination`, so nothing could persist ("I am going to *that*
+berry"), nothing could interrupt (a rung could fill an empty destination slot, never take
+a full one), and a threshold near its trigger flickered. **A commitment is not
+reconsidered; a wander is** — the food rung preempts an aimless leg mid-walk, and a target
+that is eaten or stolen is dropped the tick the brain notices. Every destination write goes
+through one helper that also zeroes `time_left`, because overwriting a live trip would
+otherwise inherit the old one's budget. The brain reads components that are not its own
+(sensor, inventory) and that is accepted: it is the one place that knows several concerns
+at once, and it still *writes* only `state`, `target`, `pause_left` and a destination.
+
 **A destination is a budget, not a standing order.** `EcsMovementSystem` prices each trip
 the tick it first sees it — distance over speed, times the component's `timeout_slack`,
 plus `timeout_grace` — and when that runs out it drops the destination exactly as if it
 had been reached, so the ladder decides again. Without it an entity that soft collision
-holds off its target keeps `has_destination` true forever, and forage and low_brain both
-skip it *because* it already has somewhere to be: a stuck entity is a livelock across
-stages, not a bug inside one. Giving up and arriving are the same event to every other
+holds off its target keeps `has_destination` true forever, and the brain above it skips
+it *because* it already has somewhere to be: a stuck entity is a livelock across stages,
+not a bug inside one. Giving up and arriving are the same event to every other
 system.
 
 **Nodes are grouped per entity**, not pooled per kind: `World/Entities/entity_<id>/` holds
@@ -133,9 +147,10 @@ been crossed.
 is picked up loses its `EcsPositionComponent` but is not dead, so its sprite is hidden
 rather than freed and comes back if it is put down. Freeing a node is kill and only kill.
 
-**It is deliberately stripped to a bare-minimum core**: 14 components, 13 systems
-(`lifecycle > spawner > sensor > forage > low_brain > movement > collision > pickup > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
-rank in the plan's decision ladder, not for the wandering it happens to do), and a world
+**It is deliberately stripped to a bare-minimum core**: 14 components, 12 systems
+(`lifecycle > spawner > sensor > low_brain > movement > collision > pickup > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
+rank in the plan's decision ladder — a planner goes *above* it at step 7 — and not for the
+wandering it happens to do), and a world
 of 10 entities in 2 types (5 rabbits, 5 monkeys — same component list, different authored
 values). `EcsDebugSystem` is a pure
 reader feeding one dumb view, `EcsDebugOverlay`, which annotates each entity in world

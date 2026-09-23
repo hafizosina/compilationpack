@@ -13,9 +13,9 @@ extends EcsComponent
 ## destroyed, and what a carried thing can do is still whatever components it
 ## happens to carry.
 ##
-## Having one of these is what makes an entity forage. No inventory, no
-## `EcsForageSystem` query match, so a berry bush never goes looking for berries
-## and nothing had to tell it not to.
+## Having one of these is what makes an entity forage. No inventory, and the
+## brain's food rung declines to run, so a berry bush never goes looking for
+## berries and nothing had to tell it not to.
 
 ## How many entities fit.
 @export var capacity: int = 1

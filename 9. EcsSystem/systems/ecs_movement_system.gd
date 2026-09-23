@@ -11,7 +11,7 @@ extends EcsSystem
 ## walking" and "wedged". Soft collision corrects a position *after* movement
 ## proposes it, so an entity pushed off its line keeps proposing the same step
 ## forever: the destination stays live, `has_destination` stays true, and the
-## rungs above — forage, low_brain — skip it precisely because it already has
+## brain above it skips it precisely because it already has
 ## somewhere to be. That is the stuck entity, and it is a livelock, not a bug in
 ## any one stage.
 ##

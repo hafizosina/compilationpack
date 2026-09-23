@@ -45,6 +45,7 @@ func run(world: EcsWorld, _delta: float) -> void:
 			"has_destination": false,
 			"destination": Vector2.ZERO,
 			"pause_left": 0.0,
+			"state": "",
 			"bag": "%d/%d" % [bag.items.size(), bag.capacity] if bag != null else "",
 		}
 		if move != null:
@@ -56,6 +57,9 @@ func run(world: EcsWorld, _delta: float) -> void:
 			row["destination"] = move.destination
 		if brain != null:
 			row["pause_left"] = maxf(brain.pause_left, 0.0)
+			# The name comes off a constant on the component, so a new state is
+			# one enum entry and one string, with nothing here to update.
+			row["state"] = EcsLowBrainComponent.STATE_NAMES[brain.state]
 		rows.append(row)
 
 	_overlay.show_rows(rows)

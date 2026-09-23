@@ -6,7 +6,7 @@ extends EcsSystem
 ## and it is the only system besides EcsCollisionSystem that reads anything
 ## back off a node.
 ##
-## Keeping it to one system is the point. EcsForageSystem asks what an entity
+## Keeping it to one system is the point. EcsLowBrainSystem asks what an entity
 ## can see and EcsPickupSystem asks what it can touch, and neither of them ever
 ## looks at a node: they read a list of ids off a component like every other
 ## system reads its inputs. The exception to "nothing reads back off a node"
@@ -14,7 +14,7 @@ extends EcsSystem
 ##
 ## ## Why areas and not a distance loop
 ##
-## EcsForageSystem used to measure to every berry in the world, every tick, for
+## The brain used to measure to every berry in the world, every tick, for
 ## every forager — O(foragers x berries) of interpreted GDScript. Godot's
 ## broadphase buckets the world spatially in C++ and hands back only what
 ## actually overlaps, so a forager now considers a handful of neighbours no

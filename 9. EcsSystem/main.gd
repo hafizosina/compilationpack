@@ -40,8 +40,7 @@ extends Node2D
 ##     lifecycle  births and deaths    → the only stage that creates or frees
 ##     spawner    asks for a berry     → writes a note to the lifecycle inbox
 ##     sensor     what can it see/reach→ writes EcsSensor/EcsActionComponent
-##     forage     go get what it sees  → writes EcsMovementComponent
-##     low_brain  else wander          → writes EcsMovementComponent
+##     low_brain  decides, and remembers → writes EcsMovementComponent
 ##     movement   walks toward it      → writes EcsPositionComponent
 ##     collision  unstacks the bodies  → writes EcsPositionComponent
 ##                (the Area2Ds it reads overlaps off are a derived index only)
@@ -56,7 +55,10 @@ extends Node2D
 ## broadphase in C++ rather than by measuring to every entity in GDScript. Only
 ## bodies carry a collision layer, so sensors are never reported to each other.
 ##
-## Read low_brain, movement and node_sync in that order and you have seen every
+## Deciding is one stage, not a rung each. EcsLowBrainSystem is a small state
+## machine — idle, wander, seek food — holding its state and its target on
+## EcsLowBrainComponent, so a decision survives the tick that made it. Read
+## low_brain, movement and node_sync in that order and you have seen every
 ## behaviour. The last three stages are pure readers: pull debug, census or
 ## inspect out of the chain and the simulation does not notice.
 ##
@@ -129,9 +131,9 @@ func _unhandled_input(event: InputEvent) -> void:
 ## Builds a fresh world and the pipeline that runs it. The scheduler's order is
 ## the whole story of a frame, which is why it is one readable chain: decide
 ## where to go, then go there, then fix up where that actually left everyone,
-## then draw the result. The first stage is named for
-## its rank, not its behaviour: a smarter brain later takes EcsLowBrainSystem's
-## place and writes the same destination field.
+## then draw the result. EcsLowBrainSystem is named for
+## its rank, not its behaviour: the plan's planner goes *above* it later and
+## writes the same destination field.
 func _build() -> void:
 	if _collision != null:
 		_collision.clear()
@@ -147,7 +149,6 @@ func _build() -> void:
 		.add(EcsLifecycleSystem.new(_manager, catalog)) \
 		.add(EcsSpawnerSystem.new()) \
 		.add(EcsSensorSystem.new(_manager)) \
-		.add(EcsForageSystem.new()) \
 		.add(EcsLowBrainSystem.new()) \
 		.add(EcsMovementSystem.new()) \
 		.add(_collision) \

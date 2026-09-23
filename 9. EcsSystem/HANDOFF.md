@@ -16,8 +16,8 @@ or run it directly:
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 "$GODOT" --path . "res://9. EcsSystem/main.tscn"
 
-# 57 checks over the entity lifecycle, the sensor/action layer, solidity and the
-# movement trip clock; exit 0 only if all pass
+# 66 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# movement trip clock and the brain's commitments; exit 0 only if all pass
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
 ```
 
@@ -41,8 +41,7 @@ every frame, EcsScheduler runs thirteen systems over that world:
   lifecycle  births and deaths     → the only stage that creates or frees
   spawner    asks for a berry      → writes a note to the lifecycle inbox
   sensor     what it sees/reaches  → writes EcsSensor/EcsActionComponent
-  forage     go get what it sees   → writes EcsMovementComponent
-  low_brain  else wander           → writes EcsMovementComponent
+  low_brain  FSM: idle/wander/seek  → writes EcsMovementComponent
   movement   walks toward it       → writes EcsPositionComponent
   collision  unstacks the bodies   → writes EcsPositionComponent
              (the Area2Ds it reads overlaps off are a derived index)
@@ -186,17 +185,64 @@ the cap working, not a bug.
 Verified: 14 entities at t=0 → 36 by t=25s, holding steady, 12 per bush, bodies constant
 at 12 throughout.
 
-### Foraging: the decision ladder, made out of run order
+### Deciding: one brain with state, after a ladder made out of run order
 
-`EcsForageSystem` has the *same shape* as `EcsLowBrainSystem` — look at an entity with
-nothing to do, write a destination — and it runs **before** it. That is the entire
-priority mechanism. Forage gets first refusal; an entity it declines (bag full) falls
-through to aimless wandering on its own. No state machine, no priority field, no brain
-arbitrating. Adding a third rung is one system and one scheduler line, and neither
-existing brain changes.
+**What it was.** `EcsForageSystem` had the *same shape* as `EcsLowBrainSystem` — look at
+an entity with nothing to do, write a destination — and it ran **before** it. That was the
+entire priority mechanism: forage got first refusal, an entity it declined fell through to
+aimless wandering, and a third rung would have been one file and one scheduler line with
+no existing rung changed. It read beautifully and it is worth understanding why it went.
 
-Both write the same `destination` field, so movement, collision and node_sync never learn
-that foraging exists.
+**Why it went.** It was stateless. A creature's only memory between ticks was
+`EcsMovementComponent.has_destination` — one borrowed boolean — and three things follow
+from that, none of them fixable by adding rungs:
+
+- **No persistence.** "I am going to *that* berry" had nowhere to live, so it was
+  re-derived every tick from whatever the sensor happened to report.
+- **No preemption.** A rung could fill an *empty* destination slot and never take a full
+  one, so nothing could interrupt anything. A wolf appearing mid-forage could not cut in,
+  because every rung politely skips an entity that already has somewhere to be.
+- **No hysteresis.** A threshold sitting near its trigger flickers the creature between
+  rungs on consecutive ticks, because nothing remembers which side it was on. Step 4's
+  hunger thresholds are exactly that shape, which is what forced the issue.
+
+**What it is now.** One `EcsLowBrainSystem` holding a small state machine, with `state`
+and `target` on `EcsLowBrainComponent`:
+
+```
+IDLE  ──pause elapsed──►  WANDER  ──sees food──►  SEEK_FOOD
+  ▲                         │                        │
+  └─────────── trip ended, or target gone ───────────┘
+```
+
+The ladder is now the order of the branches inside one function rather than the order of
+two lines in `main.gd`. That is no less explicit — arguably more, since the whole decision
+reads top to bottom in one place — and it buys the three things above. Concretely:
+
+- **A commitment is not reconsidered; a wander is.** `SEEK_FOOD` runs to its end.
+  `WANDER` is interruptible, so a creature drifting aimlessly notices a berry on the tick
+  it perceives it rather than when its leg happens to finish.
+- **A dead target is dropped immediately.** If the berry is eaten or taken by someone
+  else, the brain calls off the trip that tick instead of walking to empty grass.
+- **Every destination write goes through one helper** that also zeroes `time_left`.
+  Overwriting a live trip would otherwise inherit the previous one's budget and time out
+  early — the hazard that arrives the moment preemption is possible at all.
+
+It still says exactly one thing to the rest of the pipeline: a destination. Movement,
+collision and node_sync never learn that any of this exists, and the planner that goes
+above this at step 7 will not change them either.
+
+**The cost, stated plainly.** This system reads components that are not its own — sensor,
+inventory, and hunger next — through `get_component` rather than naming them in its query,
+so a creature lacking one simply never takes that rung. It is the one place in the module
+that knows about several concerns at once. That is what a brain is; the line it must not
+cross is *doing* anything with them, and it still writes only `state`, `target`,
+`pause_left` and a destination.
+
+**One behaviour worth knowing:** a freshly spawned entity perceives nothing on its very
+first tick, because `sensor.perceived` is written from physics overlaps that have not been
+reported yet. Its opening move is therefore always a wander, preempted the tick after.
+`tests/lifecycle_test.gd` pins that down rather than papering over it.
 
 ### A destination is a budget, not a standing order
 
@@ -238,7 +284,7 @@ the legs — the note here is that the entity is free to choose, where before it
 
 - the node_sync query stops matching, so the sprite stops being drawn — nothing was told
   to hide it, and the node itself survives, because losing a position is not dying (§5)
-- the forage query stops matching, so nobody walks toward a berry in someone's pocket
+- the brain stops seeing it, so nobody walks toward a berry in someone's pocket
 - the spawner stops counting it against `max_loose`, so the bush resumes producing
 
 One removed component, three consequences, no `is_carried` flag to keep in step.
@@ -250,7 +296,7 @@ carried thing was a recipe for itself rather than itself. Here nothing is snapsh
 nothing is destroyed: verified, a held berry reads `alive=true, has position=false,
 has sprite=true, has pickable=true`.
 
-Having an `EcsInventoryComponent` is what makes an entity forage, so a berry bush never
+Having an `EcsInventoryComponent` is what lets the food rung run, so a berry bush never
 goes looking for berries and nothing had to tell it not to. `EcsPickableComponent` is what
 separates a berry from the bush — both are sprites sitting in the world, only one answers
 the forager's query.
@@ -419,7 +465,7 @@ shoving whatever walks over the spot it was picked up from.
 
 ### Its test
 
-`tests/lifecycle_test.tscn` — 57 checks, re-runnable, exit code 0 only if all pass:
+`tests/lifecycle_test.tscn` — 66 checks, re-runnable, exit code 0 only if all pass:
 
 ```bash
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
@@ -545,6 +591,8 @@ data rather than behaviour and can say tab / merge-into-entity / hide. **Not imp
 
 ## 7. Next, per the plan
 
+**Where the plan actually stands: steps 3 and 5 are done, 6 is half done, 4 is next.**
+
 **Step 3 is most of the way done.** The plan asked for "inventory and pickup as
 relationships (`Inventory{item_ids}`, one system owning the move, so double-claim is
 structurally impossible)" — that is exactly what `EcsInventoryComponent` and
@@ -560,12 +608,15 @@ Before starting any of the rest, decide whether it builds on this stripped core 
 - **Step 3 (remainder)** — eat via `ConsumeSystem`, once there is a hunger bar to feed.
 - **Step 4** — hunger/fatigue/health as components with a system each. This is the
   natural next step: the forage loop currently has no *reason*, and hunger is the reason.
-- **Step 5** — `SensorSystem` writing `Perceived{ids}`; perception becomes a distance
-  query over `EcsPositionComponent`, with no node areas. `EcsForageSystem`'s nearest-berry
-  scan is already this shape and is where a range cap or spatial index belongs.
+- **Step 5 — done, and not the way the plan said.** `EcsSensorSystem` writes
+  `perceived`/`reached`, but off physics areas rather than a distance query: the
+  broadphase does the culling in C++, which is why the brain's nearest-berry scan ranks a
+  handful of neighbours instead of every berry in the world. The plan's node-free version
+  is the fallback if areas ever stop paying, not a regression to make.
 - **Step 6** — FSM brain writing move/eat/attack intents. Note the decision ladder is
-  already here in miniature: `forage > low_brain` is priority expressed as run order, and
-  an FSM is a third rung rather than a rewrite.
+  **already built** — `EcsLowBrainSystem` became that FSM when the stateless
+  `forage > low_brain` run-order ladder was folded into it. What step 6 still wants is
+  intent components, and states above wandering and eating.
 - **Step 7** — GOAP planner as a pure function over a symbolic snapshot, run off-frame
   under a replan budget.
 

@@ -70,6 +70,7 @@ func _run() -> void:
 	await _a_ground_item_is_walked_over_not_bumped_into()
 	await _it_walks_to_what_it_sees_and_takes_it()
 	await _a_trip_it_cannot_finish_is_given_up_on()
+	await _a_stolen_target_is_dropped_the_tick_it_vanishes()
 
 ## A component's `const NODE_KIND` is what gets it a node, so a berry — sprite,
 ## no shape — must come out with a sprite and no body. And everything an entity
@@ -308,16 +309,18 @@ func _a_ground_item_is_walked_over_not_bumped_into() -> void:
 ## The whole loop, driven end to end: a forager spots a berry it cannot reach,
 ## walks to it, and takes it the moment its action area meets the berry's body.
 ##
-## This one runs its own scheduler, with forage and movement added, because
+## This one runs its own scheduler, with the brain and movement added, because
 ## every other test above deliberately has no brain and no legs so that nothing
-## moves except what the test moves. `low_brain` is left out on purpose: with no
-## fallback wandering, the rabbit either walks to the berry it saw or it does
-## not, and the check cannot pass by accident.
+## moves except what the test moves.
+##
+## The brain now owns wandering too, so "it walked that way" could in principle
+## be a coincidence. That is what the state check is for: it must be in
+## SEEK_FOOD, aimed at *that* berry, before any of the distances mean anything.
 func _it_walks_to_what_it_sees_and_takes_it() -> void:
 	var walking := EcsScheduler.new()
 	walking \
 		.add(EcsSensorSystem.new(_manager)) \
-		.add(EcsForageSystem.new()) \
+		.add(EcsLowBrainSystem.new()) \
 		.add(EcsMovementSystem.new()) \
 		.add(EcsCollisionSystem.new(_manager)) \
 		.add(EcsPickupSystem.new()) \
@@ -331,6 +334,22 @@ func _it_walks_to_what_it_sees_and_takes_it() -> void:
 	var at := _world.get_component(rabbit, EcsPositionComponent) as EcsPositionComponent
 	var started := at.position
 
+	var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
+	# Not on the first tick. `sensor.perceived` is written from physics overlaps,
+	# and a freshly spawned entity has none reported yet, so its opening move is
+	# always a wander. The tick after, perception arrives and the food rung
+	# preempts the wander mid-leg — which is the behaviour worth pinning down,
+	# so this asserts it happens within a couple of ticks and not that it
+	# happened instantly.
+	for i in 3:
+		walking.run_all(_world, TICK)
+		await get_tree().physics_frame
+		if brain.state == EcsLowBrainComponent.State.SEEK_FOOD:
+			break
+	_check("it chose to seek food, not to wander",
+		brain.state == EcsLowBrainComponent.State.SEEK_FOOD)
+	_check("and committed to the berry it saw", brain.target == berry)
+
 	# 200 px at 72 px/sec is a bit under 3 seconds. 240 ticks is four.
 	for i in 240:
 		walking.run_all(_world, TICK)
@@ -343,6 +362,15 @@ func _it_walks_to_what_it_sees_and_takes_it() -> void:
 	_check("which is what leaving the world means", not _world.has(berry, EcsPositionComponent))
 	_check("it stopped at arm's length, not on top of it",
 		at.position.distance_to(Vector2(2200.0, -2000.0)) > 20.0)
+
+	# The brain runs before pickup, so on the tick the berry was taken it still
+	# believed it was seeking. It finds out on the next one — the ordinary
+	# one-tick lag of a pipeline where each stage reads what the last one left.
+	walking.run_all(_world, TICK)
+	await get_tree().physics_frame
+	_check("and let the commitment go once the berry was gone",
+		brain.target == EcsWorld.NO_ENTITY
+		and brain.state != EcsLowBrainComponent.State.SEEK_FOOD)
 
 ## A destination it can never stand on. Soft collision holds the walker and the
 ## bush 67 px apart — bodies of 22 and 45 — while its arrive radius is 6, so
@@ -388,6 +416,49 @@ func _a_trip_it_cannot_finish_is_given_up_on() -> void:
 		ticks > 80 and ticks < 220)
 	_check("and the clock is back to zero for the next trip",
 		is_zero_approx(move.time_left))
+
+## What the state machine bought. A forager commits to a berry, and the berry
+## is taken by somebody else mid-walk. The old stateless rung could only fill an
+## *empty* destination slot, never take a full one, so it kept walking to the
+## empty grass and only re-decided on arrival. With `target` on the component
+## the brain can tell its commitment died, and calls the trip off on the tick it
+## notices.
+func _a_stolen_target_is_dropped_the_tick_it_vanishes() -> void:
+	var thinking := EcsScheduler.new()
+	thinking \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsLowBrainSystem.new()) \
+		.add(EcsMovementSystem.new()) \
+		.add(EcsNodeSyncSystem.new(_manager))
+
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-2000.0, 2000.0))
+	var berry := _manager.spawn(_world, _catalog, &"berry", Vector2(-1800.0, 2000.0))
+	var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
+	var move := _world.get_component(rabbit, EcsMovementComponent) as EcsMovementComponent
+
+	for i in 30:
+		thinking.run_all(_world, TICK)
+		await get_tree().physics_frame
+
+	_check("it is committed to the berry", brain.target == berry
+		and brain.state == EcsLowBrainComponent.State.SEEK_FOOD)
+	var committed_to := move.destination
+	_check("and walking to it", move.has_destination)
+
+	# Somebody else takes it: losing its position is what leaving the world
+	# means, and it is exactly what EcsPickupSystem does.
+	_world.remove(berry, EcsPositionComponent)
+	thinking.run_all(_world, TICK)
+	await get_tree().physics_frame
+
+	_check("the commitment was dropped the moment the berry left",
+		brain.target == EcsWorld.NO_ENTITY)
+	_check("and it is no longer seeking food",
+		brain.state != EcsLowBrainComponent.State.SEEK_FOOD)
+	_check("the walk to the empty grass was called off",
+		not move.has_destination or not move.destination.is_equal_approx(committed_to))
+	_check("with the trip clock reset, so the next one is priced fresh",
+		is_zero_approx(move.time_left) or move.has_destination)
 
 func _tick(count: int) -> void:
 	for i in count:

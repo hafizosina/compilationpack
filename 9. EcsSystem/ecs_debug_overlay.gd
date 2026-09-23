@@ -103,6 +103,13 @@ func _draw() -> void:
 			_label(pos + Vector2(left, second), "pausing %.1fs" % row["pause_left"],
 				10.0 * px, width, PAUSED_COLOR)
 
+		# What the brain thinks it is doing. Worth its own line: with the FSM,
+		# "walking" and "walking *to a berry it chose*" look identical on screen
+		# and are different states.
+		var state: String = row["state"]
+		if state != "":
+			_label(pos + Vector2(left, third + 12.0 * px), state, 10.0 * px, width, PAUSED_COLOR)
+
 ## One line of centred text. Sizes arrive already scaled for the camera.
 func _label(at: Vector2, text: String, size: float, width: float, color: Color) -> void:
 	draw_string(_font, at, text, HORIZONTAL_ALIGNMENT_CENTER, width, roundi(size), color)

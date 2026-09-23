@@ -252,7 +252,6 @@ func _build_pipeline() -> void:
 		EcsLifecycleSystem.new(_manager, _catalog),
 		EcsSpawnerSystem.new(),
 		EcsSensorSystem.new(_manager),
-		EcsForageSystem.new(),
 		EcsLowBrainSystem.new(),
 		EcsMovementSystem.new(),
 		EcsCollisionSystem.new(_manager),
@@ -293,7 +292,7 @@ func _populate(n: int) -> void:
 ## stage whose us/entity climbs is being paid for by something other than the
 ## entity — its neighbours.
 const COLUMNS: Array[StringName] = [&"sensor", &"collision", &"node_sync", &"pickup",
-	&"movement", &"forage", &"low_brain"]
+	&"movement", &"low_brain"]
 
 func _report_matrix(every: Array[Dictionary]) -> void:
 	if every.is_empty():
@@ -367,9 +366,9 @@ func _report_breakdown(result: Dictionary) -> void:
 	var sensor_ms: float = systems.get(&"sensor", 0.0)
 	var collision_ms: float = systems.get(&"collision", 0.0)
 	var pickup_ms: float = systems.get(&"pickup", 0.0)
-	var forage_ms: float = systems.get(&"forage", 0.0)
+	var brain_ms: float = systems.get(&"low_brain", 0.0)
 	var ids: int = maxi(work["perceived"] + work["reached"], 1)
 	print("[stress]   => sensor    %6.3f us per id returned" % (sensor_ms * 1000.0 / ids))
 	print("[stress]   => collision %6.3f us per overlap pair" % (collision_ms * 1000.0 / maxi(work["overlaps"], 1)))
 	print("[stress]   => pickup    %6.3f us per id in reach" % (pickup_ms * 1000.0 / maxi(work["reached"], 1)))
-	print("[stress]   => forage    %6.3f us per id perceived" % (forage_ms * 1000.0 / maxi(work["perceived"], 1)))
+	print("[stress]   => low_brain %6.3f us per id perceived" % (brain_ms * 1000.0 / maxi(work["perceived"], 1)))

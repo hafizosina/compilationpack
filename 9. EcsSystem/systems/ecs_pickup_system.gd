@@ -4,12 +4,12 @@ extends EcsSystem
 ## Takes anything pickable an entity is standing on.
 ##
 ## Deciding to go and acting on arrival are different systems, the same split as
-## brain and movement: EcsForageSystem never learns what happens when you get
+## brain and movement: EcsLowBrainSystem never learns what happens when you get
 ## there, and this never learns why anyone came.
 ##
 ## Picking up is **removing `EcsPositionComponent`**. That one line is the whole
 ## of leaving the world: EcsNodeSyncSystem's query stops matching so the sprite
-## stops being drawn, the forage query stops matching so nobody walks toward it,
+## stops being drawn, the brain stops seeing anything worth walking to,
 ## and the spawner stops counting it against its litter cap. Nothing was told to
 ## hide anything, and there is no `is_carried` flag to keep in step.
 ##
