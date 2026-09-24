@@ -74,6 +74,7 @@ func _run() -> void:
 	await _hunger_climbs_and_gates_the_food_rung()
 	await _eating_empties_the_bag_and_ends_the_berry()
 	await _starving_costs_health_and_then_the_entity()
+	await _being_well_fed_mends_and_the_band_between_does_neither()
 	await _a_grazer_eats_off_the_ground_with_no_inventory()
 	await _a_sated_carrier_leaves_the_berry_alone()
 	await _a_hungry_carrier_eats_off_the_ground_without_pocketing()
@@ -351,11 +352,11 @@ func _it_walks_to_what_it_sees_and_takes_it() -> void:
 	var bag := _world.get_component(rabbit, EcsInventoryComponent) as EcsInventoryComponent
 	var at := _world.get_component(rabbit, EcsPositionComponent) as EcsPositionComponent
 	var started := at.position
-	# Since step 4 the food rung has a motive gate, and a rabbit spawns sated.
-	# Hungry enough to fetch, not hungry enough to eat what it fetches — this
+	# Since step 4 the food rung has a motive gate, and a rabbit spawns fed.
+	# Empty enough to fetch, not empty enough to eat what it fetches — this
 	# test is about walking and taking, and eating would end the berry early.
 	var appetite := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
-	appetite.value = appetite.forage_at + 1.0
+	appetite.fullness = appetite.forage_below - 1.0
 
 	var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
 	# Not on the first tick. `sensor.perceived` is written from physics overlaps,
@@ -465,9 +466,9 @@ func _a_stolen_target_is_dropped_the_tick_it_vanishes() -> void:
 	var berry := _manager.spawn(_world, _catalog, &"berry", Vector2(-1800.0, 2000.0))
 	var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
 	var move := _world.get_component(rabbit, EcsMovementComponent) as EcsMovementComponent
-	# Hungry enough to want it; no EcsHungerSystem here, so it stays put.
+	# Empty enough to want it; no EcsHungerSystem here, so it stays put.
 	var appetite := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
-	appetite.value = appetite.forage_at + 1.0
+	appetite.fullness = appetite.forage_below - 1.0
 
 	for i in 30:
 		thinking.run_all(_world, TICK)
@@ -513,7 +514,7 @@ func _hunger_climbs_and_gates_the_food_rung() -> void:
 	var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
 
 	# Sated, with a berry 100 px away and well inside its 280 px sensor.
-	hunger.value = 0.0
+	hunger.fullness = hunger.max_fullness
 	var sated_state := EcsLowBrainComponent.State.SEEK_FOOD
 	for i in 20:
 		living.run_all(_world, TICK)
@@ -523,10 +524,10 @@ func _hunger_climbs_and_gates_the_food_rung() -> void:
 			break
 	_check("a sated creature ignores food it can see",
 		sated_state != EcsLowBrainComponent.State.SEEK_FOOD)
-	_check("and hunger climbed while it did", hunger.value > 0.0)
+	_check("and fullness drained while it did", hunger.fullness < hunger.max_fullness)
 
 	# Now make it hungry enough to bother.
-	hunger.value = hunger.forage_at + 1.0
+	hunger.fullness = hunger.forage_below - 1.0
 	for i in 20:
 		living.run_all(_world, TICK)
 		await get_tree().physics_frame
@@ -558,16 +559,16 @@ func _eating_empties_the_bag_and_ends_the_berry() -> void:
 	# Hand it the berry the way EcsPickupSystem would, and make it hungry.
 	bag.items.append(berry)
 	_world.remove(berry, EcsPositionComponent)
-	hunger.value = hunger.eat_at + 5.0
-	var before := hunger.value
+	hunger.fullness = hunger.eat_below - 5.0
+	var before := hunger.fullness
 
 	living.run_all(_world, TICK)
 	await get_tree().physics_frame
 	_check("it decided to eat what it was carrying",
 		brain.state == EcsLowBrainComponent.State.EAT)
 	_check("the berry left the bag", not bag.items.has(berry))
-	_check("and hunger fell by the berry's nutrition",
-		is_equal_approx(hunger.value, before - food.nutrition))
+	_check("and fullness rose by the berry's nutrition",
+		is_equal_approx(hunger.fullness, before + food.nutrition))
 
 	# The kill note is fulfilled at the top of the next tick, not on the spot.
 	_check("the berry is still alive this tick", _world.is_alive(berry))
@@ -592,13 +593,13 @@ func _starving_costs_health_and_then_the_entity() -> void:
 	await _tick(1)
 
 	# Not starving yet: one tick short of the top costs nothing.
-	hunger.value = hunger.max_value - 1.0
+	hunger.fullness = 1.0
 	health.value = health.max_health
 	living.run_all(_world, TICK)
 	await get_tree().physics_frame
-	_check("being merely hungry is free", is_equal_approx(health.value, health.max_health))
+	_check("being merely peckish is free", is_equal_approx(health.value, health.max_health))
 
-	hunger.value = hunger.max_value
+	hunger.fullness = 0.0
 	living.run_all(_world, TICK)
 	await get_tree().physics_frame
 	_check("starving costs health", health.value < health.max_health)
@@ -641,11 +642,11 @@ func _a_grazer_eats_off_the_ground_with_no_inventory() -> void:
 	_check("a rabbit carries nothing at all",
 		not _world.has(rabbit, EcsInventoryComponent))
 
-	# Hungry enough to fetch. Its eat_at sits *below* forage_at precisely
+	# Empty enough to fetch. Its eat_below sits *above* forage_below precisely
 	# because it cannot stockpile — it eats what it walks to, on arrival.
-	hunger.value = hunger.forage_at + 1.0
-	_check("and its thresholds say graze, not hoard", hunger.eat_at < hunger.forage_at)
-	var before := hunger.value
+	hunger.fullness = hunger.forage_below - 1.0
+	_check("and its thresholds say graze, not hoard", hunger.eat_below > hunger.forage_below)
+	var before := hunger.fullness
 
 	var ate := false
 	for i in 400:
@@ -657,7 +658,7 @@ func _a_grazer_eats_off_the_ground_with_no_inventory() -> void:
 
 	_check("it walked to the berry and ate it off the ground", ate)
 	_check("without ever holding it", not _world.has(rabbit, EcsInventoryComponent))
-	_check("hunger went down, not up", hunger.value < before)
+	_check("fullness went up, not down", hunger.fullness > before)
 	_check("and its nodes went with it", _manager.container_for(berry) == null)
 	_check("it is no longer eating", brain.state != EcsLowBrainComponent.State.EAT)
 
@@ -685,7 +686,7 @@ func _a_sated_carrier_leaves_the_berry_alone() -> void:
 	var action := _world.get_component(monkey, EcsActionComponent) as EcsActionComponent
 
 	# Right on top of it, and no EcsHungerSystem here so the bar stays put.
-	hunger.value = 0.0
+	hunger.fullness = hunger.max_fullness
 	for i in 20:
 		living.run_all(_world, TICK)
 		await get_tree().physics_frame
@@ -693,8 +694,8 @@ func _a_sated_carrier_leaves_the_berry_alone() -> void:
 	_check("the berry is well within its reach", action.reached.has(berry))
 	_check("but a sated carrier does not pocket it", not bag.items.has(berry))
 
-	# Hungry enough to want it, and it takes it without moving an inch.
-	hunger.value = hunger.forage_at + 1.0
+	# Empty enough to want it, and it takes it without moving an inch.
+	hunger.fullness = hunger.forage_below - 1.0
 	for i in 20:
 		living.run_all(_world, TICK)
 		await get_tree().physics_frame
@@ -731,10 +732,10 @@ func _a_hungry_carrier_eats_off_the_ground_without_pocketing() -> void:
 	var bag := _world.get_component(monkey, EcsInventoryComponent) as EcsInventoryComponent
 
 	_check("the carrier has a bag it could have used", bag != null)
-	# Hungry enough to eat, which is above the threshold that would pocket it.
+	# Empty enough to eat, which is past the threshold that would pocket it.
 	# No EcsHungerSystem here, so the bar stays where the test puts it.
-	hunger.value = hunger.eat_at + 5.0
-	var before := hunger.value
+	hunger.fullness = hunger.eat_below - 5.0
+	var before := hunger.fullness
 
 	var pocketed := false
 	var ate := false
@@ -749,7 +750,47 @@ func _a_hungry_carrier_eats_off_the_ground_without_pocketing() -> void:
 
 	_check("it ate the berry off the ground", ate)
 	_check("and never put it in the bag on the way", not pocketed)
-	_check("the meal came off its hunger", hunger.value < before)
+	_check("the meal went onto its fullness", hunger.fullness > before)
+
+## The other half of hunger's rule. Starving spends health; being well fed gives
+## it back, and the band between the two thresholds does neither — which is what
+## stops regeneration from simply undoing starvation.
+func _being_well_fed_mends_and_the_band_between_does_neither() -> void:
+	var living := EcsScheduler.new()
+	living.add(EcsHungerSystem.new())
+
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-8000.0, 2000.0))
+	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
+	var health := _world.get_component(rabbit, EcsHealthComponent) as EcsHealthComponent
+	await _tick(1)
+
+	# Well fed and wounded: it mends.
+	hunger.fullness = hunger.max_fullness
+	health.value = 50.0
+	for i in 30:
+		living.run_all(_world, TICK)
+	_check("a well-fed creature mends", health.value > 50.0)
+
+	# Between the thresholds: neither mending nor starving.
+	hunger.fullness = (hunger.heal_above + hunger.eat_below) * 0.5
+	var held := health.value
+	for i in 30:
+		living.run_all(_world, TICK)
+	_check("and the band between does neither", is_equal_approx(health.value, held))
+
+	# Mending stops at full, rather than running past it.
+	hunger.fullness = hunger.max_fullness
+	health.value = health.max_health - 0.1
+	for i in 60:
+		living.run_all(_world, TICK)
+	_check("mending stops at full health",
+		is_equal_approx(health.value, health.max_health))
+
+	# And empty still costs, so the two halves are the same rule.
+	hunger.fullness = 0.0
+	for i in 30:
+		living.run_all(_world, TICK)
+	_check("while empty still costs health", health.value < health.max_health)
 
 ## States an intent on an entity's brain, for the tests that run an executor
 ## system without EcsLowBrainSystem to decide for them.

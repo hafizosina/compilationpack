@@ -1,5 +1,9 @@
 # Module 9 — EcsSystem: state of the build
 
+> `SESSION_HANDOFF.md` sits beside this file and covers one session at a time: what changed,
+> what was settled, and what was retracted. This file is the living state; that one is the
+> diary. Read this first.
+
 Greenfield hand-rolled ECS, built beside `8. SimpleAiSystem` per `ECS_REFACTOR_PLAN.md`.
 **Module 8's code has since been deleted** — its folder is a design archive of five `.md`
 files, so the references to it below are to a recorded design, not to something you can
@@ -16,7 +20,7 @@ or run it directly:
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 "$GODOT" --path . "res://9. EcsSystem/main.tscn"
 
-# 95 checks over the entity lifecycle, the sensor/action layer, solidity, the movement
+# 99 checks over the entity lifecycle, the sensor/action layer, solidity, the movement
 # trip clock, the brain's commitments and the hunger/health loop; exit 0 only if all pass
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
 ```
@@ -251,22 +255,30 @@ foraged because the rung said to and stopped when its bag was full — motion wi
 reason behind it. `EcsHungerComponent.value` climbs from 0 to `max_value` and two
 authored thresholds turn it into behaviour:
 
+**The number counts fullness, not hunger.** It starts at `max_fullness`, drains to zero,
+and zero is starving — the same shape as health, so both bars deplete and a short bar is
+bad news on either. The class is still `EcsHungerComponent` because hunger is the subject;
+the field is `fullness` because that is what it holds.
+
 | threshold | default | what it gates |
 |---|---|---|
-| `forage_at` | 35 | below it the brain's SEEK_FOOD rung declines — a sated creature wanders past food it can see |
-| `eat_at` | 60 | above it the EAT rung fires, if it is carrying something edible |
+| `forage_below` | 65 | above it the brain's SEEK_FOOD rung declines — a fed creature wanders past food it can see |
+| `eat_below` | 40 | below it the EAT rung fires, if it has something edible at hand |
+| `heal_above` | 70 | above it health comes back at `heal_rate`, slower than starving takes it |
 
-`eat_at` sits **above** `forage_at` deliberately, so both rungs are visible in play: it
-gathers while peckish, carries, and eats when properly hungry. Swapping them makes it eat
-on arrival instead, and that is an authored value in a `.tres`, not a code change.
+`eat_below` sits **under** `forage_below` for a carrier, so both rungs are visible in play:
+it gathers while peckish, carries, and eats once properly empty. Putting it *over* makes a
+grazer, which eats whatever it walked to on arrival — that one relation is the whole
+difference, and it is an authored value in a `.tres`, not a code change.
 
-**Starvation is hunger's rule, so it lives in `EcsHungerSystem`** — pinned at
-`max_value`, it spends `starve_damage` per second out of `EcsHealthComponent`.
+**What being empty or full does to you is hunger's rule, so both halves live in
+`EcsHungerSystem`** — at zero fullness it spends `starve_damage` per second out of
+`EcsHealthComponent`; above `heal_above` it gives health back at `heal_rate`; between the
+two it does neither, which is the band that stops mending from merely undoing starving.
 `EcsHealthSystem` owns only the other end: health at zero writes a kill note. Each system
 owns the consequences of the component it is named for, so neither has to know the other
-exists, and an entity with no health component simply starves forever. Nothing
-regenerates — starvation is the module's only damage source and regen would just undo it.
-The combat layer that used to provide a second one is in git at `928b9d1`.
+exists, and an entity with no health component simply starves forever. Starvation is still the module's only damage
+source; the combat layer that used to provide a second one is in git at `928b9d1`.
 
 **Eating does not require an inventory, and that is the point.** The condition is "I am
 hungry and there is food within reach"; a pocket is one place reach can mean. So
@@ -572,7 +584,7 @@ shoving whatever walks over the spot it was picked up from.
 
 ### Its test
 
-`tests/lifecycle_test.tscn` — 95 checks, re-runnable, exit code 0 only if all pass:
+`tests/lifecycle_test.tscn` — 99 checks, re-runnable, exit code 0 only if all pass:
 
 ```bash
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
@@ -783,13 +795,16 @@ Open questions, none settled:
 Nothing here is blocking step 4. It is blocking a decision about what module 9 *is*, which
 is a different thing and worth taking the time over.
 
-#### Measured: 81% of a system is finding its components, not using them
+#### Measured: most of a system is finding its components, not using them
 
 The argument ran on the assertion that "the measured bottleneck is `get_component` call
 overhead" without anything measuring it. `tests/stress_test.tscn` now probes it, on
 `EcsMovementSystem` because it is the purest per-entity stage in the pipeline — two
-components in, one position out, no neighbours. At 2,000 entities (**measured before
-the trip clock went in** — the stage now prices and decrements a budget per entity, so
+components in, one position out, no neighbours. The ratio has been re-measured twice
+since and moves with the population: **67%** at 2,000 entities below, **56–62%** at 4,000
+in §9. The direction is what keeps — and §9's 41 µs floor is the stronger form of this
+same argument, since it bounds the whole pipeline rather than one stage. At 2,000 entities
+(**measured before the trip clock went in** — the stage now prices and decrements a budget per entity, so
 re-run before leaning on the absolute numbers; the 25/67/19 split is the durable part):
 
 | | ms | µs/entity | share of the stage |
@@ -856,12 +871,15 @@ the real pipeline and:
 | pipeline | crossing | note |
 |---|---|---|
 | 12 stages, as documented before today | ~4,450 | the number this section used to carry |
-| 12 stages, after the FSM merge and the pickup simplification | **4,800+** (never crossed) | those two refactors bought ~8% |
-| **15 stages, what main.gd actually builds** | **3,200** (4,000 crosses at 372 ms) | reproduced cold, ±5% |
+| **15 stages, what main.gd actually builds** | **3,200** (4,000 crosses) | reproduced cold, ±5% |
 
-So **step 4 cost about a third of the population ceiling**, and the honest headline is
-3,200. Reference points interpolated off the live curve: **60 FPS at ~250 entities, 30 FPS
-at ~520, 10 FPS at ~1,700.**
+The honest headline is **3,200**. Reference points interpolated off the live curve:
+**60 FPS at ~250 entities, 30 FPS at ~520, 10 FPS at ~1,700.**
+
+A third row used to sit in that table — 12 stages measured at 4,800+, read as "the FSM
+merge bought 8%" and "step 4 cost a third of the ceiling". Both are withdrawn; see
+immediately below. The 12-stage configuration measured in the same sitting as everything
+else crosses at 3,200 like the rest.
 
 **Retracted: the "70% regression" and the "step 4 cost a third of the ceiling".** Both came
 from comparing a ramp run in the morning against ramps run that afternoon, and the machine's
@@ -874,7 +892,7 @@ one sitting, and made that way it says something much duller:
 | sensor | 130.66 ms | 132.25 ms | +1.2% |
 | collision | 55.98 ms | 54.47 ms | −2.7% |
 | low_brain | 46.96 ms | 47.26 ms | +0.6% |
-| node_sync | 35.08 ms | 35.08 → 34.21 ms | −2.5% |
+| node_sync | 35.08 ms | 34.21 ms | −2.5% |
 | movement | 22.76 ms | 22.70 ms | 0% |
 | **crossing 250 ms** | **3,200** | **3,200** | none |
 
@@ -1116,26 +1134,29 @@ else). Budget at 60 Hz: ~30–40 such systems at 100 entities, ~15–20 at 200.
 
 ### The levers, ranked by payoff over cost
 
-**None of these are taken.** Ordered so the cheap ones get spent before anything
-architectural is committed to.
+**None of these are taken.** Re-ranked after the floor measurement above, which moved the
+sensor from first to nearly last and promoted the thing that was last.
 
-1. **Stagger the sensor across ticks.** `sensor` is 42% of the frame and every sensing
-   entity re-scans every tick. Slice the query so a quarter run per tick: **~4x off the
-   dominant stage, ~32% off the tick**, for four ticks of perception latency that
-   timer-based AI cannot notice. A few lines, no architectural commitment.
-2. **Shrink the monkey's sight radius.** Sensor cost is ids returned and ids scale with
-   πr². 420 → 280 px would cut ~38% of all ids — sensor ~111 → ~68 ms — with **no code at
-   all**, if the gameplay tolerates it.
-3. **Cache the `Area2D` in `EcsCollisionSystem`, and fix `node_for`.** It still resolves
-   the body through the manager every tick — the lookup that was worth 14% in the sensor —
-   and `node_for`'s `_nodes.get(id, {})` allocates a throwaway dictionary on every call,
-   which every caller pays. Small, free, uncontroversial.
-4. **Decouple sim tick from frame rate.** A colony sim does not need 60 Hz simulation.
-   Running the scheduler at 10–20 Hz is a 3–6x headroom multiplier and costs nothing —
-   the scheduler already takes `delta`.
-5. **Archetype storage.** ~1.6–2x on the tick, and the only lever that touches the
-   per-entity access floor. It is also a rewrite of `EcsWorld`'s storage and an open
-   argument — §8 has the measurement and the case. Last, not first.
+1. **Attack the per-entity floor.** 41 µs before anything perceives or touches anything,
+   and a hard ceiling near 6,000 entities however much else is fixed. That is `query()`
+   plus component access plus per-entity area bookkeeping — §8's packed-storage argument,
+   now with a number behind it rather than a ratio. **It is an open argument and the
+   author's call; do not implement it unasked.**
+2. **Decouple sim tick from frame rate.** 10–20 Hz instead of 60 is a 3–6x headroom
+   multiplier, the scheduler already takes `delta`, and it is the only lever that
+   multiplies a *floor* rather than shaving a stage.
+3. **Decide the density you are designing for.** Free: 90 px versus 180 px spacing moves
+   the ceiling from 3,200 to 4,800. Sight radius is the same lever from the other end —
+   ids scale with πr², so 420 → 280 px cuts ~38% of them with no code at all.
+4. **Cache the brain's perception scan.** The food rung asks three store questions of every
+   perceived id, every tick, right after the sensor walked the same list. Cheap, and it
+   shrinks with density.
+5. **Stagger the sensor across ticks — worth far less than it looked.** The old entry here
+   claimed ~32% off the tick. The 840 px run prices it properly: deleting perception
+   *entirely* saves the sensor stage 34% and the whole tick 10%, so staggering it buys less
+   than 10%. Most of a sensing entity's cost is fixed overhead, not ids returned.
+6. **Fix `node_for`'s throwaway dictionary.** `_nodes.get(id, {})` allocates on every call
+   and every caller pays. Small, free, uncontroversial.
 
 The first tick after a world is built creates every pooled node at once: 5 ms at 100
 entities, 70 ms at 400, 345 ms at 1000 — 97% of it `Area2D` creation. Behind a loading

@@ -128,7 +128,7 @@ func run(world: EcsWorld, delta: float) -> void:
 func _try_eat(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		move: EcsMovementComponent) -> bool:
 	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
-	if hunger == null or hunger.value < hunger.eat_at:
+	if hunger == null or hunger.fullness > hunger.eat_below:
 		return false
 	if not _food_at_hand(world, id):
 		return false
@@ -161,8 +161,8 @@ func _food_at_hand(world: EcsWorld, id: int) -> bool:
 ## reflex, and the module had settled that the brain is the only thing that
 ## chooses — so it is a rung now, and pickup does nothing until it fires.
 ##
-## Gated on the same `forage_at` that sends it out in the first place: a
-## creature wants a berry for one reason, and a sated one has no more business
+## Gated on the same `forage_below` that sends it out in the first place: a
+## creature wants a berry for one reason, and a fed one has no more business
 ## pocketing food than it has walking to it. Eating outranks this, so a hungry
 ## creature standing over a berry eats it where it lies rather than bagging it
 ## first — bagging is for when you are peckish now and hungry later.
@@ -180,7 +180,7 @@ func _try_take(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	if bag == null or bag.items.size() >= bag.capacity:
 		return false
 	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
-	if hunger != null and hunger.value < hunger.forage_at:
+	if hunger != null and hunger.fullness > hunger.forage_below:
 		return false
 	var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
 	if action == null:
@@ -236,7 +236,7 @@ func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	# because it could, and stopped only when the bag filled. A creature below
 	# its forage threshold now wanders past food it can plainly see.
 	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
-	if hunger != null and hunger.value < hunger.forage_at:
+	if hunger != null and hunger.fullness > hunger.forage_below:
 		return false
 	# A bag caps how much it may fetch; having none does not stop it going.
 	# A grazer walks to the berry and eats it where it lies.

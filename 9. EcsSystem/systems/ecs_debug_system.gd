@@ -56,7 +56,7 @@ func run(world: EcsWorld, _delta: float) -> void:
 		var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
 		var health := world.get_component(id, EcsHealthComponent) as EcsHealthComponent
 		if hunger != null:
-			row["hunger"] = clampf(hunger.value / maxf(hunger.max_value, 0.01), 0.0, 1.0)
+			row["hunger"] = clampf(hunger.fullness / maxf(hunger.max_fullness, 0.01), 0.0, 1.0)
 		if health != null:
 			row["health"] = clampf(health.value / maxf(health.max_health, 0.01), 0.0, 1.0)
 		rows.append(row)

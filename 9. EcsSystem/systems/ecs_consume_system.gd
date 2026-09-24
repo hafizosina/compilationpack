@@ -4,8 +4,8 @@ extends EcsSystem
 ## Carries out the decision to eat. It does not make it.
 ##
 ## `EcsLowBrainSystem` puts a creature in the EAT state when it is hungry enough
-## and has food at hand; this turns that into the berry ending and points coming
-## off the bar. The split is the same one the whole module runs on — one place
+## and has food at hand; this turns that into the berry ending and points going
+## back onto the bar. The split is the same one the whole module runs on — one place
 ## decides, another acts — and it is what keeps the brain from growing hands. It
 ## is also step 6's intent pattern in miniature: `state` is the intent, and this
 ## is its executor.
@@ -62,7 +62,7 @@ func run(world: EcsWorld, _delta: float) -> void:
 
 		var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
 		var food := world.get_component(meal, EcsConsumableComponent) as EcsConsumableComponent
-		hunger.value = maxf(hunger.value - food.nutrition, 0.0)
+		hunger.fullness = minf(hunger.fullness + food.nutrition, hunger.max_fullness)
 		if not lifecycle.kill_requests.has(meal):
 			lifecycle.kill_requests.append(meal)
 

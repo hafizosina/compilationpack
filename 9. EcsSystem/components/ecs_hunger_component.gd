@@ -1,40 +1,54 @@
 class_name EcsHungerComponent
 extends EcsComponent
 
-## How hungry it is, and at what points that starts to matter.
+## How fed it is, and at what points that starts to matter.
 ##
-## The bar is the *reason* the rest of the loop exists. Before it, a creature
-## foraged because EcsLowBrainSystem's food rung said to and stopped when its
-## bag was full — motion with no motive. Now the rung asks this first, so
-## gathering is something a hungry animal does and a full one does not.
+## **The number is `fullness`, not hunger.** It starts at `max_fullness`, drains
+## toward zero, and zero is starving — the same shape as EcsHealthComponent, so
+## the two bars an entity carries both deplete, both read "more is better", and
+## both mean trouble at the bottom. The class keeps the name `EcsHungerComponent`
+## because hunger is what the thing is *about*; the field is named for what it
+## actually counts so no call site has to hold the inversion in its head.
 ##
-## `value` counts **up**: 0 is sated, `max_value` is starving. Counting up is
-## what makes the thresholds read as "hungrier than", which is how the brain
-## asks about them.
+## It is the *reason* the rest of the loop exists. Before it, a creature foraged
+## because EcsLowBrainSystem's food rung said to and stopped when its bag was
+## full — motion with no motive. Now the rung asks this first, so gathering is
+## something a hungry animal does and a fed one does not.
 ##
 ## Carrying this component is the whole of "this entity needs to eat". A berry
 ## bush has none and no rung ever asks.
 
-## How fast hunger climbs, in points per second.
-@export var rate: float = 2.0
-## Starving. Sitting here is what starts costing health.
-@export var max_value: float = 100.0
-## Hungry enough to go and fetch food it can see. The brain's SEEK_FOOD rung
-## declines below this, so a sated creature wanders past a berry.
-@export var forage_at: float = 35.0
-## Hungry enough to eat what it is already carrying.
+## How fast fullness drains, in points per second.
+@export var drain: float = 2.0
+## Full. Also the ceiling a meal cannot push past.
+@export var max_fullness: float = 100.0
+## Empty enough to go and fetch food it can see. The brain's SEEK_FOOD rung
+## declines *above* this, so a fed creature wanders past a berry.
+@export var forage_below: float = 65.0
+## Empty enough to eat what it already has at hand.
 ##
-## Deliberately *above* `forage_at`: it gathers while peckish, carries, and eats
-## when properly hungry, so both rungs are visible in play. Put it below
-## `forage_at` instead and a creature eats the moment it picks something up —
-## an authored value, not a code change.
-@export var eat_at: float = 60.0
-## Health lost per second while pinned at `max_value`. Starving does nothing at
+## For a carrier this sits **below** `forage_below`: it gathers while peckish,
+## carries, and eats once properly empty, so both rungs are visible in play. For
+## a grazer — something with no inventory to stockpile into — it sits *above*,
+## so anything it walked to gets eaten on arrival rather than stood over. That
+## one relation is the whole difference between hoarding and grazing, and it is
+## an authored value in a `.tres`, not a code change.
+@export var eat_below: float = 40.0
+## Health lost per second while fullness sits at zero. Starving does nothing at
 ## all to an entity with no EcsHealthComponent.
 @export var starve_damage: float = 5.0
+## Fed enough to mend. Above this, health comes back at `heal_rate`.
+##
+## Set so one meal reaches it from either creature's eating threshold — a berry
+## is worth 40, a carrier eats at 40 and a grazer at 70, so both clear 70 after
+## a single berry. Raise it and eating stops paying for itself.
+@export var heal_above: float = 70.0
+## Health regained per second while above `heal_above`. Deliberately slower than
+## `starve_damage`: going hungry should cost more than being fed repays.
+@export var heal_rate: float = 1.5
 
-## Current hunger. Runtime state: 0 sated, `max_value` starving.
-var value: float = 0.0
+## How fed it is right now. Runtime state: `max_fullness` fed, 0 starving.
+var fullness: float = 100.0
 
 func key() -> StringName:
 	return &"hunger"

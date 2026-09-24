@@ -10,7 +10,7 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 95 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 99 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments and the hunger/health loop.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
@@ -117,14 +117,21 @@ flag. Solidity is the module's one authored boolean of this kind, chosen over a 
 component deliberately: radius and solidity are one physical fact about a body, and the
 `.tres` reads as one block.
 
-**Hunger is the motive, and health is the consequence** (the plan's step 4).
-`EcsHungerComponent.value` climbs 0 → `max_value`; the brain's food rung declines below
-`forage_at`, so a sated creature wanders past a berry it can plainly see, and its eat rung
-fires above `eat_at`. Pinned at the top, `EcsHungerSystem` spends `EcsHealthComponent` —
-**starvation is hunger's rule, so it lives with hunger** — and `EcsHealthSystem` owns only
-the threshold, writing a kill note at zero. Each system owns the consequences of the
-component it is named for and neither knows the other exists. Nothing regenerates health:
-starvation is the module's one damage source and regen would merely undo it.
+**Hunger is the motive, and health is the consequence** (the plan's step 4). The number is
+**`EcsHungerComponent.fullness`, not hunger** — it starts at `max_fullness` and drains to
+zero, the same shape as health, so both of an entity's bars deplete and both mean trouble
+at the bottom. The class keeps the name because hunger is what it is *about*; the field is
+named for what it counts, so no call site has to hold the inversion in its head. The
+brain's food rung declines *above* `forage_below`, so a fed creature wanders past a berry
+it can plainly see, and its eat rung fires below `eat_below`.
+**What being empty or full does to you is hunger's rule**, so both halves live in
+`EcsHungerSystem`: at zero it spends `EcsHealthComponent` at `starve_damage`, above
+`heal_above` it gives health back at the slower `heal_rate`, and the band between does
+neither. `EcsHealthSystem` owns only the threshold, writing a kill note at zero. Each
+system owns the consequences of the component it is named for and neither knows the other
+exists. Regeneration was argued against while starvation was the only damage source —
+gating it on being *well fed* is what answers that: mending is the reward for having
+eaten, not the absence of starving.
 **The brain is the only thing that chooses.** `EcsPickupSystem` used to be a reflex — it
 ran on reach alone, so a sated monkey pocketed every berry it wandered across with nothing
 having decided that. Taking is now a `TAKE` rung on the brain, gated on the same
@@ -146,9 +153,9 @@ would walk a creature onto the thing before it grabbed it.
 the condition, and a pocket is only one place reach can mean: a carrier eats out of its
 `EcsInventoryComponent`, a **grazer** eats what its action area is touching, off the
 ground. The two creature types are now that contrast, from authored values alone — the
-**monkey** carries (bag, `forage_at` 30 < `eat_at` 60: gather, carry, eat later) and the
-**rabbit** has no `EcsInventoryComponent` at all (`eat_at` 30 < `forage_at` 35: walk to it,
-eat it where it lies, and its hunger climbs slower to match). The brain's food rung treats
+**monkey** carries (bag, `eat_below` 40 < `forage_below` 70: gather, carry, eat later) and
+the **rabbit** has no `EcsInventoryComponent` at all (`eat_below` 70 > `forage_below` 65:
+walk to it, eat it where it lies, and its fullness drains slower to match). The brain's food rung treats
 a bag as a *cap on how much it may fetch*, never as a requirement to go. Food is
 `EcsConsumableComponent`, not `EcsPickableComponent` — a hungry animal must not chase a
 tool. **Eating is a kill, picking up is not** — a carried berry has only lost its

@@ -34,10 +34,9 @@ const VELOCITY_COLOR := Color(0.35, 0.9, 1.0)
 const DESTINATION_COLOR := Color(1.0, 0.45, 0.85)
 
 ## Bar colours, taken from the project palette so the overlay reads as part of
-## the same game: health is the palette's blood red, hunger its brass. Hunger
-## *fills* as it climbs, so a full bar is the warning, which is the opposite
-## direction to health and deliberately so — both bars are full of bad news at
-## opposite ends, and the colour is what tells them apart at a glance.
+## the same game: health is the palette's blood red, fullness its brass. Both
+## drain in the same direction now — a short bar is bad news on either — so the
+## colour says *which* reading it is, not which way to read it.
 const BAR_BACK := Color(0.165, 0.125, 0.086, 0.7)
 const BAR_EDGE := Color(0.0, 0.0, 0.0, 0.5)
 const HUNGER_COLOR := Color(0.725, 0.541, 0.196)

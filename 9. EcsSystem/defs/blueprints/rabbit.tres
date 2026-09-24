@@ -41,8 +41,9 @@ script = ExtResource("s_action")
 
 [sub_resource type="Resource" id="c_hunger"]
 script = ExtResource("s_hunger")
-rate = 1.2
-eat_at = 30.0
+drain = 1.2
+forage_below = 65.0
+eat_below = 70.0
 
 
 [sub_resource type="Resource" id="c_health"]

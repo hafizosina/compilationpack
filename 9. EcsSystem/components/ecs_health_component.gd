@@ -3,10 +3,11 @@ extends EcsComponent
 
 ## What it has left before it dies.
 ##
-## Nothing regenerates it. The only thing that spends it today is starvation,
-## and a regen rule would simply undo that — so this stays a number that goes
-## one way until there is a second source of damage worth healing from. The
-## combat layer that used to provide one is in git at `928b9d1`.
+## It moves both ways, but never from here. EcsHungerSystem spends it while a
+## creature is starving and gives it back while a creature is well fed, because
+## both are hunger's consequences; this component is only the reading, and
+## EcsHealthSystem owns only what happens at zero. Nothing else damages anything
+## yet — the combat layer that used to is in git at `928b9d1`.
 ##
 ## Carrying this component is the whole of "this entity can die". Anything
 ## without it cannot be killed by the simulation, which is why a berry bush

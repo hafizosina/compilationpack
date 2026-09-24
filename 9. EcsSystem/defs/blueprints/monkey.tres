@@ -44,8 +44,8 @@ radius = 50.0
 
 [sub_resource type="Resource" id="c_hunger"]
 script = ExtResource("s_hunger")
-rate = 2.6
-forage_at = 30.0
+drain = 2.6
+forage_below = 70.0
 
 [sub_resource type="Resource" id="c_health"]
 script = ExtResource("s_health")
