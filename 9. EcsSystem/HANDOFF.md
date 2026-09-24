@@ -931,6 +931,33 @@ half: most of a sensing entity's cost is fixed overhead, not the ids. Collision 
 almost entirely per-body bookkeeping — writing radii, monitoring flags, gathering the
 arrays — and hardly at all the resolve.
 
+**The floor: what an entity costs for existing.** Push the spacing to 840 px — twice the
+monkey's 420 px sensor, so no two sensor circles can overlap and the census reports
+literally zero perceived ids and zero collision pairs — and the pipeline still costs
+**41 µs per entity**:
+
+| at n = 4,800 | 90 px | 180 px | 840 px (no overlap at all) |
+|---|---|---|---|
+| ids per sensing entity | 53.5 | 13.2 | **0.0** |
+| collision pairs per body | 1.2 | 0.2 | **0.0** |
+| sensor stage | — | 59.01 ms | **39.06 ms** |
+| collision stage | — | 40.66 ms | **39.94 ms** |
+| µs per entity | 74.5 (at 3,200) | 46.2 | **41.6** |
+| crossing 250 ms | 3,200 | 4,800 | **4,800** (6,400 crosses) |
+
+**Sensor costs 39 ms to return nothing**, and collision costs 40 ms to resolve nothing.
+Deleting every interaction in the world — all perception, all overlap — moves the ceiling
+from 3,200 to about 6,000 and no further. That is the shape of a system that is
+**overhead-bound, not interaction-bound**: roughly 41 µs of every entity's cost is the
+per-entity bookkeeping of being queried, having components fetched, and having its areas
+synced, before it perceives or touches anything.
+
+It also settles what the sensor lever is worth. Going from 13.2 ids to 0 ids saves the
+sensor stage 34% and the whole tick 10%. Staggering it across four ticks cannot beat
+deleting it outright, so the ceiling on that lever is ~10% of the tick, not the ~32%
+the old per-id arithmetic suggested. **The per-entity floor is where the headroom is, and
+that is §8's argument.**
+
 **Which spacing is the honest one?** The shipped `world1.tres` puts 10 entities in a
 3200x1680 arena, which is far sparser than either. 90 px is a deliberately hostile
 neighbourhood, useful for finding the crowding cliff; 180 px is closer to a colony that

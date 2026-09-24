@@ -397,7 +397,13 @@ func _report_breakdown(result: Dictionary) -> void:
 	var pickup_ms: float = systems.get(&"pickup", 0.0)
 	var brain_ms: float = systems.get(&"low_brain", 0.0)
 	var ids: int = maxi(work["perceived"] + work["reached"], 1)
-	print("[stress]   => sensor    %6.3f us per id returned" % (sensor_ms * 1000.0 / ids))
-	print("[stress]   => collision %6.3f us per overlap pair" % (collision_ms * 1000.0 / maxi(work["overlaps"], 1)))
+	if ids > 1:
+		print("[stress]   => sensor    %6.3f us per id returned" % (sensor_ms * 1000.0 / ids))
+	else:
+		print("[stress]   => sensor    %6.2f ms for ZERO ids — this is the fixed floor" % sensor_ms)
+	if work["overlaps"] > 0:
+		print("[stress]   => collision %6.3f us per overlap pair" % (collision_ms * 1000.0 / work["overlaps"]))
+	else:
+		print("[stress]   => collision %6.2f ms for ZERO pairs — this is the fixed floor" % collision_ms)
 	print("[stress]   => pickup    %6.3f us per id in reach" % (pickup_ms * 1000.0 / maxi(work["reached"], 1)))
 	print("[stress]   => low_brain %6.3f us per id perceived" % (brain_ms * 1000.0 / maxi(work["perceived"], 1)))
