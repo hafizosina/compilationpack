@@ -20,7 +20,7 @@ or run it directly:
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 "$GODOT" --path . "res://9. EcsSystem/main.tscn"
 
-# 120 checks over the entity lifecycle, the sensor/action layer, solidity, the movement
+# 130 checks over the entity lifecycle, the sensor/action layer, solidity, the movement
 # trip clock, the brain's commitments and the hunger/health loop; exit 0 only if all pass
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
 ```
@@ -584,7 +584,7 @@ shoving whatever walks over the spot it was picked up from.
 
 ### Its test
 
-`tests/lifecycle_test.tscn` — 120 checks, re-runnable, exit code 0 only if all pass:
+`tests/lifecycle_test.tscn` — 130 checks, re-runnable, exit code 0 only if all pass:
 
 ```bash
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"

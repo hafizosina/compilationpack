@@ -18,8 +18,18 @@ extends EcsComponent
 ## Carrying this component is the whole of "this entity needs to eat". A berry
 ## bush has none and no rung ever asks.
 
-## How fast fullness drains, in points per second.
+## How fast fullness drains, in points per second, while awake.
 @export var drain: float = 2.0
+## What fraction of that it drains while asleep or collapsed.
+##
+## A scale rather than a second rate, so "slower asleep" survives retuning
+## `drain` and cannot quietly invert. 0 makes sleeping free; 1 makes it cost the
+## same as being awake, which is the behaviour this replaced.
+##
+## It must stay above 0 for `EcsLowBrainSystem`'s wake-on-starving rule to be
+## reachable at all: a sleeper that never empties never has a reason to get up
+## before it is rested.
+@export var asleep_drain_scale: float = 0.4
 ## Full. Also the ceiling a meal cannot push past.
 @export var max_fullness: float = 100.0
 ## Empty enough to go and fetch food it can see. The brain's SEEK_FOOD rung

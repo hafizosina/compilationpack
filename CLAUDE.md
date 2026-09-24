@@ -10,7 +10,7 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 120 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 130 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments and the hunger/health loop.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
@@ -197,7 +197,11 @@ refills while asleep, so all three bars — fullness, energy, health — are res
 short bar is bad news on every one. The brain's sleep rung sits **below the food rungs**:
 a tired creature that can see a berry goes for it, and one that keeps finding food can run
 itself to collapse, which is the price of food outranking rest. `rest_at` < `wake_at` is
-the hysteresis. **Starving outranks tired in both directions** — it wakes a chosen sleep
+the hysteresis. **A sleeper still gets hungry, at `asleep_drain_scale` of the waking rate** — slower is
+the point, and *still* is what keeps waking-on-starving reachable at all; set it to 0 and
+that rule quietly stops existing. `EcsHungerSystem` and `EcsEnergySystem` both decide
+"asleep" from the brain's `state` plus the collapse tag, and must agree — neither reads the
+other. **Starving outranks tired in both directions** — it wakes a chosen sleep
 and stops one being chosen, or a creature woken by its stomach would be put straight back
 down while still tired and starve where it lay. At zero, `EcsEnergySystem` adds the
 `EcsCollapsedComponent` tag and takes `collapse_damage` once; **presence of the tag is the

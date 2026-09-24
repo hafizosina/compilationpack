@@ -1,7 +1,8 @@
 class_name EcsHungerSystem
 extends EcsSystem
 
-## Fullness drains; running empty costs health and being well fed mends it.
+## Fullness drains — slower while asleep — and running empty costs health while
+## being well fed mends it.
 ##
 ## One loop, one field, the ECS-native version of a self-ticking bar: the
 ## component is the reading and this is the clock. Module 8 would have put a
@@ -30,7 +31,16 @@ func label() -> StringName:
 func run(world: EcsWorld, delta: float) -> void:
 	for id in world.query([EcsHungerComponent]):
 		var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
-		hunger.fullness = maxf(hunger.fullness - hunger.drain * delta, 0.0)
+		# Resting costs less. The condition is the same one EcsEnergySystem uses
+		# to decide whether to drain or restore, and the two must agree about
+		# what "asleep" means — both read the brain's state and the collapse
+		# tag, neither reads the other.
+		var drain := hunger.drain
+		var brain := world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
+		if world.has(id, EcsCollapsedComponent) or (brain != null
+				and brain.state == EcsLowBrainComponent.State.SLEEP):
+			drain *= hunger.asleep_drain_scale
+		hunger.fullness = maxf(hunger.fullness - drain * delta, 0.0)
 
 		var health := world.get_component(id, EcsHealthComponent) as EcsHealthComponent
 		if health == null:

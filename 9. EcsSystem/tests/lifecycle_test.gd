@@ -78,6 +78,8 @@ func _run() -> void:
 	await _it_tires_sleeps_and_wakes_rested()
 	await _running_out_of_energy_drops_it_once()
 	await _a_thing_with_no_energy_never_sleeps()
+	await _food_outranks_rest_and_a_trip_is_not_cut_short()
+	await _sleeping_slows_hunger_without_stopping_it()
 	await _a_grazer_eats_off_the_ground_with_no_inventory()
 	await _a_sated_carrier_leaves_the_berry_alone()
 	await _a_hungry_carrier_eats_off_the_ground_without_pocketing()
@@ -885,6 +887,13 @@ func _it_tires_sleeps_and_wakes_rested() -> void:
 	_check("and stays down between rest_at and wake_at",
 		brain.state == EcsLowBrainComponent.State.SLEEP)
 
+	# Sleeping puts it back, at `restore` per second.
+	energy.value = energy.rest_at * 0.5
+	var slept_from := energy.value
+	for i in 30:
+		living.run_all(_world, TICK)
+	_check("sleeping restores energy", energy.value > slept_from)
+
 	# Rested: it gets up on its own.
 	energy.value = energy.wake_at
 	living.run_all(_world, TICK)
@@ -943,6 +952,15 @@ func _running_out_of_energy_drops_it_once() -> void:
 	_check("and starving can wake it now",
 		brain.state != EcsLowBrainComponent.State.SLEEP)
 
+	# Something with energy but no health collapses without complaint — the
+	# same way something with no health starves forever.
+	_world.remove(rabbit, EcsHealthComponent)
+	_world.remove(rabbit, EcsCollapsedComponent)
+	energy.value = 0.0
+	living.run_all(_world, TICK)
+	_check("an entity with no health collapses without error",
+		_world.has(rabbit, EcsCollapsedComponent))
+
 ## Nothing without an EcsEnergyComponent ever tires or sleeps, and no flag says
 ## so — a berry is the proof.
 func _a_thing_with_no_energy_never_sleeps() -> void:
@@ -950,6 +968,92 @@ func _a_thing_with_no_energy_never_sleeps() -> void:
 	await _tick(1)
 	_check("a berry carries no energy", not _world.has(berry, EcsEnergyComponent))
 	_check("and never collapses", not _world.has(berry, EcsCollapsedComponent))
+
+## The plan's rule that nothing else pins down: **food outranks rest.** A tired
+## creature that can see a berry goes for it, and the trip it commits to is not
+## cut short by getting tireder on the way. The consequence — that a creature
+## which keeps finding food can run itself into a collapse — is the price of
+## that ordering, not a bug.
+func _food_outranks_rest_and_a_trip_is_not_cut_short() -> void:
+	var living := EcsScheduler.new()
+	living \
+		.add(EcsEnergySystem.new()) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsLowBrainSystem.new())
+
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-11000.0, 0.0))
+	var berry := _manager.spawn(_world, _catalog, &"berry", Vector2(-10850.0, 0.0))
+	var energy := _world.get_component(rabbit, EcsEnergyComponent) as EcsEnergyComponent
+	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
+	var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
+	await _tick(2)
+
+	# Tired enough to sleep, and empty enough to forage, with food in sight.
+	energy.value = energy.rest_at - 1.0
+	hunger.fullness = hunger.forage_below - 5.0
+	for i in 4:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+	_check("a tired creature that can see food goes for it",
+		brain.state == EcsLowBrainComponent.State.SEEK_FOOD)
+	_check("and committed to that berry", brain.target == berry)
+
+	# Getting tireder mid-trip must not call it off.
+	energy.value = 1.0
+	for i in 4:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+	_check("and the trip is not cut short by tiredness",
+		brain.state == EcsLowBrainComponent.State.SEEK_FOOD)
+
+	# But running out entirely is not a decision, so it does override the trip.
+	energy.value = 0.0
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+	_check("though a collapse does override it",
+		_world.has(rabbit, EcsCollapsedComponent)
+		and brain.state == EcsLowBrainComponent.State.SLEEP)
+
+## A sleeper still gets hungry, just slower. Both halves matter: slower is the
+## point, and *still* is what keeps the wake-on-starving rule reachable — a
+## sleeper that never emptied would have no reason to get up before it was
+## rested, and `asleep_drain_scale` at 0 would quietly remove that rule.
+func _sleeping_slows_hunger_without_stopping_it() -> void:
+	var living := EcsScheduler.new()
+	living.add(EcsHungerSystem.new())
+
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-12000.0, 0.0))
+	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
+	var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
+	await _tick(1)
+
+	brain.state = EcsLowBrainComponent.State.WANDER
+	hunger.fullness = hunger.max_fullness
+	for i in 60:
+		living.run_all(_world, TICK)
+	var awake_cost := hunger.max_fullness - hunger.fullness
+
+	brain.state = EcsLowBrainComponent.State.SLEEP
+	hunger.fullness = hunger.max_fullness
+	for i in 60:
+		living.run_all(_world, TICK)
+	var asleep_cost := hunger.max_fullness - hunger.fullness
+
+	_check("a sleeper still gets hungry", asleep_cost > 0.0)
+	_check("but slower than awake (%.3f vs %.3f)" % [asleep_cost, awake_cost],
+		asleep_cost < awake_cost)
+	_check("by the authored fraction",
+		is_equal_approx(asleep_cost, awake_cost * hunger.asleep_drain_scale))
+
+	# A collapse is a forced sleep, and costs the same reduced rate.
+	brain.state = EcsLowBrainComponent.State.IDLE
+	_world.add(rabbit, EcsCollapsedComponent.new())
+	hunger.fullness = hunger.max_fullness
+	for i in 60:
+		living.run_all(_world, TICK)
+	_check("and a collapse counts as asleep too",
+		is_equal_approx(hunger.max_fullness - hunger.fullness, asleep_cost))
+	_world.remove(rabbit, EcsCollapsedComponent)
 
 ## States an intent on an entity's brain, for the tests that run an executor
 ## system without EcsLowBrainSystem to decide for them.
