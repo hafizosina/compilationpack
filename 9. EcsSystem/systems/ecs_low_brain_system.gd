@@ -63,11 +63,19 @@ func run(world: EcsWorld, delta: float) -> void:
 				# berry was stolen walked to the empty grass anyway.
 				_abandon_trip(move)
 				_release(brain)
+			elif _in_reach(world, id, brain.target):
+				# Close enough to touch it, which is what it set out for. The
+				# trip's destination is the berry's *centre*, so waiting for
+				# the trip to end would walk it onto the thing before taking
+				# it — fulfilling a commitment is not reconsidering one, so the
+				# rungs below get to act this same tick.
+				_abandon_trip(move)
+				_release(brain)
 			elif not move.has_destination:
-				# The trip ended by itself. Arrival and giving up look identical
-				# here by design — both are an empty slot — and either way this
-				# brain is no longer seeking. Whether it actually got the berry
-				# is EcsPickupSystem's business, not this one's.
+				# The trip ended without arriving: given up, or the target was
+				# taken and re-placed out of reach. Either way it is no longer
+				# seeking, and whether it got anything is not this brain's
+				# business to ask.
 				_release(brain)
 			else:
 				continue
@@ -83,6 +91,8 @@ func run(world: EcsWorld, delta: float) -> void:
 
 		# 3. Choose, highest rung first.
 		if _try_eat(world, id, brain, move):
+			continue
+		if _try_take(world, id, brain, move):
 			continue
 		if _try_seek_food(world, id, brain, move):
 			continue
@@ -143,7 +153,72 @@ func _food_at_hand(world: EcsWorld, id: int) -> bool:
 				return true
 	return false
 
-## Rung 2 — go and get a berry, if it is hungry enough and has room to put one.
+## Rung 2 — put something within reach into the bag.
+##
+## Taking used to happen without anyone deciding it. EcsPickupSystem ran over
+## anything with a bag and an action area and took whatever it touched, so a
+## perfectly full monkey hoovered up every berry it wandered across. That was a
+## reflex, and the module had settled that the brain is the only thing that
+## chooses — so it is a rung now, and pickup does nothing until it fires.
+##
+## Gated on the same `forage_at` that sends it out in the first place: a
+## creature wants a berry for one reason, and a sated one has no more business
+## pocketing food than it has walking to it. Eating outranks this, so a hungry
+## creature standing over a berry eats it where it lies rather than bagging it
+## first — bagging is for when you are peckish now and hungry later.
+##
+## Having no EcsInventoryComponent is the whole of "cannot carry": a rabbit
+## never takes the rung, and no flag says so.
+##
+## It only decides. The berry moves in EcsPickupSystem, which reads TAKE as its
+## instruction exactly as EcsConsumeSystem reads EAT — and which stays a system
+## of its own because step 7's planner emits action ids that need one executor
+## each. Standing still to do it, so any wander in progress is called off.
+func _try_take(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
+		move: EcsMovementComponent) -> bool:
+	var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
+	if bag == null or bag.items.size() >= bag.capacity:
+		return false
+	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+	if hunger != null and hunger.value < hunger.forage_at:
+		return false
+	var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
+	if action == null:
+		return false
+
+	var takeable := false
+	for touched in action.reached:
+		if _is_takeable(world, touched):
+			takeable = true
+			break
+	if not takeable:
+		return false
+
+	_release(brain)
+	_abandon_trip(move)
+	brain.state = EcsLowBrainComponent.State.TAKE
+	return true
+
+## Is `other` close enough for this entity to act on?
+##
+## The physics server's answer, taken at its word — the same reading
+## EcsPickupSystem and EcsConsumeSystem act on, so the brain cannot decide to
+## take something they will then decline to reach.
+func _in_reach(world: EcsWorld, id: int, other: int) -> bool:
+	var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
+	return action != null and action.reached.has(other)
+
+## Is `id` something that could go in a bag, and still there to be put in one?
+##
+## Pickable rather than consumable: what a bag will hold is a wider question
+## than what a mouth will, and the day a tool exists this rung should want it
+## while the eat rung still does not.
+func _is_takeable(world: EcsWorld, id: int) -> bool:
+	if id == EcsWorld.NO_ENTITY or not world.is_alive(id):
+		return false
+	return world.has(id, EcsPickableComponent) and world.has(id, EcsPositionComponent)
+
+## Rung 3 — go and get a berry, if it is hungry enough and has room to put one.
 ##
 ## The candidates are the ids in the entity's own EcsSensorComponent.perceived:
 ## what its sensor area overlapped last tick. A berry across the map does not
@@ -193,7 +268,7 @@ func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	_set_trip(move, (world.get_component(best, EcsPositionComponent) as EcsPositionComponent).position)
 	return true
 
-## Rung 3, and the floor — drift somewhere nearby, having rested first.
+## Rung 4, and the floor — drift somewhere nearby, having rested first.
 ##
 ## The pause clock runs only here, which is why a creature that spent ten
 ## seconds walking to a berry does not then owe ten seconds of accumulated

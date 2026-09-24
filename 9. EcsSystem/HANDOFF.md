@@ -16,7 +16,7 @@ or run it directly:
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 "$GODOT" --path . "res://9. EcsSystem/main.tscn"
 
-# 87 checks over the entity lifecycle, the sensor/action layer, solidity, the movement
+# 95 checks over the entity lifecycle, the sensor/action layer, solidity, the movement
 # trip clock, the brain's commitments and the hunger/health loop; exit 0 only if all pass
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
 ```
@@ -300,6 +300,45 @@ picked up  →  berry loses EcsPositionComponent  →  sprite hidden, entity ali
 eaten      →  kill note to EcsLifecycleComponent →  data and nodes freed next tick
 ```
 
+**Taking became a decision too.** `EcsPickupSystem` was the last reflex in the module: it
+ran on reach alone, so a full monkey pocketed whatever it walked over and nothing had
+chosen it. That was an inconsistency rather than a design — eating was already a decision
+— so there is a `TAKE` rung now, gated on the same `forage_at` that sends a creature out
+for food, and pickup is inert until the brain sets it.
+
+It stayed a separate system, which cost about fifteen lines it need not have. The case for
+merging it into the brain was real: it reads only `action.reached`, which the sensor wrote,
+so it has no ordering constraint left since the distance check went. Three things kept it
+out. The brain would start mutating *another entity's* components, which is the line that
+stops it growing hands. The same argument merges `EcsConsumeSystem` next, and every verb
+after that, which is the god-object this module was built away from. And **step 7's planner
+emits a sequence of action ids and wants one executor per action** — merging now means
+splitting again later.
+
+**What carrying is for**, which was an open question while the rung was being built:
+provisioning. A creature fills its bag while it is wandering anyway, so that hunger
+arriving later is answered on the spot instead of sending it across the arena. That
+settles the rung order:
+
+```
+hungry enough to eat?  →  bag first, then the ground     (EAT)
+peckish, bag has room? →  pocket what is under your nose (TAKE)
+neither, and hungry?   →  go and find some               (SEEK_FOOD)
+```
+
+`EAT` above `TAKE` is the part worth keeping honest: a creature hungry enough to eat, with
+a berry at its feet, eats it where it lies rather than pocketing it and taking it straight
+back out. With a one-slot bag both paths end in the same dead berry and the same fed
+monkey, so the end state proves nothing — `tests/lifecycle_test.gd` watches the bag stay
+empty for the whole meal instead, and that is the only check that would notice the rungs
+being swapped.
+
+One behaviour had to come with it: **reaching the target ends the commitment.** A
+SEEK_FOOD trip is aimed at the item's *centre*, so a brain that waited for the trip to end
+walked the creature onto the berry before taking it. Arriving within reach is fulfilling
+the commitment, not reconsidering it, so the rungs below act that same tick and a creature
+stops at arm's length as it always did.
+
 **The brain decides, `EcsConsumeSystem` acts.** `EcsLowBrainSystem` enters the `EAT`
 state; the consume system reads that as its instruction and moves the berry out of the
 bag. That split is what stops the brain growing hands, and it is step 6's intent pattern
@@ -533,7 +572,7 @@ shoving whatever walks over the spot it was picked up from.
 
 ### Its test
 
-`tests/lifecycle_test.tscn` — 87 checks, re-runnable, exit code 0 only if all pass:
+`tests/lifecycle_test.tscn` — 95 checks, re-runnable, exit code 0 only if all pass:
 
 ```bash
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"

@@ -10,7 +10,7 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 87 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 95 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments and the hunger/health loop.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
@@ -125,6 +125,23 @@ fires above `eat_at`. Pinned at the top, `EcsHungerSystem` spends `EcsHealthComp
 the threshold, writing a kill note at zero. Each system owns the consequences of the
 component it is named for and neither knows the other exists. Nothing regenerates health:
 starvation is the module's one damage source and regen would merely undo it.
+**The brain is the only thing that chooses.** `EcsPickupSystem` used to be a reflex — it
+ran on reach alone, so a sated monkey pocketed every berry it wandered across with nothing
+having decided that. Taking is now a `TAKE` rung on the brain, gated on the same
+`forage_at` that sends a creature out for food, and pickup does nothing until it fires.
+The executors stayed systems rather than folding into the brain, which would have been
+shorter: the brain would begin mutating *another entity's* components, the same argument
+would then swallow `EcsConsumeSystem` and every verb after it, and **step 7's planner
+emits action ids that want one executor each**. `state` is the intent; `EcsPickupSystem`
+and `EcsConsumeSystem` are its executors. **Carrying is provisioning, not a step on the
+way to a meal**: you fill the bag while wandering so that later hunger is answered where
+you stand. So the rungs are ordered `EAT > TAKE`, and `EcsConsumeSystem` looks in the bag
+before the ground — a creature hungry enough to eat, standing over a berry, eats it where
+it lies and never pockets it first. That order is pinned by a test that watches the bag
+stay empty, because the end state cannot tell the two paths apart. **Reaching what it set out for ends the
+commitment** — a trip's destination is the item's centre, so waiting for the trip to end
+would walk a creature onto the thing before it grabbed it.
+
 **Eating does not require an inventory.** "I am hungry and there is food within reach" is
 the condition, and a pocket is only one place reach can mean: a carrier eats out of its
 `EcsInventoryComponent`, a **grazer** eats what its action area is touching, off the
@@ -142,7 +159,7 @@ carries it out, one bite per tick. That is step 6's intent pattern in miniature,
 `state` as the intent — **do not let the brain grow hands.**
 
 **Deciding is one system with state, not a rung per behaviour.** `EcsLowBrainSystem` is a
-small FSM — `IDLE > WANDER > SEEK_FOOD > EAT` — and `EcsLowBrainComponent` holds its `state` and
+small FSM — `IDLE > WANDER > SEEK_FOOD > TAKE > EAT` — and `EcsLowBrainComponent` holds its `state` and
 its `target`. It replaced `EcsForageSystem`, which was a second decider whose priority was
 its line number in `main.gd`. That read well but was stateless: a creature's only memory
 between ticks was `has_destination`, so nothing could persist ("I am going to *that*

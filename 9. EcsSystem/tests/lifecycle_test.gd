@@ -75,6 +75,8 @@ func _run() -> void:
 	await _eating_empties_the_bag_and_ends_the_berry()
 	await _starving_costs_health_and_then_the_entity()
 	await _a_grazer_eats_off_the_ground_with_no_inventory()
+	await _a_sated_carrier_leaves_the_berry_alone()
+	await _a_hungry_carrier_eats_off_the_ground_without_pocketing()
 
 ## A component's `const NODE_KIND` is what gets it a node, so a berry — sprite,
 ## no shape — must come out with a sprite and no body. And everything an entity
@@ -138,6 +140,11 @@ func _spawn_builds_declared_nodes() -> void:
 func _pickup_hides_the_sprite_without_freeing_it() -> void:
 	var rabbit := _first_of(&"monkey")
 	var berry := _first_of(&"berry")
+	# Taking is a decision now, and this scheduler has no brain in it on
+	# purpose. So the test plays the brain: it states the intent, and checks
+	# that EcsPickupSystem carries it out. That is the split under test here —
+	# with the old reflex, this passed without anything having chosen.
+	_intend(rabbit, EcsLowBrainComponent.State.TAKE)
 	await _tick(2)
 
 	var bag := _world.get_component(rabbit, EcsInventoryComponent) as EcsInventoryComponent
@@ -246,6 +253,8 @@ func _it_sees_before_it_takes() -> void:
 	var sensor := _world.get_component(rabbit, EcsSensorComponent) as EcsSensorComponent
 	var action := _world.get_component(rabbit, EcsActionComponent) as EcsActionComponent
 	var bag := _world.get_component(rabbit, EcsInventoryComponent) as EcsInventoryComponent
+	# Wanting it is a given here; what is under test is whether it can reach it.
+	_intend(rabbit, EcsLowBrainComponent.State.TAKE)
 	await _tick(2)
 
 	# 100 px away: inside the 280 px sensor, outside the 34 + 14 px reach.
@@ -656,6 +665,97 @@ func _tick(count: int) -> void:
 	for i in count:
 		_scheduler.run_all(_world, TICK)
 		await get_tree().physics_frame
+
+## What making pickup a decision is for. A full monkey standing on a berry used
+## to pocket it anyway, because EcsPickupSystem ran on reach alone and nothing
+## had chosen anything. Now the brain gates it on the same hunger that would
+## send it out for food in the first place.
+func _a_sated_carrier_leaves_the_berry_alone() -> void:
+	var living := EcsScheduler.new()
+	living \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsLowBrainSystem.new()) \
+		.add(EcsPickupSystem.new()) \
+		.add(EcsNodeSyncSystem.new(_manager))
+
+	var monkey := _manager.spawn(_world, _catalog, &"monkey", Vector2(-6000.0, 3000.0))
+	var berry := _manager.spawn(_world, _catalog, &"berry", Vector2(-6000.0, 3020.0))
+	var hunger := _world.get_component(monkey, EcsHungerComponent) as EcsHungerComponent
+	var bag := _world.get_component(monkey, EcsInventoryComponent) as EcsInventoryComponent
+	var action := _world.get_component(monkey, EcsActionComponent) as EcsActionComponent
+
+	# Right on top of it, and no EcsHungerSystem here so the bar stays put.
+	hunger.value = 0.0
+	for i in 20:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+
+	_check("the berry is well within its reach", action.reached.has(berry))
+	_check("but a sated carrier does not pocket it", not bag.items.has(berry))
+
+	# Hungry enough to want it, and it takes it without moving an inch.
+	hunger.value = hunger.forage_at + 1.0
+	for i in 20:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		if bag.items.has(berry):
+			break
+
+	_check("once hungry, the same berry goes in the bag", bag.items.has(berry))
+	_check("which is a decision, not a reflex — it had to want it first",
+		not _world.has(berry, EcsPositionComponent))
+
+## The rung order, pinned. A carrier hungry enough to eat, standing over a
+## berry, must eat it where it lies — not pocket it and then take it back out.
+##
+## The end state cannot tell you which happened: with a one-slot bag, TAKE then
+## EAT leaves exactly the same dead berry and the same fed monkey as EAT alone.
+## So this watches the *path* and fails if the bag is ever non-empty. Reorder
+## EAT below TAKE and only this check notices.
+##
+## Carrying is provisioning, not a step on the way to a meal: you fill the bag
+## while wandering so that later hunger is answered on the spot.
+func _a_hungry_carrier_eats_off_the_ground_without_pocketing() -> void:
+	var living := EcsScheduler.new()
+	living \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsLowBrainSystem.new()) \
+		.add(EcsConsumeSystem.new()) \
+		.add(EcsPickupSystem.new()) \
+		.add(EcsNodeSyncSystem.new(_manager))
+
+	var monkey := _manager.spawn(_world, _catalog, &"monkey", Vector2(-6000.0, 5000.0))
+	var berry := _manager.spawn(_world, _catalog, &"berry", Vector2(-6000.0, 5020.0))
+	var hunger := _world.get_component(monkey, EcsHungerComponent) as EcsHungerComponent
+	var bag := _world.get_component(monkey, EcsInventoryComponent) as EcsInventoryComponent
+
+	_check("the carrier has a bag it could have used", bag != null)
+	# Hungry enough to eat, which is above the threshold that would pocket it.
+	# No EcsHungerSystem here, so the bar stays where the test puts it.
+	hunger.value = hunger.eat_at + 5.0
+	var before := hunger.value
+
+	var pocketed := false
+	var ate := false
+	for i in 120:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		if not bag.items.is_empty():
+			pocketed = true
+		if not _world.is_alive(berry):
+			ate = true
+			break
+
+	_check("it ate the berry off the ground", ate)
+	_check("and never put it in the bag on the way", not pocketed)
+	_check("the meal came off its hunger", hunger.value < before)
+
+## States an intent on an entity's brain, for the tests that run an executor
+## system without EcsLowBrainSystem to decide for them.
+func _intend(id: int, state: EcsLowBrainComponent.State) -> void:
+	var brain := _world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
+	brain.state = state
 
 func _first_of(type_id: StringName) -> int:
 	for id in _world.query([EcsNameComponent]):

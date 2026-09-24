@@ -1,11 +1,27 @@
 class_name EcsPickupSystem
 extends EcsSystem
 
-## Takes anything pickable an entity is standing on.
+## Carries out the decision to take something. It does not make it.
 ##
-## Deciding to go and acting on arrival are different systems, the same split as
-## brain and movement: EcsLowBrainSystem never learns what happens when you get
-## there, and this never learns why anyone came.
+## `EcsLowBrainSystem` puts a creature in the TAKE state when it wants something
+## its action area is touching; this moves the thing into the bag. Deciding and
+## acting are different systems, the same split as brain and movement, and the
+## same one EcsConsumeSystem is the other half of.
+##
+## **It used to be a reflex.** This ran over anything with a bag and an action
+## area and took whatever it touched, whether or not the creature had any reason
+## to — a full monkey hoovered up every berry it wandered across, and nothing
+## had decided that. Eating was already a decision by then, so taking being a
+## reflex was an inconsistency rather than a design: the brain is the only thing
+## in this module that chooses, and now it chooses this too.
+##
+## It stayed a system rather than folding into the brain, which would have been
+## fifteen lines shorter. Three reasons. The brain would begin mutating *another
+## entity's* components — the berry's position — which is the line that keeps it
+## from growing hands. The same argument would then merge EcsConsumeSystem too,
+## and every verb after it, which is the god-object this module was built away
+## from. And step 7's planner emits a sequence of action ids that wants exactly
+## one executor per action, so a merge now is a split again later.
 ##
 ## Picking up is **removing `EcsPositionComponent`**. That one line is the whole
 ## of leaving the world: EcsNodeSyncSystem's query stops matching so the sprite
@@ -52,7 +68,16 @@ func label() -> StringName:
 	return &"pickup"
 
 func run(world: EcsWorld, _delta: float) -> void:
-	for id in world.query([EcsPositionComponent, EcsInventoryComponent, EcsActionComponent]):
+	for id in world.query([EcsPositionComponent, EcsInventoryComponent,
+			EcsActionComponent, EcsLowBrainComponent]):
+		# Nothing happens unless something decided it. A brain is in the query
+		# rather than read optionally, because "taking is a decision" has no
+		# sensible exception: a thing with no brain and a bag would be picking
+		# up on nobody's authority, which is the reflex this stopped being.
+		var brain := world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
+		if brain.state != EcsLowBrainComponent.State.TAKE:
+			continue
+
 		var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
 		if bag.items.size() >= bag.capacity:
 			continue
