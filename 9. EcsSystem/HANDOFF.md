@@ -20,7 +20,7 @@ or run it directly:
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 "$GODOT" --path . "res://9. EcsSystem/main.tscn"
 
-# 99 checks over the entity lifecycle, the sensor/action layer, solidity, the movement
+# 103 checks over the entity lifecycle, the sensor/action layer, solidity, the movement
 # trip clock, the brain's commitments and the hunger/health loop; exit 0 only if all pass
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
 ```
@@ -584,7 +584,7 @@ shoving whatever walks over the spot it was picked up from.
 
 ### Its test
 
-`tests/lifecycle_test.tscn` — 99 checks, re-runnable, exit code 0 only if all pass:
+`tests/lifecycle_test.tscn` — 103 checks, re-runnable, exit code 0 only if all pass:
 
 ```bash
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
@@ -1142,9 +1142,19 @@ sensor from first to nearly last and promoted the thing that was last.
    plus component access plus per-entity area bookkeeping — §8's packed-storage argument,
    now with a number behind it rather than a ratio. **It is an open argument and the
    author's call; do not implement it unasked.**
-2. **Decouple sim tick from frame rate.** 10–20 Hz instead of 60 is a 3–6x headroom
-   multiplier, the scheduler already takes `delta`, and it is the only lever that
-   multiplies a *floor* rather than shaving a stage.
+2. **Decouple sim tick from frame rate — TAKEN, per stage rather than globally.**
+   `EcsScheduler.add(system, every, phase)` gives each stage a rate in ticks, and `main.gd`
+   puts `sensor` and `low_brain` on `SLOW` (3 ticks, 20 Hz) while movement, collision and
+   node_sync stay at 60. A global sim clock would have bought the same time and made the
+   picture stutter; per-stage keeps the eye-facing stages full rate. The scheduler banks
+   delta per system, so a slower stage is handed the time it missed and nothing is scaled
+   by hand — what changes is latency, not rate.
+
+   On the figures in this section those two stages are 179 of 335 ms at n=4,000, so a
+   third of that is **~120 ms off the average tick**. Unmeasured: `tests/stress_test.gd`
+   calls each system directly rather than through the scheduler, so it still reports the
+   full-rate cost of every stage. That is the right thing for a worst-case ramp, but it
+   means the saving does not show up there — measure it on `main.gd` if you want it.
 3. **Decide the density you are designing for.** Free: 90 px versus 180 px spacing moves
    the ceiling from 3,200 to 4,800. Sight radius is the same lever from the other end —
    ids scale with πr², so 420 → 280 px cuts ~38% of them with no code at all.

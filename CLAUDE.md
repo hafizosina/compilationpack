@@ -10,7 +10,7 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 99 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 103 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments and the hunger/health loop.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
@@ -178,6 +178,18 @@ through one helper that also zeroes `time_left`, because overwriting a live trip
 otherwise inherit the old one's budget. The brain reads components that are not its own
 (sensor, inventory) and that is accepted: it is the one place that knows several concerns
 at once, and it still *writes* only `state`, `target`, `pause_left` and a destination.
+
+**A stage may declare how often it runs.** `EcsScheduler.add(system, every, phase)` takes a
+rate in ticks — `main.gd` runs `sensor` and `low_brain` at `SLOW` (3 ticks, 20 Hz) while
+`movement`, `collision` and `node_sync` stay at every tick. This is safe only because every
+system already takes `delta` and means it: **the scheduler banks delta per system**, so a
+stage ticked a third as often is handed three ticks' worth and hunger still climbs at its
+authored points-per-second. What changes is latency, never rate. **`phase` is not
+optional** — two slow stages landing on the same tick make one heavy frame in three instead
+of three even ones, which buys the same average and looks worse; a system runs when
+`tick % every == phase`, and giving a consumer the phase just after its producer keeps it
+reading data one tick old exactly as it did at full rate. Per-stage rates rather than one
+global sim clock, because the eye watches movement and the view, not perception.
 
 **A destination is a budget, not a standing order.** `EcsMovementSystem` prices each trip
 the tick it first sees it — distance over speed, times the component's `timeout_slack`,

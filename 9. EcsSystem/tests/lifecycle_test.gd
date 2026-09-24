@@ -78,6 +78,7 @@ func _run() -> void:
 	await _a_grazer_eats_off_the_ground_with_no_inventory()
 	await _a_sated_carrier_leaves_the_berry_alone()
 	await _a_hungry_carrier_eats_off_the_ground_without_pocketing()
+	await _a_stage_on_a_slower_tick_still_simulates_the_same()
 
 ## A component's `const NODE_KIND` is what gets it a node, so a berry — sprite,
 ## no shape — must come out with a sprite and no body. And everything an entity
@@ -751,6 +752,51 @@ func _a_hungry_carrier_eats_off_the_ground_without_pocketing() -> void:
 	_check("it ate the berry off the ground", ate)
 	_check("and never put it in the bag on the way", not pocketed)
 	_check("the meal went onto its fullness", hunger.fullness > before)
+
+## Running a stage a third as often must not make it simulate a third as much.
+## The scheduler banks delta per system, so hunger authored in points per second
+## climbs at that rate whether it is ticked at 60 Hz or 20 Hz — nothing is
+## scaled by hand, which is the whole reason a per-stage rate is safe here.
+##
+## Also checks `phase`, which is what keeps two slow stages off the same frame:
+## a stage at phase 1 must sit out tick 0 and run on tick 1.
+func _a_stage_on_a_slower_tick_still_simulates_the_same() -> void:
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-8000.0, 0.0))
+	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
+	await _tick(1)
+
+	# 60 Hz.
+	var fast := EcsScheduler.new()
+	fast.add(EcsHungerSystem.new())
+	hunger.fullness = hunger.max_fullness
+	for i in 30:
+		fast.run_all(_world, TICK)
+	var at_60 := hunger.max_fullness - hunger.fullness
+
+	# 20 Hz, same wall-clock span.
+	var slow := EcsScheduler.new()
+	slow.add(EcsHungerSystem.new(), 3, 0)
+	hunger.fullness = hunger.max_fullness
+	for i in 30:
+		slow.run_all(_world, TICK)
+	var at_20 := hunger.max_fullness - hunger.fullness
+
+	_check("fullness drained at 60 Hz", at_60 > 0.0)
+	# At most one interval's worth may still be banked when the span ends.
+	var owed := hunger.drain * 3.0 * TICK
+	_check("and by the same amount at 20 Hz (%.4f vs %.4f, one interval = %.4f)"
+		% [at_60, at_20, owed], absf(at_60 - at_20) <= owed + 0.0001)
+
+	# Phase: this one must sit out the first tick and act on the second.
+	var offset := EcsScheduler.new()
+	offset.add(EcsHungerSystem.new(), 3, 1)
+	hunger.fullness = hunger.max_fullness
+	offset.run_all(_world, TICK)
+	_check("a stage at phase 1 sits out tick 0",
+		is_equal_approx(hunger.fullness, hunger.max_fullness))
+	offset.run_all(_world, TICK)
+	_check("and runs on tick 1, with both ticks of delta banked",
+		is_equal_approx(hunger.max_fullness - hunger.fullness, hunger.drain * 2.0 * TICK))
 
 ## The other half of hunger's rule. Starving spends health; being well fed gives
 ## it back, and the band between the two thresholds does neither — which is what

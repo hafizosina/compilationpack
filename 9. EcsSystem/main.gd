@@ -41,8 +41,8 @@ extends Node2D
 ##     spawner    asks for a berry     → writes a note to the lifecycle inbox
 ##     hunger     the bar climbs       → writes EcsHunger/EcsHealthComponent
 ##     health     and death at zero    → writes a note to the lifecycle inbox
-##     sensor     what can it see/reach→ writes EcsSensor/EcsActionComponent
-##     low_brain  decides, and remembers → writes EcsMovementComponent
+##     sensor     what can it see/reach→ writes EcsSensor/EcsActionComponent  [20 Hz]
+##     low_brain  decides, and remembers → writes EcsMovementComponent        [20 Hz]
 ##     consume    carries out "eat"    → writes EcsHunger/EcsInventoryComponent
 ##     movement   walks toward it      → writes EcsPositionComponent
 ##     collision  unstacks the bodies  → writes EcsPositionComponent
@@ -75,6 +75,20 @@ extends Node2D
 ##   F1  show/hide the on-entity debug overlay
 ##   F5  rebuild the world from data — edit world1.tres or a blueprint,
 ##       press F5, and see the change with no code touched.
+
+## Ticks between runs for the stages that do not need 60 Hz — 3 is 20 Hz.
+##
+## Perception and deciding are the two most expensive stages and the two least
+## sensitive to being late: a sensor list is already a tick stale, and a
+## creature that takes 50 ms to notice something is a creature. Movement,
+## collision and node_sync stay at every tick, because those are what the eye
+## actually watches — this is why the rate is per stage and not one global sim
+## clock, which would buy the same time and make the picture stutter.
+##
+## The two run on different phases so they never share a tick. That keeps the
+## frame even, and it puts the brain one tick *after* the sensor, which is the
+## same freshness it had at full rate.
+const SLOW: int = 3
 
 ## Blueprint book to resolve placement `type` ids against.
 @export var catalog: EcsEntityCatalog
@@ -153,8 +167,8 @@ func _build() -> void:
 		.add(EcsSpawnerSystem.new()) \
 		.add(EcsHungerSystem.new()) \
 		.add(EcsHealthSystem.new()) \
-		.add(EcsSensorSystem.new(_manager)) \
-		.add(EcsLowBrainSystem.new()) \
+		.add(EcsSensorSystem.new(_manager), SLOW, 0) \
+		.add(EcsLowBrainSystem.new(), SLOW, 1) \
 		.add(EcsConsumeSystem.new()) \
 		.add(EcsMovementSystem.new()) \
 		.add(_collision) \
