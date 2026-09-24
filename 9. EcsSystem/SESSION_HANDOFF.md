@@ -1,6 +1,6 @@
 # Session handoff — 2026-09-23/24
 
-Written at commit `80d9a30`. Companion to `HANDOFF.md`, which is the living
+Written at commit `80d9a30`, extended through the scheduler and hunger-model work that followed. Companion to `HANDOFF.md`, which is the living
 state-of-the-build; this file is only what *this* session changed, decided and got wrong,
 so the next session does not re-derive or re-litigate any of it.
 
@@ -9,10 +9,10 @@ so the next session does not re-derive or re-litigate any of it.
 ## Where the project stands
 
 Module 9 is the only live simulation and the main scene. **17 components, 15 systems**,
-**95/95 checks** in `tests/lifecycle_test.tscn`, headless validation clean.
+**103/103 checks** in `tests/lifecycle_test.tscn`, headless validation clean.
 
 ```
-lifecycle > spawner > hunger > health > sensor > low_brain > consume >
+lifecycle > spawner > hunger > health > sensor[20Hz] > low_brain[20Hz] > consume >
 movement > collision > pickup > selection > node_sync > debug > census > inspect
 ```
 
@@ -21,7 +21,7 @@ and a state worth preempting for do not); step 7 untouched. Fatigue is the one p
 step 4 deliberately skipped — it needs sleep to mean anything, and sleep is a brain state
 with no consumer.
 
-**Git: 11 commits this session, 3 not yet pushed to `origin/main`.** Tree clean.
+**Git: 13 commits this session, 5 not yet pushed to `origin/main`.** Tree clean.
 
 ---
 
@@ -40,6 +40,8 @@ with no consumer.
 | `f1affa3` | grid spacing is a knob; what crowding costs |
 | `bb56732` | the floor — what an entity costs before it interacts |
 | `80d9a30` | retract the 70% regression |
+| `4287a91` | the bar counts fullness, and being well fed mends |
+| `8ee5896` | a stage may declare how often it runs |
 
 The session began as a bug report — "entities get stuck" — and the through-line of
 everything after it is the same move: **something was acting without anything having
@@ -79,7 +81,26 @@ be visible, a pickup that fired on proximity alone.
    deliberate exception to "capability is component presence", chosen because radius and
    solidity are one physical fact about one body.
 
-7. **Reaching the target ends a commitment.** A `SEEK_FOOD` trip aims at the item's centre,
+7. **A stage declares its own tick rate, not one global sim clock.**
+   `EcsScheduler.add(system, every, phase)`; `sensor` and `low_brain` run at 20 Hz while
+   movement, collision and node_sync stay at 60, because the eye watches those. The
+   scheduler **banks delta per system**, so a slower stage is handed the time it missed and
+   nothing is scaled by hand — what changes is latency, not rate. `phase` is not optional:
+   two slow stages on the same tick make one heavy frame in three instead of three even
+   ones.
+
+8. **The hunger bar counts fullness.** It starts full, drains, and zero is starving — the
+   same shape as health. The class stays `EcsHungerComponent`; the field is `fullness`, so
+   no call site holds the inversion in its head. Thresholds became `forage_below` /
+   `eat_below`, and the grazer rule inverted with them: a grazer now has `eat_below`
+   *above* `forage_below`.
+
+9. **Being well fed mends.** Above `heal_above`, `EcsHungerSystem` gives health back at
+   `heal_rate`; at zero it takes it at the faster `starve_damage`; between the two it does
+   neither. That dead band is the answer to the old objection that regen would merely undo
+   starvation — mending is the reward for having eaten.
+
+10. **Reaching the target ends a commitment.** A `SEEK_FOOD` trip aims at the item's centre,
    so waiting for the trip to end walks a creature onto the thing before it grabs it.
 
 ---
@@ -175,4 +196,4 @@ Smaller, flagged not done:
   blueprint default. Only matters once something spawns animals.
 - The bag badge sits at the *nominal* sprite corner from `EcsConst.SPRITE_SCALE`, but
   blueprints set their own `scale_factor`. Worth an eyeball in the editor.
-- Three commits unpushed.
+- Five commits unpushed.
