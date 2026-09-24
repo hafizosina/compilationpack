@@ -24,11 +24,34 @@ extends Node2D
 ## The delta handed to every system, matching a 60 Hz physics step.
 const TICK: float = 1.0 / 60.0
 ## Population steps. The ramp stops as soon as a tick crosses the budget.
-const SIZES: Array[int] = [100, 200, 400, 800, 1600, 3200, 4000, 4400, 4600, 4800]
-## Pixels between entities. Above the largest body (36) so nothing is born
-## permanently overlapping, below the smallest sensor (280) so everything has
-## neighbours to perceive.
-const SPACING: float = 90.0
+const SIZES: Array[int] = [100, 200, 400, 800, 1600, 3200, 4000, 4400, 4600, 4800,
+	6400, 8000, 9600]
+## Pixels between entities, and the one knob that separates *population* from
+## *crowding*. Above the largest body (36) so nothing is born permanently
+## overlapping; below the smallest sensor (280) so everything has neighbours to
+## perceive. The arena is sized from it — sqrt(n) columns at this spacing — so
+## the area already grows with the population and density is what stays fixed.
+##
+## Override it to ask the other question:
+##
+##   "$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn" -- --spacing=180
+##
+## Ids in perception scale with density x pi r squared, so doubling this should
+## quarter what the sensor returns per entity. Whether the ceiling moves by the
+## same factor is the measurement.
+const DEFAULT_SPACING: float = 90.0
+
+## Resolved from the command line at startup; DEFAULT_SPACING when absent.
+static var SPACING: float = DEFAULT_SPACING
+
+## Reads `-- --spacing=N` off the command line. Godot hands everything after the
+## bare `--` to the game, so the test can be swept without editing it.
+static func _resolve_spacing() -> void:
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--spacing="):
+			var value := arg.substr("--spacing=".length()).to_float()
+			if value > 0.0:
+				SPACING = value
 ## Ticks thrown away before measuring — the first few build the physics state.
 const WARMUP: int = 12
 ## Ticks averaged.
@@ -43,6 +66,7 @@ var _entities: Node2D
 var _catalog: EcsEntityCatalog
 
 func _ready() -> void:
+	_resolve_spacing()
 	_catalog = load("res://9. EcsSystem/defs/catalog.tres") as EcsEntityCatalog
 	_entities = Node2D.new()
 	_entities.name = "Entities"
@@ -51,6 +75,8 @@ func _ready() -> void:
 
 	print("[stress] budget %.0f ms/tick (%.0f FPS). simulation only, nothing is drawn."
 		% [BUDGET_MS, 1000.0 / BUDGET_MS])
+	print("[stress] grid spacing %.0f px — arena is sqrt(n) columns wide, so it grows with n."
+		% SPACING)
 	print("[stress] %6s %9s %9s %9s %8s" % ["n", "spawn ms", "tick ms", "per ent", "FPS"])
 
 	var last_ok := 0

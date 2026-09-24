@@ -903,6 +903,41 @@ node_sync 10.5%, movement 6.6%, consume 3.8%, hunger 3.5%, health 3.1%, pickup 2
 lifecycle, spawner, selection and inspect stages are together under 0.1 ms and effectively
 free.
 
+### Crowding is a third of the ceiling, and it is not the population
+
+The grid spacing is now a knob — `-- --spacing=180` — because the arena already grows with
+the population (sqrt(n) columns at this spacing) and *density* is the thing that was
+fixed. Doubling the spacing quarters the density, and the sensor's fan-out follows exactly
+as pi r squared predicts:
+
+| at n = 3,200 | 90 px (shipped default) | 180 px |
+|---|---|---|
+| ids per sensing entity | 53.5 | **13.2** |
+| collision pairs per body | 1.2 | **0.2** |
+| µs per entity | 74.5 | **45.9** |
+| sensor share of tick | 39.4% | 26.6% |
+| **crossing 250 ms** | **3,200** | **4,800** (6,400 crosses) |
+
+**The shape changes, not just the number.** At 90 px the per-entity cost climbs with
+population — 69, 72, 74, 83 µs as n goes 100 → 4,000 — so something is super-linear. At
+180 px it is *flat*: 41.3, 41.9, 44.4, 45.9, 43.8, 46.2, 45.6 µs from n=400 to n=6,400.
+Sparse, this system is genuinely linear in population; dense, it is not, and the
+difference is perception fan-out rather than anything about entity count.
+
+Two numbers worth keeping from the sparse run, because they say what the stages really
+cost. Sensor rose to **0.892 µs per id returned** (from 0.590) while its total fell by
+half: most of a sensing entity's cost is fixed overhead, not the ids. Collision rose to
+**40.19 µs per overlap pair** (from 11.58) with pairs down to 0.2 per body: collision is
+almost entirely per-body bookkeeping — writing radii, monitoring flags, gathering the
+arrays — and hardly at all the resolve.
+
+**Which spacing is the honest one?** The shipped `world1.tres` puts 10 entities in a
+3200x1680 arena, which is far sparser than either. 90 px is a deliberately hostile
+neighbourhood, useful for finding the crowding cliff; 180 px is closer to a colony that
+has spread out. Quote 3,200 as the pessimistic ceiling and know that a third of it is
+crowding you may never have. Past ~280 px the measurement stops meaning anything: that is
+the sensor radius, so entities perceive nobody and the sim degenerates into wandering.
+
 `low_brain` is now a *perception* cost rather than a decision cost: 0.221 µs per id
 perceived against 53.5 ids per sensing entity accounts for essentially the whole stage.
 The food rung walks `sensor.perceived` and asks three store questions of each id, so the
