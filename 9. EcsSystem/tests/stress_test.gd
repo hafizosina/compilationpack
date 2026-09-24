@@ -251,8 +251,11 @@ func _build_pipeline() -> void:
 	_systems = [
 		EcsLifecycleSystem.new(_manager, _catalog),
 		EcsSpawnerSystem.new(),
+		EcsHungerSystem.new(),
+		EcsHealthSystem.new(),
 		EcsSensorSystem.new(_manager),
 		EcsLowBrainSystem.new(),
+		EcsConsumeSystem.new(),
 		EcsMovementSystem.new(),
 		EcsCollisionSystem.new(_manager),
 		EcsPickupSystem.new(),
@@ -292,7 +295,7 @@ func _populate(n: int) -> void:
 ## stage whose us/entity climbs is being paid for by something other than the
 ## entity — its neighbours.
 const COLUMNS: Array[StringName] = [&"sensor", &"collision", &"node_sync", &"pickup",
-	&"movement", &"low_brain"]
+	&"movement", &"low_brain", &"consume", &"hunger"]
 
 func _report_matrix(every: Array[Dictionary]) -> void:
 	if every.is_empty():

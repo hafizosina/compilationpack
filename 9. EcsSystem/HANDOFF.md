@@ -841,23 +841,73 @@ stage into query / fetch / arithmetic (§8).
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"
 ```
 
-**~4,450 entities is where a tick costs 250 ms — 4 FPS.** Half rabbits, half monkeys, on a
-jittered 90 px grid so the neighbourhood each entity sees stays the same size as the
-population grows; crowding a fixed arena would measure the stacking, not the population.
+**~3,200 entities is where a tick costs 250 ms — 4 FPS**, re-measured after step 4. Half
+rabbits, half monkeys, on a jittered 90 px grid so the neighbourhood each entity sees stays
+the same size as the population grows; crowding a fixed arena would measure the stacking,
+not the population.
+
+**Three ramps, and what they say.** The stress test had been left with the *old* pipeline
+in it — `hunger`, `health` and `consume` were never added when step 4 landed — so its first
+ramp of the day measured a program that is not shipped. Worse than three missing stages:
+with no `EcsHungerSystem`, hunger stays at 0 forever, so the brain's `SEEK_FOOD`, `TAKE`
+and `EAT` rungs never fire and `low_brain` was only ever measured wandering. Run it against
+the real pipeline and:
+
+| pipeline | crossing | note |
+|---|---|---|
+| 12 stages, as documented before today | ~4,450 | the number this section used to carry |
+| 12 stages, after the FSM merge and the pickup simplification | **4,800+** (never crossed) | those two refactors bought ~8% |
+| **15 stages, what main.gd actually builds** | **3,200** (4,000 crosses at 372 ms) | reproduced cold, ±5% |
+
+So **step 4 cost about a third of the population ceiling**, and the honest headline is
+3,200. Reference points interpolated off the live curve: **60 FPS at ~250 entities, 30 FPS
+at ~520, 10 FPS at ~1,700.**
+
+**The part that is not explained yet.** At n=4,000 the three new stages cost 39 ms between
+them — 10.5% of the tick, and only a fifth of the regression. The other ~137 ms landed on
+stages that did not change:
+
+| stage | 12-stage run | 15-stage run | |
+|---|---|---|---|
+| sensor | 85.24 ms | 146.38 ms | +72% |
+| collision | 35.39 ms | 61.02 ms | +72% |
+| low_brain | 30.60 ms | 51.89 ms | +70% |
+| node_sync | 23.63 ms | 39.06 ms | +65% |
+| movement | 14.44 ms | 24.69 ms | +71% |
+
+Every pre-existing stage got ~70% slower **at the same workload** — the census counts barely
+moved (53.5 vs 53.8 sensor ids per sensing entity, 1.2 vs 1.1 collision pairs per body).
+Thermal throttling was the first guess and it is wrong: a third ramp from a cold 42 °C CPU
+reproduced the second within 5%.
+
+The shape of it — everything slowing together, in proportion, with no stage doing more
+work — is what a *memory* effect looks like rather than a logic cost. Two more components
+per entity is 8,000 more `Resource` objects and two more tables in `EcsWorld._store` at
+n=4,000. If that is the cause it is the strongest evidence yet **for** §8's packed storage,
+and considerably stronger than the ~2x the movement probe suggests. **It is a hypothesis
+and it is not measured.** Probe it before spending any lever on the sensor.
+
+The live curve, 15 stages, cold run:
 
 | n | tick | implied FPS | ms/entity |
 |---|---|---|---|
-| 100 | 3.80 ms | 263 | 0.038 |
-| 400 | 17.12 ms | 58.4 | 0.043 |
-| 1600 | 75.58 ms | 13.2 | 0.047 |
-| 3200 | 156.74 ms | 6.4 | 0.049 |
-| 4000 | 215.18 ms | 4.6 | 0.054 |
-| **4400** | **249.67 ms** | **4.0** | 0.057 |
-| 4600 | 261.26 ms | 3.8 | 0.057 |
+| 100 | 9.56 ms | 105 | 0.096 |
+| 400 | 27.66 ms | 36.1 | 0.069 |
+| 800 | 58.01 ms | 17.2 | 0.073 |
+| 1600 | 114.98 ms | 8.7 | 0.072 |
+| **3200** | **238.90 ms** | **4.2** | 0.075 |
+| 4000 | 371.52 ms | 2.7 | 0.093 |
 
-Three consecutive ramps put 4,400 at 247.39, 248.40 and 249.67 ms — under 1% apart — so the
-curve is reproducible; call the crossing **4,450 ± 100**. Useful reference points interpolated off
-it: **60 FPS at ~400 entities, 30 FPS at ~750, 10 FPS at ~2,150.**
+Where the 250 ms goes at 4,000: **sensor 39.4%**, collision 16.4%, low_brain 14.0%,
+node_sync 10.5%, movement 6.6%, consume 3.8%, hunger 3.5%, health 3.1%, pickup 2.5%. The
+lifecycle, spawner, selection and inspect stages are together under 0.1 ms and effectively
+free.
+
+`low_brain` is now a *perception* cost rather than a decision cost: 0.221 µs per id
+perceived against 53.5 ids per sensing entity accounts for essentially the whole stage.
+The food rung walks `sensor.perceived` and asks three store questions of each id, so the
+brain pays the sensor's fan-out a second time. That is the cheapest thing on this page to
+fix and nobody has.
 
 Both of those ramps are ~6–7% faster than the ramps taken before `EcsEntityArea` and the
 module 8 deletion, and **that gain is not attributed to either**: the isolated A/B below
