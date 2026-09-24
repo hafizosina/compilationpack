@@ -52,6 +52,22 @@ func run(world: EcsWorld, delta: float) -> void:
 		var brain := world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
 		var move := world.get_component(id, EcsMovementComponent) as EcsMovementComponent
 
+		# 0. Collapsed: it has no say at all. This is above the commitment check
+		# on purpose — dropping from exhaustion overrides a trip already under
+		# way, which nothing else in this brain is allowed to do.
+		if world.has(id, EcsCollapsedComponent):
+			if brain.state != EcsLowBrainComponent.State.SLEEP:
+				_release(brain)
+				_abandon_trip(move)
+				brain.state = EcsLowBrainComponent.State.SLEEP
+			continue
+
+		# 0b. Sleeping by choice: stay down until rested, or until starving.
+		if brain.state == EcsLowBrainComponent.State.SLEEP:
+			if not _worth_waking_for(world, id):
+				continue
+			_release(brain)
+
 		# 1. Does the standing commitment still hold?
 		if brain.state == EcsLowBrainComponent.State.SEEK_FOOD:
 			if not _is_food(world, brain.target):
@@ -95,6 +111,8 @@ func run(world: EcsWorld, delta: float) -> void:
 		if _try_take(world, id, brain, move):
 			continue
 		if _try_seek_food(world, id, brain, move):
+			continue
+		if _try_sleep(world, id, brain, move):
 			continue
 		# Nothing better came up, so an existing wander simply carries on.
 		if move.has_destination:
@@ -268,7 +286,50 @@ func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	_set_trip(move, (world.get_component(best, EcsPositionComponent) as EcsPositionComponent).position)
 	return true
 
-## Rung 4, and the floor — drift somewhere nearby, having rested first.
+## Rung 4 — lie down, if nothing above wanted anything.
+##
+## Below the food rungs deliberately: a tired, hungry creature that can see a
+## berry goes for it, and only one with nothing in sight sleeps. A creature that
+## keeps finding food can therefore run itself to collapse, which is the price
+## of food outranking rest rather than a bug.
+##
+## Entering sleep only ever happens from IDLE or WANDER, because a SEEK_FOOD
+## commitment is not reconsidered — the one thing that overrides it is a
+## collapse, handled above. The trip is called off through the same helper as
+## everything else, so the clock is zeroed and movement, which is told nothing,
+## simply finds no destination and stops.
+func _try_sleep(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
+		move: EcsMovementComponent) -> bool:
+	var energy := world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
+	if energy == null or energy.value > energy.rest_at:
+		return false
+	if _starving(world, id):
+		# Too hungry to lie down. Without this a starving creature woken by its
+		# stomach would be put straight back to sleep by this rung while it is
+		# still tired, and starve where it lay.
+		return false
+	_release(brain)
+	_abandon_trip(move)
+	brain.state = EcsLowBrainComponent.State.SLEEP
+	return true
+
+## Is there anything worth getting up for? Rested is the ordinary end of a
+## sleep; starving is the interruption — the first thing in this module that
+## preempts a standing state rather than filling an empty slot.
+func _worth_waking_for(world: EcsWorld, id: int) -> bool:
+	var energy := world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
+	if energy == null or energy.value >= energy.wake_at:
+		return true
+	return _starving(world, id)
+
+## Empty, with nothing left to draw on. The same condition EcsHungerSystem
+## spends health on, asked here so the two never disagree about what starving
+## is — and it is the only thing that outranks being tired.
+func _starving(world: EcsWorld, id: int) -> bool:
+	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+	return hunger != null and hunger.fullness <= 0.0
+
+## Rung 5, and the floor — drift somewhere nearby, having rested first.
 ##
 ## The pause clock runs only here, which is why a creature that spent ten
 ## seconds walking to a berry does not then owe ten seconds of accumulated

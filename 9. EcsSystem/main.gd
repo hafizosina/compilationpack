@@ -39,7 +39,8 @@ extends Node2D
 ##
 ##     lifecycle  births and deaths    → the only stage that creates or frees
 ##     spawner    asks for a berry     → writes a note to the lifecycle inbox
-##     hunger     the bar climbs       → writes EcsHunger/EcsHealthComponent
+##     hunger     fullness drains      → writes EcsHunger/EcsHealthComponent
+##     energy     tires, rests, collapses → writes EcsEnergy/EcsCollapsedComponent
 ##     health     and death at zero    → writes a note to the lifecycle inbox
 ##     sensor     what can it see/reach→ writes EcsSensor/EcsActionComponent  [20 Hz]
 ##     low_brain  decides, and remembers → writes EcsMovementComponent        [20 Hz]
@@ -166,6 +167,7 @@ func _build() -> void:
 		.add(EcsLifecycleSystem.new(_manager, catalog)) \
 		.add(EcsSpawnerSystem.new()) \
 		.add(EcsHungerSystem.new()) \
+		.add(EcsEnergySystem.new()) \
 		.add(EcsHealthSystem.new()) \
 		.add(EcsSensorSystem.new(_manager), SLOW, 0) \
 		.add(EcsLowBrainSystem.new(), SLOW, 1) \

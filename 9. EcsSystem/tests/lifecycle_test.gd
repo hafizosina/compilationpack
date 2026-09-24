@@ -75,6 +75,9 @@ func _run() -> void:
 	await _eating_empties_the_bag_and_ends_the_berry()
 	await _starving_costs_health_and_then_the_entity()
 	await _being_well_fed_mends_and_the_band_between_does_neither()
+	await _it_tires_sleeps_and_wakes_rested()
+	await _running_out_of_energy_drops_it_once()
+	await _a_thing_with_no_energy_never_sleeps()
 	await _a_grazer_eats_off_the_ground_with_no_inventory()
 	await _a_sated_carrier_leaves_the_berry_alone()
 	await _a_hungry_carrier_eats_off_the_ground_without_pocketing()
@@ -837,6 +840,116 @@ func _being_well_fed_mends_and_the_band_between_does_neither() -> void:
 	for i in 30:
 		living.run_all(_world, TICK)
 	_check("while empty still costs health", health.value < health.max_health)
+
+## The ordinary cycle: awake costs, moving costs more, low energy puts it down,
+## and sleeping brings it back up to `wake_at` and no further.
+func _it_tires_sleeps_and_wakes_rested() -> void:
+	var living := EcsScheduler.new()
+	living.add(EcsEnergySystem.new()).add(EcsLowBrainSystem.new())
+
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-9000.0, 0.0))
+	var energy := _world.get_component(rabbit, EcsEnergyComponent) as EcsEnergyComponent
+	var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
+	var move := _world.get_component(rabbit, EcsMovementComponent) as EcsMovementComponent
+	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
+	hunger.fullness = hunger.max_fullness
+	await _tick(1)
+
+	# Standing still costs drain_idle.
+	energy.value = energy.max_energy
+	move.velocity = Vector2.ZERO
+	for i in 60:
+		living.run_all(_world, TICK)
+	var idle_cost := energy.max_energy - energy.value
+	_check("being awake costs energy", idle_cost > 0.0)
+
+	# Walking costs more. Velocity is what movement leaves behind, so the test
+	# sets it the way movement would.
+	energy.value = energy.max_energy
+	for i in 60:
+		move.velocity = Vector2(80.0, 0.0)
+		living.run_all(_world, TICK)
+	_check("and moving costs more than standing",
+		energy.max_energy - energy.value > idle_cost)
+
+	# Tired, with nothing to eat and nothing in sight: it lies down.
+	move.velocity = Vector2.ZERO
+	energy.value = energy.rest_at - 1.0
+	living.run_all(_world, TICK)
+	_check("a tired creature sleeps", brain.state == EcsLowBrainComponent.State.SLEEP)
+	_check("and drops whatever trip it had", not move.has_destination)
+
+	# Still below wake_at: it stays down rather than flickering.
+	energy.value = (energy.rest_at + energy.wake_at) * 0.5
+	living.run_all(_world, TICK)
+	_check("and stays down between rest_at and wake_at",
+		brain.state == EcsLowBrainComponent.State.SLEEP)
+
+	# Rested: it gets up on its own.
+	energy.value = energy.wake_at
+	living.run_all(_world, TICK)
+	_check("then wakes once rested", brain.state != EcsLowBrainComponent.State.SLEEP)
+
+	# Starving interrupts a voluntary sleep — the first thing in this module
+	# that preempts a standing state rather than filling an empty slot.
+	energy.value = energy.rest_at - 1.0
+	living.run_all(_world, TICK)
+	_check("it sleeps again when tired", brain.state == EcsLowBrainComponent.State.SLEEP)
+	hunger.fullness = 0.0
+	living.run_all(_world, TICK)
+	_check("but starving wakes it", brain.state != EcsLowBrainComponent.State.SLEEP)
+
+## Running out entirely is not a decision. The tag is the lock, the damage is
+## paid once at the moment of crossing, and coming round leaves an ordinary
+## sleeper rather than a free creature.
+func _running_out_of_energy_drops_it_once() -> void:
+	var living := EcsScheduler.new()
+	living.add(EcsEnergySystem.new()).add(EcsLowBrainSystem.new())
+
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-9000.0, 2000.0))
+	var energy := _world.get_component(rabbit, EcsEnergyComponent) as EcsEnergyComponent
+	var health := _world.get_component(rabbit, EcsHealthComponent) as EcsHealthComponent
+	var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
+	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
+	hunger.fullness = hunger.max_fullness
+	await _tick(1)
+
+	energy.value = 0.0
+	health.value = health.max_health
+	living.run_all(_world, TICK)
+	_check("empty energy collapses it", _world.has(rabbit, EcsCollapsedComponent))
+	_check("the collapse cost exactly collapse_damage once",
+		is_equal_approx(health.value, health.max_health - energy.collapse_damage))
+	_check("and it is down", brain.state == EcsLowBrainComponent.State.SLEEP)
+
+	# Many more ticks must not charge for it again.
+	for i in 30:
+		living.run_all(_world, TICK)
+	_check("and is not charged for it again",
+		is_equal_approx(health.value, health.max_health - energy.collapse_damage))
+
+	# The lock holds even against starving, which would wake a chosen sleep.
+	hunger.fullness = 0.0
+	living.run_all(_world, TICK)
+	_check("starving cannot wake a collapsed creature",
+		brain.state == EcsLowBrainComponent.State.SLEEP)
+
+	# Come round, still tired, and now an ordinary sleeper again.
+	energy.value = energy.collapse_release
+	living.run_all(_world, TICK)
+	_check("the lock lifts at collapse_release",
+		not _world.has(rabbit, EcsCollapsedComponent))
+	living.run_all(_world, TICK)
+	_check("and starving can wake it now",
+		brain.state != EcsLowBrainComponent.State.SLEEP)
+
+## Nothing without an EcsEnergyComponent ever tires or sleeps, and no flag says
+## so — a berry is the proof.
+func _a_thing_with_no_energy_never_sleeps() -> void:
+	var berry := _manager.spawn(_world, _catalog, &"berry", Vector2(-9000.0, 4000.0))
+	await _tick(1)
+	_check("a berry carries no energy", not _world.has(berry, EcsEnergyComponent))
+	_check("and never collapses", not _world.has(berry, EcsCollapsedComponent))
 
 ## States an intent on an entity's brain, for the tests that run an executor
 ## system without EcsLowBrainSystem to decide for them.

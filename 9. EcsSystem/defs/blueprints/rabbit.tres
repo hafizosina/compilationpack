@@ -10,6 +10,7 @@
 [ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
 [ext_resource type="Script" uid="uid://cxsykqivwrtfc" path="res://9. EcsSystem/components/ecs_hunger_component.gd" id="s_hunger"]
 [ext_resource type="Script" uid="uid://b0cqwu7rlda2j" path="res://9. EcsSystem/components/ecs_health_component.gd" id="s_health"]
+[ext_resource type="Script" uid="uid://debbcabui1aj7" path="res://9. EcsSystem/components/ecs_energy_component.gd" id="s_energy"]
 [ext_resource type="Texture2D" uid="uid://dnk7drhg2i8xh" path="res://Global/Asset/Animal/rabbit.png" id="tex_rabbit"]
 
 [sub_resource type="Resource" id="c_body"]
@@ -50,8 +51,11 @@ eat_below = 70.0
 script = ExtResource("s_health")
 
 
+[sub_resource type="Resource" id="c_energy"]
+script = ExtResource("s_energy")
+
 [resource]
 script = ExtResource("def")
 id = &"rabbit"
 display_name = "Rabbit"
-components = Array[ExtResource("base")]([SubResource("c_health"), SubResource("c_hunger"), SubResource("c_body"), SubResource("c_sprite"), SubResource("c_movement"), SubResource("c_brain"), SubResource("c_sensor"), SubResource("c_action")])
+components = Array[ExtResource("base")]([SubResource("c_energy"), SubResource("c_health"), SubResource("c_hunger"), SubResource("c_body"), SubResource("c_sprite"), SubResource("c_movement"), SubResource("c_brain"), SubResource("c_sensor"), SubResource("c_action")])

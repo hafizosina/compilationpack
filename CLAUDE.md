@@ -10,7 +10,7 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 103 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 120 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments and the hunger/health loop.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
@@ -166,7 +166,7 @@ carries it out, one bite per tick. That is step 6's intent pattern in miniature,
 `state` as the intent — **do not let the brain grow hands.**
 
 **Deciding is one system with state, not a rung per behaviour.** `EcsLowBrainSystem` is a
-small FSM — `IDLE > WANDER > SEEK_FOOD > TAKE > EAT` — and `EcsLowBrainComponent` holds its `state` and
+small FSM — `IDLE > WANDER > SEEK_FOOD > TAKE > EAT > SLEEP` — and `EcsLowBrainComponent` holds its `state` and
 its `target`. It replaced `EcsForageSystem`, which was a second decider whose priority was
 its line number in `main.gd`. That read well but was stateless: a creature's only memory
 between ticks was `has_destination`, so nothing could persist ("I am going to *that*
@@ -191,6 +191,22 @@ of three even ones, which buys the same average and looks worse; a system runs w
 reading data one tick old exactly as it did at full rate. Per-stage rates rather than one
 global sim clock, because the eye watches movement and the view, not perception.
 
+**Energy is a reserve, sleep is a decision, and collapse is not.** `EcsEnergyComponent`
+drains while awake (`drain_idle`, plus `drain_moving` when velocity is non-zero) and
+refills while asleep, so all three bars — fullness, energy, health — are reserves and a
+short bar is bad news on every one. The brain's sleep rung sits **below the food rungs**:
+a tired creature that can see a berry goes for it, and one that keeps finding food can run
+itself to collapse, which is the price of food outranking rest. `rest_at` < `wake_at` is
+the hysteresis. **Starving outranks tired in both directions** — it wakes a chosen sleep
+and stops one being chosen, or a creature woken by its stomach would be put straight back
+down while still tired and starve where it lay. At zero, `EcsEnergySystem` adds the
+`EcsCollapsedComponent` tag and takes `collapse_damage` once; **presence of the tag is the
+lock**, which is how energy tells the brain "no say" without writing the brain's
+component, and it lifts at `collapse_release` — below `wake_at`, so what comes round is an
+ordinary sleeper that starving can interrupt. **SLEEP is the module's first real
+preemption**: a collapse overrides a live `SEEK_FOOD` commitment, which nothing else is
+allowed to do.
+
 **A destination is a budget, not a standing order.** `EcsMovementSystem` prices each trip
 the tick it first sees it — distance over speed, times the component's `timeout_slack`,
 plus `timeout_grace` — and when that runs out it drops the destination exactly as if it
@@ -213,8 +229,8 @@ been crossed.
 is picked up loses its `EcsPositionComponent` but is not dead, so its sprite is hidden
 rather than freed and comes back if it is put down. Freeing a node is kill and only kill.
 
-**It is deliberately stripped to a bare-minimum core**: 17 components, 15 systems
-(`lifecycle > spawner > hunger > health > sensor > low_brain > consume > movement > collision > pickup > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
+**It is deliberately stripped to a bare-minimum core**: 19 components, 16 systems
+(`lifecycle > spawner > hunger > energy > health > sensor > low_brain > consume > movement > collision > pickup > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
 rank in the plan's decision ladder — a planner goes *above* it at step 7 — and not for the
 wandering it happens to do), and a world
 of 10 entities in 2 types (5 rabbits, 5 monkeys — a grazer and a carrier, differing by one
