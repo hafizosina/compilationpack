@@ -44,6 +44,16 @@ const DEFAULT_SPACING: float = 90.0
 ## Resolved from the command line at startup; DEFAULT_SPACING when absent.
 static var SPACING: float = DEFAULT_SPACING
 
+## `--n=4000` measures one population instead of walking the ramp. For probing
+## a single point repeatedly without paying for the whole curve.
+static var ONLY_N: int = 0
+
+## `--skip=hunger,health,consume` leaves those stages out of the pipeline, by
+## label. The point is to add systems one at a time and watch whether the
+## *other* stages move — a stage that gets slower when an unrelated one is added
+## is not paying for its own work.
+static var SKIP := PackedStringArray()
+
 ## Reads `-- --spacing=N` off the command line. Godot hands everything after the
 ## bare `--` to the game, so the test can be swept without editing it.
 static func _resolve_spacing() -> void:
@@ -52,6 +62,10 @@ static func _resolve_spacing() -> void:
 			var value := arg.substr("--spacing=".length()).to_float()
 			if value > 0.0:
 				SPACING = value
+		elif arg.begins_with("--n="):
+			ONLY_N = arg.substr("--n=".length()).to_int()
+		elif arg.begins_with("--skip="):
+			SKIP = arg.substr("--skip=".length()).split(",", false)
 ## Ticks thrown away before measuring — the first few build the physics state.
 const WARMUP: int = 12
 ## Ticks averaged.
@@ -62,6 +76,8 @@ const BUDGET_MS: float = 250.0
 var _world: EcsWorld
 var _manager: EcsEntityManager
 var _systems: Array[EcsSystem] = []
+var _overlay: EcsDebugOverlay
+var _marker: EcsSelectionMarker
 var _entities: Node2D
 var _catalog: EcsEntityCatalog
 
@@ -77,13 +93,20 @@ func _ready() -> void:
 		% [BUDGET_MS, 1000.0 / BUDGET_MS])
 	print("[stress] grid spacing %.0f px — arena is sqrt(n) columns wide, so it grows with n."
 		% SPACING)
+	if not SKIP.is_empty():
+		print("[stress] skipping stages: %s" % ", ".join(SKIP))
 	print("[stress] %6s %9s %9s %9s %8s" % ["n", "spawn ms", "tick ms", "per ent", "FPS"])
 
 	var last_ok := 0
 	var first_over := 0
 	var worst: Dictionary = {}
 	var every: Array[Dictionary] = []
-	for n in SIZES:
+	var sizes: Array[int] = []
+	if ONLY_N > 0:
+		sizes.append(ONLY_N)
+	else:
+		sizes.append_array(SIZES)
+	for n in sizes:
 		var result := await _measure(n)
 		var tick_ms: float = result["tick_ms"]
 		print("[stress] %6d %9.0f %9.2f %9.4f %8.1f"
@@ -268,13 +291,20 @@ func _work_done(n: int) -> Dictionary:
 ## exactly as it does with F1 off, which is how anyone measuring anything would
 ## be running.
 func _build_pipeline() -> void:
-	var overlay := EcsDebugOverlay.new()
-	overlay.visible = false
-	add_child(overlay)
-	var marker := EcsSelectionMarker.new()
-	add_child(marker)
+	# Built once and reused. These used to be created per population and added
+	# to the tree without ever being freed, so a ramp of thirteen sizes left
+	# thirteen overlays and thirteen markers behind — measurement litter that
+	# grows as the ramp goes on, which is exactly the wrong direction.
+	if _overlay == null:
+		_overlay = EcsDebugOverlay.new()
+		_overlay.visible = false
+		add_child(_overlay)
+		_marker = EcsSelectionMarker.new()
+		add_child(_marker)
+	var overlay := _overlay
+	var marker := _marker
 
-	_systems = [
+	var all: Array[EcsSystem] = [
 		EcsLifecycleSystem.new(_manager, _catalog),
 		EcsSpawnerSystem.new(),
 		EcsHungerSystem.new(),
@@ -291,6 +321,11 @@ func _build_pipeline() -> void:
 		EcsCensusSystem.new(),
 		EcsInspectSystem.new(),
 	]
+	_systems = []
+	for system in all:
+		if SKIP.has(String(system.label())):
+			continue
+		_systems.append(system)
 
 ## One tick, timing each stage. Same call sequence as EcsScheduler.run_all —
 ## unrolled only so the cost can be attributed.

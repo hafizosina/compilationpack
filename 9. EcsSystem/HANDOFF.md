@@ -863,45 +863,46 @@ So **step 4 cost about a third of the population ceiling**, and the honest headl
 3,200. Reference points interpolated off the live curve: **60 FPS at ~250 entities, 30 FPS
 at ~520, 10 FPS at ~1,700.**
 
-**The part that is not explained yet.** At n=4,000 the three new stages cost 39 ms between
-them — 10.5% of the tick, and only a fifth of the regression. The other ~137 ms landed on
-stages that did not change:
+**Retracted: the "70% regression" and the "step 4 cost a third of the ceiling".** Both came
+from comparing a ramp run in the morning against ramps run that afternoon, and the machine's
+throughput drifted ~50% between them. `--skip` now exists so the comparison can be made in
+one sitting, and made that way it says something much duller:
 
-| stage | 12-stage run | 15-stage run | |
+| at n = 4,000, same session | 12 stages | 15 stages | difference |
 |---|---|---|---|
-| sensor | 85.24 ms | 146.38 ms | +72% |
-| collision | 35.39 ms | 61.02 ms | +72% |
-| low_brain | 30.60 ms | 51.89 ms | +70% |
-| node_sync | 23.63 ms | 39.06 ms | +65% |
-| movement | 14.44 ms | 24.69 ms | +71% |
+| tick | 300.31 ms | 335.08 ms | **+11.6%** |
+| sensor | 130.66 ms | 132.25 ms | +1.2% |
+| collision | 55.98 ms | 54.47 ms | −2.7% |
+| low_brain | 46.96 ms | 47.26 ms | +0.6% |
+| node_sync | 35.08 ms | 35.08 → 34.21 ms | −2.5% |
+| movement | 22.76 ms | 22.70 ms | 0% |
+| **crossing 250 ms** | **3,200** | **3,200** | none |
 
-Every pre-existing stage got ~70% slower **at the same workload** — the census counts barely
-moved (53.5 vs 53.8 sensor ids per sensing entity, 1.2 vs 1.1 collision pairs per body).
-Thermal throttling was the first guess and it is wrong: a third ramp from a cold 42 °C CPU
-reproduced the second within 5%.
+The +34.77 ms is exactly `consume` + `hunger` + `health` — the three stages' own cost,
+additive, with nothing else touched. **Step 4 cost about 12% of the tick and none of the
+ceiling.** The earlier figure of 4,800 for a 12-stage pipeline was that same morning run;
+the identical configuration measured today crosses at 4,000 like everything else.
 
-The shape of it — everything slowing together, in proportion, with no stage doing more
-work — is what a *memory* effect looks like rather than a logic cost. Two more components
-per entity is 8,000 more `Resource` objects and two more tables in `EcsWorld._store` at
-n=4,000. If that is the cause it is the strongest evidence yet **for** §8's packed storage,
-and considerably stronger than the ~2x the movement probe suggests. **It is a hypothesis
-and it is not measured.** Probe it before spending any lever on the sensor.
+The memory hypothesis that was built on the 70% is withdrawn with it. It was wrong on its
+own terms as well: `EcsHungerComponent` and `EcsHealthComponent` were already on the
+blueprints during *both* ramps, so the component count per entity never changed.
 
-The live curve, 15 stages, cold run:
+**How it was settled**, since the method is the reusable part. `--n=4000 --skip=<labels>`
+measures one population with named stages left out. Adding the three one at a time, then
+repeating the sweep in reverse order to separate configuration from heat and position:
+config-14 looked reproducibly slow in both directions, but repeated runs at a *fixed*
+configuration varied by ±12%, which is the size of the effect being chased. Two runs at
+each end after fixing the measurement litter below settled it at +9–12%.
 
-| n | tick | implied FPS | ms/entity |
-|---|---|---|---|
-| 100 | 9.56 ms | 105 | 0.096 |
-| 400 | 27.66 ms | 36.1 | 0.069 |
-| 800 | 58.01 ms | 17.2 | 0.073 |
-| 1600 | 114.98 ms | 8.7 | 0.072 |
-| **3200** | **238.90 ms** | **4.2** | 0.075 |
-| 4000 | 371.52 ms | 2.7 | 0.093 |
+**Measurement litter, now fixed.** `_build_pipeline()` ran per population and `add_child`ed
+a fresh `EcsDebugOverlay` and `EcsSelectionMarker` every time without freeing them, so a
+thirteen-step ramp finished with thirteen of each in the tree. They are built once now.
 
-Where the 250 ms goes at 4,000: **sensor 39.4%**, collision 16.4%, low_brain 14.0%,
-node_sync 10.5%, movement 6.6%, consume 3.8%, hunger 3.5%, health 3.1%, pickup 2.5%. The
-lifecycle, spawner, selection and inspect stages are together under 0.1 ms and effectively
-free.
+**Two rules this leaves.** Never compare numbers from different sittings — use `--skip` and
+measure both arms back to back. And single-shot `--n` numbers are *not* comparable to ramp
+numbers: the same 12-stage configuration measures ~260 ms single-shot and 300 ms at the same
+population inside a ramp, because six earlier measurements leave the process in a different
+state.
 
 ### Crowding is a third of the ceiling, and it is not the population
 
