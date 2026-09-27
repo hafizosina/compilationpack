@@ -108,6 +108,13 @@ func _format(world: EcsWorld, property: String, value: Variant) -> String:
 	if value is int and property.ends_with("_id") and world.is_alive(value):
 		var named := world.get_component(value, EcsNameComponent) as EcsNameComponent
 		return "#%d %s" % [value, named.entity_name if named != null else "?"]
+	if value is Array and not value.is_empty() and value[0] is EcsItemRecord:
+		# Carried records: type and the head of the uid, which is enough to see
+		# the same berry go into a bag and come back out.
+		var held := PackedStringArray()
+		for record: EcsItemRecord in value:
+			held.append("%s (%s)" % [record.type_id, record.uid.left(6)])
+		return ", ".join(held)
 	if value is float:
 		return "%.2f" % value
 	if value is Vector2:

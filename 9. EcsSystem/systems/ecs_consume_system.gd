@@ -27,15 +27,13 @@ extends EcsSystem
 ## it was the identical condition on numbers about a pixel fresher. What is
 ## still asked of a candidate is that it is alive and still somewhere.
 ##
-## **Eating is a kill, and picking up is not.** A berry in a bag has merely lost
-## its EcsPositionComponent: still alive, still holding its components, and it
-## comes back if it is put down. An eaten one is gone, so this adds
+## **Eating off the ground is a kill; eating from the bag is not.** A berry in a
+## bag is already a record — it died when it was picked up — so eating it is
+## only taking the record out. One on the ground is an entity, so this adds
 ## EcsDyingFlag and EcsEntityManager frees it and its nodes at the top of the
 ## next tick. The flag is a claim from the instant it lands: EcsPickupSystem
 ## runs after this and refuses a berry carrying it, so one berry cannot be both
 ## eaten here and pocketed there in the same tick.
-## That contrast is the clearest example in the module of node lifetime tracking
-## the entity while what a node *does* tracks the components.
 ##
 ## One berry per decision: the flag names one meal, and once it is eaten the
 ## flag names something Dying, so nothing more happens until the brain runs
@@ -47,17 +45,25 @@ func label() -> StringName:
 
 func run(world: EcsWorld, _delta: float) -> void:
 	for id in world.query([EcsEatIntentFlag, EcsHungerComponent]):
-		var meal := (world.get_component(id, EcsEatIntentFlag) as EcsEatIntentFlag).target_id
-		if not _still_food(world, meal):
-			# Eaten or claimed since the brain named it. Nothing happens; the
-			# brain decides again with a fresher picture.
-			continue
-		if not _take_from_bag(world, id, meal) and not _within_reach(world, id, meal):
-			# Neither held nor touching: it moved out of reach since the brain
-			# decided, on a list a tick stale.
+		var intent := world.get_component(id, EcsEatIntentFlag) as EcsEatIntentFlag
+		var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+
+		if intent.record_uid != "":
+			# Out of the bag. The record is the whole of the item — it died when
+			# it was picked up — so eating it is only taking it out; its
+			# nutrition is the snapshot's, whatever that instance was given.
+			var record := _take_from_bag(world, id, intent.record_uid)
+			if record == null:
+				continue
+			var carried := record.component(EcsConsumableComponent) as EcsConsumableComponent
+			hunger.fullness = minf(hunger.fullness + carried.nutrition, hunger.max_fullness)
 			continue
 
-		var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+		var meal := intent.target_id
+		if not _still_food(world, meal) or not _within_reach(world, id, meal):
+			# Eaten or claimed since the brain named it, or moved out of reach
+			# on a list a tick stale. Nothing happens; the brain decides again.
+			continue
 		var food := world.get_component(meal, EcsConsumableComponent) as EcsConsumableComponent
 		hunger.fullness = minf(hunger.fullness + food.nutrition, hunger.max_fullness)
 		world.add(meal, EcsDyingFlag.new())
@@ -67,15 +73,18 @@ func _still_food(world: EcsWorld, meal: int) -> bool:
 	return world.is_alive(meal) and world.has(meal, EcsConsumableComponent) \
 		and not world.has(meal, EcsDyingFlag)
 
-## If `meal` is in this entity's bag, takes it out and says so. A held entity has
-## no position, so "is it anywhere" does not apply — being in a pocket is where
-## it is.
-func _take_from_bag(world: EcsWorld, id: int, meal: int) -> bool:
+## Takes the record with `uid` out of this entity's bag and returns it, or
+## null if it is not there or is not food.
+func _take_from_bag(world: EcsWorld, id: int, uid: String) -> EcsItemRecord:
 	var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
-	if bag == null or not bag.items.has(meal):
-		return false
-	bag.items.erase(meal)
-	return true
+	if bag == null:
+		return null
+	for slot in bag.items.size():
+		var record := bag.items[slot]
+		if record.uid == uid and record.component(EcsConsumableComponent) != null:
+			bag.items.remove_at(slot)
+			return record
+	return null
 
 ## Is `meal` lying on the ground within this entity's action area? Nothing is
 ## removed from anywhere: it is on the ground, and in a moment it will not exist.

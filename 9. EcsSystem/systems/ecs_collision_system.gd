@@ -154,15 +154,6 @@ func _sync(world: EcsWorld) -> void:
 		_solid.append(solid)
 		_areas.append(body)
 
-	# A body whose entity has stopped being anywhere is switched off rather
-	# than destroyed. Left on, a held berry would go on shoving whatever walked
-	# over the spot it was picked up from.
-	for id in world.query([EcsBodyComponent], [EcsPositionComponent]):
-		var body := _manager.node_for(id, EcsConst.NODE_BODY) as Area2D
-		if body != null and body.monitorable:
-			body.monitoring = false
-			body.monitorable = false
-
 ## Pushes each body clear of everything the physics server says it overlaps.
 ##
 ## Every pair is reported twice — A sees B and B sees A — and rather than

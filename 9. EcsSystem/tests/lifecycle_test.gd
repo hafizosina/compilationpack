@@ -29,6 +29,7 @@ var _catalog: EcsEntityCatalog
 var _entities: Node2D
 var _checks: int = 0
 var _failures: int = 0
+var _uids: Dictionary = {}  # entity id -> uid, for asking after a record once it dies
 
 func _ready() -> void:
 	_catalog = load("res://9. EcsSystem/defs/catalog.tres") as EcsEntityCatalog
@@ -60,9 +61,7 @@ func _ready() -> void:
 func _run() -> void:
 	await _spawn_builds_declared_nodes()
 	await _flags_share_one_inspector_tab()
-	await _pickup_hides_the_sprite_without_freeing_it()
-	await _putting_it_back_shows_it_again()
-	await _a_body_with_no_position_stands_down()
+	await _pickup_keeps_a_record_and_ends_the_berry()
 	await _kill_takes_the_data_and_the_nodes()
 	await _a_spawner_note_is_fulfilled_next_tick()
 	await _collision_still_separates_manager_owned_bodies()
@@ -144,65 +143,45 @@ func _spawn_builds_declared_nodes() -> void:
 		sensor_area.collision_mask == EcsConst.LAYER_BODY
 		and action_area.collision_mask == EcsConst.LAYER_BODY)
 
-## The regression this whole refactor risks. Picking a berry up removes its
-## EcsPositionComponent — it is alive, it is simply not anywhere. Under the old
-## render system that freed the Sprite2D as a side effect of the query. Under
-## the manager the node must survive and merely stop being drawn.
-func _pickup_hides_the_sprite_without_freeing_it() -> void:
-	var rabbit := _first_of(&"monkey")
+## Picking up is a death with a record kept. The berry is captured — every
+## component, and its uid — into the bag, flagged Dying on the spot, and gone
+## with its nodes the tick after. What survives is data, and it is the same
+## berry: the record's uid is the one the entity had.
+func _pickup_keeps_a_record_and_ends_the_berry() -> void:
+	var monkey := _first_of(&"monkey")
 	var berry := _first_of(&"berry")
-	# Taking is a decision now, and this scheduler has no brain in it on
-	# purpose. So the test plays the brain: it states the intent, and checks
-	# that EcsPickupSystem carries it out. That is the split under test here —
-	# with the old reflex, this passed without anything having chosen.
-	_intend_take(rabbit, berry)
+	var uid := (_world.get_component(berry, EcsNameComponent) as EcsNameComponent).uid
+	var food := _world.get_component(berry, EcsConsumableComponent) as EcsConsumableComponent
+	# An instance value the catalog does not know, to prove the snapshot is of
+	# this berry and not of its blueprint.
+	food.nutrition = 37.5
+	# Taking is a decision, and this scheduler has no brain in it on purpose.
+	# The test plays the brain by raising the flag the brain would.
+	_intend_take(monkey, berry)
+	# Two ticks: reach is what physics reported, and it reports after a step.
 	await _tick(2)
 
-	var bag := _world.get_component(rabbit, EcsInventoryComponent) as EcsInventoryComponent
-	var view := _manager.node_for(berry, EcsConst.NODE_SPRITE) as Sprite2D
-	var box := _manager.container_for(berry)
-	_check("the berry was picked up", bag != null and bag.items.has(berry))
-	_check("the berry lost its position", not _world.has(berry, EcsPositionComponent))
-	_check("the berry is still alive", _world.is_alive(berry))
-	_check("its nodes were NOT freed", view != null and is_instance_valid(view))
-	_check("its container is hidden instead", box != null and not box.visible)
-	_check("so the sprite under it is not drawn", view != null and not view.is_visible_in_tree())
+	var bag := _world.get_component(monkey, EcsInventoryComponent) as EcsInventoryComponent
+	_check("every entity is born with a uid", uid.length() == 32)
+	_check("the berry went into the bag as a record", _holds(bag, berry))
+	_check("and is claimed for death on the spot", _world.has(berry, EcsDyingFlag))
 
-## And the inverse, which the old model could not express at all: put it back
-## down and it is drawn again, with no node rebuilt.
-func _putting_it_back_shows_it_again() -> void:
-	var berry := _first_of(&"berry")
-	var before := _manager.node_for(berry, EcsConst.NODE_SPRITE)
-	var place := EcsPositionComponent.new()
-	place.position = Vector2(400.0, 400.0)
-	_world.add(berry, place)
 	await _tick(1)
-
-	var view := _manager.node_for(berry, EcsConst.NODE_SPRITE) as Sprite2D
-	var box := _manager.container_for(berry)
-	_check("dropping it makes it visible again", view != null and view.is_visible_in_tree())
-	_check("it is the same node, not a new one", view == before)
-	_check("the container followed the new position",
-		box != null and box.position.is_equal_approx(Vector2(400.0, 400.0)))
-
-## Same rule one layer down: an entity that is not anywhere must not collide
-## from wherever it last stood.
-func _a_body_with_no_position_stands_down() -> void:
-	var rabbit := _first_of(&"monkey")
-	var body := _manager.node_for(rabbit, EcsConst.NODE_BODY) as Area2D
-	var held := _world.get_component(rabbit, EcsPositionComponent) as EcsPositionComponent
-
-	_world.remove(rabbit, EcsPositionComponent)
-	await _tick(1)
-	_check("a body with no position stops monitoring", body != null and not body.monitoring)
-
-	_world.add(rabbit, held)
-	await _tick(1)
-	_check("and starts again when the position returns", body != null and body.monitoring)
+	var record: EcsItemRecord = bag.items[0] if not bag.items.is_empty() else null
+	_check("next tick the entity is gone", not _world.is_alive(berry))
+	_check("with its nodes", _manager.container_for(berry) == null)
+	_check("the record kept its type", record != null and record.type_id == &"berry")
+	_check("and its instance values, not the blueprint's", record != null
+		and is_equal_approx((record.component(EcsConsumableComponent)
+			as EcsConsumableComponent).nutrition, 37.5))
+	_check("and its position, as it was when taken", record != null
+		and record.component(EcsPositionComponent) != null)
+	_check("but none of its flags", record != null and record.components.all(
+		func(held: EcsComponent) -> bool: return not held is EcsFlag))
 
 ## Kill is the only thing that takes nodes away.
 func _kill_takes_the_data_and_the_nodes() -> void:
-	var berry := _first_of(&"berry")
+	var berry := _manager.spawn(_world, _catalog, &"berry", Vector2(600.0, -600.0))
 	var containers_before := _entities.get_child_count()
 	_world.add(berry, EcsDyingFlag.new())
 	await _tick(1)
@@ -296,7 +275,7 @@ func _it_sees_before_it_takes() -> void:
 	_check("it sees the berry 100 px away", sensor.perceived.has(near))
 	_check("it does not see the one 900 px away", not sensor.perceived.has(far))
 	_check("seeing is not reaching", not action.reached.has(near))
-	_check("so it has not taken it", not bag.items.has(near))
+	_check("so it has not taken it", not _holds(bag, near))
 
 	# Bring it to arm's length without moving the rabbit.
 	(_world.get_component(near, EcsPositionComponent) as EcsPositionComponent).position \
@@ -305,9 +284,9 @@ func _it_sees_before_it_takes() -> void:
 
 	_check("once the bodies touch the action area, it is in reach",
 		action.reached.has(near))
-	_check("and it is taken", bag.items.has(near))
+	_check("and it is taken", _holds(bag, near))
 	_check("the one it never saw is untouched",
-		_world.has(far, EcsPositionComponent) and not bag.items.has(far))
+		_world.has(far, EcsPositionComponent) and not _holds(bag, far))
 
 ## A bush is solid and has no EcsMovementComponent, so a walker must be pushed
 ## out of it and it must not give an inch — solidity and movability are separate
@@ -413,12 +392,13 @@ func _it_walks_to_what_it_sees_and_takes_it() -> void:
 	for i in 240:
 		walking.run_all(_world, TICK)
 		await get_tree().physics_frame
-		if bag.items.has(berry):
+		if _holds(bag, berry):
 			break
 
 	_check("it walked toward the berry it could see", at.position.x > started.x + 100.0)
-	_check("and picked it up on arrival", bag.items.has(berry))
-	_check("which is what leaving the world means", not _world.has(berry, EcsPositionComponent))
+	_check("and picked it up on arrival", _holds(bag, berry))
+	_check("which is what leaving the world means",
+		not _world.is_alive(berry) or _world.has(berry, EcsDyingFlag))
 	_check("it stopped at arm's length, not on top of it",
 		at.position.distance_to(Vector2(2200.0, -2000.0)) > 20.0)
 
@@ -591,8 +571,8 @@ func _eating_empties_the_bag_and_ends_the_berry() -> void:
 	await _tick(1)
 
 	# Hand it the berry the way EcsPickupSystem would, and make it hungry.
-	bag.items.append(berry)
-	_world.remove(berry, EcsPositionComponent)
+	bag.items.append(EcsItemRecord.capture(_world, berry))
+	_world.add(berry, EcsDyingFlag.new())
 	hunger.fullness = hunger.eat_below - 5.0
 	var before := hunger.fullness
 
@@ -600,16 +580,11 @@ func _eating_empties_the_bag_and_ends_the_berry() -> void:
 	await get_tree().physics_frame
 	_check("it decided to eat what it was carrying",
 		brain.state == EcsLowBrainComponent.State.EAT)
-	_check("the berry left the bag", not bag.items.has(berry))
+	_check("the berry left the bag", not _holds(bag, berry))
 	_check("and fullness rose by the berry's nutrition",
 		is_equal_approx(hunger.fullness, before + food.nutrition))
-
-	# The Dying flag is carried out at the top of the next tick, not on the spot.
-	_check("the berry is still alive this tick", _world.is_alive(berry))
-	living.run_all(_world, TICK)
-	await get_tree().physics_frame
-	_check("eaten means dead, unlike being carried", not _world.is_alive(berry))
-	_check("and its nodes went with it", _manager.container_for(berry) == null)
+	_check("the intent named the record, not an entity",
+		brain.target == EcsWorld.NO_ENTITY)
 
 ## The consequence that makes hunger more than a number: pinned at the top it
 ## costs health, and health at zero is the module's first death by simulation.
@@ -726,19 +701,19 @@ func _a_sated_carrier_leaves_the_berry_alone() -> void:
 		await get_tree().physics_frame
 
 	_check("the berry is well within its reach", action.reached.has(berry))
-	_check("but a sated carrier does not pocket it", not bag.items.has(berry))
+	_check("but a sated carrier does not pocket it", not _holds(bag, berry))
 
 	# Empty enough to want it, and it takes it without moving an inch.
 	hunger.fullness = hunger.forage_below - 1.0
 	for i in 20:
 		living.run_all(_world, TICK)
 		await get_tree().physics_frame
-		if bag.items.has(berry):
+		if _holds(bag, berry):
 			break
 
-	_check("once hungry, the same berry goes in the bag", bag.items.has(berry))
+	_check("once hungry, the same berry goes in the bag", _holds(bag, berry))
 	_check("which is a decision, not a reflex — it had to want it first",
-		not _world.has(berry, EcsPositionComponent))
+		not _world.is_alive(berry) or _world.has(berry, EcsDyingFlag))
 
 ## The rung order, pinned. A carrier hungry enough to eat, standing over a
 ## berry, must eat it where it lies — not pocket it and then take it back out.
@@ -821,7 +796,7 @@ func _one_berry_two_takers_one_tick() -> void:
 	await get_tree().physics_frame
 
 	_check("the grazer ate it: it is claimed for death", _world.has(berry, EcsDyingFlag))
-	_check("so the carrier did not also take it", not bag.items.has(berry))
+	_check("so the carrier did not also take it", not _holds(bag, berry))
 
 	_world.remove(rabbit, EcsEatIntentFlag)
 	_world.remove(monkey, EcsTakeIntentFlag)
@@ -868,7 +843,7 @@ func _executors_need_a_flag_not_a_brain() -> void:
 	var bag := _world.get_component(monkey, EcsInventoryComponent) as EcsInventoryComponent
 	_check("a brainless grazer with an eat flag eats", _world.has(meal, EcsDyingFlag)
 		and hunger.fullness > before)
-	_check("a brainless carrier with a take flag takes", bag.items.has(prize))
+	_check("a brainless carrier with a take flag takes", _holds(bag, prize))
 
 	var energy := _world.get_component(rabbit, EcsEnergyComponent) as EcsEnergyComponent
 	energy.value = energy.max_energy * 0.5
@@ -879,7 +854,8 @@ func _executors_need_a_flag_not_a_brain() -> void:
 		energy.value > energy.max_energy * 0.5)
 
 	for id in [rabbit, monkey, prize]:
-		_world.add(id, EcsDyingFlag.new())
+		if _world.is_alive(id):
+			_world.add(id, EcsDyingFlag.new())
 	acting.run_all(_world, TICK)
 
 ## `state` is the brain's memory and the flags are its instructions, written in
@@ -1247,6 +1223,16 @@ func _intend_eat(id: int, target: int) -> void:
 	var eat := EcsEatIntentFlag.new()
 	eat.target_id = target
 	_world.add(id, eat)
+
+## Does `bag` hold a record of entity `id`? Matched by uid, since a carried item
+## is no longer an entity. The uid is remembered the first time it is asked
+## while the entity is alive, so the question still has an answer after it dies.
+func _holds(bag: EcsInventoryComponent, id: int) -> bool:
+	if _world.is_alive(id):
+		_uids[id] = (_world.get_component(id, EcsNameComponent) as EcsNameComponent).uid
+	var uid: String = _uids.get(id, "")
+	return uid != "" and bag.items.any(func(record: EcsItemRecord) -> bool:
+		return record.uid == uid)
 
 func _first_of(type_id: StringName) -> int:
 	for id in _world.query([EcsNameComponent]):

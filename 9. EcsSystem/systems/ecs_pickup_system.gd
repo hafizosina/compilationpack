@@ -24,17 +24,13 @@ extends EcsSystem
 ## from. And step 7's planner emits a sequence of action ids that wants exactly
 ## one executor per action, so a merge now is a split again later.
 ##
-## Picking up is **removing `EcsPositionComponent`**. That one line is the whole
-## of leaving the world: EcsNodeSyncSystem's query stops matching so the sprite
-## stops being drawn, the brain stops seeing anything worth walking to,
-## and the spawner stops counting it against its litter cap. Nothing was told to
-## hide anything, and there is no `is_carried` flag to keep in step.
-##
-## The node itself survives. EcsEntityManager frees nodes only when an entity
-## dies, and a berry in a bag is not dead — it is alive and not anywhere. Those
-## used to be the same event, because the old render system freed the view the
-## tick its query stopped matching. Separating them is what lets the berry be
-## put back down again.
+## Picking up is **a death with a record kept**. The item is captured into an
+## EcsItemRecord — every component, and its uid — which goes in the bag, and the
+## entity is flagged Dying. Next tick the manager destroys it and its nodes, so
+## the sprite stops being drawn, the brain stops seeing it and the spawner stops
+## counting it, all by the ordinary route every death takes. It used to be
+## removing EcsPositionComponent, which left a live entity that was nowhere;
+## components now stay fixed from spawn to death, and the item survives as data.
 ##
 ## **Reach is a real overlap**, not a distance: the ids in the picker's own
 ## EcsActionComponent.reached are the ones whose body is touching its action
@@ -61,9 +57,9 @@ extends EcsSystem
 ## spawned onto someone — can be taken from where it used to be, for exactly
 ## one tick. If items ever become droppable, this is the line to revisit.
 ##
-## What is still checked is `EcsPositionComponent`, and that is a different
-## question: not "is it near enough" but "is it still in the world at all",
-## because something earlier in this same loop may already have taken it.
+## What is still checked is EcsDyingFlag, and that is a different question: not
+## "is it near enough" but "is it still anyone's to take" — something earlier in
+## this loop, or in EcsConsumeSystem this tick, may already have claimed it.
 
 func label() -> StringName:
 	return &"pickup"
@@ -81,14 +77,13 @@ func run(world: EcsWorld, _delta: float) -> void:
 			continue
 		if not world.is_alive(item) or not world.has(item, EcsPickableComponent):
 			continue
-		# Something earlier in this same loop may already have taken it.
-		if not world.has(item, EcsPositionComponent):
-			continue
-		# Or eaten it, earlier this tick: it is claimed and dies next tick.
+		# Taken earlier in this loop, or eaten earlier this tick: claimed.
 		if world.has(item, EcsDyingFlag):
 			continue
 		var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
 		if not action.reached.has(item):
 			continue
-		bag.items.append(item)
-		world.remove(item, EcsPositionComponent)
+		# Taking is ending it as an entity and keeping it as data. The flag is
+		# the claim, so nobody else can eat or take it for the tick it has left.
+		bag.items.append(EcsItemRecord.capture(world, item))
+		world.add(item, EcsDyingFlag.new())

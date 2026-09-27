@@ -15,14 +15,10 @@ extends EcsSystem
 ## job is "mirror the data onto the nodes" and the nodes are therefore the right
 ## thing to iterate. An entity with no container has nothing for it to do.
 ##
-## The split from the manager matters more than it looks. The old system
-## inferred a node's existence from its query — a berry that was picked up lost
-## its EcsPositionComponent, stopped matching, and had its Sprite2D freed as a
-## side effect. Correct, but accidental, and it welded node lifetime to
-## component presence. Now the node lives exactly as long as the entity and this
-## system decides what it *shows*: an entity with no position is not anywhere,
-## so its container is hidden, and it comes back the moment something puts it
-## down again.
+## The split from the manager matters more than it looks: the node lives
+## exactly as long as the entity, and this system only decides what it shows.
+## Nothing is alive-but-nowhere any more — a picked-up berry dies and becomes a
+## record — so every container it walks has a position to follow.
 ##
 ## Still strictly one-way. Nothing is read back off a node, so the world stays
 ## true whether or not anything is being drawn — which is what lets the whole
@@ -46,13 +42,7 @@ func run(world: EcsWorld, _delta: float) -> void:
 
 		var place := world.get_component(id, EcsPositionComponent) as EcsPositionComponent
 		if place == null:
-			# Carrying nodes but no position — a berry in someone's inventory.
-			# It is not anywhere, so it is not drawn. Hiding the container hides
-			# everything under it; the body is stood down by EcsCollisionSystem,
-			# because visibility and physics are different questions.
-			container.visible = false
 			continue
-		container.visible = true
 		container.position = place.position
 
 		var sprite := world.get_component(id, EcsSpriteComponent) as EcsSpriteComponent

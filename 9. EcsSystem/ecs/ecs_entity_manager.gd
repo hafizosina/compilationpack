@@ -45,6 +45,7 @@ var _root: Node2D
 var _containers: Dictionary = {}  # entity id -> Node2D container
 var _nodes: Dictionary = {}       # entity id -> { node kind -> Node2D }
 var _serial: int = 0
+var _crypto := Crypto.new()
 
 func _init(root: Node2D) -> void:
 	_root = root
@@ -99,6 +100,7 @@ func spawn(world: EcsWorld, catalog: EcsEntityCatalog, type_id: StringName, pos:
 	named.entity_name = entity_name if entity_name != &"" else StringName("%s_%d" % [type_id, _serial])
 	named.type_id = type_id
 	named.display_name = blueprint.display_name
+	named.uid = new_uid()
 	world.add(id, named)
 	var position := EcsPositionComponent.new()
 	position.position = pos
@@ -122,17 +124,18 @@ func spawn(world: EcsWorld, catalog: EcsEntityCatalog, type_id: StringName, pos:
 
 ## Destroys an entity outright — component data and nodes together.
 ##
-## Note what this is NOT for. A berry being picked up is not killed: it stays
-## alive and loses its EcsPositionComponent, and the systems that draw and
-## collide it see the component is gone and stand their nodes down. Node
-## lifetime tracks the entity; what a node *does* tracks the components. Those
-## are two different questions, and the old render system answered both with
-## one query — right by accident rather than by design.
+## A berry being picked up *is* killed now: EcsPickupSystem keeps an
+## EcsItemRecord of it and flags it Dying, and it comes back, as itself with
+## its uid, only if the record is put back into the world.
 func kill(world: EcsWorld, id: int) -> void:
 	if not world.is_alive(id):
 		return
 	world.destroy_entity(id)
 	_free_nodes(id)
+
+## A fresh identity for a new thing: 128 random bits, as hex.
+func new_uid() -> String:
+	return _crypto.generate_random_bytes(16).hex_encode()
 
 ## The node of `kind` belonging to `id`, or null. This is how a system finds a
 ## node to update; nothing stores a node handle in a component.

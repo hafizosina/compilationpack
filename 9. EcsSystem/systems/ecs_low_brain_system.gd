@@ -157,26 +157,30 @@ func _try_eat(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
 	if hunger == null or hunger.fullness > hunger.eat_below:
 		return false
-	var meal := _meal_at_hand(world, id)
-	if meal == EcsWorld.NO_ENTITY:
+	# The bag first, only because a thing already held is the nearer of the
+	# two; then whatever its action area is touching. This order used to live in
+	# EcsConsumeSystem — it is a choice, so it lives here now, and the executor
+	# is handed the answer.
+	var carried := _meal_in_bag(world, id)
+	var meal := EcsWorld.NO_ENTITY if carried != "" else _meal_on_ground(world, id)
+	if carried == "" and meal == EcsWorld.NO_ENTITY:
 		return false
 
 	_abandon_trip(move)
-	_set_state(world, id, brain, EcsLowBrainComponent.State.EAT, meal)
+	_set_state(world, id, brain, EcsLowBrainComponent.State.EAT, meal, carried)
 	return true
 
-## Something edible it could put in its mouth right now, or NO_ENTITY. The bag
-## first, only because a thing already held is the nearer of the two; then
-## whatever its action area is touching. This order used to live in
-## EcsConsumeSystem — it is a choice, so it lives here now, and the executor is
-## handed the answer.
-func _meal_at_hand(world: EcsWorld, id: int) -> int:
+## The uid of something edible it is carrying, or "".
+func _meal_in_bag(world: EcsWorld, id: int) -> String:
 	var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
 	if bag != null:
-		for item in bag.items:
-			if world.is_alive(item) and world.has(item, EcsConsumableComponent) \
-					and not world.has(item, EcsDyingFlag):
-				return item
+		for record in bag.items:
+			if record.component(EcsConsumableComponent) != null:
+				return record.uid
+	return ""
+
+## Something edible lying within its action area, or NO_ENTITY.
+func _meal_on_ground(world: EcsWorld, id: int) -> int:
 	var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
 	if action != null:
 		for touched in action.reached:
@@ -382,10 +386,16 @@ func _release(world: EcsWorld, id: int, brain: EcsLowBrainComponent) -> void:
 ## The only place `state` and `target` are written, and the reason the intent
 ## flags can never disagree with them: leaving a state clears its flag, entering
 ## one raises it with the target named. Unchanged state and target is a no-op,
-## so an idle creature re-entering IDLE every tick touches the store not at all.
+## so an idle creature re-entering IDLE every tick touches the store not at all
+## — except that eating from the bag names its meal by uid, which `target` does
+## not hold, so a still-eating creature has the uid refreshed on its flag.
 func _set_state(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
-		state: EcsLowBrainComponent.State, target: int = EcsWorld.NO_ENTITY) -> void:
+		state: EcsLowBrainComponent.State, target: int = EcsWorld.NO_ENTITY,
+		record_uid: String = "") -> void:
 	if brain.state == state and brain.target == target:
+		var eating := world.get_component(id, EcsEatIntentFlag) as EcsEatIntentFlag
+		if eating != null:
+			eating.record_uid = record_uid
 		return
 	var old_flag: Script = _flag_for(brain.state)
 	if old_flag != null:
@@ -396,6 +406,7 @@ func _set_state(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		EcsLowBrainComponent.State.EAT:
 			var eat := EcsEatIntentFlag.new()
 			eat.target_id = target
+			eat.record_uid = record_uid
 			world.add(id, eat)
 		EcsLowBrainComponent.State.TAKE:
 			var take := EcsTakeIntentFlag.new()

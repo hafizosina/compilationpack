@@ -16,6 +16,11 @@ extends EcsComponent
 @export var type_id: StringName = &""
 ## The blueprint's human-readable name, for the inspector title.
 @export var display_name: String = ""
+## Who this thing is, for as long as it is anything. The entity id is the
+## store's key and changes when an item is picked up and put back; this does
+## not. Set by EcsEntityManager at first spawn and carried by EcsItemRecord.
+## Runtime, not authored: a .tres cannot know it.
+var uid: String = ""
 
 func key() -> StringName:
 	return &"name"
