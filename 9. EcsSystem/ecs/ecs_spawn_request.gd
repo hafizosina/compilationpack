@@ -17,6 +17,10 @@ var position: Vector2 = Vector2.ZERO
 var overrides: Dictionary = {}
 ## Optional name. Blank means the manager numbers it after its type.
 var entity_name: StringName = &""
+## Set instead of `type_id` to put a carried item back into the world as
+## itself: built from the record's components — instance values and uid intact —
+## rather than from the blueprint's defaults. `position` still says where.
+var record: EcsItemRecord = null
 
 ## Set by the manager once it has dealt with this note, whatever the outcome.
 ## Kept separate from `born` because a blueprint that fails to resolve also

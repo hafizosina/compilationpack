@@ -76,8 +76,11 @@ func drain(world: EcsWorld, catalog: EcsEntityCatalog) -> void:
 	var births := inbox.spawn_requests
 	inbox.spawn_requests = []
 	for request in births:
-		request.born = spawn(world, catalog, request.type_id, request.position,
-			request.overrides, request.entity_name)
+		if request.record != null:
+			request.born = restore(world, request.record, request.position)
+		else:
+			request.born = spawn(world, catalog, request.type_id, request.position,
+				request.overrides, request.entity_name)
 		request.fulfilled = true
 
 	# Everything claimed for death since the last drain. The query is taken
@@ -119,6 +122,24 @@ func spawn(world: EcsWorld, catalog: EcsEntityCatalog, type_id: StringName, pos:
 			_apply_overrides(component, slot_overrides)
 		world.add(id, component)
 
+	_build_nodes(world, id, pos)
+	return id
+
+## Puts a carried item back into the world as itself, at `pos`, and returns its
+## new id. Every component comes from the record — instance values, name and
+## uid intact — and the one it must not keep is where it was: the copied
+## position is overwritten with the new spot. The id is new; the uid is not.
+##
+## Nodes are built exactly as for a fresh spawn, from whatever NODE_KIND the
+## components declare, so this knows nothing about what kind of item it is.
+func restore(world: EcsWorld, record: EcsItemRecord, pos: Vector2) -> int:
+	var id := world.create_entity()
+	for component in record.components:
+		world.add(id, component)
+	var place := world.get_component(id, EcsPositionComponent) as EcsPositionComponent
+	if place == null:
+		place = world.add(id, EcsPositionComponent.new()) as EcsPositionComponent
+	place.position = pos
 	_build_nodes(world, id, pos)
 	return id
 

@@ -86,6 +86,7 @@ func _run() -> void:
 	await _one_berry_two_takers_one_tick()
 	await _executors_need_a_flag_not_a_brain()
 	await _every_state_raises_exactly_its_flag()
+	await _a_dead_carrier_puts_back_what_it_carried()
 	await _a_stage_on_a_slower_tick_still_simulates_the_same()
 
 ## A component's `const NODE_KIND` is what gets it a node, so a berry — sprite,
@@ -914,6 +915,93 @@ func _every_state_raises_exactly_its_flag() -> void:
 		if _world.is_alive(id):
 			_world.add(id, EcsDyingFlag.new())
 	living.run_all(_world, TICK)
+
+## A carried item is a record; when its carrier dies it goes back into the world,
+## where the carrier fell, as itself. Same uid, new id, its instance values
+## intact — and it is real again: a hungry grazer can walk up and eat it.
+func _a_dead_carrier_puts_back_what_it_carried() -> void:
+	var living := EcsScheduler.new()
+	living \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsHealthSystem.new()) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsLowBrainSystem.new()) \
+		.add(EcsConsumeSystem.new()) \
+		.add(EcsPickupSystem.new()) \
+		.add(EcsDropSystem.new()) \
+		.add(EcsNodeSyncSystem.new(_manager))
+
+	var spot := Vector2(-21000.0, 0.0)
+	var monkey := _manager.spawn(_world, _catalog, &"monkey", spot)
+	var bag := _world.get_component(monkey, EcsInventoryComponent) as EcsInventoryComponent
+	bag.capacity = 2
+	# Two berries, far away, put in the bag the way EcsPickupSystem would. One is
+	# given an instance value its blueprint does not have.
+	var uids: Array[String] = []
+	for i in 2:
+		var berry := _manager.spawn(_world, _catalog, &"berry", spot + Vector2(0.0, 5000.0 + i * 100.0))
+		if i == 0:
+			(_world.get_component(berry, EcsConsumableComponent) as EcsConsumableComponent).nutrition = 41.0
+		uids.append((_world.get_component(berry, EcsNameComponent) as EcsNameComponent).uid)
+		bag.items.append(EcsItemRecord.capture(_world, berry))
+		_world.add(berry, EcsDyingFlag.new())
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+	_check("the carried berries are no longer entities", _ids_with_uids(uids).is_empty())
+
+	# Death by health: the ordinary route, not a flag raised by the test.
+	(_world.get_component(monkey, EcsHealthComponent) as EcsHealthComponent).value = 0.0
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+	_check("the carrier is flagged to die", _world.has(monkey, EcsDyingFlag))
+	_check("and its bag was emptied onto the lifecycle inbox", bag.items.is_empty())
+
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+	var back := _ids_with_uids(uids)
+	_check("the carrier is gone", not _world.is_alive(monkey))
+	_check("both berries are back, as themselves (same uids)", back.size() == 2)
+	var at_spot := true
+	var drawn := true
+	var kept_value := false
+	for id: int in back:
+		var place := _world.get_component(id, EcsPositionComponent) as EcsPositionComponent
+		at_spot = at_spot and place.position.is_equal_approx(spot)
+		drawn = drawn and _manager.container_for(id) != null
+		var food := _world.get_component(id, EcsConsumableComponent) as EcsConsumableComponent
+		if is_equal_approx(food.nutrition, 41.0):
+			kept_value = true
+	_check("where the carrier fell, stacked on one spot", at_spot)
+	_check("with nodes built for them", drawn)
+	_check("and the instance value survived the round trip", kept_value)
+	_check("none came back still flagged to die",
+		back.all(func(id: int) -> bool: return not _world.has(id, EcsDyingFlag)))
+
+	# Real again: a hungry grazer eats one off the ground.
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(0.0, 30.0))
+	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
+	hunger.fullness = hunger.eat_below - 5.0
+	var before := hunger.fullness
+	var ate := false
+	for i in 60:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		if _ids_with_uids(uids).size() < 2:
+			ate = true
+			break
+	_check("a hungry grazer eats a dropped berry", ate and hunger.fullness > before)
+
+	for id in _ids_with_uids(uids) + [rabbit]:
+		_world.add(id, EcsDyingFlag.new())
+	living.run_all(_world, TICK)
+
+## The live entities whose uid is one of `uids`.
+func _ids_with_uids(uids: Array[String]) -> Array[int]:
+	var found: Array[int] = []
+	for id in _world.query([EcsNameComponent]):
+		if uids.has((_world.get_component(id, EcsNameComponent) as EcsNameComponent).uid):
+			found.append(id)
+	return found
 
 ## Running a stage a third as often must not make it simulate a third as much.
 ## The scheduler banks delta per system, so hunger authored in points per second

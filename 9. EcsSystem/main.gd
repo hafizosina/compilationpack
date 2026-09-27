@@ -41,13 +41,15 @@ extends Node2D
 ##     spawner    asks for a berry     → writes a note to the lifecycle inbox
 ##     hunger     fullness drains      → writes EcsHunger/EcsHealthComponent
 ##     energy     tires, rests, collapses → writes EcsEnergy/EcsCollapsedFlag
-##     health     and death at zero    → writes a note to the lifecycle inbox
+##     health     and death at zero    → writes EcsDyingFlag
 ##     sensor     what can it see/reach→ writes EcsSensor/EcsActionComponent  [20 Hz]
-##     low_brain  decides, and remembers → writes EcsMovementComponent        [20 Hz]
-##     consume    carries out "eat"    → writes EcsHunger/EcsInventoryComponent
+##     low_brain  decides, and remembers → writes EcsMovementComponent + intent flags [20 Hz]
+##     consume    carries out "eat"    → writes EcsHunger/EcsInventory, EcsDyingFlag
 ##     movement   walks toward it      → writes EcsPositionComponent
 ##     collision  unstacks the bodies  → writes EcsPositionComponent
 ##                (the Area2Ds it reads overlaps off are a derived index only)
+##     pickup     carries out "take"   → writes EcsInventoryComponent, EcsDyingFlag
+##     drop       a dead carrier's bag → writes notes to the lifecycle inbox
 ##     selection  resolves a click     → writes EcsSelectedFlag
 ##     node_sync  draws where it ended → writes each entity_<id> container
 ##     debug      reports all of it    → writes the on-entity overlay
@@ -175,6 +177,7 @@ func _build() -> void:
 		.add(EcsMovementSystem.new()) \
 		.add(_collision) \
 		.add(EcsPickupSystem.new()) \
+		.add(EcsDropSystem.new()) \
 		.add(EcsSelectionSystem.new(_marker)) \
 		.add(EcsNodeSyncSystem.new(_manager)) \
 		.add(EcsDebugSystem.new(_debug_overlay)) \
