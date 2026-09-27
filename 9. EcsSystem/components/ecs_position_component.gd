@@ -7,8 +7,10 @@ extends EcsComponent
 
 @export var position: Vector2 = Vector2.ZERO
 
-## How the inspector shows it — see inspect/position_inspect.gd.
-const INSPECTOR := preload("res://9. EcsSystem/inspect/position_inspect.gd")
-
 func key() -> StringName:
 	return &"position"
+
+## How the inspector shows it: its reading on the Entity tab. Display only;
+## see EcsComponent.describe().
+func describe() -> Dictionary:
+	return {"tab": &"entity", "lines": {"position": "(%.0f, %.0f)" % [position.x, position.y]}}

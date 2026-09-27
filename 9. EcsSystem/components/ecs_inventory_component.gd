@@ -24,8 +24,16 @@ extends EcsComponent
 ## What is held. Runtime state.
 var items: Array[EcsItemRecord] = []
 
-## How the inspector shows it — see inspect/inventory_inspect.gd.
-const INSPECTOR := preload("res://9. EcsSystem/inspect/inventory_inspect.gd")
-
 func key() -> StringName:
 	return &"inventory"
+
+## How the inspector shows it: its own tab, each carried record as its type and
+## the head of its uid. Display only; see EcsComponent.describe().
+func describe() -> Dictionary:
+	var held := PackedStringArray()
+	for record in items:
+		held.append("%s (%s)" % [record.type_id, record.uid.left(6)])
+	return {"tab": &"own", "lines": {
+		"capacity": str(capacity),
+		"items": ", ".join(held) if not held.is_empty() else "—",
+	}}

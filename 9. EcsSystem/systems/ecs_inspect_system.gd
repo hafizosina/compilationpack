@@ -5,24 +5,21 @@ extends EcsSystem
 ## tag, and pushes it onto the EventBus. The panel rebuilds from that dictionary
 ## and never touches the world.
 ##
-## **It knows no component.** How a component looks is the component's own
-## business, carried by a presenter script it names with
-## `const INSPECTOR := preload(...)` — a constant, so the component stays data
-## only, the same way NODE_KIND names a node without doing anything. This file
-## knows only the presenter contract, fixed once:
+## **It knows no component.** How a component reads is the component's own
+## `describe()` — the one display-only method a component may have (see
+## EcsComponent). This file knows only that contract, fixed once:
 ##
-##     static func present(component) -> Dictionary
+##     func describe() -> Dictionary
 ##         {"tab": &"entity" | &"own" | &"hidden",   # where it goes
 ##          "lines": {label: text},                  # what it says, in order
 ##          "title": {"name": ..., "type": ...}}     # optional: names the panel
 ##
-## Changing how any component reads is an edit to its presenter in `inspect/`,
-## never to this file. A component that names no presenter gets its own tab
-## with every field, read by REFLECTION off `get_property_list()` —
+## Changing how any component reads is an edit to that component's describe(),
+## never to this file. A component without one gets its own tab with every
+## field, read by REFLECTION off `get_property_list()` —
 ## `PROPERTY_USAGE_SCRIPT_VARIABLE` marks exactly its own declarations, in the
 ## order they were written. That fallback is generic, not a preference about
-## any one kind. Module 8 put a `describe()` method on every component; here
-## the component still has no methods, and the presenter is a separate script.
+## any one kind.
 ##
 ## Flags are the one thing this lays out itself, and by base class alone: all of
 ## an entity's flags share one "Flags" tab, a line each.
@@ -97,13 +94,11 @@ func _snapshot(world: EcsWorld, id: int) -> Dictionary:
 		"components": sections,
 	}
 
-## What a component says about itself: its presenter's answer if it names one,
-## else its own tab with every field.
+## What a component says about itself: its describe() if it has one, else its
+## own tab with every field.
 func _present(world: EcsWorld, component: EcsComponent) -> Dictionary:
-	var presenter: Variant = (component.get_script() as Script) \
-		.get_script_constant_map().get("INSPECTOR")
-	if presenter is Script:
-		return presenter.present(component)
+	if component.has_method(&"describe"):
+		return component.call(&"describe")
 	return {"tab": &"own", "lines": _fields_of(world, component)}
 
 ## One component's own declarations, formatted. `PROPERTY_USAGE_SCRIPT_VARIABLE`
@@ -131,7 +126,7 @@ func _inline(world: EcsWorld, flag: EcsFlag) -> String:
 func _format(world: EcsWorld, property: String, value: Variant) -> String:
 	# An int field named *_id is a relationship. Showing the entity's name makes
 	# "this monkey wields that dagger" legible without the reader tracking ids —
-	# and the name is whatever title that entity's own presenters give it.
+	# and the name is whatever title that entity's own components describe.
 	if value is int and property.ends_with("_id") and world.is_alive(value):
 		return "#%d %s" % [value, _title_of(world, value)]
 	if value is float:
@@ -147,7 +142,7 @@ func _format(world: EcsWorld, property: String, value: Variant) -> String:
 		return "—"
 	return str(value)
 
-## The name an entity's presenters give it, or "?" if none of them titles it.
+## The name an entity's components give it in describe(), or "?" if none do.
 func _title_of(world: EcsWorld, id: int) -> String:
 	for component in world.components_of(id):
 		if component is EcsFlag:

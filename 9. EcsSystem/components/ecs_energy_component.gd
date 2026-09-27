@@ -53,8 +53,11 @@ var value: float = 100.0
 ## roll overwrites the authored number on the first tick (world1.tres does).
 var rolled: bool = false
 
-## How the inspector shows it — see inspect/energy_inspect.gd.
-const INSPECTOR := preload("res://9. EcsSystem/inspect/energy_inspect.gd")
-
 func key() -> StringName:
 	return &"energy"
+
+## How the inspector shows it: its reading on the Entity tab. Display only;
+## see EcsComponent.describe().
+func describe() -> Dictionary:
+	return {"tab": &"entity",
+		"lines": {"energy": "%d/%d" % [roundi(value), roundi(max_energy)]}}

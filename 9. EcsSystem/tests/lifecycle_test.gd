@@ -236,7 +236,7 @@ func _flags_share_one_inspector_tab() -> void:
 		and String(snapshot["fields"].get("components")).contains("name"))
 	var source := (load("res://9. EcsSystem/systems/ecs_inspect_system.gd") as GDScript).source_code
 	var names_one := RegEx.create_from_string("Ecs[A-Za-z]+Component\\b").search(source)
-	_check("the inspector names no component type — presenters decide how each reads",
+	_check("the inspector names no component type — each describes itself",
 		names_one == null)
 	_check("the singletons are their own kind",
 		_world.get_singleton(EcsLifecycleSingleton) is EcsSingleton)

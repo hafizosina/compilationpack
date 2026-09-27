@@ -22,8 +22,14 @@ extends EcsComponent
 ## Runtime, not authored: a .tres cannot know it.
 var uid: String = ""
 
-## How the inspector shows it — see inspect/name_inspect.gd.
-const INSPECTOR := preload("res://9. EcsSystem/inspect/name_inspect.gd")
-
 func key() -> StringName:
 	return &"name"
+
+## How the inspector shows it: it titles the panel, and puts the entity name and
+## blueprint on the Entity tab. Display only; see EcsComponent.describe().
+func describe() -> Dictionary:
+	return {
+		"tab": &"entity",
+		"title": {"name": String(entity_name), "type": String(type_id)},
+		"lines": {"entity_name": String(entity_name), "blueprint": display_name},
+	}

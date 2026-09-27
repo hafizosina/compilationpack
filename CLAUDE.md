@@ -67,6 +67,9 @@ methods, and every behaviour is an `EcsSystem` the scheduler runs in order; the
 `Sprite2D`s under `World/Entities` are a view `EcsNodeSyncSystem` writes, not the entities.
 Three rules are non-negotiable there: components hold data only, systems hold all
 behaviour and never call each other, and nothing outside a system mutates component data.
+**The one exception is `describe()`** — a display-only method a component may define, which
+reads its own fields and changes nothing (see `ecs/ecs_component.gd`). Anything that computes,
+decides or writes is still a system's.
 Queries key on the script object — `world.query([EcsPositionComponent])` — never on a
 string.
 
@@ -315,16 +318,13 @@ resolves it on the next tick by a distance query over `EcsPositionComponent` (no
 pick, no hitboxes), selection is the presence of `EcsSelectedFlag`, and
 `EcsInspectSystem` pushes a formatted snapshot onto `EventBus.ecs_entity_inspected`.
 `ui/ui.tscn` is a dumb renderer that never touches the world. **`EcsInspectSystem` knows no
-component — keep it that way.** How a component reads is a **presenter script** in
-`9. EcsSystem/inspect/`, named by the component with `const INSPECTOR := preload(...)` (a
-constant, so the component stays data only, like `NODE_KIND`). The contract is fixed:
-`static func present(component) -> {"tab": &"entity" | &"own" | &"hidden", "lines":
-{label: text}, "title"?: {name, type}}`. To change how a component shows, edit its presenter —
-**never the inspect system**; a test fails if that file names a component type. A component
-with no presenter gets its own tab of every field, by reflection. Flags are the one thing the
-inspector lays out itself, by base class: one "Flags" tab. **Components stay method-free; do
-not add a `describe()` hook to a component** the way module 8 did — the presenter is the
-separate script that answers that.
+component — keep it that way.** How a component reads is its own **`describe()`**:
+`{"tab": &"entity" | &"own" | &"hidden", "lines": {label: text}, "title"?: {name, type}}`. To
+change how a component shows, edit its `describe()` — **never the inspect system**; a test
+fails if that file names a component type. A component without `describe()` gets its own tab
+of every field, by reflection. Flags are the one thing the inspector lays out itself, by base
+class: one "Flags" tab. This brings back module 8's `describe()` **for display only** — the
+argument was settled that way; it is not a door for other methods.
 
 The plan's step-2 combat pipeline was built, proved out, and then cut back out so the
 flow reads end to end; it is in git at `928b9d1`, and `9. EcsSystem/HANDOFF.md` §6 says

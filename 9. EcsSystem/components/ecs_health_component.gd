@@ -19,8 +19,11 @@ extends EcsComponent
 ## What is left. Authored so a blueprint can spawn something wounded.
 @export var value: float = 100.0
 
-## How the inspector shows it — see inspect/health_inspect.gd.
-const INSPECTOR := preload("res://9. EcsSystem/inspect/health_inspect.gd")
-
 func key() -> StringName:
 	return &"health"
+
+## How the inspector shows it: its reading on the Entity tab. Display only;
+## see EcsComponent.describe().
+func describe() -> Dictionary:
+	return {"tab": &"entity",
+		"lines": {"health": "%d/%d" % [roundi(value), roundi(max_health)]}}

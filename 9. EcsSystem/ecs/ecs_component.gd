@@ -4,6 +4,20 @@ extends Resource
 ## Base for every component. A component is DATA: exported fields and nothing
 ## else. No apply(), no use(), no tick(). All behaviour lives in an EcsSystem.
 ##
+## **One exception, for display only: `describe()`.** A component may define
+##
+##     func describe() -> Dictionary
+##         {"tab": &"entity" | &"own" | &"hidden",   # where the inspector puts it
+##          "lines": {label: text},                  # what it says, in order
+##          "title": {"name": ..., "type": ...}}     # optional: names the panel
+##
+## and EcsInspectSystem shows whatever it returns, knowing no component type.
+## It reads the component's own fields and changes nothing — it is how the
+## component reads to a person, not something it does. That is the whole of the
+## exception: a method that computes, decides or writes still belongs in a
+## system. A component without describe() gets its own inspector tab of every
+## field, by reflection.
+##
 ## `key()` is the single exception and it is *identity*, not behaviour — a
 ## stable name for the type so a .tres placement can address it in an override
 ## block and the HUD can label it. Storage and queries key on the script object

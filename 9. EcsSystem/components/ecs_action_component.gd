@@ -31,8 +31,10 @@ const NODE_MASK: int = EcsConst.LAYER_BODY
 ## EcsSensorSystem and by nothing else. Never contains the entity itself.
 var reached: Array[int] = []
 
-## Not shown in the entity detail — see inspect/hidden_inspect.gd.
-const INSPECTOR := preload("res://9. EcsSystem/inspect/hidden_inspect.gd")
-
 func key() -> StringName:
 	return &"action"
+
+## How the inspector shows it: not at all — plumbing a person clicking an animal
+## does not want to read. Display only; see EcsComponent.describe().
+func describe() -> Dictionary:
+	return {"tab": &"hidden", "lines": {}}

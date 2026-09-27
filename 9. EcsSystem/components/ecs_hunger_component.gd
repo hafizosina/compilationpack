@@ -60,8 +60,11 @@ extends EcsComponent
 ## How fed it is right now. Runtime state: `max_fullness` fed, 0 starving.
 var fullness: float = 100.0
 
-## How the inspector shows it — see inspect/hunger_inspect.gd.
-const INSPECTOR := preload("res://9. EcsSystem/inspect/hunger_inspect.gd")
-
 func key() -> StringName:
 	return &"hunger"
+
+## How the inspector shows it: its reading on the Entity tab. Display only;
+## see EcsComponent.describe().
+func describe() -> Dictionary:
+	return {"tab": &"entity",
+		"lines": {"fullness": "%d/%d" % [roundi(fullness), roundi(max_fullness)]}}
