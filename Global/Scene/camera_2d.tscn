@@ -19,8 +19,13 @@ func _ready():
 	zoom = Vector2.ONE*zoom_value
 
 func _input(event):
-	handle_zoom(event)
 	handle_panning(event)
+	save_camera_state()
+
+# The wheel is read here rather than in _input so that UI gets it first: a
+# scroll over a panel scrolls the panel and never reaches the camera.
+func _unhandled_input(event):
+	handle_zoom(event)
 	save_camera_state()
 	
 func _process(delta: float) -> void:

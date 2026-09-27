@@ -28,6 +28,7 @@ const KEY_WIDTH := 96.0
 @onready var tabs: TabBar = %Tabs
 @onready var scroll: ScrollContainer = %Scroll
 @onready var detail: VBoxContainer = %Detail
+@onready var inspector_panel: PanelContainer = $Root/InspectorHolder/InspectorRow/InspectorPanel
 
 ## Section keys currently on the tab bar, in tab order.
 var _tab_keys: Array[String] = []
@@ -43,7 +44,19 @@ func _ready() -> void:
 	EventBus.ecs_entity_inspected.connect(_on_entity_inspected)
 	respawn_button.pressed.connect(_on_respawn_pressed)
 	tabs.tab_changed.connect(_on_tab_changed)
+	inspector_panel.gui_input.connect(_on_inspector_input)
 	_on_entity_inspected({})
+
+## The wheel over the panel belongs to the panel. The scroll list inside it has
+## already had its turn by the time the event bubbles up here; accepting it is
+## what stops the camera zooming as well — a mouse_filter of STOP does not
+## consume wheel events on its own (measured), so the event reached the
+## camera's _unhandled_input even with nothing left to scroll.
+func _on_inspector_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index in [
+			MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN,
+			MOUSE_BUTTON_WHEEL_LEFT, MOUSE_BUTTON_WHEEL_RIGHT]:
+		inspector_panel.accept_event()
 
 func _process(_delta: float) -> void:
 	fps_label.text = "%d fps" % Engine.get_frames_per_second()
