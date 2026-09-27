@@ -30,8 +30,11 @@ extends EcsSystem
 ##
 ## **Eating is a kill, and picking up is not.** A berry in a bag has merely lost
 ## its EcsPositionComponent: still alive, still holding its components, and it
-## comes back if it is put down. An eaten one is gone, so this writes a kill
-## note and EcsEntityManager frees it and its nodes at the top of the next tick.
+## comes back if it is put down. An eaten one is gone, so this adds
+## EcsDyingFlag and EcsEntityManager frees it and its nodes at the top of the
+## next tick. The flag is a claim from the instant it lands: EcsPickupSystem
+## runs after this and refuses a berry carrying it, so one berry cannot be both
+## eaten here and pocketed there in the same tick.
 ## That contrast is the clearest example in the module of node lifetime tracking
 ## the entity while what a node *does* tracks the components.
 ##
@@ -43,9 +46,6 @@ func label() -> StringName:
 	return &"consume"
 
 func run(world: EcsWorld, _delta: float) -> void:
-	var lifecycle := world.get_singleton(EcsLifecycleSingleton) as EcsLifecycleSingleton
-	if lifecycle == null:
-		return
 	for id in world.query([EcsLowBrainComponent, EcsHungerComponent]):
 		var brain := world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
 		if brain.state != EcsLowBrainComponent.State.EAT:
@@ -63,8 +63,7 @@ func run(world: EcsWorld, _delta: float) -> void:
 		var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
 		var food := world.get_component(meal, EcsConsumableComponent) as EcsConsumableComponent
 		hunger.fullness = minf(hunger.fullness + food.nutrition, hunger.max_fullness)
-		if not lifecycle.kill_requests.has(meal):
-			lifecycle.kill_requests.append(meal)
+		world.add(meal, EcsDyingFlag.new())
 
 ## Something edible it is already carrying, taken out of the bag as it is eaten.
 ## A held entity has no position, so `_is_food`'s "is it anywhere" test does not
@@ -89,6 +88,9 @@ func _within_reach(world: EcsWorld, id: int) -> int:
 		return EcsWorld.NO_ENTITY
 	for touched in action.reached:
 		if not world.is_alive(touched) or not world.has(touched, EcsConsumableComponent):
+			continue
+		# Claimed: eaten by someone earlier in this loop, dying next tick.
+		if world.has(touched, EcsDyingFlag):
 			continue
 		# Still somewhere, rather than already eaten or pocketed this tick.
 		if not world.has(touched, EcsPositionComponent):

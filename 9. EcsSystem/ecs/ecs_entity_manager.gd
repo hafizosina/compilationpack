@@ -79,9 +79,9 @@ func drain(world: EcsWorld, catalog: EcsEntityCatalog) -> void:
 			request.overrides, request.entity_name)
 		request.fulfilled = true
 
-	var deaths := inbox.kill_requests
-	inbox.kill_requests = []
-	for id in deaths:
+	# Everything claimed for death since the last drain. The query is taken
+	# whole before the first kill, so destroying one cannot disturb the walk.
+	for id in world.query([EcsDyingFlag]):
 		kill(world, id)
 
 ## Builds one entity of `type_id` at `pos` and returns its id, or NO_ENTITY.

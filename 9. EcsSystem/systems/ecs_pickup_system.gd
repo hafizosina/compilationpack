@@ -89,6 +89,9 @@ func run(world: EcsWorld, _delta: float) -> void:
 			# Something earlier in this same loop may already have taken it.
 			if not world.has(touched, EcsPositionComponent):
 				continue
+			# Or eaten it, earlier this tick: it is claimed and dies next tick.
+			if world.has(touched, EcsDyingFlag):
+				continue
 			bag.items.append(touched)
 			world.remove(touched, EcsPositionComponent)
 			if bag.items.size() >= bag.capacity:

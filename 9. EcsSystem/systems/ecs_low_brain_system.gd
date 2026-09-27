@@ -234,7 +234,8 @@ func _in_reach(world: EcsWorld, id: int, other: int) -> bool:
 func _is_takeable(world: EcsWorld, id: int) -> bool:
 	if id == EcsWorld.NO_ENTITY or not world.is_alive(id):
 		return false
-	return world.has(id, EcsPickableComponent) and world.has(id, EcsPositionComponent)
+	return world.has(id, EcsPickableComponent) and world.has(id, EcsPositionComponent) \
+		and not world.has(id, EcsDyingFlag)
 
 ## Rung 3 — go and get a berry, if it is hungry enough and has room to put one.
 ##
@@ -360,7 +361,8 @@ func _wander(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 func _is_food(world: EcsWorld, id: int) -> bool:
 	if id == EcsWorld.NO_ENTITY or not world.is_alive(id):
 		return false
-	return world.has(id, EcsConsumableComponent) and world.has(id, EcsPositionComponent)
+	return world.has(id, EcsConsumableComponent) and world.has(id, EcsPositionComponent) \
+		and not world.has(id, EcsDyingFlag)
 
 ## Ends a commitment. Only the brain's own fields — whether the trip it implied
 ## is also called off is a separate decision, made above.

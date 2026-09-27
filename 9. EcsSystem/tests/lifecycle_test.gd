@@ -84,6 +84,7 @@ func _run() -> void:
 	await _a_grazer_eats_off_the_ground_with_no_inventory()
 	await _a_sated_carrier_leaves_the_berry_alone()
 	await _a_hungry_carrier_eats_off_the_ground_without_pocketing()
+	await _one_berry_two_takers_one_tick()
 	await _a_stage_on_a_slower_tick_still_simulates_the_same()
 
 ## A component's `const NODE_KIND` is what gets it a node, so a berry — sprite,
@@ -201,8 +202,7 @@ func _a_body_with_no_position_stands_down() -> void:
 func _kill_takes_the_data_and_the_nodes() -> void:
 	var berry := _first_of(&"berry")
 	var containers_before := _entities.get_child_count()
-	var inbox := _world.get_singleton(EcsLifecycleSingleton) as EcsLifecycleSingleton
-	inbox.kill_requests.append(berry)
+	_world.add(berry, EcsDyingFlag.new())
 	await _tick(1)
 
 	_check("the killed entity is gone from the world", not _world.is_alive(berry))
@@ -602,7 +602,7 @@ func _eating_empties_the_bag_and_ends_the_berry() -> void:
 	_check("and fullness rose by the berry's nutrition",
 		is_equal_approx(hunger.fullness, before + food.nutrition))
 
-	# The kill note is fulfilled at the top of the next tick, not on the spot.
+	# The Dying flag is carried out at the top of the next tick, not on the spot.
 	_check("the berry is still alive this tick", _world.is_alive(berry))
 	living.run_all(_world, TICK)
 	await get_tree().physics_frame
@@ -783,6 +783,52 @@ func _a_hungry_carrier_eats_off_the_ground_without_pocketing() -> void:
 	_check("it ate the berry off the ground", ate)
 	_check("and never put it in the bag on the way", not pocketed)
 	_check("the meal went onto its fullness", hunger.fullness > before)
+
+## Two executors, one berry, one tick: a grazer eating it off the ground and a
+## carrier taking it into its bag. Consume runs first, so the grazer wins — and
+## the carrier must then find it claimed. Death is deferred to the next tick, so
+## for the rest of this one the berry still exists; what stops the second taker
+## is that the claim is instant, not that the berry is gone. Neither creature
+## learns the other meant to have it: the executors, running one at a time, are
+## the single authority that settles it.
+func _one_berry_two_takers_one_tick() -> void:
+	var contest := EcsScheduler.new()
+	contest \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsConsumeSystem.new()) \
+		.add(EcsPickupSystem.new())
+
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-9000.0, 0.0))
+	var monkey := _manager.spawn(_world, _catalog, &"monkey", Vector2(-9000.0, 40.0))
+	var berry := _manager.spawn(_world, _catalog, &"berry", Vector2(-9000.0, 20.0))
+	var bag := _world.get_component(monkey, EcsInventoryComponent) as EcsInventoryComponent
+
+	# Let physics report who touches what, with neither creature meaning anything.
+	for i in 3:
+		contest.run_all(_world, TICK)
+		await get_tree().physics_frame
+	var rabbit_reach := _world.get_component(rabbit, EcsActionComponent) as EcsActionComponent
+	var monkey_reach := _world.get_component(monkey, EcsActionComponent) as EcsActionComponent
+	_check("both creatures have the berry in reach",
+		rabbit_reach.reached.has(berry) and monkey_reach.reached.has(berry))
+
+	_intend(rabbit, EcsLowBrainComponent.State.EAT)
+	_intend(monkey, EcsLowBrainComponent.State.TAKE)
+	contest.run_all(_world, TICK)
+	await get_tree().physics_frame
+
+	_check("the grazer ate it: it is claimed for death", _world.has(berry, EcsDyingFlag))
+	_check("so the carrier did not also take it", not bag.items.has(berry))
+
+	_intend(rabbit, EcsLowBrainComponent.State.IDLE)
+	_intend(monkey, EcsLowBrainComponent.State.IDLE)
+	contest.run_all(_world, TICK)
+	await get_tree().physics_frame
+	_check("and next tick it is gone", not _world.is_alive(berry))
+	for id in [rabbit, monkey]:
+		_world.add(id, EcsDyingFlag.new())
+	contest.run_all(_world, TICK)
 
 ## Running a stage a third as often must not make it simulate a third as much.
 ## The scheduler banks delta per system, so hunger authored in points per second

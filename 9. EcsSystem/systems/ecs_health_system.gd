@@ -9,7 +9,7 @@ extends EcsSystem
 ## threshold, which is exactly one comparison and the module's only death by
 ## simulation.
 ##
-## Killing is a **note**, not an act. EcsEntityManager is the only thing that
+## Killing is a **flag**, not an act. EcsEntityManager is the only thing that
 ## destroys an entity, its data or its nodes, and it does so at the lifecycle
 ## stage at the top of the next tick — so a creature that dies here is still
 ## walking around for the rest of this frame and every system after this one
@@ -19,12 +19,8 @@ func label() -> StringName:
 	return &"health"
 
 func run(world: EcsWorld, _delta: float) -> void:
-	var lifecycle := world.get_singleton(EcsLifecycleSingleton) as EcsLifecycleSingleton
-	if lifecycle == null:
-		return
-	for id in world.query([EcsHealthComponent]):
+	for id in world.query([EcsHealthComponent], [EcsDyingFlag]):
 		var health := world.get_component(id, EcsHealthComponent) as EcsHealthComponent
 		if health.value > 0.0:
 			continue
-		if not lifecycle.kill_requests.has(id):
-			lifecycle.kill_requests.append(id)
+		world.add(id, EcsDyingFlag.new())
