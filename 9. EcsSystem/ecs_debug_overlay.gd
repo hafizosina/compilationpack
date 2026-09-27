@@ -144,8 +144,11 @@ func _draw() -> void:
 		# so the two never overlap.
 		var sleep: int = row["sleep"]
 		if sleep > 0 and _sleep_icon != null:
-			var icon := 30.0 * px
-			var icon_at := pos + Vector2(-shoulder - 12.0 * px - icon, -shoulder - 10.0 * px)
+			# Sized off the sprite, in world units, so it zooms with the animal
+			# it belongs to rather than holding a fixed size on screen the way
+			# the text and bars do.
+			var icon := shoulder * 0.9
+			var icon_at := pos + Vector2(-shoulder * 1.25 - icon, -shoulder * 1.3)
 			draw_texture_rect(_sleep_icon, Rect2(icon_at, Vector2(icon, icon)), false,
 				COLLAPSED_COLOR if sleep == 2 else ASLEEP_COLOR)
 
