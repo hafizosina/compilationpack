@@ -10,8 +10,9 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 130 checks over the entity lifecycle, the sensor/action layer, solidity, the
-# movement trip clock, the brain's commitments and the hunger/health loop.
+# 153 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# movement trip clock, the brain's commitments, the hunger/health/energy loop,
+# intent flags, items as records and the drop on death.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
@@ -71,8 +72,9 @@ string.
 
 **`EcsEntityManager` is the only thing that creates or destroys an entity id, its
 component data, or its nodes**, and it does so at one instant — the `lifecycle` stage,
-first in the pipeline. A system that wants something born or killed writes a note to the
-`EcsLifecycleComponent` singleton; it never calls `create_entity`, `destroy_entity`,
+first in the pipeline. A system that wants something born writes a note to the
+`EcsLifecycleSingleton`; one that wants something dead adds `EcsDyingFlag` to it. It never
+calls `create_entity`, `destroy_entity`,
 `add_child` or `queue_free` itself. The manager *creates and destroys*; it never updates.
 Per-tick writes onto nodes belong to `EcsNodeSyncSystem` (sprites) and
 `EcsCollisionSystem` (bodies). Keep that line — it is what stops the manager becoming a
@@ -127,7 +129,7 @@ it can plainly see, and its eat rung fires below `eat_below`.
 **What being empty or full does to you is hunger's rule**, so both halves live in
 `EcsHungerSystem`: at zero it spends `EcsHealthComponent` at `starve_damage`, above
 `heal_above` it gives health back at the slower `heal_rate`, and the band between does
-neither. `EcsHealthSystem` owns only the threshold, writing a kill note at zero. Each
+neither. `EcsHealthSystem` owns only the threshold, adding `EcsDyingFlag` at zero. Each
 system owns the consequences of the component it is named for and neither knows the other
 exists. Regeneration was argued against while starvation was the only damage source —
 gating it on being *well fed* is what answers that: mending is the reward for having
@@ -139,11 +141,11 @@ having decided that. Taking is now a `TAKE` rung on the brain, gated on the same
 The executors stayed systems rather than folding into the brain, which would have been
 shorter: the brain would begin mutating *another entity's* components, the same argument
 would then swallow `EcsConsumeSystem` and every verb after it, and **step 7's planner
-emits action ids that want one executor each**. `state` is the intent; `EcsPickupSystem`
-and `EcsConsumeSystem` are its executors. **Carrying is provisioning, not a step on the
+emits action ids that want one executor each**. The intent flags are the instruction;
+`EcsPickupSystem` and `EcsConsumeSystem` are their executors. **Carrying is provisioning, not a step on the
 way to a meal**: you fill the bag while wandering so that later hunger is answered where
-you stand. So the rungs are ordered `EAT > TAKE`, and `EcsConsumeSystem` looks in the bag
-before the ground — a creature hungry enough to eat, standing over a berry, eats it where
+you stand. So the rungs are ordered `EAT > TAKE`, and the brain looks in the bag before
+the ground when it names a meal — a creature hungry enough to eat, standing over a berry, eats it where
 it lies and never pockets it first. That order is pinned by a test that watches the bag
 stay empty, because the end state cannot tell the two paths apart. **Reaching what it set out for ends the
 commitment** — a trip's destination is the item's centre, so waiting for the trip to end
@@ -158,12 +160,48 @@ the **rabbit** has no `EcsInventoryComponent` at all (`eat_below` 70 > `forage_b
 walk to it, eat it where it lies, and its fullness drains slower to match). The brain's food rung treats
 a bag as a *cap on how much it may fetch*, never as a requirement to go. Food is
 `EcsConsumableComponent`, not `EcsPickableComponent` — a hungry animal must not chase a
-tool. **Eating is a kill, picking up is not** — a carried berry has only lost its
-`EcsPositionComponent` and comes back if put down, while an eaten one gets a kill note,
-which is the clearest case of node lifetime tracking the entity while what a node *does*
-tracks the components. The brain *decides* to eat by entering `EAT`; `EcsConsumeSystem`
-carries it out, one bite per tick. That is step 6's intent pattern in miniature, with
-`state` as the intent — **do not let the brain grow hands.**
+tool. The brain *decides* to eat by raising `EcsEatIntentFlag` naming the meal;
+`EcsConsumeSystem` carries it out, one berry per decision. **Do not let the brain grow
+hands.**
+
+**Components, flags and singletons are three kinds.** A **component** is what an entity
+*is*: present from spawn to death, its data authored in the blueprint or placement. A wall
+that gains movement is no longer a wall — that is a kill and a spawn, not an `add()`. A
+**flag** (`EcsFlag`, `…Flag` suffix, in `flags/`) is what is true of it *now*, added and
+removed freely by the system that owns it; it may carry runtime data (an intent names its
+target) but never `@export`. A **singleton** (`EcsSingleton`, in `singletons/`) belongs to
+the world, not an entity. This is a **guideline, not an enforced rule** — `EcsWorld` stores
+all three alike; break it for a good reason and write the reason down where it breaks. The
+inspector gives each component a tab and lists all flags on one "Flags" tab.
+
+**Step 6 is done on the stripped core: the brain speaks in flags.** `state` is the FSM's
+memory; `EcsEatIntentFlag{target_id | record_uid}`, `EcsTakeIntentFlag{target_id}` and
+`EcsAsleepFlag` are its instructions, raised and cleared in `_set_state()` — the one place
+`state` is written — so they cannot disagree (a test watches 400 live ticks for it).
+Consume, pickup, hunger and energy read the flags and never `EcsLowBrainComponent`, so a
+creature with **no brain at all** eats, takes and sleeps when one is raised on it. There is
+**no `MoveIntent` yet** — decided and deferred: the destination stays a field on
+`EcsMovementComponent` until this proof of concept has run.
+
+**Dying is a flag, and the flag is the claim.** Death is still deferred to the next
+lifecycle stage, so every system in a tick sees the same entities, but `EcsDyingFlag` lands
+in the store *instantly*: every executor that eats or takes refuses anything carrying it.
+That is the Valheim/Minecraft duplication fix — one authority checks and commits in one
+step, and systems run one at a time, so the executor *is* that authority and no entity
+learns another's intent. It closed a real race (a grazer eating and a carrier pocketing the
+same berry in one tick), pinned by a test.
+
+**A carried item is a record, not an entity** — a deliberate reversal of step 3, because in
+most games an item in a bag, chest or shop is not a live entity. Picking up *kills* the item
+and puts an `EcsItemRecord` in the bag: **every component, Position included, no flags**,
+copied by reflection over `PROPERTY_USAGE_SCRIPT_VARIABLE` — measured: `Resource.duplicate()`
+drops runtime `var`s. A record keeps instance values the catalog cannot know. **`uid`** on
+`EcsNameComponent` is who a thing is; the int id is the store's key and changes when an item
+goes back into the world. One record, one slot; capacity, stacking and anything a carried
+item *does* (durability, rot) are deferred. **When a carrier dies, `EcsDropSystem` puts
+back what it carried**, where it fell, as itself — same uid, new id, via
+`EcsEntityManager.restore()`. That also fixed a leak: a dead carrier's berries used to live
+forever with no position. Later, death by health should leave a lootable corpse instead.
 
 **Deciding is one system with state, not a rung per behaviour.** `EcsLowBrainSystem` is a
 small FSM — `IDLE > WANDER > SEEK_FOOD > TAKE > EAT > SLEEP` — and `EcsLowBrainComponent` holds its `state` and
@@ -200,16 +238,18 @@ itself to collapse, which is the price of food outranking rest. `rest_at` < `wak
 the hysteresis. **A sleeper still gets hungry, at `asleep_drain_scale` of the waking rate** — slower is
 the point, and *still* is what keeps waking-on-starving reachable at all; set it to 0 and
 that rule quietly stops existing. `EcsHungerSystem` and `EcsEnergySystem` both decide
-"asleep" from the brain's `state` plus the collapse tag, and must agree — neither reads the
-other. **Starving outranks tired in both directions** — it wakes a chosen sleep
+"asleep" from `EcsAsleepFlag` plus `EcsCollapsedFlag`, and must agree — neither reads the
+other or the brain. **Starving outranks tired in both directions** — it wakes a chosen sleep
 and stops one being chosen, or a creature woken by its stomach would be put straight back
 down while still tired and starve where it lay. At zero, `EcsEnergySystem` adds the
-`EcsCollapsedComponent` tag and takes `collapse_damage` once; **presence of the tag is the
+`EcsCollapsedFlag` and takes `collapse_damage` once; **presence of the flag is the
 lock**, which is how energy tells the brain "no say" without writing the brain's
 component, and it lifts at `collapse_release` — below `wake_at`, so what comes round is an
 ordinary sleeper that starving can interrupt. **SLEEP is the module's first real
 preemption**: a collapse overrides a live `SEEK_FOOD` commitment, which nothing else is
-allowed to do.
+allowed to do. Animals start at a random energy in the blueprint's `start_min`–`start_max`,
+rolled by `EcsEnergySystem` the first time it sees one (so runtime spawns get it too), or the
+whole population would sleep at once.
 
 **A destination is a budget, not a standing order.** `EcsMovementSystem` prices each trip
 the tick it first sees it — distance over speed, times the component's `timeout_slack`,
@@ -229,19 +269,22 @@ back off it. That discipline is all that separates this from module 8, where the
 *was* the entity (see its archive); if something hangs state on a container, that line has
 been crossed.
 
-**Node lifetime tracks the entity; what a node does tracks the components.** A berry that
-is picked up loses its `EcsPositionComponent` but is not dead, so its sprite is hidden
-rather than freed and comes back if it is put down. Freeing a node is kill and only kill.
+**Node lifetime tracks the entity.** Nothing is alive-but-nowhere any more: a picked-up
+berry dies and becomes a record, so freeing a node is kill and only kill, and every live
+entity has a position to draw.
 
-**It is deliberately stripped to a bare-minimum core**: 19 components, 16 systems
-(`lifecycle > spawner > hunger > energy > health > sensor > low_brain > consume > movement > collision > pickup > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
+**It is deliberately stripped to a bare-minimum core**: 15 components, 6 flags, 2
+singletons, 17 systems
+(`lifecycle > spawner > hunger > energy > health > sensor > low_brain > consume > movement > collision > pickup > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
 rank in the plan's decision ladder — a planner goes *above* it at step 7 — and not for the
 wandering it happens to do), and a world
 of 10 entities in 2 types (5 rabbits, 5 monkeys — a grazer and a carrier, differing by one
 component and some authored values). `EcsDebugSystem` is a pure
 reader feeding one dumb view, `EcsDebugOverlay`, which annotates each entity in world
-space: name, a velocity arrow, a dashed line to its destination, **hunger and health as
-bars**, and a **badge on the sprite's shoulder** when it is carrying something. Shapes
+space: name, a velocity arrow, a dashed line to its destination, **fullness, energy and
+health as bars**, a **badge on the sprite's shoulder** when it is carrying something, and
+**the sleep icon** (`Global/Asset/Icon/sleep.png`, whitened once and tinted) off that
+shoulder while it sleeps — parchment for a chosen sleep, red for a collapse. Shapes
 rather than numbers, because these are readings you scan a crowd for rather than read one
 at a time — the arrow *is* the velocity, so the figures that used to sit under it said
 nothing the picture did not, and the exact numbers live in the inspector for whichever
@@ -268,9 +311,9 @@ entity it describes.
 
 **Selection and the inspector are back** (restored from `928b9d1`). Left-click picks an
 entity, and the bottom-left panel shows it. The chain is strictly ECS: a click is only
-*recorded* on the `EcsSelectionComponent` singleton by `main.gd`, `EcsSelectionSystem`
+*recorded* on the `EcsSelectionSingleton` by `main.gd`, `EcsSelectionSystem`
 resolves it on the next tick by a distance query over `EcsPositionComponent` (no physics
-pick, no hitboxes), selection is the presence of the `EcsSelectedComponent` tag, and
+pick, no hitboxes), selection is the presence of `EcsSelectedFlag`, and
 `EcsInspectSystem` pushes a formatted snapshot onto `EventBus.ecs_entity_inspected`.
 `ui/ui.tscn` is a dumb renderer that never touches the world. **The inspector builds its
 tabs by reflection** over `PROPERTY_USAGE_SCRIPT_VARIABLE`, so a new component gets a tab,
@@ -290,8 +333,9 @@ how the Godot nodes are structured (a pool per concern, one view node per entity
 server RIDs) and how component data is stored (dictionary-of-dictionaries, archetypes,
 whether a node handle may live inside a component). `9. EcsSystem/HANDOFF.md` §8 records
 the positions. The author has said explicitly he still wants to argue both out. **Do not
-implement any option from §8**; raise it for a decision instead. Steps 3–7 are not started, and several of
-them assume the cut combat layer.
+implement any option from §8**; raise it for a decision instead. Steps 3–6 are done — 6
+on the stripped core, without combat (`9. EcsSystem/INTENT_PLAN.md`) — and step 7 is not
+started; it and any return of combat assume the cut combat layer.
 
 Read `9. EcsSystem/HANDOFF.md` before touching that folder. Module 9 is the main scene,
 ahead of the plan, which held that switch until step 6, and now the only simulation in the

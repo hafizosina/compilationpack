@@ -10,7 +10,7 @@ files, so the references to it below are to a recorded design, not to something 
 run and compare against. Module 9 is the only live simulation in the repo.
 
 **The module has been deliberately stripped to its bare minimum** — one world, one
-scheduler, thirteen systems — so the flow reads end to end without hunting. What was cut is
+scheduler, seventeen systems — so the flow reads end to end without hunting. What was cut is
 listed in §6 and is recoverable from git; nothing was lost, only set aside.
 
 `project.godot`'s main scene is module 9 (`uid://daecsmain0001`), so a plain run opens it,
@@ -20,8 +20,9 @@ or run it directly:
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 "$GODOT" --path . "res://9. EcsSystem/main.tscn"
 
-# 130 checks over the entity lifecycle, the sensor/action layer, solidity, the movement
-# trip clock, the brain's commitments and the hunger/health loop; exit 0 only if all pass
+# 153 checks over the entity lifecycle, the sensor/action layer, solidity, the movement
+# trip clock, the brain's commitments, the hunger/health/energy loop, intent flags, items
+# as records and the drop on death; exit 0 only if all pass
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
 ```
 
@@ -398,6 +399,12 @@ the legs — the note here is that the entity is free to choose, where before it
 
 ### Picking up is removing a component
 
+> **Superseded by step 6** (`INTENT_PLAN.md`, commits `9010dfa`..`f3cebe5`). Picking up now
+> *kills* the item and keeps an `EcsItemRecord` — every component, its `uid` — in the bag;
+> nothing is alive-but-nowhere any more, and a dead carrier's `EcsDropSystem` puts the
+> records back into the world as themselves. What follows is the design it replaced, kept
+> for the reasoning.
+
 `EcsPickupSystem` takes anything within the picker's own body radius. The whole of
 "leaving the world" is `world.remove(berry, EcsPositionComponent)`:
 
@@ -710,7 +717,13 @@ data rather than behaviour and can say tab / merge-into-entity / hide. **Not imp
 
 ## 7. Next, per the plan
 
-**Where the plan actually stands: steps 3, 4 and 5 are done, and 6 is half done.**
+**Where the plan actually stands: steps 3 to 6 are done — 6 on the stripped core, without
+combat — and step 7 is not started.** Step 6 is recorded in `INTENT_PLAN.md`: components,
+flags and singletons as three kinds; the brain's decisions go out as intent flags that
+consume, pickup, hunger and energy read instead of the brain; `EcsDyingFlag` replaces
+`kill_requests` and is the claim that closed a real eat-and-pocket race; carried items are
+records with a `uid`; and a dead carrier drops what it held. `MoveIntent` is deferred on
+purpose — the destination field is the move intent until the proof of concept has run.
 
 **Step 3 is most of the way done.** The plan asked for "inventory and pickup as
 relationships (`Inventory{item_ids}`, one system owning the move, so double-claim is
@@ -743,10 +756,9 @@ Before starting any of the rest, decide whether it builds on this stripped core 
   broadphase does the culling in C++, which is why the brain's nearest-berry scan ranks a
   handful of neighbours instead of every berry in the world. The plan's node-free version
   is the fallback if areas ever stop paying, not a regression to make.
-- **Step 6** — FSM brain writing move/eat/attack intents. Note the decision ladder is
-  **already built** — `EcsLowBrainSystem` became that FSM when the stateless
-  `forage > low_brain` run-order ladder was folded into it. What step 6 still wants is
-  intent components, and states above wandering and eating.
+- **Step 6 — done on the stripped core.** Eat, take and sleep intents are flags; see
+  `INTENT_PLAN.md`. Still open: `MoveIntent` (deferred), an attack intent and a state worth
+  preempting *for* (both wait on combat), and what a carried item does while carried.
 - **Step 7** — GOAP planner as a pure function over a symbolic snapshot, run off-frame
   under a replan budget.
 

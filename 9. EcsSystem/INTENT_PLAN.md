@@ -1,5 +1,11 @@
 # Plan — flags, intents, and items as records (step 6 on the stripped core)
 
+> **Status: built**, commits `2ddacc9`..`99e1fbf`, plus the energy bar and sleep icon on the
+> overlay in `0030bba`/`ef7779b`. Measured in §8.
+> One change from the plan below: energy's start roll uses a runtime `rolled` bool, not a
+> `-1` sentinel — a sentinel reads as "exhausted" to any brain that runs before the energy
+> system, which put test creatures to sleep.
+
 Scope: finish step 6 without the combat layer. The brain stops being read by the systems
 that act on its decisions; they read **flags** instead. On the way, carried items stop
 being live entities and become **records**, and a carrier's death puts them back into the
@@ -195,6 +201,27 @@ tab lists records as `type_id (uid prefix)`.
 
 Stress ramp before and after, same spacing. A state change is now a store add/remove
 instead of a field write; report the number, do not claim it is free.
+
+**Measured** — `stress_test.tscn`, 90 px spacing, same machine, one session: `d361f13`
+(before any step 6 code) against `0030bba`.
+
+| n | tick before | tick after | pickup | consume | low_brain |
+|---|---|---|---|---|---|
+| 1,200 | 111.8 ms | 99.8 ms | 2.55 → 0.01 | 3.44 → 0.01 | 17.6 → 17.4 |
+| 2,000 | 190.9 ms | 184.3 ms | 4.12 → 0.01 | 6.21 → 0.01 | 29.7 → 30.6 |
+| 2,400 | 262.7 ms | 225.5 ms | 5.93 → 0.01 | 8.57 → 0.01 | 40.2 → 38.0 |
+
+- **The real gain is the executors, ~14 ms at 2,400.** They used to query every brain and
+  skip the ones not eating or taking; they now query the intent flag, so they cost only
+  what is actually happening. That is structural, not noise.
+- **The brain did not get dearer.** `_set_state()`'s no-op early-out holds: `low_brain` is
+  flat within noise.
+- **The rest of the tick difference is noise.** Sensor, collision and node_sync moved by
+  a few ms in both directions across rows. The budget line moved from 2,000 to 2,400, but
+  do not quote that as a step 6 result without a repeat run.
+- **Not measured:** the cost of a raised flag. The stress population never raises one in
+  the measured ticks (pickup and consume read ~0), so what an add/remove per state change
+  costs under load is still open.
 
 ## 9. Order of work — one commit each, tests green at every step
 
