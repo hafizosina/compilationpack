@@ -214,6 +214,13 @@ func _flags_share_one_inspector_tab() -> void:
 	_check("and neither gets a tab of its own",
 		not sections.has(&"selected") and not sections.has(&"collapsed"))
 	_check("components still do", sections.has(&"hunger") and sections.has(&"inventory"))
+	var snapshot: Dictionary = inspect._snapshot(_world, monkey)
+	var named := _world.get_component(monkey, EcsNameComponent) as EcsNameComponent
+	_check("the name component has no tab of its own", not sections.has(&"name"))
+	_check("its entity name is on the Entity tab instead",
+		snapshot["fields"].get("entity_name") == String(named.entity_name))
+	_check("and so is its position, with no Position tab",
+		not sections.has(&"position") and snapshot["fields"].has("position"))
 	_check("the singletons are their own kind",
 		_world.get_singleton(EcsLifecycleSingleton) is EcsSingleton)
 

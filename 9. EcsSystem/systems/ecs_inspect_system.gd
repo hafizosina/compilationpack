@@ -16,6 +16,12 @@ extends EcsSystem
 ## So a new component kind gets an inspector tab, with its fields, in its
 ## declaration order, without this file or that component knowing anything about
 ## each other. Nothing here names a single component type.
+##
+## A component may instead ask for a few of its fields to sit on the Entity tab,
+## with no tab of its own, by declaring `const INSPECT_ON_ENTITY_TAB` — the
+## field names, in order. A constant and not a method for the same reason as
+## NODE_KIND: the component states where it belongs and still does nothing, and
+## this reads the declaration without switching on type.
 
 ## How often a snapshot is sent. The values are read by a person, so 5 Hz is
 ## plenty and costs nothing.
@@ -54,7 +60,14 @@ func _snapshot(world: EcsWorld, id: int) -> Dictionary:
 	# intent was raised would be unreadable. The tab is always there, so it is
 	# also where a flag is seen to be *absent*.
 	var flags: Dictionary = {}
+	var entity_fields: Dictionary = {}
 	for component in components:
+		var promoted: Variant = (component.get_script() as Script) \
+			.get_script_constant_map().get("INSPECT_ON_ENTITY_TAB")
+		if promoted is Array:
+			for field in promoted:
+				entity_fields[String(field)] = _format(world, String(field), component.get(field))
+			continue
 		if component is EcsFlag:
 			flags[String(component.key()).capitalize()] = _inline(world, component)
 			continue
@@ -69,14 +82,13 @@ func _snapshot(world: EcsWorld, id: int) -> Dictionary:
 	}
 
 	var named := world.get_component(id, EcsNameComponent) as EcsNameComponent
+	entity_fields["id"] = "#%d" % id
+	entity_fields["blueprint"] = named.display_name if named != null else "—"
+	entity_fields["components"] = ", ".join(keys)
 	return {
 		"name": String(named.entity_name) if named != null else "#%d" % id,
 		"type": String(named.type_id) if named != null else "—",
-		"fields": {
-			"id": "#%d" % id,
-			"blueprint": named.display_name if named != null else "—",
-			"components": ", ".join(keys),
-		},
+		"fields": entity_fields,
 		"components": sections,
 	}
 
