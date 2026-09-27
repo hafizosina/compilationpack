@@ -490,6 +490,13 @@ out, by label).
 
 `ECS_REFACTOR_PLAN.md` is the roadmap. **Steps 0–6 are done; step 7 is not started.**
 
+**Next, decided 2026-09-27: cut the fetch time first** (§14 — about half the tick is
+component lookups). In order: run hunger / energy / health at 10 Hz (~35 ms); stop the brain
+re-fetching every perceived id (part of ~41 ms); trim duplicate `has` checks. Then decide
+§15's storage question with the numbers in hand — cached queries returning component
+references, valid now that components are fixed from spawn to death, are the biggest lever
+and the author's call. Measure every step before and after in one sitting.
+
 - **0–1** core and data-driven factory — done.
 - **2, the weapon pain case** — built, proved clean (armour and crit added without touching
   the attack code), then **cut** so the flow reads end to end. It is in git at `928b9d1`.
