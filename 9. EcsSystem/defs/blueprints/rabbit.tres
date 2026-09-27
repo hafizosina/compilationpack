@@ -54,6 +54,7 @@ script = ExtResource("s_health")
 [sub_resource type="Resource" id="c_energy"]
 script = ExtResource("s_energy")
 start_min = 0.5
+restore = 10.0
 
 [resource]
 script = ExtResource("def")
