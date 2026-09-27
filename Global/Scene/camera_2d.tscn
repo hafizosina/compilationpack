@@ -33,7 +33,9 @@ func _process(delta: float) -> void:
 
 
 func handle_zoom(event):
-	if event is InputEventMouseButton:
+	# A wheel notch arrives as a press and a release; zoom on the press only, or
+	# every notch counts twice.
+	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			zoom_in()
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
