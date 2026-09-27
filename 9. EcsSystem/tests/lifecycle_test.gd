@@ -87,6 +87,7 @@ func _run() -> void:
 	await _executors_need_a_flag_not_a_brain()
 	await _every_state_raises_exactly_its_flag()
 	await _a_dead_carrier_puts_back_what_it_carried()
+	await _animals_of_one_kind_start_differently_rested()
 	await _a_stage_on_a_slower_tick_still_simulates_the_same()
 
 ## A component's `const NODE_KIND` is what gets it a node, so a berry — sprite,
@@ -847,6 +848,7 @@ func _executors_need_a_flag_not_a_brain() -> void:
 	_check("a brainless carrier with a take flag takes", _holds(bag, prize))
 
 	var energy := _world.get_component(rabbit, EcsEnergyComponent) as EcsEnergyComponent
+	energy.rolled = true  # the test sets energy by hand; no start roll
 	energy.value = energy.max_energy * 0.5
 	_world.add(rabbit, EcsAsleepFlag.new())
 	for i in 30:
@@ -1003,6 +1005,37 @@ func _ids_with_uids(uids: Array[String]) -> Array[int]:
 			found.append(id)
 	return found
 
+## Every animal born equally rested with the same drain falls asleep at the same
+## moment. The blueprint authors a spread, and the energy system rolls each
+## animal into it the first time it sees one — so a runtime spawn gets it too.
+func _animals_of_one_kind_start_differently_rested() -> void:
+	var rolling := EcsScheduler.new()
+	rolling.add(EcsEnergySystem.new())
+	var spawned: Array[int] = []
+	for i in 8:
+		spawned.append(_manager.spawn(_world, _catalog, &"rabbit", Vector2(-24000.0, i * 200.0)))
+	rolling.run_all(_world, 0.0)
+
+	var values := {}
+	var in_range := true
+	for id in spawned:
+		var energy := _world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
+		values[snappedf(energy.value, 0.01)] = true
+		in_range = in_range and energy.value >= energy.max_energy * energy.start_min - 0.001 \
+			and energy.value <= energy.max_energy * energy.start_max + 0.001
+	_check("rabbits start at different energy (%d distinct of 8)" % values.size(),
+		values.size() > 1)
+	_check("all within the blueprint's authored range", in_range)
+
+	var first := _world.get_component(spawned[0], EcsEnergyComponent) as EcsEnergyComponent
+	var once := first.value
+	rolling.run_all(_world, 0.0)
+	_check("and it is rolled once, not every tick", is_equal_approx(first.value, once))
+
+	for id in spawned:
+		_world.add(id, EcsDyingFlag.new())
+	_scheduler.run_all(_world, TICK)
+
 ## Running a stage a third as often must not make it simulate a third as much.
 ## The scheduler banks delta per system, so hunger authored in points per second
 ## climbs at that rate whether it is ticked at 60 Hz or 20 Hz — nothing is
@@ -1096,6 +1129,7 @@ func _it_tires_sleeps_and_wakes_rested() -> void:
 
 	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-9000.0, 0.0))
 	var energy := _world.get_component(rabbit, EcsEnergyComponent) as EcsEnergyComponent
+	energy.rolled = true  # the test sets energy by hand; no start roll
 	var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
 	var move := _world.get_component(rabbit, EcsMovementComponent) as EcsMovementComponent
 	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
@@ -1162,6 +1196,7 @@ func _running_out_of_energy_drops_it_once() -> void:
 
 	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-9000.0, 2000.0))
 	var energy := _world.get_component(rabbit, EcsEnergyComponent) as EcsEnergyComponent
+	energy.rolled = true  # the test sets energy by hand; no start roll
 	var health := _world.get_component(rabbit, EcsHealthComponent) as EcsHealthComponent
 	var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
 	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
@@ -1229,6 +1264,7 @@ func _food_outranks_rest_and_a_trip_is_not_cut_short() -> void:
 	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-11000.0, 0.0))
 	var berry := _manager.spawn(_world, _catalog, &"berry", Vector2(-10850.0, 0.0))
 	var energy := _world.get_component(rabbit, EcsEnergyComponent) as EcsEnergyComponent
+	energy.rolled = true  # the test sets energy by hand; no start roll
 	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
 	var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
 	await _tick(2)

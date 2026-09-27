@@ -37,9 +37,19 @@ extends EcsComponent
 ## Health taken once, at the moment of collapse. Nothing at all to an entity
 ## with no EcsHealthComponent, the same way starving is nothing to one.
 @export var collapse_damage: float = 20.0
+## The range a new entity's starting energy is drawn from, as fractions of
+## `max_energy`. Without a spread every animal is born equally rested with the
+## same drain, and the whole population falls asleep at once. 1.0 / 1.0 — the
+## default — is no spread at all.
+@export_range(0.0, 1.0) var start_min: float = 1.0
+@export_range(0.0, 1.0) var start_max: float = 1.0
 
 ## How rested it is right now. Runtime state: `max_energy` rested, 0 exhausted.
+## Full until EcsEnergySystem first sees the entity and rolls it.
 var value: float = 100.0
+## Whether the starting value has been rolled. Runtime state. A record keeps it,
+## so an animal put back into the world keeps its energy rather than re-rolling.
+var rolled: bool = false
 
 func key() -> StringName:
 	return &"energy"

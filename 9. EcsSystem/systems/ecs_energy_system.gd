@@ -28,6 +28,12 @@ func label() -> StringName:
 func run(world: EcsWorld, delta: float) -> void:
 	for id in world.query([EcsEnergyComponent]):
 		var energy := world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
+		if not energy.rolled:
+			# Rolled here, the first time this system sees the entity, rather
+			# than in the manager — which never switches on component type — or
+			# per placement, which a runtime-spawned animal would miss.
+			energy.value = energy.max_energy * randf_range(energy.start_min, energy.start_max)
+			energy.rolled = true
 		var collapsed := world.has(id, EcsCollapsedFlag)
 		var resting := collapsed or world.has(id, EcsAsleepFlag)
 
