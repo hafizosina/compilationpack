@@ -2,8 +2,9 @@ class_name EcsDebugOverlay
 extends Node2D
 
 ## World-space debug gizmos, drawn on the entities themselves: the name, a
-## velocity arrow, a dashed line to the spot the brain picked, hunger and health
-## as bars, and a badge on the sprite's shoulder when it is carrying something.
+## velocity arrow, a dashed line to the spot the brain picked, fullness, energy
+## and health as bars, a badge on the sprite's shoulder when it is carrying
+## something, and "zzz" above that shoulder while it sleeps.
 ##
 ## Shapes rather than numbers, because these are readings you scan a crowd for
 ## rather than ones you read. A dozen creatures' worth of "hunger 43%" and
@@ -40,7 +41,13 @@ const DESTINATION_COLOR := Color(1.0, 0.45, 0.85)
 const BAR_BACK := Color(0.165, 0.125, 0.086, 0.7)
 const BAR_EDGE := Color(0.0, 0.0, 0.0, 0.5)
 const HUNGER_COLOR := Color(0.725, 0.541, 0.196)
+const ENERGY_COLOR := Color(0.369, 0.541, 0.18)
 const HEALTH_COLOR := Color(0.62, 0.169, 0.145)
+
+## "zzz" in parchment for a sleep it chose, in health red for a collapse — the
+## same word, because both are down, and the colour says which kind of down.
+const ASLEEP_COLOR := Color(0.906, 0.839, 0.675, 0.95)
+const COLLAPSED_COLOR := Color(0.85, 0.25, 0.2, 0.95)
 
 ## Snapshot rows from EcsDebugSystem. See that file for the keys.
 var _rows: Array[Dictionary] = []
@@ -92,6 +99,11 @@ func _draw() -> void:
 			_bar(pos + Vector2(bar_left, stacked), hunger, bar_width, bar_height,
 				HUNGER_COLOR, px)
 			stacked += bar_height + 2.0 * px
+		var energy: float = row["energy"]
+		if energy >= 0.0:
+			_bar(pos + Vector2(bar_left, stacked), energy, bar_width, bar_height,
+				ENERGY_COLOR, px)
+			stacked += bar_height + 2.0 * px
 		var health: float = row["health"]
 		if health >= 0.0:
 			_bar(pos + Vector2(bar_left, stacked), health, bar_width, bar_height,
@@ -102,9 +114,22 @@ func _draw() -> void:
 		# every creature is noise. Nothing shown therefore means either empty
 		# hands or no inventory at all, which for scanning a crowd is the same
 		# fact — neither one is carrying anything.
+		# The shoulder is the corner of the sprite actually drawn: blueprints
+		# scale their own art, so the nominal half-size would float a marker
+		# off a small rabbit into empty grass.
+		var shoulder := SPRITE_HALF * float(row["sprite_scale"])
 		var carried: int = row["carried"]
 		if carried > 0:
-			_badge(pos + Vector2(-SPRITE_HALF, -SPRITE_HALF), carried, px)
+			_badge(pos + Vector2(-shoulder, -shoulder), carried, px)
+
+		# Asleep: "zzz" off the top-left shoulder — left of where the bag badge
+		# sits so a sleeping carrier shows both, and below the name line so the
+		# two never print over each other.
+		var sleep: int = row["sleep"]
+		if sleep > 0:
+			var zzz_at := pos + Vector2(-shoulder - 50.0 * px, -shoulder + 4.0 * px)
+			_label(zzz_at, "zzz", 16.0 * px, 44.0 * px,
+				COLLAPSED_COLOR if sleep == 2 else ASLEEP_COLOR)
 
 		if not row["has_movement"]:
 			continue

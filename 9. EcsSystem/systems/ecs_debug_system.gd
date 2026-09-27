@@ -43,9 +43,21 @@ func run(world: EcsWorld, _delta: float) -> void:
 			"has_destination": false,
 			"destination": Vector2.ZERO,
 			"hunger": -1.0,
+			"energy": -1.0,
 			"health": -1.0,
+			# 0 awake, 1 asleep by choice, 2 collapsed. Read off the two flags,
+			# which are public for exactly this — never off the brain's state.
+			"sleep": 2 if world.has(id, EcsCollapsedFlag)
+				else (1 if world.has(id, EcsAsleepFlag) else 0),
 			"carried": bag.items.size() if bag != null else -1,
+			# How big its sprite is drawn against the nominal size, as a ratio —
+			# blueprints set their own scale_factor, and the shoulder markers
+			# must sit on the sprite actually drawn.
+			"sprite_scale": 1.0,
 		}
+		var sprite := world.get_component(id, EcsSpriteComponent) as EcsSpriteComponent
+		if sprite != null:
+			row["sprite_scale"] = sprite.scale_factor / EcsConst.SPRITE_SCALE
 		if move != null:
 			row["velocity"] = move.velocity
 			row["has_destination"] = move.has_destination
@@ -54,9 +66,12 @@ func run(world: EcsWorld, _delta: float) -> void:
 		# view's business and a fraction is the honest reading — the overlay
 		# decides how long a bar that makes, and -1 means "has no such bar".
 		var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+		var energy := world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
 		var health := world.get_component(id, EcsHealthComponent) as EcsHealthComponent
 		if hunger != null:
 			row["hunger"] = clampf(hunger.fullness / maxf(hunger.max_fullness, 0.01), 0.0, 1.0)
+		if energy != null:
+			row["energy"] = clampf(energy.value / maxf(energy.max_energy, 0.01), 0.0, 1.0)
 		if health != null:
 			row["health"] = clampf(health.value / maxf(health.max_health, 0.01), 0.0, 1.0)
 		rows.append(row)
