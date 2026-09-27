@@ -17,8 +17,8 @@ module 9's, in `9. EcsSystem/tests/`:
 # collision, pickup, spawner, sensor or node sync.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
 
-# Population ramp: where a tick crosses 250 ms. ~4,450 entities at 4 FPS,
-# simulation only. Takes a few minutes. See HANDOFF.md §9.
+# Population ramp: where a tick crosses 250 ms. ~3,200 entities at 4 FPS on
+# a dense grid, simulation only. Takes a few minutes. See HANDOFF.md §14.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"
 ```
 
@@ -54,7 +54,7 @@ Hand-edited scene/resource files are the main breakage risk in this repo: `.tscn
 | `<N>. <Name>/` | One isolated demo module per folder |
 | `docs/devlog/Summary.md` | Longer per-module write-up, one section per module |
 | `8. SimpleAiSystem/*.md` | **Design archive — the code is deleted.** Five docs kept for the reasoning module 9 is built against |
-| `9. EcsSystem/*.md` | Module 9 likewise — `HANDOFF.md` is its state-of-the-build, `ECS_REFACTOR_PLAN.md` the plan it follows; `HANDOFF.md` §5 covers the entity-lifecycle model |
+| `9. EcsSystem/*.md` | Module 9 likewise — `HANDOFF.md` is its state-of-the-build, `ECS_REFACTOR_PLAN.md` the roadmap it follows; `HANDOFF.md` §3 covers the entity-lifecycle model. Plans for finished work are deleted once folded into `HANDOFF.md` |
 | `9. EcsSystem/tests/` | The repo's only tests — module 9's lifecycle acceptance test and its population stress test |
 
 Keep feature work inside the module folder it belongs to; promote something to `Global/` or `System/` only when a second module needs it.
@@ -98,7 +98,7 @@ others can detect of it) and `NODE_MASK` (what it looks for), and the manager de
 (`EcsConst.LAYER_BODY`) — a body is the only detectable thing in the world; sensors and
 action areas carry none, so sensors are never reported to each other. Body's mask stays
 `LAYER_BODY` because soft collision *is* body-vs-body and nothing else detects bodies at a
-body's radius; it is free (measured, `HANDOFF.md` §5). Adding a new area kind is a
+body's radius; it is free (measured, `HANDOFF.md` §4). Adding a new area kind is a
 component with three constants and **no edit to `EcsEntityManager`**. **The overlap list is the verdict on reach**, and that is a decision, not an
 oversight: pickup and consume used to re-check `distance <= reach + radius` against the
 components, but that is the *same condition* the physics server already tested, on numbers
@@ -327,7 +327,7 @@ class: one "Flags" tab. This brings back module 8's `describe()` **for display o
 argument was settled that way; it is not a door for other methods.
 
 The plan's step-2 combat pipeline was built, proved out, and then cut back out so the
-flow reads end to end; it is in git at `928b9d1`, and `9. EcsSystem/HANDOFF.md` §6 says
+flow reads end to end; it is in git at `928b9d1`, and `9. EcsSystem/HANDOFF.md` §16 says
 what was removed and how to restore it. The observability layer was cut with it and has
 since been restored, minus its `EcsCommandSystem` and pipeline panel, which depended on
 the combat demo. **Do not re-add breadth to module 9 without being asked**; the small
@@ -336,10 +336,10 @@ size is the point.
 **Two architecture questions in module 9 are open arguments, not settled plans** —
 how the Godot nodes are structured (a pool per concern, one view node per entity, or
 server RIDs) and how component data is stored (dictionary-of-dictionaries, archetypes,
-whether a node handle may live inside a component). `9. EcsSystem/HANDOFF.md` §8 records
+whether a node handle may live inside a component). `9. EcsSystem/HANDOFF.md` §15 records
 the positions. The author has said explicitly he still wants to argue both out. **Do not
 implement any option from §8**; raise it for a decision instead. Steps 3–6 are done — 6
-on the stripped core, without combat (`9. EcsSystem/INTENT_PLAN.md`) — and step 7 is not
+on the stripped core, without combat (`9. EcsSystem/HANDOFF.md` §7, §13) — and step 7 is not
 started; it and any return of combat assume the cut combat layer.
 
 Read `9. EcsSystem/HANDOFF.md` before touching that folder. Module 9 is the main scene,

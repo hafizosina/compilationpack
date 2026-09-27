@@ -134,7 +134,7 @@ func _ready() -> void:
 ## using EcsMovementSystem as the probe because it is the purest per-entity
 ## stage in the pipeline: two components in, one position out, no neighbours.
 ##
-## This exists to put a number on HANDOFF.md §8's data-structure argument.
+## This exists to put a number on HANDOFF.md §15's data-structure argument.
 ## Dictionary-of-dictionaries pays for `query()` building an id list and then two
 ## hashed `get_component` lookups per entity; archetype or packed-array storage
 ## would replace both with walking arrays that are already in the right order.

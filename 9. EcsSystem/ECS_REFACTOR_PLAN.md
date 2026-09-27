@@ -1,5 +1,14 @@
 # Refactor Plan — Hand-Rolled ECS Rewrite
 
+> **Status (kept current in `HANDOFF.md` §13):** steps 0–6 are done; step 7 (GOAP) is not
+> started. Where the build diverged from this plan, on purpose: step 2's combat pipeline
+> landed clean and was then **cut** so the core reads end to end (git `928b9d1`); step 3's
+> "items stay entities" was **reversed** — a carried item is a record; step 5 senses with
+> **physics areas**, not a distance query; step 6 was done **without combat**, with intent
+> *flags* rather than intent components, and no `MoveIntent` yet. This document is the plan
+> as written; `HANDOFF.md` is what exists. The companion docs it names below live in
+> `8. SimpleAiSystem/`.
+
 > Greenfield rebuild of the data-driven foundation as **real ECS** (data-only components,
 > behavior in systems), hand-rolled and minimal. Godot 4.x, GDScript.
 >

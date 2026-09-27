@@ -1,1193 +1,630 @@
 # Module 9 — EcsSystem: state of the build
 
-> `SESSION_HANDOFF.md` sits beside this file and covers one session at a time: what changed,
-> what was settled, and what was retracted. This file is the living state; that one is the
-> diary. Read this first.
+The living state of module 9, and the only document in this folder besides the roadmap
+(`ECS_REFACTOR_PLAN.md`). Read it before touching the folder. It says what exists, why it is
+shaped that way, what is settled, what is open, and what has been measured. History —
+earlier designs and the reasoning that retired them — is in git; commit hashes are given
+where a design is worth recovering.
 
-Greenfield hand-rolled ECS, built beside `8. SimpleAiSystem` per `ECS_REFACTOR_PLAN.md`.
-**Module 8's code has since been deleted** — its folder is a design archive of five `.md`
-files, so the references to it below are to a recorded design, not to something you can
-run and compare against. Module 9 is the only live simulation in the repo.
-
-**The module has been deliberately stripped to its bare minimum** — one world, one
-scheduler, seventeen systems — so the flow reads end to end without hunting. What was cut is
-listed in §6 and is recoverable from git; nothing was lost, only set aside.
-
-`project.godot`'s main scene is module 9 (`uid://daecsmain0001`), so a plain run opens it,
-or run it directly:
+Module 9 is a hand-rolled ECS and the repo's only live simulation. Module 8 (`8.
+SimpleAiSystem`) is a design archive: its code is deleted, and references to it here are to
+a recorded design, not something you can run.
 
 ```bash
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
-"$GODOT" --path . "res://9. EcsSystem/main.tscn"
-
-# 153 checks over the entity lifecycle, the sensor/action layer, solidity, the movement
-# trip clock, the brain's commitments, the hunger/health/energy loop, intent flags, items
-# as records and the drop on death; exit 0 only if all pass
-"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
+"$GODOT" --path . "res://9. EcsSystem/main.tscn"                          # run it (also the main scene)
+"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 161 checks, exit 0 = all pass
+"$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"    # population ramp, minutes
+"$GODOT" --headless --editor --quit --path . 2>&1 | grep -iE "error|invalid|uid"  # after any .tscn/.tres edit
 ```
 
-One thing outside this folder belongs to module 9 and would be lost if the folder were
-moved alone: the main-scene line in `project.godot`. (The four `ecs_*` signals that used
-to live in `System/EventBus.gd` went with the observability layer — module 9 now touches
-the `EventBus` not at all.)
+In the running game: **F1** toggles the debug overlay, **F5** respawns the world, left-click
+selects an entity for the inspector, the wheel zooms, middle-drag pans.
+
+One thing outside this folder belongs to module 9: the main-scene line in `project.godot`.
+The shared camera (`Global/Scene/camera_2d.tscn`) and three `EventBus` signals
+(`ecs_world_census`, `ecs_entity_inspected`, `ecs_respawn_requested`) are used by it too.
 
 ---
 
 ## 1. The whole flow, in order
 
 ```
-world1.tres  ──►  EcsEntityManager ──►  EcsWorld          (once, at startup)
-(placements)      resolves each row       ids + component
-                  against catalog.tres,   tables
-                  builds the nodes        + the nodes they declare
-
-every frame, EcsScheduler runs thirteen systems over that world:
-
-  lifecycle  births and deaths     → the only stage that creates or frees
-  spawner    asks for a berry      → writes a note to the lifecycle inbox
-  sensor     what it sees/reaches  → writes EcsSensor/EcsActionComponent
-  low_brain  FSM: idle/wander/seek  → writes EcsMovementComponent
-  movement   walks toward it       → writes EcsPositionComponent
-  collision  unstacks the bodies   → writes EcsPositionComponent
-             (the Area2Ds it reads overlaps off are a derived index)
-  pickup     takes what it reached → removes EcsPositionComponent
-  selection  resolves a click      → writes EcsSelectedComponent
-  node_sync  draws where it ended  → writes each entity_<id> container
-  debug      reports all of it     → writes the on-entity overlay
-  census     counts the world      → emits on the EventBus
-  inspect    reflects the selected → emits on the EventBus
+world1.tres ──► EcsEntityManager ──► EcsWorld                         (at startup, and on F5)
+(placements)    resolves each row     ids + component tables
+                against catalog.tres, + each entity's nodes, under
+                builds the nodes      World/Entities/entity_<id>/
 ```
 
-The last three are pure readers: pull `debug`, `census` or `inspect` out of the chain and
-the simulation does not notice.
+Every physics tick `EcsScheduler` runs seventeen stages. `[20 Hz]` marks the two that run
+every third tick (§11); the rest run every tick.
 
-Read `systems/ecs_low_brain_system.gd`, `ecs_movement_system.gd` and
-`ecs_node_sync_system.gd` in that order and you have seen every behaviour in the module.
-Each is under 60 lines.
+| stage | does | writes |
+|---|---|---|
+| `lifecycle` | births and deaths — the only stage that creates or frees | the world, the nodes |
+| `spawner` | a bush asks for a berry | a note on `EcsLifecycleSingleton` |
+| `hunger` | fullness drains; starving costs health, fed mends it | `EcsHunger`, `EcsHealth` |
+| `energy` | drains awake, restores asleep; collapse at zero | `EcsEnergy`, `EcsCollapsedFlag`, `EcsHealth` |
+| `health` | death at zero | `EcsDyingFlag` |
+| `sensor` `[20 Hz]` | what each entity sees and can touch | `EcsSensor.perceived`, `EcsAction.reached` |
+| `low_brain` `[20 Hz]` | the FSM: chooses | its own state, a destination, intent flags |
+| `consume` | carries out an eat intent | `EcsHunger`, the bag, `EcsDyingFlag` |
+| `movement` | walks toward the destination, prices the trip | `EcsPosition`, `EcsMovement` |
+| `collision` | pushes overlapping solid bodies apart | `EcsPosition` |
+| `pickup` | carries out a take intent | the bag, `EcsDyingFlag` |
+| `drop` | a dying carrier's bag goes back into the world | notes on `EcsLifecycleSingleton` |
+| `selection` | resolves a click | `EcsSelectedFlag` |
+| `node_sync` | mirrors data onto the nodes, one way | each `entity_<id>` container |
+| `debug` | reads everything for the overlay | nothing — pure reader |
+| `census` | counts the world | `EventBus` |
+| `inspect` | snapshots the selected entity | `EventBus` |
 
-`EcsLowBrainSystem` / `EcsLowBrainComponent` are named for their **rank, not their
-behaviour** — they are the bottom of the decision ladder, and what they happen to do
-today is wander. The plan's step 6 puts an FSM above them and step 7 a planner; all three
-do the same single thing, write a destination into `EcsMovementComponent`, so a smarter
-brain replaces this one without movement, render or debug changing a line. Carrying the
-component is the whole of "this entity decides for itself".
+The last three are pure readers: pull them out and the simulation does not notice. The
+pipeline runs in `_physics_process` — a fixed timestep, and the physics overlap lists are
+refreshed once per physics step anyway.
 
-`EcsDebugSystem` is the odd one out and deliberately so: it is a **pure reader**. It
-writes no component and creates no entity, so pulling it out of the scheduler changes the
-simulation not at all — which is the cleanest possible demonstration that a system is just
-something the scheduler calls. It feeds one dumb view, `EcsDebugOverlay`, which draws on
-the entities themselves: name, position, the velocity vector with its heading, and a
-dashed line to the ring marking the spot the low brain picked. **F1** toggles it.
+**Three rules are non-negotiable:** components hold data (one display-only exception, §2),
+systems hold all behaviour and never call each other, and nothing outside a system mutates
+component data. Queries key on the script object — `world.query([EcsPositionComponent])` —
+so a typo is a parse error, not a silently empty result.
 
-It used to draw the `EcsBodyComponent` body as a green circle too. That is gone: since
-§5 every solid entity carries a real `CollisionShape2D` in the tree, so Godot's own
-**Debug > Visible Collision Shapes** draws it, and a hand-rolled copy could only ever
-disagree with the shape the physics server is actually using.
+The world today is 10 animals and 2 bushes (`defs/world1.tres`), spread across a 3200×1680
+arena, plus the berries the bushes grow.
 
-That body is **data, not a `CollisionShape2D` under a `PhysicsBody2D`** — one radius in a
-component table. Putting a real physics body there would move the truth back inside nodes
-and force every system to read it out of the view, which is the thing this module exists
-to avoid.
+---
 
-### Collision is soft, and leans on Godot's broadphase
+## 2. Three kinds of data: components, flags, singletons
 
-`EcsCollisionSystem` runs straight after movement: movement proposes a position, collision
-corrects it, and neither knows the other exists. Overlap is **allowed to happen and then
-undone**, never prevented — no sweep test, no veto inside movement. Applying it as a
-constraint after the fact is what makes it compose: anything else that ever writes a
-position (knockback, a spawner, a debug teleport) gets cleaned up for free.
+All three are `EcsComponent`s to the store — `add`, `has`, `remove` and `query` treat them
+alike. The difference is what they mean, and it is a **guideline, not an enforced rule**:
+break it for a good reason and write the reason down where it breaks.
 
-**It reads overlaps off an `Area2D` per solid entity, and that is a deliberate exception
-to "nothing reads back off a node".** Be precise about what it is: `EcsPositionComponent` is
-still the only truth, the areas are a *derived index* — every tick the system writes each
-body's position and radius out of the components — and the only thing read back is
-**which pairs are near each other**, never where anything is.
-Delete the pool and the simulation is still complete. That is a different thing from
-module 8, where the node *was* the entity. If a future system starts reading state off
-these areas, that line has been crossed.
-
-Why bend the rule at all: finding which circles overlap is a spatial-index problem and
-Godot ships one in C++. Measured on this machine, per tick:
-
-| n | Area2D | the GDScript O(n²) it replaced | 60Hz tick |
+| | component | flag | singleton |
 |---|---|---|---|
-| 100 | 1.56 ms | 3.82 ms | 9% |
-| 200 | 3.24 ms | 13.61 ms | 19% |
-| 400 | 6.56 ms | 52.12 ms | 39% |
-| 800 | 11.38 ms | 201.84 ms | 68% |
-| 1600 | 21.33 ms | ~800 ms | 128% |
-
-Near-linear instead of quadratic. Note where the time actually goes: the physics
-broadphase is only ~0.2 ms at 100 entities. The rest is GDScript — which is why `_sync`
-gathers component references into parallel arrays once per tick and `_resolve` then never
-touches the world. That gather is worth ~30%, and is the reason the system is shaped the
-way it is rather than calling `get_component` in the inner loop.
-
-**The pipeline runs on the physics tick**, not the render frame. A simulation wants a
-fixed timestep, and `get_overlapping_areas()` is refreshed once per physics step, so
-running faster would re-read the same answer.
-
-**One tick of lag.** The overlap list reports what the server saw at the end of the last
-step, so a correction always trails the positions that caused it — about two pixels at
-walking speed, invisible. It also means the relaxation passes the GDScript version used
-are gone: the list cannot be refreshed mid-tick, so it is one pass per tick, converging
-over a handful of ticks instead of instantly.
-`PhysicsDirectSpaceState2D.intersect_shape()` is the synchronous alternative if that ever
-matters — it works same-tick from `_physics_process`, at the cost of a query per body.
-
-Carrying an `EcsBodyComponent` gives an entity a body; that component's `is_solid` is what
-makes the body block. Anything without one never gets a body at all, and a body with
-`is_solid = false` exists purely to be seen and reached — it is gathered only so its
-radius reaches its area, and skipped at both ends of the resolve.
-
-Solidity was briefly a separate tag component, `EcsSolidComponent`, on the argument that
-presence beats a flag everywhere else in this module. It was merged back in by decision:
-a radius and whether that radius blocks are one physical fact about one body, and an
-author tuning a `.tres` sets them in one block rather than remembering to attach a second
-resource. It is the module's one authored boolean of its kind — the rule it bends is
-worth knowing it bent.
-Every pair is reported twice, A sees B and B sees A; rather than deduplicating,
-each body moves only *itself* by half the overlap, so the double report is what makes the
-correction symmetric.
-
-Verified: the ten entities spawn piled within ~60 px and separate from 46.6 px of overlap
-to under 1 px in ten ticks; **F5** rebuilds without leaking bodies.
-
-**What soft costs:** a fast enough mover can pass through something between ticks, a body
-squeezed by two others can be pushed through a third, and there is no bounce — separation
-is positional only, velocity is untouched.
-
-### The berry spawner
-
-`EcsSpawnerComponent` is the settings — blueprint id, radius, interval, `max_loose` — and
-`EcsSpawnerSystem` is the doing. It no longer spawns anything itself: it writes a note to
-`EcsLifecycleComponent` and `EcsEntityManager` fulfils it at the top of the next tick (§5),
-then the spawner reads the new id back off its own note. One tick between asking and
-appearing. The property that ordering used to protect still holds — the berry is built at
-the very start of a frame, so every system in that frame sees it and draws it, and there
-is no moment where an entity exists without its nodes.
-
-Two things it does differently from module 8's `SimEntitySpawnerComponent`:
-
-- **The component holds no behaviour.** Module 8's ran its own `_process` and did the
-  spawning itself.
-- **It tracks entity ids, not node references.** Module 8 kept nodes and pruned with
-  `is_instance_valid()`. Ids are never reused, so a harvested berry's id goes permanently
-  false through `world.is_alive()` and can never alias a later entity. The factory and
-  catalog arrive through `_init` rather than a group lookup, so the dependency is visible
-  in `main.gd`'s pipeline and cannot go missing at runtime. Notes already in flight count
-  against the cap too, or the spawner would re-ask every tick until the first one landed
-  and sail past `max_loose`.
-
-**A berry is a sprite and nothing else** — no shape, no movement, no brain. So it is not
-solid, cannot move, and never enters the collision query: 36 entities in the world, 12
-`Area2D` bodies. No `is_item` flag, no layer mask, no branch. That is the same trick the
-deleted dagger prop showed, arriving again for free.
-
-Nothing harvests berries yet, so each bush fills to `max_alive` (12) and stops. That is
-the cap working, not a bug.
-
-Verified: 14 entities at t=0 → 36 by t=25s, holding steady, 12 per bush, bodies constant
-at 12 throughout.
-
-### Deciding: one brain with state, after a ladder made out of run order
-
-**What it was.** `EcsForageSystem` had the *same shape* as `EcsLowBrainSystem` — look at
-an entity with nothing to do, write a destination — and it ran **before** it. That was the
-entire priority mechanism: forage got first refusal, an entity it declined fell through to
-aimless wandering, and a third rung would have been one file and one scheduler line with
-no existing rung changed. It read beautifully and it is worth understanding why it went.
-
-**Why it went.** It was stateless. A creature's only memory between ticks was
-`EcsMovementComponent.has_destination` — one borrowed boolean — and three things follow
-from that, none of them fixable by adding rungs:
-
-- **No persistence.** "I am going to *that* berry" had nowhere to live, so it was
-  re-derived every tick from whatever the sensor happened to report.
-- **No preemption.** A rung could fill an *empty* destination slot and never take a full
-  one, so nothing could interrupt anything. A wolf appearing mid-forage could not cut in,
-  because every rung politely skips an entity that already has somewhere to be.
-- **No hysteresis.** A threshold sitting near its trigger flickers the creature between
-  rungs on consecutive ticks, because nothing remembers which side it was on. Step 4's
-  hunger thresholds are exactly that shape, which is what forced the issue.
-
-**What it is now.** One `EcsLowBrainSystem` holding a small state machine, with `state`
-and `target` on `EcsLowBrainComponent`:
-
-```
-IDLE  ──pause elapsed──►  WANDER  ──sees food──►  SEEK_FOOD
-  ▲                         │                        │
-  └─────────── trip ended, or target gone ───────────┘
-```
-
-The ladder is now the order of the branches inside one function rather than the order of
-two lines in `main.gd`. That is no less explicit — arguably more, since the whole decision
-reads top to bottom in one place — and it buys the three things above. Concretely:
-
-- **A commitment is not reconsidered; a wander is.** `SEEK_FOOD` runs to its end.
-  `WANDER` is interruptible, so a creature drifting aimlessly notices a berry on the tick
-  it perceives it rather than when its leg happens to finish.
-- **A dead target is dropped immediately.** If the berry is eaten or taken by someone
-  else, the brain calls off the trip that tick instead of walking to empty grass.
-- **Every destination write goes through one helper** that also zeroes `time_left`.
-  Overwriting a live trip would otherwise inherit the previous one's budget and time out
-  early — the hazard that arrives the moment preemption is possible at all.
-
-It still says exactly one thing to the rest of the pipeline: a destination. Movement,
-collision and node_sync never learn that any of this exists, and the planner that goes
-above this at step 7 will not change them either.
-
-**The cost, stated plainly.** This system reads components that are not its own — sensor,
-inventory, and hunger next — through `get_component` rather than naming them in its query,
-so a creature lacking one simply never takes that rung. It is the one place in the module
-that knows about several concerns at once. That is what a brain is; the line it must not
-cross is *doing* anything with them, and it still writes only `state`, `target`,
-`pause_left` and a destination.
-
-**One behaviour worth knowing:** a freshly spawned entity perceives nothing on its very
-first tick, because `sensor.perceived` is written from physics overlaps that have not been
-reported yet. Its opening move is therefore always a wander, preempted the tick after.
-`tests/lifecycle_test.gd` pins that down rather than papering over it.
-
-### Hunger, and what it is for
-
-Step 4, and the reason it came before anything else: **the loop had no motive.** A rabbit
-foraged because the rung said to and stopped when its bag was full — motion without a
-reason behind it. `EcsHungerComponent.value` climbs from 0 to `max_value` and two
-authored thresholds turn it into behaviour:
-
-**The number counts fullness, not hunger.** It starts at `max_fullness`, drains to zero,
-and zero is starving — the same shape as health, so both bars deplete and a short bar is
-bad news on either. The class is still `EcsHungerComponent` because hunger is the subject;
-the field is `fullness` because that is what it holds.
-
-| threshold | default | what it gates |
-|---|---|---|
-| `forage_below` | 65 | above it the brain's SEEK_FOOD rung declines — a fed creature wanders past food it can see |
-| `eat_below` | 40 | below it the EAT rung fires, if it has something edible at hand |
-| `heal_above` | 70 | above it health comes back at `heal_rate`, slower than starving takes it |
-
-`eat_below` sits **under** `forage_below` for a carrier, so both rungs are visible in play:
-it gathers while peckish, carries, and eats once properly empty. Putting it *over* makes a
-grazer, which eats whatever it walked to on arrival — that one relation is the whole
-difference, and it is an authored value in a `.tres`, not a code change.
-
-**What being empty or full does to you is hunger's rule, so both halves live in
-`EcsHungerSystem`** — at zero fullness it spends `starve_damage` per second out of
-`EcsHealthComponent`; above `heal_above` it gives health back at `heal_rate`; between the
-two it does neither, which is the band that stops mending from merely undoing starving.
-`EcsHealthSystem` owns only the other end: health at zero writes a kill note. Each system
-owns the consequences of the component it is named for, so neither has to know the other
-exists, and an entity with no health component simply starves forever. Starvation is still the module's only damage
-source; the combat layer that used to provide a second one is in git at `928b9d1`.
-
-**Eating does not require an inventory, and that is the point.** The condition is "I am
-hungry and there is food within reach"; a pocket is one place reach can mean. So
-`EcsConsumeSystem` looks in the bag first and at `EcsActionComponent.reached` second, and
-an entity carrying the components for only one of those simply takes that one. The two
-creature types became the demonstration, and they differ by one component and some
-authored numbers:
-
-| | monkey — carrier | rabbit — grazer |
-|---|---|---|
-| `EcsInventoryComponent` | yes, capacity 1 | **none at all** |
-| `rate` | 2.6 | 1.2 — it cannot stockpile, so it gets hungry slower |
-| `forage_at` / `eat_at` | 30 / 60 — gather, carry, eat later | 35 / **30** — eat what you walked to, on arrival |
-
-`eat_at` **below** `forage_at` is what makes a grazer: with no way to stockpile, a rabbit
-that arrived at a berry and then had to wait to get hungrier would simply wander off. The
-whole difference between hoarding and grazing is those two numbers and one component —
-no `is_grazer` flag, and no branch in any system.
-
-Two related corrections went in with it. The brain's food rung treats a bag as a **cap on
-how much it may fetch**, never a requirement to set out; and food is
-`EcsConsumableComponent`, not `EcsPickableComponent`, so a future carryable that is not
-edible — a tool, a stick — is not chased by a hungry animal.
-
-**Eating is a kill; picking up is not.** This is the sharpest example in the module of
-node lifetime tracking the entity while what a node *does* tracks the components:
-
-```
-picked up  →  berry loses EcsPositionComponent  →  sprite hidden, entity alive,
-                                                   comes back if put down
-eaten      →  kill note to EcsLifecycleComponent →  data and nodes freed next tick
-```
-
-**Taking became a decision too.** `EcsPickupSystem` was the last reflex in the module: it
-ran on reach alone, so a full monkey pocketed whatever it walked over and nothing had
-chosen it. That was an inconsistency rather than a design — eating was already a decision
-— so there is a `TAKE` rung now, gated on the same `forage_at` that sends a creature out
-for food, and pickup is inert until the brain sets it.
-
-It stayed a separate system, which cost about fifteen lines it need not have. The case for
-merging it into the brain was real: it reads only `action.reached`, which the sensor wrote,
-so it has no ordering constraint left since the distance check went. Three things kept it
-out. The brain would start mutating *another entity's* components, which is the line that
-stops it growing hands. The same argument merges `EcsConsumeSystem` next, and every verb
-after that, which is the god-object this module was built away from. And **step 7's planner
-emits a sequence of action ids and wants one executor per action** — merging now means
-splitting again later.
-
-**What carrying is for**, which was an open question while the rung was being built:
-provisioning. A creature fills its bag while it is wandering anyway, so that hunger
-arriving later is answered on the spot instead of sending it across the arena. That
-settles the rung order:
-
-```
-hungry enough to eat?  →  bag first, then the ground     (EAT)
-peckish, bag has room? →  pocket what is under your nose (TAKE)
-neither, and hungry?   →  go and find some               (SEEK_FOOD)
-```
-
-`EAT` above `TAKE` is the part worth keeping honest: a creature hungry enough to eat, with
-a berry at its feet, eats it where it lies rather than pocketing it and taking it straight
-back out. With a one-slot bag both paths end in the same dead berry and the same fed
-monkey, so the end state proves nothing — `tests/lifecycle_test.gd` watches the bag stay
-empty for the whole meal instead, and that is the only check that would notice the rungs
-being swapped.
-
-One behaviour had to come with it: **reaching the target ends the commitment.** A
-SEEK_FOOD trip is aimed at the item's *centre*, so a brain that waited for the trip to end
-walked the creature onto the berry before taking it. Arriving within reach is fulfilling
-the commitment, not reconsidering it, so the rungs below act that same tick and a creature
-stops at arm's length as it always did.
-
-**The brain decides, `EcsConsumeSystem` acts.** `EcsLowBrainSystem` enters the `EAT`
-state; the consume system reads that as its instruction and moves the berry out of the
-bag. That split is what stops the brain growing hands, and it is step 6's intent pattern
-in miniature with `state` standing in for the intent component. One bite per tick, so a
-creature with five berries eats over five ticks and re-decides between each.
-
-Verified end to end in `tests/lifecycle_test.tscn`: a sated rabbit ignores a berry 100 px
-away, the same rabbit above `forage_at` goes after it, eating empties the bag and takes
-the nutrition off the bar, the berry is still alive that tick and dead the next, merely
-being hungry costs nothing, starving costs health, and zero health takes the entity and
-its container one lifecycle stage later.
-
-### A destination is a budget, not a standing order
-
-The ladder above has a hole in it that only shows up once something gets in the way.
-Soft collision corrects a position *after* movement proposes it, so an entity held off
-its target — wedged in a crowd, or walking at the middle of a bush it cannot stand in —
-proposes the same step forever. `has_destination` stays true, and both rungs above skip
-it **because** it already has somewhere to be. That is the stuck entity: a livelock
-between stages, not a fault in any one of them, and nothing downstream of an intent can
-tell "still walking" from "wedged".
-
-So `EcsMovementSystem` prices every trip the tick it first sees it — the cost of a walk
-is its length over its speed — and holds the result in `time_left`:
-
-```
-time_left = distance / speed * timeout_slack + timeout_grace
-```
-
-Both tunables are exported on `EcsMovementComponent` (2.5 and 0.5 by default), so a
-patient hauler and a twitchy scout differ by authored values, not by code. Pricing from
-the distance is the point: a trip across the map gets proportionally longer to make than
-a trip next door, and one budget does not have to fit both.
-
-When it runs out the destination is dropped exactly as if it had been reached — same
-`has_destination = false`, same zeroed velocity, clock back to zero for the next trip.
-**Giving up and arriving are the same event to every other system**, which is why nothing
-else in the pipeline learned a field. The entity falls back down the ladder and decides
-again with what it knows now.
-
-What this deliberately is *not*: it does not remember what it gave up on. A forager that
-times out on a berry may pick the same berry again next tick, and if the obstruction is
-permanent it will loop. That is a re-target policy and it belongs in the brain, not in
-the legs — the note here is that the entity is free to choose, where before it was not.
-
-### Picking up is removing a component
-
-> **Superseded by step 6** (`INTENT_PLAN.md`, commits `9010dfa`..`f3cebe5`). Picking up now
-> *kills* the item and keeps an `EcsItemRecord` — every component, its `uid` — in the bag;
-> nothing is alive-but-nowhere any more, and a dead carrier's `EcsDropSystem` puts the
-> records back into the world as themselves. What follows is the design it replaced, kept
-> for the reasoning.
-
-`EcsPickupSystem` takes anything within the picker's own body radius. The whole of
-"leaving the world" is `world.remove(berry, EcsPositionComponent)`:
-
-- the node_sync query stops matching, so the sprite stops being drawn — nothing was told
-  to hide it, and the node itself survives, because losing a position is not dying (§5)
-- the brain stops seeing it, so nobody walks toward a berry in someone's pocket
-- the spawner stops counting it against `max_loose`, so the bush resumes producing
-
-One removed component, three consequences, no `is_carried` flag to keep in step.
-
-**The berry stays a live entity.** This is the inventory version of the weapon pain case.
-Module 8's `SimInventoryComponent` could not hold a live entity, so picking something up
-took a **blueprint snapshot** of it and destroyed the world entity in the same breath — a
-carried thing was a recipe for itself rather than itself. Here nothing is snapshotted and
-nothing is destroyed: verified, a held berry reads `alive=true, has position=false,
-has sprite=true, has pickable=true`.
-
-Having an `EcsInventoryComponent` is what lets the food rung run, so a berry bush never
-goes looking for berries and nothing had to tell it not to. `EcsPickableComponent` is what
-separates a berry from the bush — both are sprites sitting in the world, only one answers
-the forager's query.
-
-Verified over 50 s: 14 entities → 54, held berries 0 → 30, 6 of 10 bags full, and **54
-entities with only 24 drawn** — the held ones have no position. Each animal's `items`
-array is its own (the manager's deep copy holds); every entity carries one slot.
-
-Two known roughnesses, both fine at this scale: two animals can target the same berry and
-the loser simply re-targets next tick (module 8 needed an explicit one-claim-per-entity
-rule for this; here it self-corrects because the berry stops matching the query), and the
-nearest-berry search is O(foragers x berries) with no range cap.
-
-## 5. Lifecycle: one owner for structure
-
-Applied from `DESIGN_CHANGE_HANDOFF.md`: §1, §2, §3 and §4 of that document. **§5 (the
-Area2D sensor) was not**, and the reason is at the end of this section.
-
-**`EcsEntityManager` replaced `EcsEntityFactory` and is now the only code that creates or
-destroys an entity id, its component data, or its nodes.** Node creation used to be
-smeared across two systems: `EcsRenderSystem` made a `Sprite2D` the tick an id started
-matching its query, `EcsCollisionSystem` made an `Area2D` the same way. Two implicit
-lifetimes, each with its own copy of the detach-before-free subtlety, and no kill path at
-all — nothing in the module ever called `destroy_entity`.
-
-Three pieces:
-
-- **`EcsEntityManager`** (`ecs/ecs_entity_manager.gd`) — spawn, kill, and the node
-  structure. It is a *service*, not an `EcsSystem`, so the systems that look nodes up on
-  it are not reaching into another system. It creates and destroys; it never updates.
-- **`EcsLifecycleComponent`** — a singleton inbox of `spawn_requests` / `kill_requests`,
-  the same shape as `EcsSelectionComponent`. A system that wants something born or killed
-  writes a note; it never acts itself.
-- **`EcsLifecycleSystem`** — twenty lines that drain the inbox, **first** in the pipeline,
-  so every birth and death in a frame lands at one instant and no system changes the
-  shape of the world while another is walking it.
-
-**Components declare the node they imply.** `EcsSpriteComponent` and `EcsBodyComponent`
-each carry `const NODE_KIND: StringName`, naming a kind from `EcsConst`. The manager reads
-that constant at spawn and builds exactly those children — it never switches on a
-component *type*, the same reflective spirit as the inspector reading
-`PROPERTY_USAGE_SCRIPT_VARIABLE`. A **constant, not a method**: the component states what
-it implies and still does nothing, which is the `describe()` argument from §6a settled the
-other way. A new node-backed component is one constant and no edit to the manager.
-
-**`EcsRenderSystem` is retired**, split in two: node creation went to the manager, and the
-per-tick mirror became **`EcsNodeSyncSystem`**, which writes texture, scale, tint, z-index
-and position out of the components onto the sprite. (The design document's §4 only
-mentioned position; the other four still need a writer.)
+| says | what the entity **is** | what is true of it **now** | world-level state |
+| present | from spawn to death | added and removed freely | once per world |
+| data | authored (`@export`, blueprint or placement) | runtime only, never `@export` | runtime |
+| base / folder | `EcsComponent`, `components/` | `EcsFlag`, `flags/` | `EcsSingleton`, `singletons/` |
+
+A wall that gains movement is no longer a wall — that is a kill and a spawn, not an `add()`.
+Nothing today adds or removes a component after spawn.
+
+**15 components** — `name`, `position` (both added by the manager from the placement, not the
+blueprint), `sprite`, `body`, `movement`, `low_brain`, `sensor`, `action`, `hunger`, `health`,
+`energy`, `inventory`, `consumable`, `pickable`, `spawner`.
+
+**6 flags** — `EcsSelectedFlag` (selection owns it), `EcsCollapsedFlag` (energy), and three
+brain intents, `EcsEatIntentFlag{target_id | record_uid}`, `EcsTakeIntentFlag{target_id}` and
+`EcsAsleepFlag`, plus `EcsDyingFlag` (§3). A flag may carry data — an intent names its target
+— but nothing about a flag is decided before the game starts.
+
+**2 singletons** — `EcsLifecycleSingleton` (spawn notes) and `EcsSelectionSingleton` (the
+pending click).
+
+**The one method a component may have is `describe()`**, for display only (§10). It reads the
+component's own fields and changes nothing. Anything that computes, decides or writes still
+belongs in a system — module 8's `describe()` is back for this and nothing else.
+
+**Components declare what they imply rather than being switched on.** `const NODE_KIND`
+names the node a component needs, `NODE_LAYER` / `NODE_MASK` its physics layer policy
+(§4), and `describe()` how it reads. `EcsEntityManager` and `EcsInspectSystem` read those
+and never name a component type; a new node-backed or newly-displayed component edits
+neither.
+
+---
+
+## 3. Lifecycle: one owner for structure
+
+**`EcsEntityManager` is the only thing that creates or destroys an entity id, its component
+data, or its nodes**, and it does so at one instant — the `lifecycle` stage, first in the
+pipeline — so every system in a tick sees the same set of entities. It *creates and
+destroys*; it never updates. Per-tick writes onto nodes belong to `EcsNodeSyncSystem`
+(sprites, container position) and `EcsCollisionSystem` (body radius and liveness). Hold that
+line or the manager becomes the god object the split was meant to avoid.
+
+- **Birth** is a note: a system appends an `EcsSpawnRequest` to `EcsLifecycleSingleton`, and
+  reads the new id back off its own note a tick later (`EcsSpawnerSystem` counts its berries
+  that way). A note may carry an `EcsItemRecord` instead of a blueprint id, and then the
+  manager's `restore()` rebuilds that exact item (§9).
+- **Death** is a flag: a system adds `EcsDyingFlag`, and the lifecycle stage destroys every
+  entity carrying it, data and nodes together.
+
+**`EcsDyingFlag` is also the claim.** Death waits a tick; the flag lands in the store at
+once. Every executor that eats or takes refuses anything carrying it, and the brain does not
+commit to it. That is the Valheim/Minecraft duplication fix — one authority checks and
+commits in one step — and here the authority is simply the executor, because systems run one
+at a time. No entity ever learns another's intent: a brain may decide on a claimed berry,
+the executor refuses it, the brain decides again. It closed a real race (a grazer eating a
+berry and a carrier pocketing the same berry in one tick), and a test pins it.
 
 ### Nodes are grouped per entity
 
-`World/Entities` holds one `entity_<id>` container per entity, and that entity's nodes
-hang under it:
-
 ```
 World/Entities/
-  entity_7/
+  entity_7/            ← plain Node2D: no script, no data, no state
     Sprite2D
     Area2dForBody
+    Area2dForSensor
+    Area2dForAction
   entity_11/
     Sprite2D
 ```
 
-`World/Bodies` is gone. The container carries the transform and its children sit at local
-zero, so **position is written once per entity** however many concerns it grows —
-`EcsNodeSyncSystem` moves the container, and `EcsCollisionSystem` no longer writes a body
-position at all. One container freed takes the whole entity with it.
+The container carries the transform and its children sit at local zero, so position is
+written once per entity however many concerns it grows, and one container freed takes the
+whole entity with it. **An `entity_<id>` node is a container, never an entity** — nothing is
+read back off it, and deleting every one leaves the simulation complete. That discipline is
+all that separates this from module 8, where the node *was* the entity; if something hangs
+state on a container, the line has been crossed. `ecs_entity_manager.gd`'s header is where
+it was agreed.
 
-**The line this is one step away from, and does not cross:** in module 8 the node *was*
-the entity. Here `entity_7` is a container — no script, no data, no state, nothing read
-back off it, and deleting every one of them leaves the simulation complete. That is the
-whole of the objection recorded in §8, and it is now a discipline rather than a structural
-impossibility, so it is written into `ecs_entity_manager.gd`'s header as the place it was
-agreed.
+**Node lifetime tracks the entity.** Nothing is alive-but-nowhere: a picked-up berry dies and
+becomes a record, so freeing a node is kill and only kill.
 
-A new node-backed concern — `Area2dForSensor` for step 5, an action area, an
-`AudioStreamPlayer2D` — is one `const NODE_KIND` on its component plus one branch in
-`_make_node`. No pool to add, no parent to register, and nothing in `main.gd` changes.
+A new node-backed concern — an audio player, a new area — is a component with the right
+constants. `_make_node` is "the sprite, or an area built from what the component declared".
 
-### Perception and reach are areas, not arithmetic
-
-Step 5, built on the structure above. Two components, two more areas under each
-forager's container:
-
-| component | area | radius | what it answers |
-|---|---|---|---|
-| `EcsSensorComponent` | `Area2dForSensor` | rabbit 280, monkey 420 | what can I see |
-| `EcsActionComponent` | `Area2dForAction` | rabbit 34, monkey 50 | what can I touch |
-
-`EcsSensorSystem` writes both lists — `sensor.perceived` and `action.reached` — and it is
-the **only system besides `EcsCollisionSystem` that reads anything back off a node**.
-`EcsForageSystem` and `EcsPickupSystem` read a list of ids off a component like any other
-input; the exception stays two files wide.
-
-The lists live on the components that own the radius (`radius` authored, list runtime),
-the same shape as `EcsSpawnerComponent`'s `interval` / `cooldown`. The plan described a
-separate `Perceived{ids}`; folding it in halves the component count per capability and
-matches how every stateful component here is already written.
-
-**The layer policy is declared on the components, not chosen by the manager.** Alongside
-`NODE_KIND`, a component states `NODE_LAYER` (what others can detect of it) and
-`NODE_MASK` (what it looks for), read the same reflective way:
-
-| component | layer — findable as | mask — looks for | monitorable | monitoring |
-|---|---|---|---|---|
-| `EcsBodyComponent` | `LAYER_BODY` | `LAYER_BODY` | yes | yes |
-| `EcsSensorComponent` | `LAYER_NONE` | `LAYER_BODY` | no | yes |
-| `EcsActionComponent` | `LAYER_NONE` | `LAYER_BODY` | no | yes |
-
-**A body is the only thing in the world that is detectable.** Sensors and action areas
-carry no layer at all, so no sensor is ever reported to another sensor — without that the
-n² does not go away, it moves into the physics server where you cannot see it in a
-profile. Declaring a mask is what makes a node a looker and declaring a layer is what
-makes it findable, so `EcsEntityManager` derives `monitoring` and `monitorable` from the
-declaration and has no opinion of its own.
-
-That also removed the last per-kind branch: `_make_node` is now "the sprite, or else an
-area built from what the component declared". **A new area kind is a component with three
-constants and no edit to the manager at all.**
-
-**Why the body's mask is not `LAYER_NONE`:** soft collision *is* two bodies overlapping,
-and nothing else in the module detects bodies at a body's own radius, so a body that looks
-for nothing leaves `EcsCollisionSystem` with no pairs. Measured at 3,200 entities, that
-mask costs nothing anyway — 158.0 ms/tick with it, 162.0 ms without (collision 25.8 ms vs
-25.1 ms), i.e. inside the noise. The body-body broadphase is free; what is not free is
-perception, and that is already layered.
-
-**The cull is physics; the decision is arithmetic.** `reached` is what the server saw at
-the end of the last step, so it can name something that has since moved. Acting on the
-list alone re-took a berry that had been dropped 400 px away — a real bug, caught by the
-test. So `EcsPickupSystem` confirms each of the handful the broadphase handed it against
-the components, which are the only truth. What must not be O(n) is the cull, not the
-confirmation of three items.
-
-**Two consequences worth knowing:**
-
-- **A berry now has an `EcsBodyComponent`** (radius 14). It has to: a sensor can only see
-  a body, and reach is the berry's body meeting the action area. "A berry is a sprite and
-  nothing else" is no longer true.
-- **Solid and movable became different questions.** A berry has a body but no
-  `EcsMovementComponent`, and `EcsCollisionSystem` moves only what can move. Without that
-  a forager shoves the berry it is walking toward and chases it across the arena. No
-  `is_static` flag — component presence, and the same rule holds for a tree.
-  **Since extended: blocking became a third question**, `EcsBodyComponent.is_solid` — see
-  "Collision is soft" in §1. A berry has a body and is not solid at all.
-
-Keep each forager's action radius above its own body radius, or soft collision stops it at
-body-touch before its reach arrives. Rabbit: body 22, reach 34. Monkey: body 36, reach 50.
-
-### The thing this refactor had to get right
-
-Node lifetime used to be **inferred** from a query and is now **commanded**, and those two
-models disagree in exactly one place: an entity that stops matching without dying.
-
-`EcsPickupSystem` removes a berry's `EcsPositionComponent`. The berry is alive — it is in
-someone's bag — it is simply not anywhere. The old render system freed its `Sprite2D` as a
-side effect of the query no longer matching. Correct, but *accidental*: it welded node
-lifetime to component presence, and there was no way to put the berry back down.
-
-So the split is now stated. **Node lifetime tracks the entity; what a node does tracks the
-components.** The manager frees nodes only on kill. `EcsNodeSyncSystem` hides a sprite
-whose entity has no position and shows it again when one returns; `EcsCollisionSystem`
-switches a body's monitoring off and on the same way, so a held berry does not go on
-shoving whatever walks over the spot it was picked up from.
-
-### Its test
-
-`tests/lifecycle_test.tscn` — 130 checks, re-runnable, exit code 0 only if all pass:
-
-```bash
-"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
-```
-
-It exists because `DESIGN_CHANGE_HANDOFF.md` §9 proposed re-running the Step-2 combat
-acceptance test as proof the refactor disturbed nothing, and that test left the tree with
-the combat layer at `d50aaf9`. This covers the divergence above instead: declared nodes
-get built and undeclared ones do not, pickup hides a sprite without freeing it, dropping
-shows *the same node* again, a body with no position stands down and comes back, kill
-takes data and nodes together, a spawner note is fulfilled on the next tick and harvested,
-and two stacked bodies still push apart (2.0 → 44.0 px) through areas the collision system
-no longer creates.
-
-It then covers the sensor layer: a forager sees a berry 100 px away and not one at 900,
-seeing is not reaching, an immovable bush is not shoved by the walker it stops, a berry on
-the ground is walked over rather than bumped into, a trip that cannot finish is given up
-on rather than pushed at forever, and — end to end, with forage and movement driving — a rabbit spots a berry 200 px
-off, walks to it, and takes it on arrival, stopping at arm's length rather than on top
-of it.
-
-### Not yet measured
-
-`DESIGN_CHANGE_HANDOFF.md` §5 justifies the sensor by 500-entity scaling, and **that claim
-is still unmeasured here**. The world is 12 entities. A 420-px sensor covers ~135× the area
-of a 36-px body, so §9's collision table does not predict sensor pair counts, and the layer
-split above is what keeps it from being quadratic — not a guarantee that it is cheap. Worth
-a bench before anything depends on the number.
+The first tick after a world is built creates every node at once: 5 ms at 100 entities,
+345 ms at 1,000, 97% of it `Area2D` creation. Free behind a loading screen; a mid-game spawn
+wave would want a per-tick creation cap.
 
 ---
 
-## 6. What was removed, and how to get it back
+## 4. Perception and reach are physics, not arithmetic
 
-Everything below was built, worked, and was cut to keep the core readable. It is all in
-git at **`928b9d1`**:
+| component | area | rabbit | monkey | answers |
+|---|---|---|---|---|
+| `EcsSensorComponent` | `Area2dForSensor` | 280 | 420 | what can I see — `perceived` |
+| `EcsActionComponent` | `Area2dForAction` | 34 | 50 | what can I touch — `reached` |
+| `EcsBodyComponent` | `Area2dForBody` | 22 | 36 | where am I, to others |
+
+`EcsSensorSystem` writes both lists. **It and `EcsCollisionSystem` are the only two files that
+read anything back off a node**, and that is the whole of the exception: components stay the
+only truth, the areas are a derived index, and what is read back is *which ids overlap*,
+never where anything is. Every other system reads ids off components.
+
+**Layer policy is declared on the component.** Only `EcsBodyComponent` claims a layer
+(`LAYER_BODY`) — a body is the only detectable thing in the world. Sensors and action areas
+carry no layer, so no sensor is ever reported to another sensor (without that the n² moves
+into the physics server where a profile cannot see it). Body's mask stays `LAYER_BODY`
+because soft collision *is* body-vs-body; measured at 3,200 entities, that costs nothing. The
+manager derives `monitoring` / `monitorable` from the declaration and has no opinion.
+
+**The overlap list is the verdict on reach**, and that is a decision. Pickup and consume
+used to re-check `distance <= reach + radius`, but that is the same condition the physics
+server tested, on numbers about one tick — roughly a pixel — fresher. The accepted error is
+one tick of motion. What executors still re-ask is whether the thing named is *still
+there* (alive, not Dying) — a different, cheap question. A freshly spawned entity perceives
+nothing on its first tick, so its opening move is always a wander, preempted the tick after.
+
+Keep a solid entity's action radius above its body radius (rabbit 22 → 34, monkey 36 → 50),
+or soft collision stops it before its reach arrives.
+
+---
+
+## 5. Bodies and collision
+
+**Having a body, blocking the way and being movable are three separate questions.**
+`EcsBodyComponent` is the body — a radius and an area, so the entity can be perceived and
+reached. Its `is_solid` decides whether that body takes part in soft collision.
+`EcsMovementComponent` is what lets the resolve move it rather than only push others out.
+
+| | body | solid | movable |
+|---|---|---|---|
+| bush | 45 | yes | no — walked into, never budged |
+| rabbit, monkey | 22, 36 | yes | yes |
+| berry | 14 | **no** — walked over | no |
+
+`is_solid` is the module's one authored boolean of this kind, chosen over a tag component
+deliberately: radius and solidity are one physical fact about one body.
+
+**Collision is soft.** `EcsCollisionSystem` runs after movement: movement proposes a
+position, collision pushes overlapping pairs apart, and neither knows the other. Overlap is
+allowed and then undone, never prevented — which is what lets any future position-writer be
+corrected for free. Each pair is reported twice (A sees B, B sees A) and each body moves only
+itself by half the overlap, so the double report makes it symmetric. One tick of lag, one
+pass per tick, converging over a few ticks; `intersect_shape()` is the synchronous
+alternative if that ever matters. It costs: a fast mover can tunnel between ticks, a
+squeezed body can be pushed through a third, and nothing bounces.
+
+The body is **data, not a physics body** — the sim runs with no scene tree. The overlay does
+not draw body circles: the tree holds real `CollisionShape2D`s, so Godot's **Debug > Visible
+Collision Shapes** shows what the physics server actually uses.
+
+---
+
+## 6. Movement: a destination is a budget, not a standing order
+
+`EcsMovementSystem` walks an entity toward `EcsMovementComponent.destination` and prices each
+trip the tick it first sees it:
+
+```
+time_left = distance / speed * timeout_slack + timeout_grace      (defaults 2.5, 0.5)
+```
+
+When it runs out the destination is dropped exactly as if reached. **Giving up and arriving
+are the same event to every other system.** Without it, an entity that soft collision holds
+off its target keeps `has_destination` forever and the brain skips it *because* it already
+has somewhere to be — a livelock across stages, not a bug inside one. It does not remember
+what it gave up on; a re-target policy belongs in the brain.
+
+The destination is the brain's move instruction. **There is no `MoveIntent` flag yet —
+decided and deferred** until the proof of concept has run.
+
+---
+
+## 7. The brain: the only thing that chooses
+
+`EcsLowBrainSystem` is a small FSM, and `EcsLowBrainComponent` holds its `state`, `target` and
+pause clock. It is named for its **rank** — the bottom of the plan's decision ladder; a
+planner goes above it at step 7 — not for the wandering it happens to do.
+
+**Each tick, per creature:**
+
+1. **Collapsed** → it has no say; SLEEP, any trip called off. This is the one thing allowed
+   to override a live commitment.
+2. **Asleep by choice** → stays down until rested (`wake_at`) or starving.
+3. **Seeking food** → a commitment is not reconsidered: kept until the target is gone
+   (eaten, taken, Dying), within reach (fulfilled — the rungs below act this same tick), or
+   the trip ends.
+4. **Wandering** → interruptible; a creature notices food mid-leg.
+5. **Choose, highest rung first:**
+
+```
+EAT        hungry enough (fullness <= eat_below), food at hand — bag first, then the ground
+TAKE       peckish (<= forage_below), room in the bag, something takeable in reach
+SEEK_FOOD  peckish, room (or no bag), food perceived — commit to the nearest
+SLEEP      tired (energy <= rest_at) and not starving
+WANDER     after a random pause, to a random point within its radius
+```
+
+**Why one brain with state**, not a rung per system: the old `EcsForageSystem` ran before the
+wanderer and priority was run order. It read well but was stateless — nothing persisted
+("I am going to *that* berry"), nothing could interrupt (a rung could only fill an empty
+destination slot), and a threshold near its trigger flickered. State fixes all three.
+
+**Rung order is the design.** Food outranks rest, so a creature that keeps finding food can
+run itself to collapse — the price of that order, not a bug. **Carrying is provisioning**, so
+`EAT > TAKE`: a creature hungry enough to eat, standing over a berry, eats it where it lies
+and never pockets it first. That is pinned by a test that watches the bag stay empty,
+because the end state cannot tell the two paths apart. **Starving outranks tired both
+ways** — it wakes a sleeper and stops the sleep rung choosing, or a creature woken by its
+stomach would be put straight back down to starve.
+
+**Decisions go out as flags.** `state` is the brain's memory; the intent flags are its
+instructions, raised and cleared in `_set_state()` — the one place `state` is written — so
+they cannot disagree (a test watches 400 live ticks). Unchanged state is a no-op, so an idle
+creature touches the store not at all. An intent **names its target**, so the brain chooses
+*which* berry and the executor only checks it is still there.
+
+| state | instruction | executor |
+|---|---|---|
+| EAT | `EcsEatIntentFlag` | `EcsConsumeSystem` |
+| TAKE | `EcsTakeIntentFlag` | `EcsPickupSystem` |
+| SLEEP | `EcsAsleepFlag` | `EcsHungerSystem`, `EcsEnergySystem` (as a rate) |
+| SEEK_FOOD, WANDER | a destination | `EcsMovementSystem` |
+
+**No executor reads the brain.** A creature with no brain at all eats, takes and sleeps when a
+flag is raised on it — tested. **Do not let the brain grow hands:** executors stayed separate
+systems because merging them would have the brain mutating *other entities'* components, the
+same argument would swallow every verb after it, and step 7's planner emits action ids that
+want one executor each.
+
+The brain reads components that are not its own (sensor, inventory, hunger, energy) through
+`get_component`, so a creature lacking one simply never takes that rung — no flags saying
+"cannot carry". It is the one place that knows several concerns at once; it still *writes*
+only its own state, its intent flags and a destination.
+
+---
+
+## 8. Needs: fullness, energy and health
+
+All three bars are **reserves**: full is good, and a short bar is bad news on every one.
+
+**Hunger is the motive, health is the consequence.** The number is
+`EcsHungerComponent.fullness`, not hunger — it drains from `max_fullness` to zero. The class
+keeps the name because hunger is what it is *about*. **What being empty or full does to you
+is hunger's rule**, so both halves live in `EcsHungerSystem`: at zero it spends health at
+`starve_damage`; at or above `heal_above` it gives health back at `heal_rate`; the band
+between does neither. Mending is the reward for having eaten, not the absence of starving.
+`EcsHealthSystem` owns only the threshold: health at zero adds `EcsDyingFlag`.
+
+**Energy is a reserve, sleep is a decision, and collapse is not.** `EcsEnergySystem` drains
+`drain_idle` awake, plus `drain_moving` while velocity is non-zero, and restores `restore`
+while asleep or collapsed. `rest_at < wake_at` is the hysteresis. At zero it adds
+`EcsCollapsedFlag` and takes `collapse_damage` once; **the flag's presence is the lock**,
+which is how energy tells the brain "no say" without writing the brain's component. It
+lifts at `collapse_release`, below `wake_at`, so what comes round is an ordinary sleeper that
+starving can interrupt.
+
+**A sleeper still gets hungry**, at `asleep_drain_scale` (0.4) of the waking rate — slower is
+the point, *still* is what keeps waking-on-starving reachable. Hunger and energy both decide
+"asleep" from `EcsAsleepFlag` or `EcsCollapsedFlag`, and must agree; neither reads the other or
+the brain.
+
+**Starting energy is rolled**, in `start_min`–`start_max` of `max_energy`, by
+`EcsEnergySystem` the first time it sees an animal — not by the manager (it never switches on
+type) and not per placement (a runtime spawn would miss it). Without the spread every animal
+sleeps at once. A runtime `rolled` bool marks it done — a record keeps it, so a restored
+animal does not re-roll — and **a placement that authors its own `value` must set `rolled`
+true beside it**, as `world1.tres` does, or the roll overwrites the authored number.
+
+**The two animals differ by one component and authored values** — no `is_grazer` flag, no
+branch in any system:
+
+| | rabbit — grazer | monkey — carrier |
+|---|---|---|
+| `EcsInventoryComponent` | **none** | capacity 1 |
+| hunger `drain` /s | 1.2 — it cannot stockpile | 2.6 |
+| `forage_below` / `eat_below` | 65 / **70** — eats what it walks to, on arrival | 70 / 40 — gathers, carries, eats later |
+| `heal_above` / `heal_rate` | 50 / 5 per s | 50 / 5 per s |
+| energy `restore` /s, start | 10, rolled 50–100% | 10, rolled 50–100% |
+| speed | 165 (placements 152–176) | 130 (placements 121–136) |
+| wander radius / pause | 320 / 0.5–3.0 s | 420 / 0.2–1.2 s |
+
+`eat_below` **above** `forage_below` is what makes a grazer: with nowhere to stockpile, a
+rabbit that reached a berry and then had to wait to get hungrier would wander off. With
+`restore` at 10/s a nap from `rest_at` 30 to `wake_at` 100 takes 7 s and a collapse lifts in
+5 s, so waking-on-starving rarely gets a chance to fire.
+
+---
+
+## 9. Items: eating, taking, carrying, dropping
+
+Food is `EcsConsumableComponent` (`nutrition` 40), not `EcsPickableComponent` — a hungry
+animal must not chase a tool. What a bag will hold (`pickable`) is a wider question than what
+a mouth will (`consumable`).
+
+**Eating does not require an inventory.** "Hungry, and food within reach" is the condition,
+and a pocket is one place reach can mean: a carrier eats out of its bag, a grazer eats what
+its action area touches. One berry per decision.
+
+**A carried item is a record, not an entity** — a deliberate reversal of the plan's step 3,
+because in most games an item in a bag, chest or shop is not a live entity. Picking up
+**kills** the item and puts an `EcsItemRecord` in the bag:
+
+- **every component, `Position` included, no flags** — nobody knows yet what a future item
+  will need, and the catalog holds only a type's defaults, not an instance's values. Position
+  goes stale in the bag and is overwritten when the item comes back; flags were only true of
+  the entity *then*;
+- copied **by reflection** over `PROPERTY_USAGE_SCRIPT_VARIABLE`. Measured: `Resource.duplicate()`
+  copies only `@export` fields — an energy component at 12.5 came back at its default 100, a
+  bag of two ids came back empty. Arrays and dictionaries are deep-copied; a field holding an
+  object would be shared (nothing does that yet);
+- **`uid`**, on `EcsNameComponent`, is who the thing is — 128 random bits as hex, set by the
+  manager at first spawn. The int id is the store's key and changes when an item goes back
+  into the world; the uid does not.
+
+Eating from the bag takes the record out and reads its `nutrition` — no kill, it died when
+picked up. Eating off the ground is a kill (`EcsDyingFlag`). One record, one slot.
+
+**When a carrier dies, `EcsDropSystem` puts back what it carried**, where it fell, as itself:
+one spawn note per record, restored by the manager at the same instant the carrier is
+destroyed — same uid, new id, instance values intact, stacked on one spot (berries are not
+solid). It runs late, after everything that can kill a carrier; a system that flags a carrier
+Dying after it would lose the bag. This also fixed a leak: a dead carrier's berries used to
+live forever with no position.
+
+**Deferred on purpose:** what a carried item *does* while carried (durability, rot — a record
+does nothing), bag capacity and stacking, voluntary dropping, and corpses — death by health
+should later leave a lootable corpse rather than drop.
+
+---
+
+## 10. Observability
+
+**The overlay** (`EcsDebugOverlay`, fed by `EcsDebugSystem`, **F1**) annotates each entity in
+world space: name, a velocity arrow, a dashed line to its destination, fullness / energy /
+health as bars, a badge on the sprite's top-left shoulder when it carries something, and the
+sleep icon (`Global/Asset/Icon/sleep.png`) off that shoulder while it sleeps — parchment for a
+chosen sleep, red for a collapse. Shapes rather than numbers, because these are read across a
+crowd; the numbers live in the inspector. The system sends **ratios and counts, never text or
+pixels**, and `-1` means "has no such reading", so a berry draws no bars. The overlay is drawn
+with `_draw()`, not Controls, so it sits outside the theme. Text and bars hold a fixed size on
+screen; the badge and sleep icon are sized off each sprite in world units, so they zoom with
+the animal — and they sit on the sprite actually drawn, since blueprints scale their own art.
+
+**Selection** is strictly ECS: `main.gd` only *records* a click on `EcsSelectionSingleton`,
+`EcsSelectionSystem` resolves it next tick by a distance query over positions (no physics
+pick), and selection is the presence of `EcsSelectedFlag`.
+
+**The inspector knows no component.** `EcsInspectSystem` pushes a snapshot of the selected
+entity onto the `EventBus`; `ui/ui.tscn` renders it and never touches the world. How each
+component reads is its own `describe()`:
+
+```gdscript
+func describe() -> Dictionary:
+    return {"tab": &"entity",      # or &"own" / &"hidden"
+        "lines": {"health": "%d/%d" % [roundi(value), roundi(max_health)]},
+        # "title": {"name": ..., "type": ...}   optional: names the panel
+    }
+```
+
+To change how a component shows, edit its `describe()` — **never the inspect system**; a test
+fails if that file names a component type. A component without `describe()` gets its own tab
+of every field, by reflection. Today: name, blueprint, position and the three bars read on
+the Entity tab; movement and inventory have tabs; body, sprite, brain, sensor and action are
+hidden; all flags share one "Flags" tab, the one thing the inspector lays out itself (by base
+class). Linked ids (`*_id` fields) show the linked entity's title.
+
+Two input fixes worth knowing: the tab strip takes no keyboard focus (arrow keys used to
+switch tabs), and the inspector panel accepts wheel events so scrolling it never zooms the
+camera — a `mouse_filter` of STOP does **not** consume the wheel on its own (measured). The
+shared camera reads the wheel in `_unhandled_input` and zooms once per notch.
+
+---
+
+## 11. The scheduler: a stage may declare how often it runs
+
+`EcsScheduler.add(system, every, phase)` takes a rate in ticks; `main.gd` runs `sensor` and
+`low_brain` at `SLOW` (every 3 ticks, 20 Hz) while everything the eye watches stays at 60.
+This is safe because every system takes `delta` and means it: **the scheduler banks delta
+per system**, so a stage run a third as often is handed three ticks' worth, and hunger still
+drains at its authored points per second. What changes is latency, never rate. **`phase` is
+not optional** — two slow stages on the same tick make one heavy frame in three instead of
+three even ones; a system runs when `tick % every == phase`, and giving a consumer the phase
+after its producer keeps its data one tick old, as at full rate.
+
+---
+
+## 12. Tests
+
+`tests/lifecycle_test.tscn` — **161 checks**, exit code 0 only if all pass. Run it after
+touching the manager, collision, pickup, spawner, sensor, node sync, the brain or any
+executor. It covers: declared nodes built and undeclared ones not; kill takes data and nodes;
+spawn notes fulfilled a tick later; soft collision, immovable and non-solid bodies; seeing is
+not reaching; the trip budget; the brain's commitments, preemption and rung order; hunger,
+starving, mending and the dead band; energy, sleep, collapse and waking on starving; the
+sleeper's slower hunger; the start roll; the eat-and-pocket race; executors with no brain;
+state/flag agreement over 400 ticks; records, uid and the reflection copy; the drop on death;
+the inspector's layout and its not naming any component; and per-stage tick rates banking
+delta.
+
+`tests/stress_test.tscn` — the population ramp (§14). Knobs after a bare `--`:
+`--spacing=180` (grid px), `--n=4000` (one population), `--skip=hunger,health` (leave stages
+out, by label).
+
+---
+
+## 13. Where the plan stands, and what is next
+
+`ECS_REFACTOR_PLAN.md` is the roadmap. **Steps 0–6 are done; step 7 is not started.**
+
+- **0–1** core and data-driven factory — done.
+- **2, the weapon pain case** — built, proved clean (armour and crit added without touching
+  the attack code), then **cut** so the flow reads end to end. It is in git at `928b9d1`.
+- **3, inventory and pickup** — done, then reversed on purpose: items are records, not
+  entities (§9).
+- **4, bars as systems** — done: fullness, health, energy.
+- **5, sensor and intents** — done, differently: physics areas rather than a distance query.
+  The node-free query is the fallback if areas ever stop paying.
+- **6, the brain writes intents** — done on the stripped core, without combat (§7).
+  Measured before/after in one sitting at 2,400 entities: the executors dropped ~14 ms
+  because they now query intent flags instead of every brain; the brain itself did not get
+  dearer. The cost of raising a flag under load is unmeasured — the stress population never
+  raises one.
+- **7, GOAP** — a pure planner over a symbolic snapshot, run off-frame under a replan
+  budget, emitting action ids that the existing executors run. Not started. It and any
+  return of combat assume the cut combat layer.
+
+**Open and deferred, by decision:** `MoveIntent`; an attack intent and a state worth
+preempting *for* (both wait on combat); what a carried item does while carried; corpses and
+looting; bag capacity and stacking. **Do not re-add breadth without being asked** — the small
+size is the point.
+
+Smaller, not done: `EcsEntityManager.node_for()` allocates a throwaway dictionary on every
+call (`_nodes.get(id, {})`); the brain's food rung re-asks the store about every perceived id
+right after the sensor walked the same list; speed variance is per placement, so a runtime
+spawn gets the blueprint default; the Respawn button keeps keyboard focus after a click; the
+stats panel lets the wheel through to the camera.
+
+---
+
+## 14. Performance
+
+`tests/stress_test.tscn` builds the pipeline `main.gd` builds and calls each stage directly
+at full rate (so the 20 Hz saving does not show — it is a worst case), on a jittered grid
+that grows with n so the neighbourhood stays the same size. It prints the ramp, each stage's
+cost in ms and µs per entity, a census of the work done, and a probe splitting one stage into
+query / fetch / arithmetic. Simulation only; nothing is drawn.
+
+**Latest ramp** (after step 6 and the inspector work, 90 px grid):
+
+| n | tick | FPS | | n | tick | FPS |
+|---|---|---|---|---|---|---|
+| 400 | 21.5 ms | 46.5 | | 2,400 | 144.0 ms | 6.9 |
+| 800 | 42.1 ms | 23.8 | | 3,200 | **206.6 ms** | 4.8 |
+| 1,600 | 92.0 ms | 10.9 | | 4,000 | 262.9 ms | 3.8 |
+
+**3,200 entities is the last step under the 250 ms budget.** At 4,000: sensor 36%, low_brain
+17%, collision 13%, node_sync 9%, energy / hunger / movement ~7% each; pickup and consume
+~0.01 ms. Each sensor returns ~53 ids per tick; cost per entity levels off at ~65 µs.
+
+**Measurement rules, learned the hard way:**
+
+- **Never compare numbers from different sittings.** Throughput drifts by up to ~50% across a
+  day on this machine — a ramp earlier the same day read 225 ms at 2,400 against 144 ms here,
+  with no relevant code changed and every stage moving by the same proportion. Use `--skip`
+  and run both arms back to back.
+- **Single-shot `--n` numbers are not comparable to ramp numbers**; the process state differs.
+- **Repeat before believing.** Run-to-run noise is ±12%; anything under ~15% needs two runs
+  at each end. A "70% regression" and a "step 4 cost a third of the ceiling" were both
+  retracted on exactly this: measured in one sitting, step 4 cost ~12% of the tick and none
+  of the ceiling.
+
+**What the cost is.** The system is **overhead-bound, not interaction-bound.** At 840 px
+spacing — no sensor overlaps anything, zero ids, zero pairs — the pipeline still costs
+**~41 µs per entity**, and the ceiling moves only to ~6,000. Sensor costs ~39 ms to return
+nothing, collision ~40 ms to resolve nothing. Density is a third of the ceiling: at 180 px
+spacing (13 ids per sensor instead of 53) the ceiling is 4,800, and the per-entity cost is
+flat with population; at 90 px it climbs. In `movement` — two components in, one out — **~70%
+of the stage is finding the components**, not using them (`get_component` is a double hashed
+lookup plus boxing, ~1 µs a call).
+
+**The levers, ranked by payoff over cost:**
+
+1. **The per-entity floor** — query + component access + area bookkeeping. §15's
+   data-structure argument, with a number behind it. **The author's call; not to be
+   implemented unasked.**
+2. **Per-stage tick rates — taken** (§11): sensor and brain at 20 Hz, roughly a third of the
+   largest two stages off the average tick.
+3. **Choose the density you design for** — free. Sight radius is the same lever: ids scale
+   with πr².
+4. **Cache the brain's perception scan** — cheap, shrinks with density.
+5. **Stagger the sensor** — worth under 10%: deleting perception outright saves only ~10% of
+   the tick, because most of a sensing entity's cost is fixed overhead.
+6. **`node_for`'s throwaway dictionary** — small, free.
+
+---
+
+## 15. Open arguments
+
+**The node-structure argument is settled:** one container per entity, children per concern
+(§3). Rejected: pools per concern (two pools cross-referenced by id to answer "what does
+entity 12 own"), and no nodes at all via server RIDs (cheapest, but the author wants Godot
+nodes for collision, sprites, animation and sound). Still unresolved: whether the collision
+`Area2D`s should exist, as the one place "nothing reads back off a node" bends.
+
+**The data-structure argument is open, and the author wants to argue it out. Do not
+implement any option; raise it for a decision.** What exists: `{ Script : { entity_id :
+EcsComponent } }`, components as `Resource` subclasses, queries intersecting tables driven
+from the rarest.
+
+- **Dictionary-of-dictionaries or archetype / packed storage?** The API would not change.
+  Measured: a stage like `movement` has a ~5× ceiling from packed access; across the whole
+  pipeline ~1.6–2× is the honest expectation, since `sensor` is physics queries, not access.
+  The win does *not* require dropping `Resource` — the 0.57 µs "pre-gathered" figure was over
+  arrays of Resource references; the cost is hashing and boxing, not indirection. The cost
+  archetypes carry is moving an entity between tables on add/remove; the component/flag split
+  helps there, since flags are what churn and components no longer do.
+- **May a node or RID handle live inside a component?** It would make `EcsCollisionSystem`
+  pure behaviour, at the cost of the data layer knowing the scene tree exists.
+- **Should components be `Resource` at all**, given `.tres` authoring uses only the exported
+  half and most components carry runtime fields beside it?
+
+---
+
+## 16. What was removed, and how to get it back
+
+All of it is in git at **`928b9d1`**:
 
 ```bash
-git show 928b9d1 -- "9. EcsSystem"                  # see it
-git checkout 928b9d1 -- "9. EcsSystem"              # take the whole module back
-git checkout 928b9d1 -- "9. EcsSystem/systems/ecs_attack_system.gd"   # or one file
+git show 928b9d1 -- "9. EcsSystem"                                   # see it
+git checkout 928b9d1 -- "9. EcsSystem/systems/ecs_attack_system.gd"  # take one file back
 ```
 
 **The combat pipeline** — 10 components (`aggression`, `armor`, `attack_intent`, `broken`,
 `crit_chance`, `damage`, `dead`, `durability`, `equipped`, `health`) and 8 systems
-(`aggression`, `attack`, `crit`, `damage`, `death`, `durability`, `equip`,
-`weapon_carry`), plus `ecs/ecs_event.gd` and `events/ecs_damage_event.gd`.
-
-It was the plan's step 2 and it landed clean. Armour was added to a live entity without
-the attack code changing; crits were added by writing one system and appending one line to
-the scheduler; a broken weapon fell back to fists with no `if weapon.broken` anywhere;
-"attackable" was never a flag, only the target query asking for `EcsHealthComponent`.
-**The evidence for the rewrite is in that commit, not in the working tree.**
-
-**The observability layer — RESTORED, see §6a.** What went out was the
-`selection`/`selected`/`commands` components, `EcsSelectionSystem`, `EcsInspectSystem`,
-`EcsCensusSystem`, `EcsCommandSystem`, `ecs_selection_marker.gd`, `ui/ui.tscn` + `ui.gd`,
-and the four `ecs_*` signals in `System/EventBus.gd`. Two pieces of it were evidence
-rather than scaffolding: picking was a distance query over `EcsPositionComponent` rather
-than a physics hit, and the inspector's tabs were built by reflection over
-`PROPERTY_USAGE_SCRIPT_VARIABLE` with nothing in the file naming a component type.
-
-**Also trimmed from files that stayed:** `EcsWorld` lost singletons, the frame-event API
-and `components_of()`/`count()` (the enumeration accessors the inspector needed —
-singletons and `components_of()` came back with §6a, `count()` and the event API did not);
-`EcsSystem` lost `enabled`; `EcsScheduler` lost `find()` and the end-of-frame
-`clear_events()`. The crocodile and dagger blueprints were deleted and the monkey
-rewritten as a plain wanderer, leaving two entity types; `world1.tres` went from 33
-placements to 10 — 5 rabbits and 5 monkeys.
-
-Note one demo went with the dagger: it was the only entity with **no**
-`EcsMovementComponent`, so it showed "capability is component presence" — a prop that
-cannot move, with no `is_static` flag and no branch. Both current types move. Bringing it
-back is one blueprint plus a placement, no code.
-
-## 6a. The observability layer, brought back
-
-Restored from `928b9d1` on request. What came back verbatim: `EcsSelectionComponent`
-(the click inbox singleton), `EcsSelectedComponent` (the tag), `EcsSelectionSystem`,
-`EcsInspectSystem`, `EcsCensusSystem`, `EcsSelectionMarker`, `ui/ui.tscn` + `ui.gd`, and
-three of the four EventBus signals. `EcsWorld` got `add_singleton()`/`get_singleton()`
-and `components_of()` back, and nothing else.
-
-Three deliberate differences from what was cut:
-
-- **`EcsCommandSystem` and `EcsCommandsComponent` did not come back.** They existed to
-  queue the F3 "give the crocodile armour" demo, which needs the combat layer.
-- **The pipeline panel did not come back.** It reported the run order and the F2 crit
-  toggle, and it depended on `EcsScheduler.find()` and `EcsSystem.enabled` — both removed
-  in the strip. `ecs_pipeline_changed` was dropped with it.
-- **The marker's ring shows `EcsBodyComponent.radius`, not an attack reach.**
-  `EcsAggressionComponent` is gone; the body radius is the reading that still exists. An
-  entity with no body gets the centre dot alone.
-
-The pipeline is now thirteen stages: `selection` sits after `pickup` and before `node_sync`,
-and `census > inspect` run last, after `debug`. All three added stages are pure readers or
-write only the selection tag, so the simulation is unchanged by their presence.
-
-**The restore is its own evidence for reflection.** The inspector was written when the
-world had `name/position/sprite/movement/wander` and a combat layer. Clicking a monkey
-now yields tabs for `shape`, `low_brain` and `inventory` — components that did not exist
-when `EcsInspectSystem` was written — with no edit to the inspector, the panel, or the
-components:
-
-```
-NAME: monkey_0 (monkey)
-ENTITY  { id: #6, blueprint: Monkey,
-		  components: name, position, shape, sprite, movement, low_brain, inventory, selected }
-  Shape      { radius: 36.00 }
-  Movement   { speed: 130.00, arrive_radius: 6.00, destination: (-761, -418),
-			   has_destination: true, velocity: (-115, -60) }
-  Low Brain  { radius: 420.00, pause_min: 0.20, pause_max: 1.20, pause_left: 0.00 }
-  Inventory  { capacity: 5, items: [] }
-  Selected   { }
-```
-
-**That last line is the open question made concrete.** `EcsSelectedComponent` is a pure
-tag, so reflection gives it a tab with no fields in it. Module 8 would have hidden it by
-returning `{}` from `describe()` — but that is a *method on a component*, which module 9's
-first rule forbids. If the fix is wanted, the option that keeps components method-free is
-a `const` block read via `get_script_constant_map()` (verified to work in 4.7), which is
-data rather than behaviour and can say tab / merge-into-entity / hide. **Not implemented
-— it is a presentation-policy decision that belongs with §8.**
-
-## 7. Next, per the plan
-
-**Where the plan actually stands: steps 3 to 6 are done — 6 on the stripped core, without
-combat — and step 7 is not started.** Step 6 is recorded in `INTENT_PLAN.md`: components,
-flags and singletons as three kinds; the brain's decisions go out as intent flags that
-consume, pickup, hunger and energy read instead of the brain; `EcsDyingFlag` replaces
-`kill_requests` and is the claim that closed a real eat-and-pocket race; carried items are
-records with a `uid`; and a dead carrier drops what it held. `MoveIntent` is deferred on
-purpose — the destination field is the move intent until the proof of concept has run.
-
-**Step 3 is most of the way done.** The plan asked for "inventory and pickup as
-relationships (`Inventory{item_ids}`, one system owning the move, so double-claim is
-structurally impossible)" — that is exactly what `EcsInventoryComponent` and
-`EcsPickupSystem` are. Double-claim is not merely prevented, it stopped being a category:
-the berry drops out of the query the moment it is taken, so the second forager re-targets
-without anything arbitrating. Eating closed the rest of it: `EcsConsumableComponent` and
-`EcsConsumeSystem` landed with step 4, because a bar to feed is what made them worth
-having.
-
-Before starting any of the rest, decide whether it builds on this stripped core or on
-`928b9d1`'s fuller one — steps 6 and 7 assume the combat layer that was cut.
-
-- **Step 3 — done.** `EcsConsumableComponent` + `EcsConsumeSystem`; eating is a kill.
-- **Step 4 — done.** Hunger, health and now energy. `EcsEnergyComponent` +
-  `EcsCollapsedComponent` + `EcsEnergySystem` + a `SLEEP` rung; see `ENERGY_PLAN.md`
-  for the design it was built from and §1 for what it does. The plan's premise that
-  "hunger stays a need that climbs" was stale by the time it landed — hunger had become
-  fullness, so all three bars are reserves now, which is simpler than the plan expected.
-  One thing the plan did not anticipate: **starving has to outrank tired in both
-  directions.** Waking a starving sleeper is not enough, because the sleep rung puts it
-  straight back down while it is still tired; `_try_sleep` declines while starving too.
-- **Step 4 — the older note, for the record: hunger and health only.** The plan asked for three
-  bars with a system each. Hunger and health are in and carry the whole motive chain
-  (gate → eat → starve → die). Fatigue was left out on purpose: it needs sleep to mean
-  anything, and sleep is a brain state with no consumer yet. `FatigueSystem` and its
-  `Sleeping` component are the remainder if they are ever wanted.
-- **Step 5 — done, and not the way the plan said.** `EcsSensorSystem` writes
-  `perceived`/`reached`, but off physics areas rather than a distance query: the
-  broadphase does the culling in C++, which is why the brain's nearest-berry scan ranks a
-  handful of neighbours instead of every berry in the world. The plan's node-free version
-  is the fallback if areas ever stop paying, not a regression to make.
-- **Step 6 — done on the stripped core.** Eat, take and sleep intents are flags; see
-  `INTENT_PLAN.md`. Still open: `MoveIntent` (deferred), an attack intent and a state worth
-  preempting *for* (both wait on combat), and what a carried item does while carried.
-- **Step 7** — GOAP planner as a pure function over a symbolic snapshot, run off-frame
-  under a replan budget.
-
-## 8. Open arguments — node structure and data structure
-
-**These are unsettled and deliberately so.** Claude made recommendations during the
-session that built this; they were **not accepted**, and the author has said explicitly
-that both questions are still to be argued out. Nothing below is a plan. Treat it as the
-state of a disagreement, so the argument can resume with its context rather than be
-re-derived — and do not quietly implement any of it.
-
-### The node-structure argument — **SETTLED, see §5**
-
-The author chose **one container per entity, children per concern**, and it is built. Kept
-here for the reasoning, not as a live question.
-
-- **Pools per concern** — what existed before. Each system owned exactly what it needed
-  and a concern could be deleted in one piece. Rejected: two parallel pools have to be
-  cross-referenced by id to answer "what does entity 12 own", and position was written
-  separately by each.
-- **One container per entity, children per concern** — **chosen.** Position written once
-  and inherited, one lifetime, one thing to free, and the remote scene tree reads as a
-  list of entities. The recorded objection was that a per-entity node carrying sprite,
-  area and audio is one step from module 8, where the node *was* the entity. The answer
-  held to in §5: the container holds no script, no data and no state, and nothing is read
-  back off it — so it stays a discipline, and `ecs_entity_manager.gd`'s header is where
-  that was agreed. If something ever hangs state on a container, that is the line.
-- **No nodes — `PhysicsServer2D` / `RenderingServer` RIDs.** Cheapest, and an RID is
-  honest data rather than a Node reference. Costs editor visibility and manual lifetimes.
-  The author wants Godot nodes for collision, sprite drawing, animation and sound, which
-  argues against it — never argued *through*, and now moot for the foreseeable structure.
-
-Still unresolved: whether the collision `Area2D`s should exist at all, given they are the
-one place the "nothing reads back off a node" rule is bent. The debug overlay no longer
-draws the body circle — with real `CollisionShape2D`s in the tree, Godot's **Debug >
-Visible Collision Shapes** shows the shape the physics server actually uses.
-
-### The data-structure argument
-
-What exists: `_store = { Script : { entity_id : EcsComponent } }`, components as
-field-only `Resource` subclasses, queries intersecting tables driven from the rarest.
-
-Open questions, none settled:
-
-- Should a node or RID handle ever live **inside a component** (the `EcsBodyComponent`
-  idea)? It would make `EcsCollisionSystem` pure behaviour and split lifecycle from
-  resolution — at the cost of the data layer knowing the scene tree exists.
-- Should storage stay dictionary-of-dictionaries, or become archetype/packed arrays? The
-  API would not change (`ecs_world.gd`'s header already says so). **This one now has a
-  number — see below.**
-- Should components be `Resource` at all, given `.tres` authoring only ever uses the
-  exported half and every component now carries runtime-only fields beside them?
-
-Nothing here is blocking step 4. It is blocking a decision about what module 9 *is*, which
-is a different thing and worth taking the time over.
-
-#### Measured: most of a system is finding its components, not using them
-
-The argument ran on the assertion that "the measured bottleneck is `get_component` call
-overhead" without anything measuring it. `tests/stress_test.tscn` now probes it, on
-`EcsMovementSystem` because it is the purest per-entity stage in the pipeline — two
-components in, one position out, no neighbours. The ratio has been re-measured twice
-since and moves with the population: **67%** at 2,000 entities below, **56–62%** at 4,000
-in §9. The direction is what keeps — and §9's 41 µs floor is the stronger form of this
-same argument, since it bounds the whole pipeline rather than one stage. At 2,000 entities
-(**measured before the trip clock went in** — the stage now prices and decrements a budget per entity, so
-re-run before leaning on the absolute numbers; the 25/67/19 split is the durable part):
-
-| | ms | µs/entity | share of the stage |
-|---|---|---|---|
-| `query()` alone | 1.49 | 0.745 | 25% |
-| the two `get_component` calls | 4.03 | 2.017 | **67%** |
-| the identical arithmetic, refs pre-gathered | 1.15 | 0.573 | 19% |
-| **the stage as it runs** | **6.05** | **3.024** | 100% |
-
-**Finding the components costs four times what using them costs**, and `get_component` is
-~1.0 µs per call — a double hashed lookup (`_store[Script]` then `[id]`) plus Variant
-boxing, paid by every system for every component it reads, every tick.
-
-**What that says for archetypes.** The ceiling on a stage like this is **~5x** (3.024 →
-0.573 µs/entity): packed arrays hand a system its components already in iteration order,
-which is precisely the 25% + 67% above. Across the whole pipeline it is smaller, because
-`sensor` — 42% of the frame — is physics queries rather than component access; the
-non-sensor stages are roughly 47% of the tick and mostly access-bound, so a whole-tick win
-of ~1.6–2x is the honest expectation.
-
-**The finding that changes the shape of the argument:** that 0.573 µs was measured over
-pre-gathered arrays of `Resource` **references**, pointer chase included. So the third
-bullet above is *not* upstream of the second — **you do not have to stop using `Resource`
-to get most of the win.** The 2.0 µs is hashing and boxing, not object indirection. Packed
-arrays of Resource refs capture nearly all of it, and dropping `Resource` stays a separate,
-larger, later question.
-
-**The cost archetypes carry**, unmeasured: adding or removing a component mid-life moves an
-entity between archetypes, and this module does that on every berry pickup
-(`world.remove(berry, EcsPositionComponent)`) and every selection change. That is a handful
-of entities per tick against thousands iterated, so amortisation looks favourable — but it
-is the thing to measure before committing, not after.
-
-**Still not a recommendation to build it.** Staggering the sensor is worth ~32% off the
-tick for a few lines and no architectural commitment; caching the area in
-`EcsCollisionSystem` is free (§9). Those are the same order of payoff for a tiny fraction
-of the cost, and they should be spent first — the measurement above keeps.
-
-## 9. Measured performance, on the machine that built this
-
-### How many entities before it falls over
-
-`tests/stress_test.tscn`, re-runnable, same pipeline main.gd builds. It reports four
-things: the population ramp, every stage's cost at every population (in ms and in
-µs/entity), a census of the work the pipeline actually chewed on, and a probe splitting one
-stage into query / fetch / arithmetic (§8).
-
-```bash
-"$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"
-```
-
-**~3,200 entities is where a tick costs 250 ms — 4 FPS**, re-measured after step 4. Half
-rabbits, half monkeys, on a jittered 90 px grid so the neighbourhood each entity sees stays
-the same size as the population grows; crowding a fixed arena would measure the stacking,
-not the population.
-
-**Three ramps, and what they say.** The stress test had been left with the *old* pipeline
-in it — `hunger`, `health` and `consume` were never added when step 4 landed — so its first
-ramp of the day measured a program that is not shipped. Worse than three missing stages:
-with no `EcsHungerSystem`, hunger stays at 0 forever, so the brain's `SEEK_FOOD`, `TAKE`
-and `EAT` rungs never fire and `low_brain` was only ever measured wandering. Run it against
-the real pipeline and:
-
-| pipeline | crossing | note |
-|---|---|---|
-| 12 stages, as documented before today | ~4,450 | the number this section used to carry |
-| **15 stages, what main.gd actually builds** | **3,200** (4,000 crosses) | reproduced cold, ±5% |
-
-The honest headline is **3,200**. Reference points interpolated off the live curve:
-**60 FPS at ~250 entities, 30 FPS at ~520, 10 FPS at ~1,700.**
-
-A third row used to sit in that table — 12 stages measured at 4,800+, read as "the FSM
-merge bought 8%" and "step 4 cost a third of the ceiling". Both are withdrawn; see
-immediately below. The 12-stage configuration measured in the same sitting as everything
-else crosses at 3,200 like the rest.
-
-**Retracted: the "70% regression" and the "step 4 cost a third of the ceiling".** Both came
-from comparing a ramp run in the morning against ramps run that afternoon, and the machine's
-throughput drifted ~50% between them. `--skip` now exists so the comparison can be made in
-one sitting, and made that way it says something much duller:
-
-| at n = 4,000, same session | 12 stages | 15 stages | difference |
-|---|---|---|---|
-| tick | 300.31 ms | 335.08 ms | **+11.6%** |
-| sensor | 130.66 ms | 132.25 ms | +1.2% |
-| collision | 55.98 ms | 54.47 ms | −2.7% |
-| low_brain | 46.96 ms | 47.26 ms | +0.6% |
-| node_sync | 35.08 ms | 34.21 ms | −2.5% |
-| movement | 22.76 ms | 22.70 ms | 0% |
-| **crossing 250 ms** | **3,200** | **3,200** | none |
-
-The +34.77 ms is exactly `consume` + `hunger` + `health` — the three stages' own cost,
-additive, with nothing else touched. **Step 4 cost about 12% of the tick and none of the
-ceiling.** The earlier figure of 4,800 for a 12-stage pipeline was that same morning run;
-the identical configuration measured today crosses at 4,000 like everything else.
-
-The memory hypothesis that was built on the 70% is withdrawn with it. It was wrong on its
-own terms as well: `EcsHungerComponent` and `EcsHealthComponent` were already on the
-blueprints during *both* ramps, so the component count per entity never changed.
-
-**How it was settled**, since the method is the reusable part. `--n=4000 --skip=<labels>`
-measures one population with named stages left out. Adding the three one at a time, then
-repeating the sweep in reverse order to separate configuration from heat and position:
-config-14 looked reproducibly slow in both directions, but repeated runs at a *fixed*
-configuration varied by ±12%, which is the size of the effect being chased. Two runs at
-each end after fixing the measurement litter below settled it at +9–12%.
-
-**Measurement litter, now fixed.** `_build_pipeline()` ran per population and `add_child`ed
-a fresh `EcsDebugOverlay` and `EcsSelectionMarker` every time without freeing them, so a
-thirteen-step ramp finished with thirteen of each in the tree. They are built once now.
-
-**Two rules this leaves.** Never compare numbers from different sittings — use `--skip` and
-measure both arms back to back. And single-shot `--n` numbers are *not* comparable to ramp
-numbers: the same 12-stage configuration measures ~260 ms single-shot and 300 ms at the same
-population inside a ramp, because six earlier measurements leave the process in a different
-state.
-
-### Crowding is a third of the ceiling, and it is not the population
-
-The grid spacing is now a knob — `-- --spacing=180` — because the arena already grows with
-the population (sqrt(n) columns at this spacing) and *density* is the thing that was
-fixed. Doubling the spacing quarters the density, and the sensor's fan-out follows exactly
-as pi r squared predicts:
-
-| at n = 3,200 | 90 px (shipped default) | 180 px |
-|---|---|---|
-| ids per sensing entity | 53.5 | **13.2** |
-| collision pairs per body | 1.2 | **0.2** |
-| µs per entity | 74.5 | **45.9** |
-| sensor share of tick | 39.4% | 26.6% |
-| **crossing 250 ms** | **3,200** | **4,800** (6,400 crosses) |
-
-**The shape changes, not just the number.** At 90 px the per-entity cost climbs with
-population — 69, 72, 74, 83 µs as n goes 100 → 4,000 — so something is super-linear. At
-180 px it is *flat*: 41.3, 41.9, 44.4, 45.9, 43.8, 46.2, 45.6 µs from n=400 to n=6,400.
-Sparse, this system is genuinely linear in population; dense, it is not, and the
-difference is perception fan-out rather than anything about entity count.
-
-Two numbers worth keeping from the sparse run, because they say what the stages really
-cost. Sensor rose to **0.892 µs per id returned** (from 0.590) while its total fell by
-half: most of a sensing entity's cost is fixed overhead, not the ids. Collision rose to
-**40.19 µs per overlap pair** (from 11.58) with pairs down to 0.2 per body: collision is
-almost entirely per-body bookkeeping — writing radii, monitoring flags, gathering the
-arrays — and hardly at all the resolve.
-
-**The floor: what an entity costs for existing.** Push the spacing to 840 px — twice the
-monkey's 420 px sensor, so no two sensor circles can overlap and the census reports
-literally zero perceived ids and zero collision pairs — and the pipeline still costs
-**41 µs per entity**:
-
-| at n = 4,800 | 90 px | 180 px | 840 px (no overlap at all) |
-|---|---|---|---|
-| ids per sensing entity | 53.5 | 13.2 | **0.0** |
-| collision pairs per body | 1.2 | 0.2 | **0.0** |
-| sensor stage | — | 59.01 ms | **39.06 ms** |
-| collision stage | — | 40.66 ms | **39.94 ms** |
-| µs per entity | 74.5 (at 3,200) | 46.2 | **41.6** |
-| crossing 250 ms | 3,200 | 4,800 | **4,800** (6,400 crosses) |
-
-**Sensor costs 39 ms to return nothing**, and collision costs 40 ms to resolve nothing.
-Deleting every interaction in the world — all perception, all overlap — moves the ceiling
-from 3,200 to about 6,000 and no further. That is the shape of a system that is
-**overhead-bound, not interaction-bound**: roughly 41 µs of every entity's cost is the
-per-entity bookkeeping of being queried, having components fetched, and having its areas
-synced, before it perceives or touches anything.
-
-It also settles what the sensor lever is worth. Going from 13.2 ids to 0 ids saves the
-sensor stage 34% and the whole tick 10%. Staggering it across four ticks cannot beat
-deleting it outright, so the ceiling on that lever is ~10% of the tick, not the ~32%
-the old per-id arithmetic suggested. **The per-entity floor is where the headroom is, and
-that is §8's argument.**
-
-**Which spacing is the honest one?** The shipped `world1.tres` puts 10 entities in a
-3200x1680 arena, which is far sparser than either. 90 px is a deliberately hostile
-neighbourhood, useful for finding the crowding cliff; 180 px is closer to a colony that
-has spread out. Quote 3,200 as the pessimistic ceiling and know that a third of it is
-crowding you may never have. Past ~280 px the measurement stops meaning anything: that is
-the sensor radius, so entities perceive nobody and the sim degenerates into wandering.
-
-`low_brain` is now a *perception* cost rather than a decision cost: 0.221 µs per id
-perceived against 53.5 ids per sensing entity accounts for essentially the whole stage.
-The food rung walks `sensor.perceived` and asks three store questions of each id, so the
-brain pays the sensor's fan-out a second time. That is the cheapest thing on this page to
-fix and nobody has.
-
-Both of those ramps are ~6–7% faster than the ramps taken before `EcsEntityArea` and the
-module 8 deletion, and **that gain is not attributed to either**: the isolated A/B below
-puts the typed id at ~1%, and a cross-ramp delta is not evidence of anything — which is
-the same trap documented in the next section. Machine state accounts for differences this
-size.
-
-Cost is near-linear — 0.038 ms/entity at 100 rising only to 0.057 at 4,600 — so nothing
-here is quadratic. The layer split (only bodies are detectable) is what bought that;
-sensors reported to each other would bend this curve upward hard.
-
-**Every stage at every population**, same run. The stress test prints both tables; the
-second is the one that says something.
-
-Milliseconds per tick:
-
-```
-     n    sensor collision node_sync    pickup  movement    forage low_brain     other      TICK
-   100      1.40      0.69      0.48      0.45      0.29      0.27      0.19      0.04      3.80
-   400      7.07      3.02      2.10      1.89      1.17      1.04      0.77      0.05     17.12
-  1600     31.50     12.84      9.19      9.12      5.08      4.40      3.38      0.06     75.58
-  3200     65.22     27.73     18.03     18.27     10.74      9.35      7.34      0.08    156.74
-  4000     92.86     35.98     25.65     23.87     14.59     12.24      9.92      0.07    215.18
-  4400    108.04     42.84     29.09     27.96     16.71     13.65     11.30      0.07    249.67
-  4600    110.99     45.44     31.03     29.12     18.53     14.24     11.84      0.07    261.26
-```
-
-Microseconds **per entity** — the same numbers divided by n, which is where the shape is:
-
-```
-     n    sensor collision node_sync    pickup  movement    forage low_brain      TICK
-   100    13.974     6.931     4.803     4.521     2.856     2.668     1.863    37.985
-  1600    19.689     8.022     5.745     5.702     3.178     2.751     2.111    47.235
-  4600    24.127     9.878     6.745     6.330     4.029     3.096     2.574    56.795
-```
-
-**Roughly 40% of the per-entity rise is memory, not algorithms.** `movement` has no
-neighbour dependency at all — two components in, one position out — and still went 2.86 →
-4.03 µs. `node_sync` (+40%), `pickup` (+40%) and `low_brain` (+38%) match it. That is the
-working set outgrowing cache, and no algorithmic change moves it.
-
-**Only `sensor` rises faster than that baseline** (+73%), and that part is a rig artifact,
-not the system: at n=100 the grid is 900 px across, so most entities are edge cases with
-truncated neighbourhoods, and the edge fraction shrinks as the grid grows. Per *id
-returned* the cost is flat.
-
-`low_brain` is the least stable stage across runs — 11.8 ms here, 18.8 ms in an earlier
-6400 run — because it only works on entities with no destination, and how many that is
-depends on where the berries landed. Read it as a band.
-
-### What each stage is actually paying for
-
-The stress test also counts the work, so a stage can be read per unit of work instead of
-per entity. At 4,600, per tick: sensor areas returned **245,955** ids (53.5 each), action
-areas **8,230** (1.8 each), body areas **5,052** overlap pairs (1.1 per body).
-
-- **`sensor` — 111.0 ms, 42.5%.** Almost exactly *ids returned*: 53.5 x 0.437 µs ≈ 23.4 of
-  its 24.1 µs/entity. **97% of those ids come from the sight area, 3% from the reach area**,
-  and ids scale with πr² — the monkey's 420 px radius covers 2.25x the rabbit's 280. Cost
-  here is a radius decision as much as a code one.
-- **`collision` — 45.4 ms, 17.4%.** Not the 5,052 pairs; it is the per-entity walk. It
-  still calls `_manager.node_for()` **every tick per entity** — the exact lookup that was
-  cached out of the sensor and was worth 14% there — and `node_for` builds a throwaway
-  dictionary on every call (`_nodes.get(id, {})` evaluates `{}` eagerly). ~4,600 wasted
-  allocations a tick from this stage alone. **Unfixed; it is the cheapest win left.**
-- **`node_sync` — 31.0 ms.** Pure per-entity: a container lookup, two components, five
-  property writes across two nodes. Its curve is the cache baseline and nothing else.
-- **`pickup` — 29.1 ms, 11.1%** to pick up nothing. Not the pickups — the walk: 4,600
-  entities, two components each, then one `world.has()` per id in reach (8,230, all false
-  here). It costs about what `node_sync` costs while doing far less, which is the tell
-  below.
-- **`movement` — 18.5 ms.** The floor for "query and read two components". See §8.
-- **`forage` / `low_brain` — 14.2 and 11.8 ms.** Cheapest per unit of work (forage is
-  0.058 µs per perceived id) because both bail early for most entities.
-- **Everything else — 0.07 ms combined.** lifecycle, spawner, selection, debug, census and
-  inspect together are 0.03% of the tick: drained-empty or early-outs.
-
-### Two attempts at the sensor cost, measured properly
-
-**On method first, because it bit.** Comparing a stage across two *ramp* runs is not valid:
-a run that reaches 4,300 after building and tearing down nine smaller worlds is slower at
-4,300 than a run that starts there, and the gap shows up in **every** stage, including ones
-the change never touched. A first pass at this claimed 29% off the sensor from caching, on
-exactly that confound. The numbers below are isolated runs — one population per process —
-which is the only way a stage-level delta means anything.
-
-Isolated, n = 4,300, one variable at a time:
-
-| variant | sensor | ms/entity | tick |
-|---|---|---|---|
-| no cache, typed id | 100.13 ms | 0.0233 | 219.96 ms |
-| cached, `get_meta` id | 86.64 ms | 0.0201 | 206.53 ms |
-| **cached, typed id** (current) | **86.04 ms** | **0.0200** | **204.44 ms** |
-
-**Caching the area and shape: −14% on the sensor stage, −7% on the tick.** It used to
-resolve each area through the manager and walk to its `CollisionShape2D` by NodePath every
-tick — at 4,300 animals that is 8,600 dictionary lookups and 8,600 path resolutions a tick
-— and hand each component a freshly allocated array. Now the area and its circle are
-resolved once per entity and the arrays are filled in place. The 4 FPS crossing moved
-3,900 → ~4,250, which is the same ~7% expressed in a different unit.
-
-**`EcsEntityArea` replacing `get_meta(&"entity_id")`: ~1%, inside noise.** The hypothesis
-was that a hashed metadata read, once per neighbour per sensing entity per tick, would be
-costing real time. Measured, it was not. The class was kept anyway — a typed field beats a
-magic string and it costs nothing — but **it is not a performance feature and should not be
-described as one.**
-
-**`sensor` is still ~42% of the frame**, and what is left is real work: one
-`get_overlapping_areas()` per entity carrying an `EcsSensorComponent`, one more per entity
-carrying an `EcsActionComponent`, and one field read per neighbour each call returns.
-
-Note what does *not* pay. It is component presence, not foraging: a rabbit and a monkey
-carry both components and cost two calls each, while a berry and a bush carry neither and
-cost nothing — they are only ever detected, never detectors. So the stress world, which is
-all animals, runs 2 x 4,600 = 9,200 calls a tick, while the shipped world charges only its
-10 animals and nothing for the 12 berries and bushes. (The two sets coincide today only
-because `EcsForageSystem` requires a sensor and `EcsPickupSystem` requires an action area.
-A guard that watches but never forages would still pay for its sensor.)
-
-The structural lever is untouched: **every sensing entity pays every tick**, and nothing
-needs that. Slicing the query so a quarter of the entities are scanned per tick is
-a ~4x cut to the dominant cost for four ticks of perception latency, which timer-based AI
-never notices. That is lever 1 in §9 below, and it is still the biggest single win available.
-
-**Two caveats.** This is the **simulation only** — headless draws nothing, so a windowed
-run is lower, never higher. And spawning is not free: 4,000 entities take ~600 ms to
-build, because each forager gets four nodes.
-
-### The older numbers, from before the sensor layer
-
-Intel Iris Xe, GDScript, per tick. Stale the moment the systems change; the shape is the
-durable part.
-
-| n | collision (Area2D) | collision (the O(n²) it replaced) |
-|---|---|---|
-| 100 | 1.56 ms | 3.82 ms |
-| 400 | 6.56 ms | 52.12 ms |
-| 1600 | 21.33 ms | ~800 ms |
-
-A simple linear system costs **~4–6 µs per entity per tick** (`low_brain` 4.0,
-`movement` 4.4, `render` 5.8, `debug` 13.5 — turn the overlay off when measuring anything
-else). Budget at 60 Hz: ~30–40 such systems at 100 entities, ~15–20 at 200.
-
-### The levers, ranked by payoff over cost
-
-**None of these are taken.** Re-ranked after the floor measurement above, which moved the
-sensor from first to nearly last and promoted the thing that was last.
-
-1. **Attack the per-entity floor.** 41 µs before anything perceives or touches anything,
-   and a hard ceiling near 6,000 entities however much else is fixed. That is `query()`
-   plus component access plus per-entity area bookkeeping — §8's packed-storage argument,
-   now with a number behind it rather than a ratio. **It is an open argument and the
-   author's call; do not implement it unasked.**
-2. **Decouple sim tick from frame rate — TAKEN, per stage rather than globally.**
-   `EcsScheduler.add(system, every, phase)` gives each stage a rate in ticks, and `main.gd`
-   puts `sensor` and `low_brain` on `SLOW` (3 ticks, 20 Hz) while movement, collision and
-   node_sync stay at 60. A global sim clock would have bought the same time and made the
-   picture stutter; per-stage keeps the eye-facing stages full rate. The scheduler banks
-   delta per system, so a slower stage is handed the time it missed and nothing is scaled
-   by hand — what changes is latency, not rate.
-
-   On the figures in this section those two stages are 179 of 335 ms at n=4,000, so a
-   third of that is **~120 ms off the average tick**. Unmeasured: `tests/stress_test.gd`
-   calls each system directly rather than through the scheduler, so it still reports the
-   full-rate cost of every stage. That is the right thing for a worst-case ramp, but it
-   means the saving does not show up there — measure it on `main.gd` if you want it.
-3. **Decide the density you are designing for.** Free: 90 px versus 180 px spacing moves
-   the ceiling from 3,200 to 4,800. Sight radius is the same lever from the other end —
-   ids scale with πr², so 420 → 280 px cuts ~38% of them with no code at all.
-4. **Cache the brain's perception scan.** The food rung asks three store questions of every
-   perceived id, every tick, right after the sensor walked the same list. Cheap, and it
-   shrinks with density.
-5. **Stagger the sensor across ticks — worth far less than it looked.** The old entry here
-   claimed ~32% off the tick. The 840 px run prices it properly: deleting perception
-   *entirely* saves the sensor stage 34% and the whole tick 10%, so staggering it buys less
-   than 10%. Most of a sensing entity's cost is fixed overhead, not ids returned.
-6. **Fix `node_for`'s throwaway dictionary.** `_nodes.get(id, {})` allocates on every call
-   and every caller pays. Small, free, uncontroversial.
-
-The first tick after a world is built creates every pooled node at once: 5 ms at 100
-entities, 70 ms at 400, 345 ms at 1000 — 97% of it `Area2D` creation. Behind a loading
-screen this is free; for a mid-game spawn wave it would need a per-tick creation cap.
+(`aggression`, `attack`, `crit`, `damage`, `death`, `durability`, `equip`, `weapon_carry`),
+plus `ecs_event.gd` and `ecs_damage_event.gd`. It was step 2 and it landed clean: armour added
+to a live entity without the attack code changing, crits by one new system and one scheduler
+line, a broken weapon falling back to fists with no `if weapon.broken` anywhere. **The
+evidence for the rewrite is in that commit, not in the working tree.** Restoring it means
+reconciling with what came after: health is now hunger's consequence, death is
+`EcsDyingFlag`, and a wielded weapon would be a record in a bag unless the record decision is
+revisited for items that act while carried.
+
+**Also cut then:** `EcsCommandSystem` and the pipeline panel (they served the combat demo),
+the crocodile and dagger blueprints, `EcsWorld.count()` and the frame-event API,
+`EcsSystem.enabled`, `EcsScheduler.find()`. The observability layer went too and has since
+come back, minus those.
