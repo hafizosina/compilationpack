@@ -36,7 +36,17 @@ extends EcsSystem
 ## (sensor, inventory) and will read more as behaviours arrive, so it is the one
 ## place in the module that knows about several concerns at once. That is what a
 ## brain is. The line it must not cross is *doing* anything with them — it still
-## writes nothing but `state`, `target`, `pause_left` and a destination.
+## writes nothing but `state`, `target`, `pause_left`, a destination and its
+## own intent flags.
+##
+## ## Decisions go out as flags
+##
+## `state` is this brain's memory. What the rest of the pipeline acts on is a
+## flag — EcsEatIntentFlag, EcsTakeIntentFlag, EcsAsleepFlag — raised and
+## cleared in `_set_state()`, the one place `state` is written, so the two can
+## never disagree. The executors and the hunger and energy systems read the
+## flags and never this brain's component, which is what lets anything else —
+## a planner, a test — drive them with no brain at all.
 ##
 ## ## The shape of a tick
 ##
@@ -57,16 +67,15 @@ func run(world: EcsWorld, delta: float) -> void:
 		# way, which nothing else in this brain is allowed to do.
 		if world.has(id, EcsCollapsedFlag):
 			if brain.state != EcsLowBrainComponent.State.SLEEP:
-				_release(brain)
 				_abandon_trip(move)
-				brain.state = EcsLowBrainComponent.State.SLEEP
+				_set_state(world, id, brain, EcsLowBrainComponent.State.SLEEP)
 			continue
 
 		# 0b. Sleeping by choice: stay down until rested, or until starving.
 		if brain.state == EcsLowBrainComponent.State.SLEEP:
 			if not _worth_waking_for(world, id):
 				continue
-			_release(brain)
+			_release(world, id, brain)
 
 		# 1. Does the standing commitment still hold?
 		if brain.state == EcsLowBrainComponent.State.SEEK_FOOD:
@@ -78,7 +87,7 @@ func run(world: EcsWorld, delta: float) -> void:
 				# destination slot, never take a full one, so a forager whose
 				# berry was stolen walked to the empty grass anyway.
 				_abandon_trip(move)
-				_release(brain)
+				_release(world, id, brain)
 			elif _in_reach(world, id, brain.target):
 				# Close enough to touch it, which is what it set out for. The
 				# trip's destination is the berry's *centre*, so waiting for
@@ -86,13 +95,13 @@ func run(world: EcsWorld, delta: float) -> void:
 				# it — fulfilling a commitment is not reconsidering one, so the
 				# rungs below get to act this same tick.
 				_abandon_trip(move)
-				_release(brain)
+				_release(world, id, brain)
 			elif not move.has_destination:
 				# The trip ended without arriving: given up, or the target was
 				# taken and re-placed out of reach. Either way it is no longer
 				# seeking, and whether it got anything is not this brain's
 				# business to ask.
-				_release(brain)
+				_release(world, id, brain)
 			else:
 				continue
 
@@ -148,28 +157,32 @@ func _try_eat(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
 	if hunger == null or hunger.fullness > hunger.eat_below:
 		return false
-	if not _food_at_hand(world, id):
+	var meal := _meal_at_hand(world, id)
+	if meal == EcsWorld.NO_ENTITY:
 		return false
 
-	_release(brain)
 	_abandon_trip(move)
-	brain.state = EcsLowBrainComponent.State.EAT
+	_set_state(world, id, brain, EcsLowBrainComponent.State.EAT, meal)
 	return true
 
-## Is there something edible it could put in its mouth right now — carried, or
-## lying under its nose?
-func _food_at_hand(world: EcsWorld, id: int) -> bool:
+## Something edible it could put in its mouth right now, or NO_ENTITY. The bag
+## first, only because a thing already held is the nearer of the two; then
+## whatever its action area is touching. This order used to live in
+## EcsConsumeSystem — it is a choice, so it lives here now, and the executor is
+## handed the answer.
+func _meal_at_hand(world: EcsWorld, id: int) -> int:
 	var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
 	if bag != null:
 		for item in bag.items:
-			if world.has(item, EcsConsumableComponent):
-				return true
+			if world.is_alive(item) and world.has(item, EcsConsumableComponent) \
+					and not world.has(item, EcsDyingFlag):
+				return item
 	var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
 	if action != null:
 		for touched in action.reached:
 			if _is_food(world, touched):
-				return true
-	return false
+				return touched
+	return EcsWorld.NO_ENTITY
 
 ## Rung 2 — put something within reach into the bag.
 ##
@@ -204,17 +217,16 @@ func _try_take(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	if action == null:
 		return false
 
-	var takeable := false
+	var item := EcsWorld.NO_ENTITY
 	for touched in action.reached:
 		if _is_takeable(world, touched):
-			takeable = true
+			item = touched
 			break
-	if not takeable:
+	if item == EcsWorld.NO_ENTITY:
 		return false
 
-	_release(brain)
 	_abandon_trip(move)
-	brain.state = EcsLowBrainComponent.State.TAKE
+	_set_state(world, id, brain, EcsLowBrainComponent.State.TAKE, item)
 	return true
 
 ## Is `other` close enough for this entity to act on?
@@ -282,8 +294,7 @@ func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	if best == EcsWorld.NO_ENTITY:
 		return false
 
-	brain.target = best
-	brain.state = EcsLowBrainComponent.State.SEEK_FOOD
+	_set_state(world, id, brain, EcsLowBrainComponent.State.SEEK_FOOD, best)
 	_set_trip(move, (world.get_component(best, EcsPositionComponent) as EcsPositionComponent).position)
 	return true
 
@@ -309,9 +320,8 @@ func _try_sleep(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		# stomach would be put straight back to sleep by this rung while it is
 		# still tired, and starve where it lay.
 		return false
-	_release(brain)
 	_abandon_trip(move)
-	brain.state = EcsLowBrainComponent.State.SLEEP
+	_set_state(world, id, brain, EcsLowBrainComponent.State.SLEEP)
 	return true
 
 ## Is there anything worth getting up for? Rested is the ordinary end of a
@@ -337,13 +347,13 @@ func _starving(world: EcsWorld, id: int) -> bool:
 ## rest: its pause starts when it has nothing to do.
 func _wander(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		move: EcsMovementComponent, delta: float) -> void:
-	brain.state = EcsLowBrainComponent.State.IDLE
+	_set_state(world, id, brain, EcsLowBrainComponent.State.IDLE)
 	brain.pause_left -= delta
 	if brain.pause_left > 0.0:
 		return
 	brain.pause_left = randf_range(brain.pause_min, brain.pause_max)
 	var here := world.get_component(id, EcsPositionComponent) as EcsPositionComponent
-	brain.state = EcsLowBrainComponent.State.WANDER
+	_set_state(world, id, brain, EcsLowBrainComponent.State.WANDER)
 	_set_trip(move, EcsConst.random_point_near(here.position, brain.radius, 0.25))
 
 ## Is `id` still food that is somewhere?
@@ -364,11 +374,47 @@ func _is_food(world: EcsWorld, id: int) -> bool:
 	return world.has(id, EcsConsumableComponent) and world.has(id, EcsPositionComponent) \
 		and not world.has(id, EcsDyingFlag)
 
-## Ends a commitment. Only the brain's own fields — whether the trip it implied
-## is also called off is a separate decision, made above.
-func _release(brain: EcsLowBrainComponent) -> void:
-	brain.target = EcsWorld.NO_ENTITY
-	brain.state = EcsLowBrainComponent.State.IDLE
+## Ends a commitment. Only the brain's own state and flags — whether the trip
+## it implied is also called off is a separate decision, made above.
+func _release(world: EcsWorld, id: int, brain: EcsLowBrainComponent) -> void:
+	_set_state(world, id, brain, EcsLowBrainComponent.State.IDLE)
+
+## The only place `state` and `target` are written, and the reason the intent
+## flags can never disagree with them: leaving a state clears its flag, entering
+## one raises it with the target named. Unchanged state and target is a no-op,
+## so an idle creature re-entering IDLE every tick touches the store not at all.
+func _set_state(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
+		state: EcsLowBrainComponent.State, target: int = EcsWorld.NO_ENTITY) -> void:
+	if brain.state == state and brain.target == target:
+		return
+	var old_flag: Script = _flag_for(brain.state)
+	if old_flag != null:
+		world.remove(id, old_flag)
+	brain.state = state
+	brain.target = target
+	match state:
+		EcsLowBrainComponent.State.EAT:
+			var eat := EcsEatIntentFlag.new()
+			eat.target_id = target
+			world.add(id, eat)
+		EcsLowBrainComponent.State.TAKE:
+			var take := EcsTakeIntentFlag.new()
+			take.target_id = target
+			world.add(id, take)
+		EcsLowBrainComponent.State.SLEEP:
+			world.add(id, EcsAsleepFlag.new())
+
+## The flag a state raises, or null for the states that say nothing but a
+## destination (IDLE, WANDER, SEEK_FOOD).
+static func _flag_for(state: EcsLowBrainComponent.State) -> Script:
+	match state:
+		EcsLowBrainComponent.State.EAT:
+			return EcsEatIntentFlag
+		EcsLowBrainComponent.State.TAKE:
+			return EcsTakeIntentFlag
+		EcsLowBrainComponent.State.SLEEP:
+			return EcsAsleepFlag
+	return null
 
 ## Sends an entity to a spot — the only place this system writes a destination.
 ##

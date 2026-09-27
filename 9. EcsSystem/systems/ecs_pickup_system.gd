@@ -3,8 +3,9 @@ extends EcsSystem
 
 ## Carries out the decision to take something. It does not make it.
 ##
-## `EcsLowBrainSystem` puts a creature in the TAKE state when it wants something
-## its action area is touching; this moves the thing into the bag. Deciding and
+## `EcsLowBrainSystem` raises EcsTakeIntentFlag, naming the item, when it wants
+## something its action area is touching; this moves that thing into the bag.
+## It reads the flag and never the brain, so anything that raises it drives this. Deciding and
 ## acting are different systems, the same split as brain and movement, and the
 ## same one EcsConsumeSystem is the other half of.
 ##
@@ -68,31 +69,26 @@ func label() -> StringName:
 	return &"pickup"
 
 func run(world: EcsWorld, _delta: float) -> void:
-	for id in world.query([EcsPositionComponent, EcsInventoryComponent,
-			EcsActionComponent, EcsLowBrainComponent]):
-		# Nothing happens unless something decided it. A brain is in the query
-		# rather than read optionally, because "taking is a decision" has no
-		# sensible exception: a thing with no brain and a bag would be picking
-		# up on nobody's authority, which is the reflex this stopped being.
-		var brain := world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
-		if brain.state != EcsLowBrainComponent.State.TAKE:
-			continue
-
+	for id in world.query([EcsTakeIntentFlag, EcsPositionComponent,
+			EcsInventoryComponent, EcsActionComponent]):
+		# Nothing happens unless something decided it. The flag is in the query
+		# because "taking is a decision" has no sensible exception: a thing with
+		# a bag and no intent would be picking up on nobody's authority, which
+		# is the reflex this stopped being.
+		var item := (world.get_component(id, EcsTakeIntentFlag) as EcsTakeIntentFlag).target_id
 		var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
 		if bag.items.size() >= bag.capacity:
 			continue
+		if not world.is_alive(item) or not world.has(item, EcsPickableComponent):
+			continue
+		# Something earlier in this same loop may already have taken it.
+		if not world.has(item, EcsPositionComponent):
+			continue
+		# Or eaten it, earlier this tick: it is claimed and dies next tick.
+		if world.has(item, EcsDyingFlag):
+			continue
 		var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
-
-		for touched in action.reached:
-			if not world.has(touched, EcsPickableComponent):
-				continue
-			# Something earlier in this same loop may already have taken it.
-			if not world.has(touched, EcsPositionComponent):
-				continue
-			# Or eaten it, earlier this tick: it is claimed and dies next tick.
-			if world.has(touched, EcsDyingFlag):
-				continue
-			bag.items.append(touched)
-			world.remove(touched, EcsPositionComponent)
-			if bag.items.size() >= bag.capacity:
-				break
+		if not action.reached.has(item):
+			continue
+		bag.items.append(item)
+		world.remove(item, EcsPositionComponent)

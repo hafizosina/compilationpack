@@ -85,6 +85,8 @@ func _run() -> void:
 	await _a_sated_carrier_leaves_the_berry_alone()
 	await _a_hungry_carrier_eats_off_the_ground_without_pocketing()
 	await _one_berry_two_takers_one_tick()
+	await _executors_need_a_flag_not_a_brain()
+	await _every_state_raises_exactly_its_flag()
 	await _a_stage_on_a_slower_tick_still_simulates_the_same()
 
 ## A component's `const NODE_KIND` is what gets it a node, so a berry — sprite,
@@ -153,7 +155,7 @@ func _pickup_hides_the_sprite_without_freeing_it() -> void:
 	# purpose. So the test plays the brain: it states the intent, and checks
 	# that EcsPickupSystem carries it out. That is the split under test here —
 	# with the old reflex, this passed without anything having chosen.
-	_intend(rabbit, EcsLowBrainComponent.State.TAKE)
+	_intend_take(rabbit, berry)
 	await _tick(2)
 
 	var bag := _world.get_component(rabbit, EcsInventoryComponent) as EcsInventoryComponent
@@ -287,7 +289,7 @@ func _it_sees_before_it_takes() -> void:
 	var action := _world.get_component(rabbit, EcsActionComponent) as EcsActionComponent
 	var bag := _world.get_component(rabbit, EcsInventoryComponent) as EcsInventoryComponent
 	# Wanting it is a given here; what is under test is whether it can reach it.
-	_intend(rabbit, EcsLowBrainComponent.State.TAKE)
+	_intend_take(rabbit, near)
 	await _tick(2)
 
 	# 100 px away: inside the 280 px sensor, outside the 34 + 14 px reach.
@@ -813,22 +815,129 @@ func _one_berry_two_takers_one_tick() -> void:
 	_check("both creatures have the berry in reach",
 		rabbit_reach.reached.has(berry) and monkey_reach.reached.has(berry))
 
-	_intend(rabbit, EcsLowBrainComponent.State.EAT)
-	_intend(monkey, EcsLowBrainComponent.State.TAKE)
+	_intend_eat(rabbit, berry)
+	_intend_take(monkey, berry)
 	contest.run_all(_world, TICK)
 	await get_tree().physics_frame
 
 	_check("the grazer ate it: it is claimed for death", _world.has(berry, EcsDyingFlag))
 	_check("so the carrier did not also take it", not bag.items.has(berry))
 
-	_intend(rabbit, EcsLowBrainComponent.State.IDLE)
-	_intend(monkey, EcsLowBrainComponent.State.IDLE)
+	_world.remove(rabbit, EcsEatIntentFlag)
+	_world.remove(monkey, EcsTakeIntentFlag)
 	contest.run_all(_world, TICK)
 	await get_tree().physics_frame
 	_check("and next tick it is gone", not _world.is_alive(berry))
 	for id in [rabbit, monkey]:
 		_world.add(id, EcsDyingFlag.new())
 	contest.run_all(_world, TICK)
+
+## Step 6's point, tested directly: the executors and the rate systems act on a
+## flag, so an entity with **no brain at all** eats, takes and sleeps when one is
+## raised on it. Nothing here ever reads EcsLowBrainComponent — the brain is
+## removed first so that nothing could.
+func _executors_need_a_flag_not_a_brain() -> void:
+	var acting := EcsScheduler.new()
+	acting \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsEnergySystem.new()) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsConsumeSystem.new()) \
+		.add(EcsPickupSystem.new())
+
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-15000.0, 0.0))
+	var monkey := _manager.spawn(_world, _catalog, &"monkey", Vector2(-15000.0, 3000.0))
+	var meal := _manager.spawn(_world, _catalog, &"berry", Vector2(-15000.0, 20.0))
+	var prize := _manager.spawn(_world, _catalog, &"berry", Vector2(-15000.0, 3020.0))
+	# Deliberately breaking the component guideline, for a test: nothing may be
+	# able to consult a brain, so there is none to consult.
+	_world.remove(rabbit, EcsLowBrainComponent)
+	_world.remove(monkey, EcsLowBrainComponent)
+	for i in 3:
+		acting.run_all(_world, TICK)
+		await get_tree().physics_frame
+
+	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
+	hunger.fullness = hunger.eat_below - 5.0
+	var before := hunger.fullness
+	_intend_eat(rabbit, meal)
+	_intend_take(monkey, prize)
+	acting.run_all(_world, TICK)
+	await get_tree().physics_frame
+
+	var bag := _world.get_component(monkey, EcsInventoryComponent) as EcsInventoryComponent
+	_check("a brainless grazer with an eat flag eats", _world.has(meal, EcsDyingFlag)
+		and hunger.fullness > before)
+	_check("a brainless carrier with a take flag takes", bag.items.has(prize))
+
+	var energy := _world.get_component(rabbit, EcsEnergyComponent) as EcsEnergyComponent
+	energy.value = energy.max_energy * 0.5
+	_world.add(rabbit, EcsAsleepFlag.new())
+	for i in 30:
+		acting.run_all(_world, TICK)
+	_check("a brainless sleeper with the asleep flag gets energy back",
+		energy.value > energy.max_energy * 0.5)
+
+	for id in [rabbit, monkey, prize]:
+		_world.add(id, EcsDyingFlag.new())
+	acting.run_all(_world, TICK)
+
+## `state` is the brain's memory and the flags are its instructions, written in
+## one place so they cannot drift. Run the whole deciding pipeline over a
+## hungry grazer and a hungry carrier among berries, and check on every tick
+## that each creature's flags are exactly the ones its state implies — and that
+## the eat and take states were actually visited, or the check proved nothing.
+func _every_state_raises_exactly_its_flag() -> void:
+	var living := EcsScheduler.new()
+	living \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsLowBrainSystem.new()) \
+		.add(EcsConsumeSystem.new()) \
+		.add(EcsMovementSystem.new()) \
+		.add(EcsCollisionSystem.new(_manager)) \
+		.add(EcsPickupSystem.new()) \
+		.add(EcsNodeSyncSystem.new(_manager))
+
+	var creatures: Array[int] = [
+		_manager.spawn(_world, _catalog, &"rabbit", Vector2(-18000.0, 0.0)),
+		_manager.spawn(_world, _catalog, &"monkey", Vector2(-18000.0, 200.0)),
+	]
+	var berries: Array[int] = []
+	for i in 6:
+		berries.append(_manager.spawn(_world, _catalog, &"berry",
+			Vector2(-18100.0 + i * 40.0, 100.0)))
+	var rabbit_hunger := _world.get_component(creatures[0], EcsHungerComponent) as EcsHungerComponent
+	rabbit_hunger.fullness = rabbit_hunger.forage_below - 1.0
+	var monkey_hunger := _world.get_component(creatures[1], EcsHungerComponent) as EcsHungerComponent
+	monkey_hunger.fullness = monkey_hunger.forage_below - 1.0
+
+	var disagreements := 0
+	var seen := {}
+	for tick in 400:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		for id in creatures:
+			var brain := _world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
+			seen[brain.state] = true
+			var eat := _world.has(id, EcsEatIntentFlag)
+			var take := _world.has(id, EcsTakeIntentFlag)
+			var asleep := _world.has(id, EcsAsleepFlag)
+			var want_eat := brain.state == EcsLowBrainComponent.State.EAT
+			var want_take := brain.state == EcsLowBrainComponent.State.TAKE
+			var want_asleep := brain.state == EcsLowBrainComponent.State.SLEEP
+			if eat != want_eat or take != want_take or asleep != want_asleep:
+				disagreements += 1
+
+	_check("flags and state agreed on every tick (%d disagreements)" % disagreements,
+		disagreements == 0)
+	_check("and the run did visit EAT and TAKE",
+		seen.has(EcsLowBrainComponent.State.EAT) and seen.has(EcsLowBrainComponent.State.TAKE))
+
+	for id in creatures + berries:
+		if _world.is_alive(id):
+			_world.add(id, EcsDyingFlag.new())
+	living.run_all(_world, TICK)
 
 ## Running a stage a third as often must not make it simulate a third as much.
 ## The scheduler banks delta per system, so hunger authored in points per second
@@ -1096,16 +1205,15 @@ func _sleeping_slows_hunger_without_stopping_it() -> void:
 
 	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-12000.0, 0.0))
 	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
-	var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
 	await _tick(1)
 
-	brain.state = EcsLowBrainComponent.State.WANDER
 	hunger.fullness = hunger.max_fullness
 	for i in 60:
 		living.run_all(_world, TICK)
 	var awake_cost := hunger.max_fullness - hunger.fullness
 
-	brain.state = EcsLowBrainComponent.State.SLEEP
+	# The flag alone, no brain state: hunger reads the fact, not the brain.
+	_world.add(rabbit, EcsAsleepFlag.new())
 	hunger.fullness = hunger.max_fullness
 	for i in 60:
 		living.run_all(_world, TICK)
@@ -1118,7 +1226,7 @@ func _sleeping_slows_hunger_without_stopping_it() -> void:
 		is_equal_approx(asleep_cost, awake_cost * hunger.asleep_drain_scale))
 
 	# A collapse is a forced sleep, and costs the same reduced rate.
-	brain.state = EcsLowBrainComponent.State.IDLE
+	_world.remove(rabbit, EcsAsleepFlag)
 	_world.add(rabbit, EcsCollapsedFlag.new())
 	hunger.fullness = hunger.max_fullness
 	for i in 60:
@@ -1127,11 +1235,18 @@ func _sleeping_slows_hunger_without_stopping_it() -> void:
 		is_equal_approx(hunger.max_fullness - hunger.fullness, asleep_cost))
 	_world.remove(rabbit, EcsCollapsedFlag)
 
-## States an intent on an entity's brain, for the tests that run an executor
-## system without EcsLowBrainSystem to decide for them.
-func _intend(id: int, state: EcsLowBrainComponent.State) -> void:
-	var brain := _world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
-	brain.state = state
+## Raise an intent flag directly, for the tests that run an executor without
+## EcsLowBrainSystem to decide for them. The test plays the brain — and since
+## the executors read only the flag, that is all playing the brain takes.
+func _intend_take(id: int, target: int) -> void:
+	var take := EcsTakeIntentFlag.new()
+	take.target_id = target
+	_world.add(id, take)
+
+func _intend_eat(id: int, target: int) -> void:
+	var eat := EcsEatIntentFlag.new()
+	eat.target_id = target
+	_world.add(id, eat)
 
 func _first_of(type_id: StringName) -> int:
 	for id in _world.query([EcsNameComponent]):

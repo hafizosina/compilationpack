@@ -33,12 +33,10 @@ func run(world: EcsWorld, delta: float) -> void:
 		var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
 		# Resting costs less. The condition is the same one EcsEnergySystem uses
 		# to decide whether to drain or restore, and the two must agree about
-		# what "asleep" means — both read the brain's state and the collapse
-		# tag, neither reads the other.
+		# what "asleep" means — both read the asleep and collapsed flags, and
+		# neither reads the other or the brain.
 		var drain := hunger.drain
-		var brain := world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
-		if world.has(id, EcsCollapsedFlag) or (brain != null
-				and brain.state == EcsLowBrainComponent.State.SLEEP):
+		if world.has(id, EcsCollapsedFlag) or world.has(id, EcsAsleepFlag):
 			drain *= hunger.asleep_drain_scale
 		hunger.fullness = maxf(hunger.fullness - drain * delta, 0.0)
 

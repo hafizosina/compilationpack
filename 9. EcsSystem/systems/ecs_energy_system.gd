@@ -9,8 +9,7 @@ extends EcsSystem
 ## a collapse costs. It never writes the brain or movement.
 ##
 ## **Sleeping is a decision; this is what makes it mean something.** The brain
-## puts a creature in SLEEP and this reads that state to switch drain for
-## restore — the same executor shape EcsConsumeSystem uses for EAT, except that
+## raises EcsAsleepFlag and this reads the flag to switch drain for restore — the same executor shape EcsConsumeSystem uses for EAT, except that
 ## eating is one act and resting is a rate.
 ##
 ## Collapse is the other direction: at zero this adds EcsCollapsedFlag, and
@@ -18,8 +17,8 @@ extends EcsSystem
 ## no calls between them.
 ##
 ## It sits beside `hunger` in the pipeline so a collapse's damage and any death
-## that follows land in the same tick. It reads the brain's state from the last
-## time the brain ran — and the brain runs at 20 Hz — so restoring begins up to
+## that follows land in the same tick. It reads the flag as the brain last left
+## it — and the brain runs at 20 Hz — so restoring begins up to
 ## three ticks after SLEEP is chosen. That is invisible, and it is written down
 ## here so nobody "fixes" it by moving the stage.
 
@@ -30,9 +29,7 @@ func run(world: EcsWorld, delta: float) -> void:
 	for id in world.query([EcsEnergyComponent]):
 		var energy := world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
 		var collapsed := world.has(id, EcsCollapsedFlag)
-		var brain := world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
-		var resting := collapsed or (brain != null
-			and brain.state == EcsLowBrainComponent.State.SLEEP)
+		var resting := collapsed or world.has(id, EcsAsleepFlag)
 
 		if resting:
 			energy.value = minf(energy.value + energy.restore * delta, energy.max_energy)
