@@ -490,12 +490,11 @@ out, by label).
 
 `ECS_REFACTOR_PLAN.md` is the roadmap. **Steps 0–6 are done; step 7 is not started.**
 
-**Next, decided 2026-09-27: cut the fetch time first** (§14 — about half the tick is
-component lookups). In order: run hunger / energy / health at 10 Hz (~35 ms); stop the brain
-re-fetching every perceived id (part of ~41 ms); trim duplicate `has` checks. Then decide
-§15's storage question with the numbers in hand — cached queries returning component
-references, valid now that components are fixed from spawn to death, are the biggest lever
-and the author's call. Measure every step before and after in one sitting.
+**Next, decided 2026-09-27: cut the fetch time first** — about half the tick is component
+lookups (§14). The plan, numbers and code sites are in **`FETCH_HANDOFF.md`**: bars at 10 Hz,
+the brain fetching each component once per creature, trimming duplicate `has` checks, then
+§15's storage question (cached queries returning component references) raised as the
+author's decision. Fold the results back here and delete that file when it is done.
 
 - **0–1** core and data-driven factory — done.
 - **2, the weapon pain case** — built, proved clean (armour and crit added without touching
@@ -576,7 +575,7 @@ sitting) and `logic`, the remainder. At 4,000 entities:
 | stage | total ms | bookkeeping | logic | note |
 |---|---|---|---|---|
 | sensor | 93.3 | ~22% | **72.6** | the real work is the overlap reads |
-| low_brain | 44.3 | ~100% | ~0 | 26,000 `get_component` a tick — ~6.5 per creature, the perception re-scan |
+| low_brain | 44.3 | ~100% | ~0 | 26,000 `get_component` a tick — ~6.5 per creature, the same components re-fetched in each rung |
 | collision | 34.0 | ~54% | 15.8 | |
 | node_sync | 23.8 | ~50% | 11.9 | the node writes |
 | energy, hunger | 18 each | ~100% | ~0 | 8,000 gets + 8,000 `has` each |
@@ -588,7 +587,7 @@ The priced columns are estimates and run a few percent high — the simple stage
 at 104–110%, i.e. "all bookkeeping, within error". The direct movement probe agrees (71%).
 **Outside sensor, collision and node_sync, the pipeline is almost pure lookup.** That is the
 per-entity floor in another form, and the strongest case yet for the §15 storage question
-and for caching the brain's perception scan.
+and for fetching each component once per creature in the brain.
 
 **The levers, ranked by payoff over cost:**
 
