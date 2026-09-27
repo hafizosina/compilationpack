@@ -80,6 +80,7 @@ text = "Entity"
 [node name="Tabs" type="TabBar" parent="Root/InspectorHolder/InspectorRow/InspectorPanel/Inspector" unique_id=579343396]
 unique_name_in_owner = true
 layout_mode = 2
+focus_mode = 0
 clip_tabs = false
 
 [node name="Scroll" type="ScrollContainer" parent="Root/InspectorHolder/InspectorRow/InspectorPanel/Inspector" unique_id=639292803]
