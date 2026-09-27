@@ -7,12 +7,14 @@
 script = ExtResource("place")
 entity_name = &"rabbit_0"
 type = &"rabbit"
+position = Vector2(-1250, -550)
 overrides = {
 "movement": {
 "speed": 176.0
 },
 "energy": {
-"value": 92.0
+"value": 92.0,
+"rolled": true
 }
 }
 
@@ -20,13 +22,14 @@ overrides = {
 script = ExtResource("place")
 entity_name = &"rabbit_1"
 type = &"rabbit"
-position = Vector2(18, -10)
+position = Vector2(-350, -620)
 overrides = {
 "movement": {
 "speed": 158.0
 },
 "energy": {
-"value": 61.0
+"value": 61.0,
+"rolled": true
 }
 }
 
@@ -34,13 +37,14 @@ overrides = {
 script = ExtResource("place")
 entity_name = &"rabbit_2"
 type = &"rabbit"
-position = Vector2(-15, 12)
+position = Vector2(600, -500)
 overrides = {
 "movement": {
 "speed": 168.0
 },
 "energy": {
-"value": 78.0
+"value": 78.0,
+"rolled": true
 }
 }
 
@@ -48,13 +52,14 @@ overrides = {
 script = ExtResource("place")
 entity_name = &"rabbit_3"
 type = &"rabbit"
-position = Vector2(10, 20)
+position = Vector2(-700, 450)
 overrides = {
 "movement": {
 "speed": 152.0
 },
 "energy": {
-"value": 47.0
+"value": 47.0,
+"rolled": true
 }
 }
 
@@ -62,13 +67,14 @@ overrides = {
 script = ExtResource("place")
 entity_name = &"rabbit_4"
 type = &"rabbit"
-position = Vector2(-20, -18)
+position = Vector2(1300, 600)
 overrides = {
 "movement": {
 "speed": 163.0
 },
 "energy": {
-"value": 85.0
+"value": 85.0,
+"rolled": true
 }
 }
 
@@ -76,13 +82,14 @@ overrides = {
 script = ExtResource("place")
 entity_name = &"monkey_0"
 type = &"monkey"
-position = Vector2(25, 5)
+position = Vector2(-1300, 250)
 overrides = {
 "movement": {
 "speed": 124.0
 },
 "energy": {
-"value": 55.0
+"value": 55.0,
+"rolled": true
 }
 }
 
@@ -90,13 +97,14 @@ overrides = {
 script = ExtResource("place")
 entity_name = &"monkey_1"
 type = &"monkey"
-position = Vector2(-28, 0)
+position = Vector2(150, -150)
 overrides = {
 "movement": {
 "speed": 136.0
 },
 "energy": {
-"value": 97.0
+"value": 97.0,
+"rolled": true
 }
 }
 
@@ -104,13 +112,14 @@ overrides = {
 script = ExtResource("place")
 entity_name = &"monkey_2"
 type = &"monkey"
-position = Vector2(5, -25)
+position = Vector2(1250, -250)
 overrides = {
 "movement": {
 "speed": 128.0
 },
 "energy": {
-"value": 68.0
+"value": 68.0,
+"rolled": true
 }
 }
 
@@ -118,13 +127,14 @@ overrides = {
 script = ExtResource("place")
 entity_name = &"monkey_3"
 type = &"monkey"
-position = Vector2(-8, 28)
+position = Vector2(300, 580)
 overrides = {
 "movement": {
 "speed": 133.0
 },
 "energy": {
-"value": 74.0
+"value": 74.0,
+"rolled": true
 }
 }
 
@@ -132,13 +142,14 @@ overrides = {
 script = ExtResource("place")
 entity_name = &"monkey_4"
 type = &"monkey"
-position = Vector2(30, -20)
+position = Vector2(-600, -100)
 overrides = {
 "movement": {
 "speed": 121.0
 },
 "energy": {
-"value": 51.0
+"value": 51.0,
+"rolled": true
 }
 }
 

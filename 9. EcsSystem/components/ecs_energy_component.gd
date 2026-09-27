@@ -49,6 +49,8 @@ extends EcsComponent
 var value: float = 100.0
 ## Whether the starting value has been rolled. Runtime state. A record keeps it,
 ## so an animal put back into the world keeps its energy rather than re-rolling.
+## A placement that authors its own `value` must set this true beside it, or the
+## roll overwrites the authored number on the first tick (world1.tres does).
 var rolled: bool = false
 
 func key() -> StringName:
