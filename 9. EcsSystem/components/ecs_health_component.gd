@@ -15,7 +15,7 @@ extends EcsComponent
 
 ## Only the reading goes on the inspector's Entity tab, labelled — a bare
 ## `value` would be ambiguous there beside energy's.
-const INSPECT_ON_ENTITY_TAB := {"health": &"value"}
+const INSPECT_ON_ENTITY_TAB := {"health": [&"value", &"max_health"]}
 
 ## Full health, for the inspector and for anything that later heals.
 @export var max_health: float = 100.0

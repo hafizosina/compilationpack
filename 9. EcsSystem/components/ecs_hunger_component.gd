@@ -59,7 +59,7 @@ extends EcsComponent
 
 ## Only the reading goes on the inspector's Entity tab, and the component gets
 ## no tab of its own.
-const INSPECT_ON_ENTITY_TAB := [&"fullness"]
+const INSPECT_ON_ENTITY_TAB := {"fullness": [&"fullness", &"max_fullness"]}
 
 ## How fed it is right now. Runtime state: `max_fullness` fed, 0 starving.
 var fullness: float = 100.0

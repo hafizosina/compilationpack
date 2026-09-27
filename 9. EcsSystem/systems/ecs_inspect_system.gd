@@ -21,6 +21,8 @@ extends EcsSystem
 ## with no tab of its own, by declaring `const INSPECT_ON_ENTITY_TAB` — either
 ## the field names in order, shown under their own names, or `{label: field}`
 ## when a bare field name would be ambiguous there (two components' `value`).
+## A label may map to `[field, max_field]` instead, for a reading out of a
+## ceiling: it shows as `67/100`, whole numbers.
 ## And one may declare `const INSPECT_HIDDEN := true` to show nothing at all —
 ## plumbing a person clicking an animal does not want to read. Every component
 ## is still named on the Entity tab's `components` line, hidden or not. A constant and not a method for the same reason as
@@ -80,8 +82,13 @@ func _snapshot(world: EcsWorld, id: int) -> Dictionary:
 			continue
 		if promoted is Dictionary:
 			for label in promoted:
-				var field := StringName(promoted[label])
-				entity_fields[String(label)] = _format(world, String(field), component.get(field))
+				var named_as: Variant = promoted[label]
+				if named_as is Array:
+					entity_fields[String(label)] = "%d/%d" % [
+						roundi(component.get(named_as[0])), roundi(component.get(named_as[1]))]
+				else:
+					var field := StringName(named_as)
+					entity_fields[String(label)] = _format(world, String(field), component.get(field))
 			continue
 		sections[component.key()] = {
 			"label": String(component.key()).capitalize(),

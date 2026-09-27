@@ -224,7 +224,7 @@ func _flags_share_one_inspector_tab() -> void:
 	var bars := _world.get_component(monkey, EcsHealthComponent) as EcsHealthComponent
 	_check("the three bars are on the Entity tab, each under its own label",
 		snapshot["fields"].has("fullness") and snapshot["fields"].has("energy")
-		and snapshot["fields"].get("health") == "%.2f" % bars.value)
+		and snapshot["fields"].get("health") == "%d/%d" % [roundi(bars.value), roundi(bars.max_health)])
 	_check("with no tabs of their own",
 		not sections.has(&"hunger") and not sections.has(&"energy") and not sections.has(&"health"))
 	_check("body, sprite, brain, sensor and action are not shown at all",

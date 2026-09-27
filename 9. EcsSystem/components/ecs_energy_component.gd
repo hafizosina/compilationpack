@@ -46,7 +46,7 @@ extends EcsComponent
 
 ## Only the reading goes on the inspector's Entity tab, labelled — a bare
 ## `value` would be ambiguous there beside health's.
-const INSPECT_ON_ENTITY_TAB := {"energy": &"value"}
+const INSPECT_ON_ENTITY_TAB := {"energy": [&"value", &"max_energy"]}
 
 ## How rested it is right now. Runtime state: `max_energy` rested, 0 exhausted.
 ## Full until EcsEnergySystem first sees the entity and rolls it.
