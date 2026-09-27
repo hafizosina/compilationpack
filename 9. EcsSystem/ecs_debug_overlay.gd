@@ -4,7 +4,7 @@ extends Node2D
 ## World-space debug gizmos, drawn on the entities themselves: the name, a
 ## velocity arrow, a dashed line to the spot the brain picked, fullness, energy
 ## and health as bars, a badge on the sprite's shoulder when it is carrying
-## something, and "zzz" above that shoulder while it sleeps.
+## something, and a sleep icon off that shoulder while it sleeps.
 ##
 ## Shapes rather than numbers, because these are readings you scan a crowd for
 ## rather than ones you read. A dozen creatures' worth of "hunger 43%" and
@@ -44,14 +44,31 @@ const HUNGER_COLOR := Color(0.725, 0.541, 0.196)
 const ENERGY_COLOR := Color(0.369, 0.541, 0.18)
 const HEALTH_COLOR := Color(0.62, 0.169, 0.145)
 
-## "zzz" in parchment for a sleep it chose, in health red for a collapse — the
-## same word, because both are down, and the colour says which kind of down.
+## The sleep icon in parchment for a sleep it chose, in health red for a
+## collapse — the same icon, because both are down, and the colour says which.
 const ASLEEP_COLOR := Color(0.906, 0.839, 0.675, 0.95)
 const COLLAPSED_COLOR := Color(0.85, 0.25, 0.2, 0.95)
+
+## The sleep icon. The art is black line-work, and tinting only multiplies, so
+## black would stay black on dark ground; `_ready` turns a small copy white so
+## the draw call can tint it either colour.
+const SLEEP_ICON := preload("res://Global/Asset/Icon/sleep.png")
+const SLEEP_ICON_SIZE := 64
 
 ## Snapshot rows from EcsDebugSystem. See that file for the keys.
 var _rows: Array[Dictionary] = []
 var _font: Font = ThemeDB.fallback_font
+var _sleep_icon: Texture2D
+
+func _ready() -> void:
+	var image := SLEEP_ICON.get_image()
+	image.decompress()
+	image.convert(Image.FORMAT_RGBA8)
+	image.resize(SLEEP_ICON_SIZE, SLEEP_ICON_SIZE, Image.INTERPOLATE_LANCZOS)
+	for y in SLEEP_ICON_SIZE:
+		for x in SLEEP_ICON_SIZE:
+			image.set_pixel(x, y, Color(1.0, 1.0, 1.0, image.get_pixel(x, y).a))
+	_sleep_icon = ImageTexture.create_from_image(image)
 
 ## Takes this frame's snapshot and asks for a redraw. The only entry point.
 func show_rows(rows: Array[Dictionary]) -> void:
@@ -122,13 +139,14 @@ func _draw() -> void:
 		if carried > 0:
 			_badge(pos + Vector2(-shoulder, -shoulder), carried, px)
 
-		# Asleep: "zzz" off the top-left shoulder — left of where the bag badge
-		# sits so a sleeping carrier shows both, and below the name line so the
-		# two never print over each other.
+		# Asleep: the icon off the top-left shoulder — left of where the bag
+		# badge sits so a sleeping carrier shows both, and below the name line
+		# so the two never overlap.
 		var sleep: int = row["sleep"]
-		if sleep > 0:
-			var zzz_at := pos + Vector2(-shoulder - 50.0 * px, -shoulder + 4.0 * px)
-			_label(zzz_at, "zzz", 16.0 * px, 44.0 * px,
+		if sleep > 0 and _sleep_icon != null:
+			var icon := 30.0 * px
+			var icon_at := pos + Vector2(-shoulder - 12.0 * px - icon, -shoulder - 10.0 * px)
+			draw_texture_rect(_sleep_icon, Rect2(icon_at, Vector2(icon, icon)), false,
 				COLLAPSED_COLOR if sleep == 2 else ASLEEP_COLOR)
 
 		if not row["has_movement"]:
