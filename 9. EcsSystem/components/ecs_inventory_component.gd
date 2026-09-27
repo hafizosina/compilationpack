@@ -24,5 +24,8 @@ extends EcsComponent
 ## What is held. Runtime state.
 var items: Array[EcsItemRecord] = []
 
+## How the inspector shows it — see inspect/inventory_inspect.gd.
+const INSPECTOR := preload("res://9. EcsSystem/inspect/inventory_inspect.gd")
+
 func key() -> StringName:
 	return &"inventory"

@@ -57,12 +57,11 @@ extends EcsComponent
 ## `starve_damage`: going hungry should cost more than being fed repays.
 @export var heal_rate: float = 1.5
 
-## Only the reading goes on the inspector's Entity tab, and the component gets
-## no tab of its own.
-const INSPECT_ON_ENTITY_TAB := {"fullness": [&"fullness", &"max_fullness"]}
-
 ## How fed it is right now. Runtime state: `max_fullness` fed, 0 starving.
 var fullness: float = 100.0
+
+## How the inspector shows it — see inspect/hunger_inspect.gd.
+const INSPECTOR := preload("res://9. EcsSystem/inspect/hunger_inspect.gd")
 
 func key() -> StringName:
 	return &"hunger"

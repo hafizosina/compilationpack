@@ -5,29 +5,27 @@ extends EcsSystem
 ## tag, and pushes it onto the EventBus. The panel rebuilds from that dictionary
 ## and never touches the world.
 ##
-## The snapshot is assembled by REFLECTION, and that is the interesting part.
-## Module 8 needed every component to implement `describe()` — a method, on a
-## component, written by hand, one per kind, kept in step with the fields it
-## reported. Here a component is a field-only Resource, so its fields can simply
-## be read off `get_property_list()`: `PROPERTY_USAGE_SCRIPT_VARIABLE` marks
-## exactly the component's own declarations, exported and runtime alike, in the
-## order they were written.
+## **It knows no component.** How a component looks is the component's own
+## business, carried by a presenter script it names with
+## `const INSPECTOR := preload(...)` — a constant, so the component stays data
+## only, the same way NODE_KIND names a node without doing anything. This file
+## knows only the presenter contract, fixed once:
 ##
-## So a new component kind gets an inspector tab, with its fields, in its
-## declaration order, without this file or that component knowing anything about
-## each other. Nothing here names a single component type.
+##     static func present(component) -> Dictionary
+##         {"tab": &"entity" | &"own" | &"hidden",   # where it goes
+##          "lines": {label: text},                  # what it says, in order
+##          "title": {"name": ..., "type": ...}}     # optional: names the panel
 ##
-## A component may instead ask for a few of its fields to sit on the Entity tab,
-## with no tab of its own, by declaring `const INSPECT_ON_ENTITY_TAB` — either
-## the field names in order, shown under their own names, or `{label: field}`
-## when a bare field name would be ambiguous there (two components' `value`).
-## A label may map to `[field, max_field]` instead, for a reading out of a
-## ceiling: it shows as `67/100`, whole numbers.
-## And one may declare `const INSPECT_HIDDEN := true` to show nothing at all —
-## plumbing a person clicking an animal does not want to read. Every component
-## is still named on the Entity tab's `components` line, hidden or not. A constant and not a method for the same reason as
-## NODE_KIND: the component states where it belongs and still does nothing, and
-## this reads the declaration without switching on type.
+## Changing how any component reads is an edit to its presenter in `inspect/`,
+## never to this file. A component that names no presenter gets its own tab
+## with every field, read by REFLECTION off `get_property_list()` —
+## `PROPERTY_USAGE_SCRIPT_VARIABLE` marks exactly its own declarations, in the
+## order they were written. That fallback is generic, not a preference about
+## any one kind. Module 8 put a `describe()` method on every component; here
+## the component still has no methods, and the presenter is a separate script.
+##
+## Flags are the one thing this lays out itself, and by base class alone: all of
+## an entity's flags share one "Flags" tab, a line each.
 
 ## How often a snapshot is sent. The values are read by a person, so 5 Hz is
 ## plenty and costs nothing.
@@ -58,7 +56,6 @@ func run(world: EcsWorld, delta: float) -> void:
 	EventBus.ecs_entity_inspected.emit(_snapshot(world, id))
 
 func _snapshot(world: EcsWorld, id: int) -> Dictionary:
-	var components := world.components_of(id)
 	var keys := PackedStringArray()
 	var sections: Dictionary = {}
 	# Flags come and go, so they share one tab with a line each rather than
@@ -66,49 +63,48 @@ func _snapshot(world: EcsWorld, id: int) -> Dictionary:
 	# intent was raised would be unreadable. The tab is always there, so it is
 	# also where a flag is seen to be *absent*.
 	var flags: Dictionary = {}
-	var entity_fields: Dictionary = {}
-	for component in components:
+	var entity_lines: Dictionary = {}
+	var title := {"name": "#%d" % id, "type": "—"}
+	for component in world.components_of(id):
 		if component is EcsFlag:
 			flags[String(component.key()).capitalize()] = _inline(world, component)
 			continue
 		keys.append(String(component.key()))
-		var declares := (component.get_script() as Script).get_script_constant_map()
-		if declares.get("INSPECT_HIDDEN", false):
-			continue
-		var promoted: Variant = declares.get("INSPECT_ON_ENTITY_TAB")
-		if promoted is Array:
-			for field in promoted:
-				entity_fields[String(field)] = _format(world, String(field), component.get(field))
-			continue
-		if promoted is Dictionary:
-			for label in promoted:
-				var named_as: Variant = promoted[label]
-				if named_as is Array:
-					entity_fields[String(label)] = "%d/%d" % [
-						roundi(component.get(named_as[0])), roundi(component.get(named_as[1]))]
-				else:
-					var field := StringName(named_as)
-					entity_fields[String(label)] = _format(world, String(field), component.get(field))
-			continue
-		sections[component.key()] = {
-			"label": String(component.key()).capitalize(),
-			"fields": _fields_of(world, component),
-		}
+		var view := _present(world, component)
+		if view.has("title"):
+			title = view["title"]
+		match view.get("tab", &"own"):
+			&"hidden":
+				pass
+			&"entity":
+				entity_lines.merge(view.get("lines", {}))
+			_:
+				sections[component.key()] = {
+					"label": String(component.key()).capitalize(),
+					"fields": view.get("lines", {}),
+				}
 	sections[&"flags"] = {
 		"label": "Flags",
 		"fields": flags if not flags.is_empty() else {"none": ""},
 	}
 
-	var named := world.get_component(id, EcsNameComponent) as EcsNameComponent
-	entity_fields["id"] = "#%d" % id
-	entity_fields["blueprint"] = named.display_name if named != null else "—"
-	entity_fields["components"] = ", ".join(keys)
+	entity_lines["id"] = "#%d" % id
+	entity_lines["components"] = ", ".join(keys)
 	return {
-		"name": String(named.entity_name) if named != null else "#%d" % id,
-		"type": String(named.type_id) if named != null else "—",
-		"fields": entity_fields,
+		"name": title.get("name", "#%d" % id),
+		"type": title.get("type", "—"),
+		"fields": entity_lines,
 		"components": sections,
 	}
+
+## What a component says about itself: its presenter's answer if it names one,
+## else its own tab with every field.
+func _present(world: EcsWorld, component: EcsComponent) -> Dictionary:
+	var presenter: Variant = (component.get_script() as Script) \
+		.get_script_constant_map().get("INSPECTOR")
+	if presenter is Script:
+		return presenter.present(component)
+	return {"tab": &"own", "lines": _fields_of(world, component)}
 
 ## One component's own declarations, formatted. `PROPERTY_USAGE_SCRIPT_VARIABLE`
 ## keeps the script's own fields and drops everything Resource brings with it.
@@ -134,17 +130,10 @@ func _inline(world: EcsWorld, flag: EcsFlag) -> String:
 
 func _format(world: EcsWorld, property: String, value: Variant) -> String:
 	# An int field named *_id is a relationship. Showing the entity's name makes
-	# "this monkey wields that dagger" legible without the reader tracking ids.
+	# "this monkey wields that dagger" legible without the reader tracking ids —
+	# and the name is whatever title that entity's own presenters give it.
 	if value is int and property.ends_with("_id") and world.is_alive(value):
-		var named := world.get_component(value, EcsNameComponent) as EcsNameComponent
-		return "#%d %s" % [value, named.entity_name if named != null else "?"]
-	if value is Array and not value.is_empty() and value[0] is EcsItemRecord:
-		# Carried records: type and the head of the uid, which is enough to see
-		# the same berry go into a bag and come back out.
-		var held := PackedStringArray()
-		for record: EcsItemRecord in value:
-			held.append("%s (%s)" % [record.type_id, record.uid.left(6)])
-		return ", ".join(held)
+		return "#%d %s" % [value, _title_of(world, value)]
 	if value is float:
 		return "%.2f" % value
 	if value is Vector2:
@@ -157,3 +146,13 @@ func _format(world: EcsWorld, property: String, value: Variant) -> String:
 	if value == null:
 		return "—"
 	return str(value)
+
+## The name an entity's presenters give it, or "?" if none of them titles it.
+func _title_of(world: EcsWorld, id: int) -> String:
+	for component in world.components_of(id):
+		if component is EcsFlag:
+			continue
+		var view := _present(world, component)
+		if view.has("title"):
+			return str(view["title"].get("name", "?"))
+	return "?"

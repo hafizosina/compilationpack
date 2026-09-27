@@ -10,10 +10,6 @@ extends EcsComponent
 ## .tres cannot write an integer id it has no way of knowing, so it names its
 ## weapon and EcsEquipSystem turns that name into an id once, at runtime.
 
-## Only the name goes on the inspector's Entity tab, and the component gets no
-## tab of its own; type, display name and uid are the header's or nobody's.
-const INSPECT_ON_ENTITY_TAB := [&"entity_name"]
-
 ## Unique name for this instance, from EcsPlacement.entity_name.
 @export var entity_name: StringName = &""
 ## Blueprint id this instance was built from.
@@ -25,6 +21,9 @@ const INSPECT_ON_ENTITY_TAB := [&"entity_name"]
 ## not. Set by EcsEntityManager at first spawn and carried by EcsItemRecord.
 ## Runtime, not authored: a .tres cannot know it.
 var uid: String = ""
+
+## How the inspector shows it — see inspect/name_inspect.gd.
+const INSPECTOR := preload("res://9. EcsSystem/inspect/name_inspect.gd")
 
 func key() -> StringName:
 	return &"name"

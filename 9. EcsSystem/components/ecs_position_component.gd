@@ -5,11 +5,10 @@ extends EcsComponent
 ## Sprite2D that shows it is a view EcsNodeSyncSystem writes, one way, every
 ## frame.
 
-## One line every entity has: it goes on the inspector's Entity tab rather
-## than a tab of its own.
-const INSPECT_ON_ENTITY_TAB := [&"position"]
-
 @export var position: Vector2 = Vector2.ZERO
+
+## How the inspector shows it — see inspect/position_inspect.gd.
+const INSPECTOR := preload("res://9. EcsSystem/inspect/position_inspect.gd")
 
 func key() -> StringName:
 	return &"position"

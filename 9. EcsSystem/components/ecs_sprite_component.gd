@@ -18,9 +18,8 @@ const NODE_KIND: StringName = EcsConst.NODE_SPRITE
 ## Draw order, so a wielded dagger sits over its wielder.
 @export var z_index: int = 0
 
-## Plumbing for the physics and the view, not something to read while watching
-## an animal: the inspector shows nothing of it.
-const INSPECT_HIDDEN := true
+## Not shown in the entity detail — see inspect/hidden_inspect.gd.
+const INSPECTOR := preload("res://9. EcsSystem/inspect/hidden_inspect.gd")
 
 func key() -> StringName:
 	return &"sprite"

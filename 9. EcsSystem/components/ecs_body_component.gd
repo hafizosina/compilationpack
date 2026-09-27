@@ -56,9 +56,8 @@ const NODE_MASK: int = EcsConst.LAYER_BODY
 ## ground is the one that has to say so.
 @export var is_solid: bool = true
 
-## Plumbing for the physics and the view, not something to read while watching
-## an animal: the inspector shows nothing of it.
-const INSPECT_HIDDEN := true
+## Not shown in the entity detail — see inspect/hidden_inspect.gd.
+const INSPECTOR := preload("res://9. EcsSystem/inspect/hidden_inspect.gd")
 
 func key() -> StringName:
 	return &"body"

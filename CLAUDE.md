@@ -171,8 +171,7 @@ that gains movement is no longer a wall — that is a kill and a spawn, not an `
 removed freely by the system that owns it; it may carry runtime data (an intent names its
 target) but never `@export`. A **singleton** (`EcsSingleton`, in `singletons/`) belongs to
 the world, not an entity. This is a **guideline, not an enforced rule** — `EcsWorld` stores
-all three alike; break it for a good reason and write the reason down where it breaks. The
-inspector gives each component a tab and lists all flags on one "Flags" tab.
+all three alike; break it for a good reason and write the reason down where it breaks.
 
 **Step 6 is done on the stripped core: the brain speaks in flags.** `state` is the FSM's
 memory; `EcsEatIntentFlag{target_id | record_uid}`, `EcsTakeIntentFlag{target_id}` and
@@ -315,11 +314,17 @@ entity, and the bottom-left panel shows it. The chain is strictly ECS: a click i
 resolves it on the next tick by a distance query over `EcsPositionComponent` (no physics
 pick, no hitboxes), selection is the presence of `EcsSelectedFlag`, and
 `EcsInspectSystem` pushes a formatted snapshot onto `EventBus.ecs_entity_inspected`.
-`ui/ui.tscn` is a dumb renderer that never touches the world. **The inspector builds its
-tabs by reflection** over `PROPERTY_USAGE_SCRIPT_VARIABLE`, so a new component gets a tab,
-with its fields in declaration order, without the component or the panel knowing anything
-about each other — **components stay method-free; do not add a `describe()` hook to a
-component** the way module 8 did without settling that argument first.
+`ui/ui.tscn` is a dumb renderer that never touches the world. **`EcsInspectSystem` knows no
+component — keep it that way.** How a component reads is a **presenter script** in
+`9. EcsSystem/inspect/`, named by the component with `const INSPECTOR := preload(...)` (a
+constant, so the component stays data only, like `NODE_KIND`). The contract is fixed:
+`static func present(component) -> {"tab": &"entity" | &"own" | &"hidden", "lines":
+{label: text}, "title"?: {name, type}}`. To change how a component shows, edit its presenter —
+**never the inspect system**; a test fails if that file names a component type. A component
+with no presenter gets its own tab of every field, by reflection. Flags are the one thing the
+inspector lays out itself, by base class: one "Flags" tab. **Components stay method-free; do
+not add a `describe()` hook to a component** the way module 8 did — the presenter is the
+separate script that answers that.
 
 The plan's step-2 combat pipeline was built, proved out, and then cut back out so the
 flow reads end to end; it is in git at `928b9d1`, and `9. EcsSystem/HANDOFF.md` §6 says
