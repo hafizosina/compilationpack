@@ -24,8 +24,8 @@ extends Node2D
 ## The delta handed to every system, matching a 60 Hz physics step.
 const TICK: float = 1.0 / 60.0
 ## Population steps. The ramp stops as soon as a tick crosses the budget.
-const SIZES: Array[int] = [100, 200, 400, 800, 1600, 3200, 4000, 4400, 4600, 4800,
-	6400, 8000, 9600]
+const SIZES: Array[int] = [1, 10, 25, 50, 100, 200, 400, 800, 1200, 1600, 2000,
+	2400, 2800, 3200, 4000, 4800, 6400, 8000, 9600]
 ## Pixels between entities, and the one knob that separates *population* from
 ## *crowding*. Above the largest body (36) so nothing is born permanently
 ## overlapping; below the smallest sensor (280) so everything has neighbours to
