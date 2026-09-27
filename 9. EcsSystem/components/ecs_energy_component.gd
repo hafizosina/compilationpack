@@ -44,6 +44,10 @@ extends EcsComponent
 @export_range(0.0, 1.0) var start_min: float = 1.0
 @export_range(0.0, 1.0) var start_max: float = 1.0
 
+## Only the reading goes on the inspector's Entity tab, labelled — a bare
+## `value` would be ambiguous there beside health's.
+const INSPECT_ON_ENTITY_TAB := {"energy": &"value"}
+
 ## How rested it is right now. Runtime state: `max_energy` rested, 0 exhausted.
 ## Full until EcsEnergySystem first sees the entity and rolls it.
 var value: float = 100.0

@@ -213,7 +213,7 @@ func _flags_share_one_inspector_tab() -> void:
 		flags.has("Selected") and flags.has("Collapsed") and not flags.has("none"))
 	_check("and neither gets a tab of its own",
 		not sections.has(&"selected") and not sections.has(&"collapsed"))
-	_check("components still do", sections.has(&"hunger") and sections.has(&"inventory"))
+	_check("components still do", sections.has(&"inventory") and sections.has(&"sensor"))
 	var snapshot: Dictionary = inspect._snapshot(_world, monkey)
 	var named := _world.get_component(monkey, EcsNameComponent) as EcsNameComponent
 	_check("the name component has no tab of its own", not sections.has(&"name"))
@@ -221,6 +221,17 @@ func _flags_share_one_inspector_tab() -> void:
 		snapshot["fields"].get("entity_name") == String(named.entity_name))
 	_check("and so is its position, with no Position tab",
 		not sections.has(&"position") and snapshot["fields"].has("position"))
+	var bars := _world.get_component(monkey, EcsHealthComponent) as EcsHealthComponent
+	_check("the three bars are on the Entity tab, each under its own label",
+		snapshot["fields"].has("fullness") and snapshot["fields"].has("energy")
+		and snapshot["fields"].get("health") == "%.2f" % bars.value)
+	_check("with no tabs of their own",
+		not sections.has(&"hunger") and not sections.has(&"energy") and not sections.has(&"health"))
+	_check("body and sprite are not shown at all",
+		not sections.has(&"body") and not sections.has(&"sprite"))
+	_check("but every component is still named on the components line",
+		String(snapshot["fields"].get("components")).contains("body")
+		and String(snapshot["fields"].get("components")).contains("name"))
 	_check("the singletons are their own kind",
 		_world.get_singleton(EcsLifecycleSingleton) is EcsSingleton)
 

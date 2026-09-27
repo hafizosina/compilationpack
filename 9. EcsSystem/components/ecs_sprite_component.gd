@@ -18,5 +18,9 @@ const NODE_KIND: StringName = EcsConst.NODE_SPRITE
 ## Draw order, so a wielded dagger sits over its wielder.
 @export var z_index: int = 0
 
+## Plumbing for the physics and the view, not something to read while watching
+## an animal: the inspector shows nothing of it.
+const INSPECT_HIDDEN := true
+
 func key() -> StringName:
 	return &"sprite"

@@ -18,8 +18,12 @@ extends EcsSystem
 ## each other. Nothing here names a single component type.
 ##
 ## A component may instead ask for a few of its fields to sit on the Entity tab,
-## with no tab of its own, by declaring `const INSPECT_ON_ENTITY_TAB` — the
-## field names, in order. A constant and not a method for the same reason as
+## with no tab of its own, by declaring `const INSPECT_ON_ENTITY_TAB` — either
+## the field names in order, shown under their own names, or `{label: field}`
+## when a bare field name would be ambiguous there (two components' `value`).
+## And one may declare `const INSPECT_HIDDEN := true` to show nothing at all —
+## plumbing a person clicking an animal does not want to read. Every component
+## is still named on the Entity tab's `components` line, hidden or not. A constant and not a method for the same reason as
 ## NODE_KIND: the component states where it belongs and still does nothing, and
 ## this reads the declaration without switching on type.
 
@@ -62,16 +66,23 @@ func _snapshot(world: EcsWorld, id: int) -> Dictionary:
 	var flags: Dictionary = {}
 	var entity_fields: Dictionary = {}
 	for component in components:
-		var promoted: Variant = (component.get_script() as Script) \
-			.get_script_constant_map().get("INSPECT_ON_ENTITY_TAB")
-		if promoted is Array:
-			for field in promoted:
-				entity_fields[String(field)] = _format(world, String(field), component.get(field))
-			continue
 		if component is EcsFlag:
 			flags[String(component.key()).capitalize()] = _inline(world, component)
 			continue
 		keys.append(String(component.key()))
+		var declares := (component.get_script() as Script).get_script_constant_map()
+		if declares.get("INSPECT_HIDDEN", false):
+			continue
+		var promoted: Variant = declares.get("INSPECT_ON_ENTITY_TAB")
+		if promoted is Array:
+			for field in promoted:
+				entity_fields[String(field)] = _format(world, String(field), component.get(field))
+			continue
+		if promoted is Dictionary:
+			for label in promoted:
+				var field := StringName(promoted[label])
+				entity_fields[String(label)] = _format(world, String(field), component.get(field))
+			continue
 		sections[component.key()] = {
 			"label": String(component.key()).capitalize(),
 			"fields": _fields_of(world, component),
