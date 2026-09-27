@@ -480,7 +480,7 @@ state/flag agreement over 400 ticks; records, uid and the reflection copy; the d
 the inspector's layout and its not naming any component; and per-stage tick rates banking
 delta.
 
-`tests/stress_test.tscn` — the population ramp (§14). Knobs after a bare `--`:
+`tests/stress_test.tscn` — the population ramp and the per-stage bookkeeping split (§14). Knobs after a bare `--`:
 `--spacing=180` (grid px), `--n=4000` (one population), `--skip=hunger,health` (leave stages
 out, by label).
 
@@ -560,6 +560,28 @@ spacing (13 ids per sensor instead of 53) the ceiling is 4,800, and the per-enti
 flat with population; at 90 px it climbs. In `movement` — two components in, one out — **~70%
 of the stage is finding the components**, not using them (`get_component` is a double hashed
 lookup plus boxing, ~1 µs a call).
+
+**Bookkeeping vs logic, per stage.** The stress test now ends with a split of every stage's
+time at the final population: `query` (timed), `loop` and `fetch` (store calls counted in a
+separate pass on `tests/ecs_counting_world.gd`, priced by unit costs measured in the same
+sitting) and `logic`, the remainder. At 4,000 entities:
+
+| stage | total ms | bookkeeping | logic | note |
+|---|---|---|---|---|
+| sensor | 93.3 | ~22% | **72.6** | the real work is the overlap reads |
+| low_brain | 44.3 | ~100% | ~0 | 26,000 `get_component` a tick — ~6.5 per creature, the perception re-scan |
+| collision | 34.0 | ~54% | 15.8 | |
+| node_sync | 23.8 | ~50% | 11.9 | the node writes |
+| energy, hunger | 18 each | ~100% | ~0 | 8,000 gets + 8,000 `has` each |
+| movement | 16.5 | ~97% | ~0.5 | |
+| health | 9.1 | ~100% | ~0 | |
+| **whole tick** | **257.2** | **~61–63%** | **~96** | three quarters of the logic is the sensor |
+
+The priced columns are estimates and run a few percent high — the simple stages come out
+at 104–110%, i.e. "all bookkeeping, within error". The direct movement probe agrees (71%).
+**Outside sensor, collision and node_sync, the pipeline is almost pure lookup.** That is the
+per-entity floor in another form, and the strongest case yet for the §15 storage question
+and for caching the brain's perception scan.
 
 **The levers, ranked by payoff over cost:**
 

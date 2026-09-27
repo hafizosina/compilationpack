@@ -80,6 +80,13 @@ var _overlay: EcsDebugOverlay
 var _marker: EcsSelectionMarker
 var _entities: Node2D
 var _catalog: EcsEntityCatalog
+## True while the counting pass runs, so each stage's store traffic is filed
+## under its own label.
+var _counting: bool = false
+
+const CountingWorld := preload("res://9. EcsSystem/tests/ecs_counting_world.gd")
+## Ticks the counting pass averages over.
+const COUNT_TICKS: int = 10
 
 func _ready() -> void:
 	_resolve_spacing()
@@ -128,6 +135,10 @@ func _ready() -> void:
 	_report_matrix(every)
 	_report_breakdown(worst)
 	_probe_access(worst)
+	if not worst.is_empty():
+		var units := _unit_costs()
+		var traffic := await _count_traffic(int(worst["n"]))
+		_report_split(worst, traffic, units)
 	get_tree().quit(0)
 
 ## Splits the per-entity floor into query, component fetch, and the actual work,
@@ -224,6 +235,140 @@ func _probe_access(result: Dictionary) -> void:
 		print("[stress]   => access overhead is %.0f%% of the stage (%.2f of %.2f ms)"
 			% [100.0 * (full - pk) / full, full - pk, full])
 
+## What one store call costs, measured on the plain world the ramp just timed,
+## in this sitting. The counting pass says how many calls each stage makes;
+## these say what each one costs. `loop` is one bare iteration over an id list;
+## the others are one call *on top of* that iteration, cast included, because
+## systems always cast what they fetch.
+func _unit_costs() -> Dictionary:
+	var ids := _world.query([EcsPositionComponent])
+	var n := ids.size()
+	if n == 0:
+		return {}
+	var rounds := 20
+	var began: int = 0
+	var sink: int = 0
+
+	var loop_us: float = 0.0
+	for i in rounds:
+		began = Time.get_ticks_usec()
+		for id in ids:
+			sink += id
+		loop_us += float(Time.get_ticks_usec() - began)
+
+	var get_us: float = 0.0
+	for i in rounds:
+		began = Time.get_ticks_usec()
+		for id in ids:
+			var place := _world.get_component(id, EcsPositionComponent) as EcsPositionComponent
+			sink += 1 if place != null else 0
+		get_us += float(Time.get_ticks_usec() - began)
+
+	var has_us: float = 0.0
+	for i in rounds:
+		began = Time.get_ticks_usec()
+		for id in ids:
+			sink += 1 if _world.has(id, EcsMovementComponent) else 0
+		has_us += float(Time.get_ticks_usec() - began)
+
+	var alive_us: float = 0.0
+	for i in rounds:
+		began = Time.get_ticks_usec()
+		for id in ids:
+			sink += 1 if _world.is_alive(id) else 0
+		alive_us += float(Time.get_ticks_usec() - began)
+
+	var loop := loop_us / rounds / n
+	return {
+		"loop": loop,
+		"get": maxf(get_us / rounds / n - loop, 0.0),
+		"has": maxf(has_us / rounds / n - loop, 0.0),
+		"alive": maxf(alive_us / rounds / n - loop, 0.0),
+	}
+
+## Rebuilds a world of `n` on the counting world, lets it settle exactly as the
+## timed run did, then counts each stage's store traffic over a few ticks and
+## returns it per tick. A separate world, so its counting cannot slow the
+## timings being divided up; the same size, grid and warmup, so the traffic is
+## the same traffic.
+func _count_traffic(n: int) -> Dictionary:
+	_manager.clear()
+	_world = CountingWorld.new()
+	_world.add_singleton(EcsLifecycleSingleton.new())
+	_world.add_singleton(EcsSelectionSingleton.new())
+	_build_pipeline()
+	_populate(n)
+	for i in WARMUP:
+		_run_once()
+		await get_tree().physics_frame
+
+	_world.call(&"reset_counts")
+	_counting = true
+	for i in COUNT_TICKS:
+		_run_once()
+		await get_tree().physics_frame
+	_counting = false
+
+	var per_tick: Dictionary = {}
+	var counts: Dictionary = _world.get(&"counts")
+	for label in counts:
+		var bucket: Dictionary = counts[label]
+		var averaged: Dictionary = {}
+		for key in bucket:
+			averaged[key] = float(bucket[key]) / COUNT_TICKS
+		per_tick[label] = averaged
+	return per_tick
+
+## Every stage's measured time, divided into what it spent asking the store and
+## walking the answer, and what it spent doing its job.
+##
+##   query  — world.query() calls, timed directly in the counting pass
+##   loop   — ids walked x the cost of one bare iteration
+##   fetch  — get_component / has / is_alive calls x their measured unit cost
+##   logic  — the rest: the stage's own arithmetic and decisions, and any
+##            engine calls it makes (overlap reads, node writes)
+##
+## query, loop and fetch are the ECS bookkeeping; logic is the work. The first
+## two columns are measured; loop and fetch are counts priced by unit costs, so
+## they are estimates, and logic is whatever remains. A tiny stage can come out
+## slightly negative, which reads as "all bookkeeping, within noise".
+func _report_split(result: Dictionary, traffic: Dictionary, units: Dictionary) -> void:
+	if units.is_empty():
+		return
+	var n: int = result["n"]
+	var systems: Dictionary = result["systems"]
+	print("")
+	print("[stress] bookkeeping vs logic, per stage, at %d entities (ms per tick):" % n)
+	print("[stress]   unit costs this sitting: loop %.3f us/id, get_component %.3f us, has %.3f us, is_alive %.3f us"
+		% [units["loop"], units["get"], units["has"], units["alive"]])
+	print("[stress] %11s %8s %8s %8s %8s %8s %6s   %8s %8s %8s"
+		% ["stage", "total", "query", "loop", "fetch", "logic", "book%", "ids", "gets", "has"])
+	var sums := {"total": 0.0, "query": 0.0, "loop": 0.0, "fetch": 0.0, "logic": 0.0}
+	for label in systems:
+		var total: float = systems[label]
+		var t: Dictionary = traffic.get(label, {})
+		var query_ms := float(t.get("query_us", 0.0)) / 1000.0
+		var loop_ms: float = float(t.get("ids", 0.0)) * float(units["loop"]) / 1000.0
+		var fetch_ms: float = (float(t.get("get", 0.0)) * float(units["get"])
+			+ float(t.get("has", 0.0)) * float(units["has"])
+			+ float(t.get("alive", 0.0)) * float(units["alive"])) / 1000.0
+		var logic_ms: float = total - query_ms - loop_ms - fetch_ms
+		var book: float = 100.0 * (query_ms + loop_ms + fetch_ms) / total if total > 0.001 else 0.0
+		sums["total"] += total
+		sums["query"] += query_ms
+		sums["loop"] += loop_ms
+		sums["fetch"] += fetch_ms
+		sums["logic"] += logic_ms
+		if total < 0.01:
+			continue
+		print("[stress] %11s %8.2f %8.2f %8.2f %8.2f %8.2f %5.0f%%   %8.0f %8.0f %8.0f"
+			% [label, total, query_ms, loop_ms, fetch_ms, logic_ms, book,
+				t.get("ids", 0.0), t.get("get", 0.0), float(t.get("has", 0.0)) + float(t.get("alive", 0.0))])
+	var all_book: float = 100.0 * (float(sums["query"]) + float(sums["loop"]) + float(sums["fetch"])) / float(sums["total"])
+	print("[stress] %11s %8.2f %8.2f %8.2f %8.2f %8.2f %5.0f%%"
+		% ["TOTAL", sums["total"], sums["query"], sums["loop"], sums["fetch"], sums["logic"], all_book])
+	print("[stress]   (stages under 0.01 ms are left out of the rows but counted in the total; 'has' column includes is_alive)")
+
 ## Builds a world of `n`, lets it settle, then times the pipeline.
 func _measure(n: int) -> Dictionary:
 	_manager.clear()
@@ -316,6 +461,7 @@ func _build_pipeline() -> void:
 		EcsMovementSystem.new(),
 		EcsCollisionSystem.new(_manager),
 		EcsPickupSystem.new(),
+		EcsDropSystem.new(),
 		EcsSelectionSystem.new(marker),
 		EcsNodeSyncSystem.new(_manager),
 		EcsDebugSystem.new(overlay),
@@ -334,6 +480,8 @@ func _run_once() -> PackedFloat64Array:
 	var costs := PackedFloat64Array()
 	costs.resize(_systems.size())
 	for s in _systems.size():
+		if _counting:
+			_world.set(&"stage", _systems[s].label())
 		var began := Time.get_ticks_usec()
 		_systems[s].run(_world, TICK)
 		costs[s] = float(Time.get_ticks_usec() - began)
