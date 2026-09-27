@@ -44,6 +44,8 @@ script = ExtResource("s_action")
 script = ExtResource("s_hunger")
 drain = 1.2
 forage_below = 65.0
+heal_above = 50.0
+heal_rate = 5.0
 eat_below = 70.0
 
 

@@ -1100,8 +1100,10 @@ func _being_well_fed_mends_and_the_band_between_does_neither() -> void:
 		living.run_all(_world, TICK)
 	_check("a well-fed creature mends", health.value > 50.0)
 
-	# Between the thresholds: neither mending nor starving.
-	hunger.fullness = (hunger.heal_above + hunger.eat_below) * 0.5
+	# Between the thresholds: neither mending nor starving. The band is empty
+	# (starving) to `heal_above` — eat_below is the brain's line, not this one,
+	# and a grazer's sits above heal_above.
+	hunger.fullness = hunger.heal_above * 0.5
 	var held := health.value
 	for i in 30:
 		living.run_all(_world, TICK)
