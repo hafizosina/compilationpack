@@ -34,6 +34,21 @@ Unit costs that sitting: `get_component` ~1.3–1.5 µs, `has` ~0.6 µs, `is_ali
 one bare loop iteration ~0.02 µs. The priced columns are estimates and read a few percent
 high (simple stages come out at 104–110% bookkeeping); the direct movement probe agrees.
 
+**Those numbers are the fed case, and fed is the light case.** The stress world starts every
+animal full, so no food rung ever runs. `-- --fullness=50` starts them hungry instead
+(below both kinds' `forage_below`), and the brain then checks every id its sensor returns
+for food. At 800 entities, same sitting:
+
+| | fed (default) | hungry (`--fullness=50`) |
+|---|---|---|
+| whole tick | 47.6 ms | **85.3 ms** |
+| low_brain | 8.6 ms | **46.5 ms** |
+| low_brain `has` + `is_alive` per tick | 800 | **82,038** — ~100 per creature |
+
+The stress world has no berries, so a hungry animal never finds food and rescans on every
+brain tick — the worst case for that loop, and the one to fix against. **Measure every option
+in both states.**
+
 **The sensor's 73 ms is not this job.** It is engine work, and Area2D is already the cheap way
 to do it — without the broadphase every entity would test every other. Fetch is the part
 that is our own overhead.
@@ -77,12 +92,15 @@ never share a tick. **~35 ms off the game's tick; no code change beyond `main.gd
 collapse and death land up to 0.1 s later; the tests that assume per-tick bars drive the
 systems directly and are unaffected.
 
-**2. Fetch once per creature in the brain.** Get hunger, energy, inventory, action, sensor and
+**2. Fetch once per creature in the brain — and fix the hungry scan, which is the bigger half.** Get hunger, energy, inventory, action, sensor and
 position once at the top of the per-creature loop and pass them to the rungs, instead of
 each rung fetching its own. Takes the brain from ~6.5 gets per creature to ~4–5 in the
-fed case, and removes most of the repeats. For the hungry case, make `_try_seek_food`
-cheaper per perceived id: check the cheapest disqualifier first, and fetch position only
-for ids that pass. **Part of ~44 ms (15 ms in game at 20 Hz); one file, no behaviour change.**
+fed case, and removes most of the repeats. For the hungry case — ~100 store calls per
+creature per tick — make `_try_seek_food` cheaper per perceived id: check the cheapest
+disqualifier first (is it consumable at all — most perceived ids are other animals),
+fetch position only for ids that pass, and consider letting the sensor or the world keep a
+"food in view" list so the brain never tests animals. **Fed: part of ~44 ms at 4,000;
+hungry: most of the ~38 ms the hungry state adds at 800. One file for the first part.**
 
 **3. Trim duplicate `has` checks.** hunger and energy each test two flags per entity to mean
 "resting". Small, a few ms each. Only worth it if 1 and 2 leave it visible.
@@ -113,8 +131,9 @@ GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.
 - Repeat anything under ~15% — run-to-run noise is about ±12%.
 - The stress test runs every stage every tick, so option 1 **will not show there**. Measure
   it by adding the same rates to the stress pipeline, or from `main.gd`'s real tick.
-- The split table's `gets` column is the direct check for option 2: low_brain should fall from
-  26,003 at 4,000 entities.
+- Run each measurement **fed and hungry**: the default, and `-- --fullness=50`.
+- The split table's `gets` and `has` columns are the direct check for option 2: low_brain
+  should fall from 26,003 gets at 4,000 fed, and from 82,038 has / is_alive at 800 hungry.
 - `tests/lifecycle_test.tscn` must stay at 161/161 after every step.
 
 ## Done means

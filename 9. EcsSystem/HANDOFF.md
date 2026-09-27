@@ -482,7 +482,8 @@ delta.
 
 `tests/stress_test.tscn` — the population ramp and the per-stage bookkeeping split (§14). Knobs after a bare `--`:
 `--spacing=180` (grid px), `--n=4000` (one population), `--skip=hunger,health` (leave stages
-out, by label).
+out, by label), `--fullness=50` (start every animal hungry — the default world is fed, so the
+brain's food search never runs; hungry, the tick at 800 entities goes 47.6 → 85.3 ms).
 
 ---
 

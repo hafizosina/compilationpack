@@ -54,6 +54,15 @@ static var ONLY_N: int = 0
 ## is not paying for its own work.
 static var SKIP := PackedStringArray()
 
+## `--fullness=50` starts every animal at that fullness instead of full. A fed
+## animal skips every food rung, so the default world never exercises the
+## brain's food search. At 50 both kinds are below `forage_below` (rabbit 65,
+## monkey 70) and above the monkey's `eat_below` (40), so every animal looks for
+## food: `_try_seek_food` walks everything its sensor returns, and the stress
+## world has no berries, so it never finds any and rescans every brain tick —
+## the worst case for that loop. Below 0 means "leave it at the blueprint's".
+static var FULLNESS: float = -1.0
+
 ## Reads `-- --spacing=N` off the command line. Godot hands everything after the
 ## bare `--` to the game, so the test can be swept without editing it.
 static func _resolve_spacing() -> void:
@@ -66,6 +75,8 @@ static func _resolve_spacing() -> void:
 			ONLY_N = arg.substr("--n=".length()).to_int()
 		elif arg.begins_with("--skip="):
 			SKIP = arg.substr("--skip=".length()).split(",", false)
+		elif arg.begins_with("--fullness="):
+			FULLNESS = arg.substr("--fullness=".length()).to_float()
 ## Ticks thrown away before measuring — the first few build the physics state.
 const WARMUP: int = 12
 ## Ticks averaged.
@@ -102,6 +113,8 @@ func _ready() -> void:
 		% SPACING)
 	if not SKIP.is_empty():
 		print("[stress] skipping stages: %s" % ", ".join(SKIP))
+	if FULLNESS >= 0.0:
+		print("[stress] every animal starts at fullness %.0f — hungry, searching for food." % FULLNESS)
 	print("[stress] %6s %9s %9s %9s %8s" % ["n", "spawn ms", "tick ms", "per ent", "FPS"])
 
 	var last_ok := 0
@@ -497,7 +510,11 @@ func _populate(n: int) -> void:
 		var spot := Vector2(
 			(i % columns) * SPACING - half + randf_range(-18.0, 18.0),
 			(i / columns) * SPACING - half + randf_range(-18.0, 18.0))
-		_manager.spawn(_world, _catalog, &"rabbit" if i % 2 == 0 else &"monkey", spot)
+		var id := _manager.spawn(_world, _catalog, &"rabbit" if i % 2 == 0 else &"monkey", spot)
+		if FULLNESS >= 0.0:
+			var hunger := _world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+			if hunger != null:
+				hunger.fullness = FULLNESS
 
 ## Every stage at every population, so the shape of each curve is visible
 ## rather than one snapshot at the crossing. The second table is the one that
