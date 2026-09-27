@@ -1,5 +1,5 @@
-class_name EcsSelectionComponent
-extends EcsComponent
+class_name EcsSelectionSingleton
+extends EcsSingleton
 
 ## World singleton: the click inbox. `_unhandled_input` records where the mouse
 ## went down and EcsSelectionSystem resolves it at the top of the next frame,

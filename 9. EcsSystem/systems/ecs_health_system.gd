@@ -19,7 +19,7 @@ func label() -> StringName:
 	return &"health"
 
 func run(world: EcsWorld, _delta: float) -> void:
-	var lifecycle := world.get_singleton(EcsLifecycleComponent) as EcsLifecycleComponent
+	var lifecycle := world.get_singleton(EcsLifecycleSingleton) as EcsLifecycleSingleton
 	if lifecycle == null:
 		return
 	for id in world.query([EcsHealthComponent]):

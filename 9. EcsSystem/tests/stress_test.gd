@@ -228,8 +228,8 @@ func _probe_access(result: Dictionary) -> void:
 func _measure(n: int) -> Dictionary:
 	_manager.clear()
 	_world = EcsWorld.new()
-	_world.add_singleton(EcsLifecycleComponent.new())
-	_world.add_singleton(EcsSelectionComponent.new())
+	_world.add_singleton(EcsLifecycleSingleton.new())
+	_world.add_singleton(EcsSelectionSingleton.new())
 	_build_pipeline()
 
 	var began := Time.get_ticks_usec()

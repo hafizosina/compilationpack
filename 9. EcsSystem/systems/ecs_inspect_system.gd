@@ -28,7 +28,7 @@ func label() -> StringName:
 	return &"inspect"
 
 func run(world: EcsWorld, delta: float) -> void:
-	var selected := world.query([EcsSelectedComponent])
+	var selected := world.query([EcsSelectedFlag])
 	var id: int = selected[0] if not selected.is_empty() else EcsWorld.NO_ENTITY
 
 	# A changed selection is sent at once; an unchanged one on the interval, so
@@ -49,12 +49,24 @@ func _snapshot(world: EcsWorld, id: int) -> Dictionary:
 	var components := world.components_of(id)
 	var keys := PackedStringArray()
 	var sections: Dictionary = {}
+	# Flags come and go, so they share one tab with a line each rather than
+	# getting a tab apiece — a tab strip that grew and shrank every time an
+	# intent was raised would be unreadable. The tab is always there, so it is
+	# also where a flag is seen to be *absent*.
+	var flags: Dictionary = {}
 	for component in components:
+		if component is EcsFlag:
+			flags[String(component.key()).capitalize()] = _inline(world, component)
+			continue
 		keys.append(String(component.key()))
 		sections[component.key()] = {
 			"label": String(component.key()).capitalize(),
 			"fields": _fields_of(world, component),
 		}
+	sections[&"flags"] = {
+		"label": "Flags",
+		"fields": flags if not flags.is_empty() else {"none": ""},
+	}
 
 	var named := world.get_component(id, EcsNameComponent) as EcsNameComponent
 	return {
@@ -80,6 +92,15 @@ func _fields_of(world: EcsWorld, component: EcsComponent) -> Dictionary:
 			continue
 		fields[property] = _format(world, property, component.get(property))
 	return fields
+
+## A flag's data on one line — `target #42 berry_7` — or empty for a flag whose
+## presence is the whole of what it says.
+func _inline(world: EcsWorld, flag: EcsFlag) -> String:
+	var parts := PackedStringArray()
+	var fields := _fields_of(world, flag)
+	for field in fields:
+		parts.append("%s %s" % [field, fields[field]])
+	return ", ".join(parts)
 
 func _format(world: EcsWorld, property: String, value: Variant) -> String:
 	# An int field named *_id is a relationship. Showing the entity's name makes

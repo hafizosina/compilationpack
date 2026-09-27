@@ -68,7 +68,7 @@ func spawn_world(world: EcsWorld, catalog: EcsEntityCatalog, world_def: EcsWorld
 ## request raised while draining lands on the next tick rather than extending
 ## this one — a spawner that spawns spawners cannot lock up the frame.
 func drain(world: EcsWorld, catalog: EcsEntityCatalog) -> void:
-	var inbox := world.get_singleton(EcsLifecycleComponent) as EcsLifecycleComponent
+	var inbox := world.get_singleton(EcsLifecycleSingleton) as EcsLifecycleSingleton
 	if inbox == null:
 		return
 

@@ -22,7 +22,7 @@ func label() -> StringName:
 	return &"selection"
 
 func run(world: EcsWorld, _delta: float) -> void:
-	var request := world.get_singleton(EcsSelectionComponent) as EcsSelectionComponent
+	var request := world.get_singleton(EcsSelectionSingleton) as EcsSelectionSingleton
 	if request != null and request.pending:
 		request.pending = false
 		_select(world, _entity_at(world, request.pick_at))
@@ -30,10 +30,10 @@ func run(world: EcsWorld, _delta: float) -> void:
 
 ## Clears any previous selection and tags `id`, or clears alone when NO_ENTITY.
 func _select(world: EcsWorld, id: int) -> void:
-	for previous in world.query([EcsSelectedComponent]):
-		world.remove(previous, EcsSelectedComponent)
+	for previous in world.query([EcsSelectedFlag]):
+		world.remove(previous, EcsSelectedFlag)
 	if id != EcsWorld.NO_ENTITY:
-		world.add(id, EcsSelectedComponent.new())
+		world.add(id, EcsSelectedFlag.new())
 
 ## The entity under `world_position`, or NO_ENTITY for bare ground.
 func _entity_at(world: EcsWorld, world_position: Vector2) -> int:
@@ -57,7 +57,7 @@ func _hit_radius(sprite: EcsSpriteComponent) -> float:
 func _draw_marker(world: EcsWorld) -> void:
 	if _marker == null:
 		return
-	var selected := world.query([EcsSelectedComponent, EcsPositionComponent])
+	var selected := world.query([EcsSelectedFlag, EcsPositionComponent])
 	if selected.is_empty():
 		_marker.clear()
 		return

@@ -37,7 +37,7 @@ func run(world: EcsWorld, delta: float) -> void:
 		# tag, neither reads the other.
 		var drain := hunger.drain
 		var brain := world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
-		if world.has(id, EcsCollapsedComponent) or (brain != null
+		if world.has(id, EcsCollapsedFlag) or (brain != null
 				and brain.state == EcsLowBrainComponent.State.SLEEP):
 			drain *= hunger.asleep_drain_scale
 		hunger.fullness = maxf(hunger.fullness - drain * delta, 0.0)

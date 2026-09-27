@@ -13,7 +13,7 @@ extends EcsSystem
 ## restore — the same executor shape EcsConsumeSystem uses for EAT, except that
 ## eating is one act and resting is a rate.
 ##
-## Collapse is the other direction: at zero this adds EcsCollapsedComponent, and
+## Collapse is the other direction: at zero this adds EcsCollapsedFlag, and
 ## the brain reads the tag and stops deciding. Two systems, one component each,
 ## no calls between them.
 ##
@@ -29,7 +29,7 @@ func label() -> StringName:
 func run(world: EcsWorld, delta: float) -> void:
 	for id in world.query([EcsEnergyComponent]):
 		var energy := world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
-		var collapsed := world.has(id, EcsCollapsedComponent)
+		var collapsed := world.has(id, EcsCollapsedFlag)
 		var brain := world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
 		var resting := collapsed or (brain != null
 			and brain.state == EcsLowBrainComponent.State.SLEEP)
@@ -48,11 +48,11 @@ func run(world: EcsWorld, delta: float) -> void:
 		if not collapsed and energy.value <= 0.0:
 			# Crossing into empty, once. The tag is what stops it happening
 			# again next tick, so the damage cannot be paid twice.
-			world.add(id, EcsCollapsedComponent.new())
+			world.add(id, EcsCollapsedFlag.new())
 			var health := world.get_component(id, EcsHealthComponent) as EcsHealthComponent
 			if health != null:
 				health.value = maxf(health.value - energy.collapse_damage, 0.0)
 		elif collapsed and energy.value >= energy.collapse_release:
 			# Come round, still tired. It goes on sleeping of its own accord
 			# from here, which is what makes starving able to wake it.
-			world.remove(id, EcsCollapsedComponent)
+			world.remove(id, EcsCollapsedFlag)

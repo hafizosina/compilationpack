@@ -55,7 +55,7 @@ func run(world: EcsWorld, delta: float) -> void:
 		# 0. Collapsed: it has no say at all. This is above the commitment check
 		# on purpose — dropping from exhaustion overrides a trip already under
 		# way, which nothing else in this brain is allowed to do.
-		if world.has(id, EcsCollapsedComponent):
+		if world.has(id, EcsCollapsedFlag):
 			if brain.state != EcsLowBrainComponent.State.SLEEP:
 				_release(brain)
 				_abandon_trip(move)

@@ -40,7 +40,7 @@ extends Node2D
 ##     lifecycle  births and deaths    → the only stage that creates or frees
 ##     spawner    asks for a berry     → writes a note to the lifecycle inbox
 ##     hunger     fullness drains      → writes EcsHunger/EcsHealthComponent
-##     energy     tires, rests, collapses → writes EcsEnergy/EcsCollapsedComponent
+##     energy     tires, rests, collapses → writes EcsEnergy/EcsCollapsedFlag
 ##     health     and death at zero    → writes a note to the lifecycle inbox
 ##     sensor     what can it see/reach→ writes EcsSensor/EcsActionComponent  [20 Hz]
 ##     low_brain  decides, and remembers → writes EcsMovementComponent        [20 Hz]
@@ -48,7 +48,7 @@ extends Node2D
 ##     movement   walks toward it      → writes EcsPositionComponent
 ##     collision  unstacks the bodies  → writes EcsPositionComponent
 ##                (the Area2Ds it reads overlaps off are a derived index only)
-##     selection  resolves a click     → writes EcsSelectedComponent
+##     selection  resolves a click     → writes EcsSelectedFlag
 ##     node_sync  draws where it ended → writes each entity_<id> container
 ##     debug      reports all of it    → writes the on-entity overlay
 ##     census     counts the world     → emits on the EventBus
@@ -128,7 +128,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed \
 			and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
 		# Recorded, not resolved. EcsSelectionSystem drains this next tick.
-		var selection := _world.get_singleton(EcsSelectionComponent) as EcsSelectionComponent
+		var selection := _world.get_singleton(EcsSelectionSingleton) as EcsSelectionSingleton
 		selection.pending = true
 		selection.pick_at = get_global_mouse_position()
 		get_viewport().set_input_as_handled()
@@ -181,8 +181,8 @@ func _build() -> void:
 		.add(EcsCensusSystem.new()) \
 		.add(EcsInspectSystem.new())
 
-	_world.add_singleton(EcsSelectionComponent.new())
-	_world.add_singleton(EcsLifecycleComponent.new())
+	_world.add_singleton(EcsSelectionSingleton.new())
+	_world.add_singleton(EcsLifecycleSingleton.new())
 	_manager.spawn_world(_world, catalog, world_def)
 	EventBus.ecs_world_census.emit(_world.entity_count())
 	if Constant.DEBUG:

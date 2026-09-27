@@ -38,7 +38,7 @@ func _ready() -> void:
 
 	_manager = EcsEntityManager.new(_entities)
 	_world = EcsWorld.new()
-	_world.add_singleton(EcsLifecycleComponent.new())
+	_world.add_singleton(EcsLifecycleSingleton.new())
 
 	# No brain, no movement: nothing wanders, so every position in this test is
 	# one the test put there or one collision corrected. The stages that are
@@ -59,6 +59,7 @@ func _ready() -> void:
 
 func _run() -> void:
 	await _spawn_builds_declared_nodes()
+	await _flags_share_one_inspector_tab()
 	await _pickup_hides_the_sprite_without_freeing_it()
 	await _putting_it_back_shows_it_again()
 	await _a_body_with_no_position_stands_down()
@@ -200,7 +201,7 @@ func _a_body_with_no_position_stands_down() -> void:
 func _kill_takes_the_data_and_the_nodes() -> void:
 	var berry := _first_of(&"berry")
 	var containers_before := _entities.get_child_count()
-	var inbox := _world.get_singleton(EcsLifecycleComponent) as EcsLifecycleComponent
+	var inbox := _world.get_singleton(EcsLifecycleSingleton) as EcsLifecycleSingleton
 	inbox.kill_requests.append(berry)
 	await _tick(1)
 
@@ -210,6 +211,31 @@ func _kill_takes_the_data_and_the_nodes() -> void:
 		and _manager.container_for(berry) == null)
 	_check("one container freed takes the whole entity with it",
 		_entities.get_child_count() == containers_before - 1)
+
+## A component is what an entity is and gets a tab of its own; a flag is what is
+## true of it now, and all of them share one "Flags" tab, a line each. The
+## inspector tells them apart by base class alone, naming no flag type.
+func _flags_share_one_inspector_tab() -> void:
+	var monkey := _first_of(&"monkey")
+	var inspect := EcsInspectSystem.new()
+	var before: Dictionary = inspect._snapshot(_world, monkey)["components"]
+	_check("with no flags raised the Flags tab is there, and empty",
+		before.has(&"flags") and (before[&"flags"]["fields"] as Dictionary).has("none"))
+
+	_world.add(monkey, EcsSelectedFlag.new())
+	_world.add(monkey, EcsCollapsedFlag.new())
+	var sections: Dictionary = inspect._snapshot(_world, monkey)["components"]
+	var flags: Dictionary = sections[&"flags"]["fields"]
+	_check("both flags are listed on the one tab",
+		flags.has("Selected") and flags.has("Collapsed") and not flags.has("none"))
+	_check("and neither gets a tab of its own",
+		not sections.has(&"selected") and not sections.has(&"collapsed"))
+	_check("components still do", sections.has(&"hunger") and sections.has(&"inventory"))
+	_check("the singletons are their own kind",
+		_world.get_singleton(EcsLifecycleSingleton) is EcsSingleton)
+
+	_world.remove(monkey, EcsSelectedFlag)
+	_world.remove(monkey, EcsCollapsedFlag)
 
 ## The spawner no longer builds anything itself. It leaves a note and the
 ## lifecycle stage fulfils it at the top of the next tick — one tick later, and
@@ -926,7 +952,7 @@ func _running_out_of_energy_drops_it_once() -> void:
 	energy.value = 0.0
 	health.value = health.max_health
 	living.run_all(_world, TICK)
-	_check("empty energy collapses it", _world.has(rabbit, EcsCollapsedComponent))
+	_check("empty energy collapses it", _world.has(rabbit, EcsCollapsedFlag))
 	_check("the collapse cost exactly collapse_damage once",
 		is_equal_approx(health.value, health.max_health - energy.collapse_damage))
 	_check("and it is down", brain.state == EcsLowBrainComponent.State.SLEEP)
@@ -947,7 +973,7 @@ func _running_out_of_energy_drops_it_once() -> void:
 	energy.value = energy.collapse_release
 	living.run_all(_world, TICK)
 	_check("the lock lifts at collapse_release",
-		not _world.has(rabbit, EcsCollapsedComponent))
+		not _world.has(rabbit, EcsCollapsedFlag))
 	living.run_all(_world, TICK)
 	_check("and starving can wake it now",
 		brain.state != EcsLowBrainComponent.State.SLEEP)
@@ -955,11 +981,11 @@ func _running_out_of_energy_drops_it_once() -> void:
 	# Something with energy but no health collapses without complaint — the
 	# same way something with no health starves forever.
 	_world.remove(rabbit, EcsHealthComponent)
-	_world.remove(rabbit, EcsCollapsedComponent)
+	_world.remove(rabbit, EcsCollapsedFlag)
 	energy.value = 0.0
 	living.run_all(_world, TICK)
 	_check("an entity with no health collapses without error",
-		_world.has(rabbit, EcsCollapsedComponent))
+		_world.has(rabbit, EcsCollapsedFlag))
 
 ## Nothing without an EcsEnergyComponent ever tires or sleeps, and no flag says
 ## so — a berry is the proof.
@@ -967,7 +993,7 @@ func _a_thing_with_no_energy_never_sleeps() -> void:
 	var berry := _manager.spawn(_world, _catalog, &"berry", Vector2(-9000.0, 4000.0))
 	await _tick(1)
 	_check("a berry carries no energy", not _world.has(berry, EcsEnergyComponent))
-	_check("and never collapses", not _world.has(berry, EcsCollapsedComponent))
+	_check("and never collapses", not _world.has(berry, EcsCollapsedFlag))
 
 ## The plan's rule that nothing else pins down: **food outranks rest.** A tired
 ## creature that can see a berry goes for it, and the trip it commits to is not
@@ -1011,7 +1037,7 @@ func _food_outranks_rest_and_a_trip_is_not_cut_short() -> void:
 	living.run_all(_world, TICK)
 	await get_tree().physics_frame
 	_check("though a collapse does override it",
-		_world.has(rabbit, EcsCollapsedComponent)
+		_world.has(rabbit, EcsCollapsedFlag)
 		and brain.state == EcsLowBrainComponent.State.SLEEP)
 
 ## A sleeper still gets hungry, just slower. Both halves matter: slower is the
@@ -1047,13 +1073,13 @@ func _sleeping_slows_hunger_without_stopping_it() -> void:
 
 	# A collapse is a forced sleep, and costs the same reduced rate.
 	brain.state = EcsLowBrainComponent.State.IDLE
-	_world.add(rabbit, EcsCollapsedComponent.new())
+	_world.add(rabbit, EcsCollapsedFlag.new())
 	hunger.fullness = hunger.max_fullness
 	for i in 60:
 		living.run_all(_world, TICK)
 	_check("and a collapse counts as asleep too",
 		is_equal_approx(hunger.max_fullness - hunger.fullness, asleep_cost))
-	_world.remove(rabbit, EcsCollapsedComponent)
+	_world.remove(rabbit, EcsCollapsedFlag)
 
 ## States an intent on an entity's brain, for the tests that run an executor
 ## system without EcsLowBrainSystem to decide for them.

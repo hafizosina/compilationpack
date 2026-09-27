@@ -4,7 +4,7 @@ extends EcsSystem
 ## Runs every spawner's clock and asks for another entity when it is due.
 ##
 ## It used to create entities itself, holding the factory and calling it
-## mid-query. It now writes a note to EcsLifecycleComponent and EcsEntityManager
+## mid-query. It now writes a note to EcsLifecycleSingleton and EcsEntityManager
 ## fulfils it at the top of the next tick, which is the whole point of the
 ## lifecycle stage: no system changes the shape of the world while another
 ## system is walking it.
@@ -22,7 +22,7 @@ func label() -> StringName:
 	return &"spawner"
 
 func run(world: EcsWorld, delta: float) -> void:
-	var inbox := world.get_singleton(EcsLifecycleComponent) as EcsLifecycleComponent
+	var inbox := world.get_singleton(EcsLifecycleSingleton) as EcsLifecycleSingleton
 	if inbox == null:
 		return
 

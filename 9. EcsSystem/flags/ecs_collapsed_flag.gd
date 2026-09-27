@@ -1,5 +1,5 @@
-class_name EcsCollapsedComponent
-extends EcsComponent
+class_name EcsCollapsedFlag
+extends EcsFlag
 
 ## Tag: this entity ran out of energy and has no say until it comes round.
 ## Carries no data — presence is the lock.
