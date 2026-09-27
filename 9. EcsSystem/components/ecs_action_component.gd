@@ -31,5 +31,8 @@ const NODE_MASK: int = EcsConst.LAYER_BODY
 ## EcsSensorSystem and by nothing else. Never contains the entity itself.
 var reached: Array[int] = []
 
+## Not shown in the inspector's entity detail.
+const INSPECT_HIDDEN := true
+
 func key() -> StringName:
 	return &"action"

@@ -38,5 +38,8 @@ const NODE_MASK: int = EcsConst.LAYER_BODY
 ## walking speed that is a couple of pixels of lag and no behaviour notices.
 var perceived: Array[int] = []
 
+## Not shown in the inspector's entity detail.
+const INSPECT_HIDDEN := true
+
 func key() -> StringName:
 	return &"sensor"

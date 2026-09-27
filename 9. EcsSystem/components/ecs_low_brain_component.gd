@@ -55,5 +55,8 @@ var state: State = State.IDLE
 ## target stopped being something to walk to.
 var target: int = EcsWorld.NO_ENTITY
 
+## Not shown in the inspector's entity detail.
+const INSPECT_HIDDEN := true
+
 func key() -> StringName:
 	return &"low_brain"
