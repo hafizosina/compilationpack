@@ -93,6 +93,19 @@ extends Node2D
 ## same freshness it had at full rate.
 const SLOW: int = 3
 
+## Ticks between runs for hunger and energy — 6 is 10 Hz.
+##
+## The bars are almost all lookup and change slowly, so a tenth of a second
+## late is invisible. Banked delta keeps every drain and heal rate exact; what
+## moves is when a threshold is noticed — a collapse, or starving — and the
+## state a run sees (asleep, moving) is charged for the whole tenth.
+##
+## They take the two ticks SLOW leaves free, 2 and 5, so no bar shares a tick
+## with the sensor or the brain. Health is the threshold for both, so it runs
+## at SLOW on phase 2 — ticks 2 and 5, after whichever bar just ran — and a
+## death from either is seen the tick it is caused, not one cycle later.
+const BARS: int = 6
+
 ## Blueprint book to resolve placement `type` ids against.
 @export var catalog: EcsEntityCatalog
 ## Placement list describing what to spawn and where.
@@ -168,9 +181,9 @@ func _build() -> void:
 	_scheduler \
 		.add(EcsLifecycleSystem.new(_manager, catalog)) \
 		.add(EcsSpawnerSystem.new()) \
-		.add(EcsHungerSystem.new()) \
-		.add(EcsEnergySystem.new()) \
-		.add(EcsHealthSystem.new()) \
+		.add(EcsHungerSystem.new(), BARS, 2) \
+		.add(EcsEnergySystem.new(), BARS, 5) \
+		.add(EcsHealthSystem.new(), SLOW, 2) \
 		.add(EcsSensorSystem.new(_manager), SLOW, 0) \
 		.add(EcsLowBrainSystem.new(), SLOW, 1) \
 		.add(EcsConsumeSystem.new()) \

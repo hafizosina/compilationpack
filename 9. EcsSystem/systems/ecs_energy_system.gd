@@ -16,11 +16,13 @@ extends EcsSystem
 ## the brain reads the tag and stops deciding. Two systems, one component each,
 ## no calls between them.
 ##
-## It sits beside `hunger` in the pipeline so a collapse's damage and any death
-## that follows land in the same tick. It reads the flag as the brain last left
-## it — and the brain runs at 20 Hz — so restoring begins up to
-## three ticks after SLEEP is chosen. That is invisible, and it is written down
-## here so nobody "fixes" it by moving the stage.
+## It runs at 10 Hz, and `health` runs on the same tick right after it, so a
+## collapse's damage and any death that follows land together. It reads the
+## flag as the brain last left it, and charges the whole banked tenth at
+## whatever it finds — asleep or awake, moving or still — so a run straddling
+## the moment SLEEP is chosen is billed all one way. On average that is exact;
+## per run it is off by up to six ticks of difference. That is invisible, and
+## it is written down here so nobody "fixes" it by moving the stage.
 
 func label() -> StringName:
 	return &"energy"

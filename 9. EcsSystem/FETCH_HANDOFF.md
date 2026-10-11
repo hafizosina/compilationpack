@@ -1,6 +1,6 @@
 # Handoff — cutting the fetch time
 
-**Status: not started.** Decided 2026-09-27 as the next job in module 9. When it is done,
+**Status: option 1 done (2026-10-11); option 2 next.** Decided 2026-09-27 as the next job in module 9. When it is done,
 fold what it measured into `HANDOFF.md` §14 and delete this file, the same way the step 6
 plans were folded in.
 
@@ -250,59 +250,27 @@ changed.
 
 ## Options, cheapest first
 
-**1. Run the slow bars less often.** hunger, energy and health: ~45 ms together, all lookup.
-The bars change slowly; a tenth of a second of latency is invisible. `EcsScheduler.add(system,
-every, phase)` already does this and banks delta, so drain and heal rates stay exact — only
-latency changes. In `main.gd`, e.g. every 6 ticks (10 Hz) on three different phases so they
-never share a tick. **~35 ms off the game's tick; no code change beyond `main.gd`.** Watch:
-collapse and death land up to 0.1 s later; the tests that assume per-tick bars drive the
-systems directly and are unaffected.
+**1. Run the slow bars less often — done.** `main.gd` now runs hunger and energy at `BARS`
+(6 ticks, 10 Hz) on phases 2 and 5, the two ticks `SLOW` leaves free, and health at `SLOW`
+on phase 2, so it lands right after whichever bar just ran and a death is seen the tick it
+is caused. Banked delta keeps the rates exact; a run charges its whole tenth at the state
+it finds (asleep, moving), which is exact on average.
 
-Today (`main.gd:168`, `SLOW` is 3 at `main.gd:94`):
+Measured with the stress test's new `--every=label:every:phase` flag, which applies the
+game's rates. Before is `sensor:3:0,low_brain:3:1`, after adds
+`hunger:6:2,energy:6:5,health:3:2`. 4,000 entities, one sitting, each pair run twice and
+agreeing within 2%:
 
-```gdscript
-_scheduler \
-	.add(EcsLifecycleSystem.new(_manager, catalog)) \
-	.add(EcsSpawnerSystem.new()) \
-	.add(EcsHungerSystem.new()) \
-	.add(EcsEnergySystem.new()) \
-	.add(EcsHealthSystem.new()) \
-	.add(EcsSensorSystem.new(_manager), SLOW, 0) \
-	.add(EcsLowBrainSystem.new(), SLOW, 1) \
-	...
-```
+| | before | after | |
+|---|---|---|---|
+| fed — average tick | 137.2 ms | **108.0 ms** | −29 ms, −21% |
+| fed — heaviest tick | 179–186 ms | 149–157 ms | |
+| hungry — average tick | 201.1 ms | **169.8 ms** | −31 ms, −15% |
+| hungry — heaviest tick | 328–352 ms | 291–293 ms | |
+| hunger + energy + health | ~37.6 ms | ~7.6 ms | |
 
-The change is three arguments — a sketch, rate and phases to be chosen when measured:
-
-```gdscript
-	.add(EcsHungerSystem.new(), BARS, 2) \
-	.add(EcsEnergySystem.new(), BARS, 3) \
-	.add(EcsHealthSystem.new(), BARS, 4) \
-```
-
-Delta banking is what keeps rates exact — `ecs/ecs_scheduler.gd:64`:
-
-```gdscript
-func run_all(world: EcsWorld, delta: float) -> void:
-	for i in _systems.size():
-		_accum[i] += delta
-		if _tick % _every[i] != _phase[i]:
-			continue
-		_systems[i].run(world, _accum[i])
-		_accum[i] = 0.0
-	_tick += 1
-```
-
-Health should land *after* hunger and energy in the cycle so a death from either is seen
-on the next health run, not one cycle later. Phases are per rate, so they can still collide
-with `sensor` (`tick % 3 == 0`) and `low_brain` (`tick % 3 == 1`): at `every = 6` only
-phases 2 and 5 are clear of both, so the sketch's 3 lands with `sensor` and 4 with
-`low_brain`. Three bars need either one shared slot or a rate that leaves three free —
-check the combined frame, not the average.
-
-The stress test does not use the scheduler — `_build_pipeline()` (`tests/stress_test.gd:465`)
-makes a flat `Array[EcsSystem]` and `_run_once()` calls each every tick — so to see option 1
-there, the rates have to be added to that loop.
+**The heaviest tick is now the brain's.** Hungry, `low_brain` averages ~74 ms over three
+ticks, so it costs ~220 ms on the one tick it runs — that is option 2's target.
 
 **2. Fetch once per creature in the brain — and fix the hungry scan, which is the bigger half.** Get hunger, energy, inventory, action, sensor and
 position once at the top of the per-creature loop and pass them to the rungs, instead of
@@ -394,8 +362,8 @@ GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.
 - **Before and after in the same sitting**, back to back. Throughput on this machine drifts by
   up to ~50% across a day; a cross-sitting comparison proves nothing.
 - Repeat anything under ~15% — run-to-run noise is about ±12%.
-- The stress test runs every stage every tick, so option 1 **will not show there**. Measure
-  it by adding the same rates to the stress pipeline, or from `main.gd`'s real tick.
+- The stress test runs every stage every tick unless given `--every=` — pass the game's
+  rates (see option 1) to measure the tick the game actually pays.
 - Run each measurement **fed and hungry**: the default, and `-- --fullness=50`.
 - The split table's `gets` and `has` columns are the direct check for option 2: low_brain
   should fall from 26,003 gets at 4,000 fed, and from 82,038 has / is_alive at 800 hungry.

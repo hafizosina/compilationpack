@@ -220,7 +220,8 @@ otherwise inherit the old one's budget. The brain reads components that are not 
 at once, and it still *writes* only `state`, `target`, `pause_left` and a destination.
 
 **A stage may declare how often it runs.** `EcsScheduler.add(system, every, phase)` takes a
-rate in ticks — `main.gd` runs `sensor` and `low_brain` at `SLOW` (3 ticks, 20 Hz) while
+rate in ticks — `main.gd` runs `sensor`, `low_brain` and `health` at `SLOW` (3 ticks, 20 Hz),
+`hunger` and `energy` at `BARS` (6 ticks, 10 Hz), while
 `movement`, `collision` and `node_sync` stay at every tick. This is safe only because every
 system already takes `delta` and means it: **the scheduler banks delta per system**, so a
 stage ticked a third as often is handed three ticks' worth and hunger still climbs at its
