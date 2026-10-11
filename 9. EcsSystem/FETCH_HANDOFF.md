@@ -55,16 +55,61 @@ that is our own overhead.
 
 ## What fetch is
 
+`systems/ecs_hunger_system.gd:32` is the whole pattern in five lines:
+
 ```gdscript
-for id in world.query([EcsHungerComponent]):                                         # query
-    var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent    # fetch
-    if world.has(id, EcsCollapsedFlag) or world.has(id, EcsAsleepFlag):                # fetch
-        drain *= hunger.asleep_drain_scale                                              # logic
+for id in world.query([EcsHungerComponent]):                                          # query
+    var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent     # fetch
+    var drain := hunger.drain
+    if world.has(id, EcsCollapsedFlag) or world.has(id, EcsAsleepFlag):                 # fetch ×2
+        drain *= hunger.asleep_drain_scale                                               # logic
+    hunger.fullness = maxf(hunger.fullness - drain * delta, 0.0)                         # logic
+    var health := world.get_component(id, EcsHealthComponent) as EcsHealthComponent     # fetch
 ```
 
 Storage is `{ Script : { entity_id : EcsComponent } }`, so every `get_component` is two
 dictionary lookups (the type's table, then the id) plus Variant boxing and the cast back.
-That is ~1.4 µs, paid per call, per entity, per stage, per tick.
+That is ~1.4 µs, paid per call, per entity, per stage, per tick. The whole of it, from
+`ecs/ecs_world.gd:65`:
+
+```gdscript
+var _alive: Dictionary = {}  # entity_id -> true
+var _store: Dictionary = {}  # Script -> { entity_id -> EcsComponent }
+
+func get_component(id: int, type: Script) -> EcsComponent:
+	var table: Dictionary = _store.get(type, {})   # lookup 1 — and a fresh {} on a miss
+	return table.get(id)                           # lookup 2
+
+func has(id: int, type: Script) -> bool:
+	var table: Dictionary = _store.get(type, {})
+	return table.has(id)
+
+func is_alive(id: int) -> bool:
+	return _alive.has(id)
+```
+
+`query()` (`ecs/ecs_world.gd:87`) drives from the smallest requested table and tests every
+other table per id, building a fresh `Array[int]` each call — the ~31 ms query line:
+
+```gdscript
+for id: int in driver:
+	var matched := true
+	for type: Script in include:
+		if not (_store[type] as Dictionary).has(id):
+			matched = false
+			break
+	if matched:
+		for type: Script in exclude:
+			var table: Dictionary = _store.get(type, {})
+			if table.has(id):
+				matched = false
+				break
+	if matched:
+		result.append(id)
+```
+
+The ids come back bare, so a system then re-fetches from the very tables `query()` just
+tested — every component is looked up twice per entity per stage.
 
 ## Where the lookups are
 
@@ -82,6 +127,127 @@ That is ~1.4 µs, paid per call, per entity, per stage, per tick.
 Note: the stress test calls every stage every tick. In the game, `sensor` and `low_brain`
 run at 20 Hz, so their real cost there is a third of the table's.
 
+### The brain's repeats — `systems/ecs_low_brain_system.gd`
+
+The per-creature loop fetches brain and movement, then each rung fetches what it needs
+for itself (`:60`):
+
+```gdscript
+for id in world.query([EcsPositionComponent, EcsMovementComponent, EcsLowBrainComponent]):
+	var brain := world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
+	var move := world.get_component(id, EcsMovementComponent) as EcsMovementComponent
+	if world.has(id, EcsCollapsedFlag):
+		...
+	# 3. Choose, highest rung first.
+	if _try_eat(world, id, brain, move):          # hunger, inventory, action
+		continue
+	if _try_take(world, id, brain, move):         # inventory, hunger, action   — again
+		continue
+	if _try_seek_food(world, id, brain, move):    # hunger, inventory, sensor, position — again
+		continue
+	if _try_sleep(world, id, brain, move):        # energy, hunger (via _starving) — again
+		continue
+	...
+	_wander(world, id, brain, move, delta)        # position — again
+```
+
+Hunger alone is fetched up to four times per creature per brain tick — each rung opens
+the same way:
+
+```gdscript
+# _try_eat, :157
+var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+# _try_take, :214 / :217 / :220
+var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
+var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
+# _try_seek_food, :273 / :278
+var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
+# _starving, :344 — called from _try_sleep and _worth_waking_for
+var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+```
+
+### The hungry scan — `_try_seek_food` and `_is_food`
+
+This is the 82,038 at 800 hungry. For every id the sensor perceived (`:290`):
+
+```gdscript
+for seen in sensor.perceived:
+	if not _is_food(world, seen):           # 1 is_alive + up to 3 has
+		continue
+	var there := (world.get_component(seen, EcsPositionComponent) as EcsPositionComponent).position
+	var distance := here.distance_squared_to(there)
+	...
+```
+
+and `_is_food` (`:375`) asks the expensive-to-fail questions first — an animal is alive
+and has a position, so it passes two checks before failing on the consumable one:
+
+```gdscript
+func _is_food(world: EcsWorld, id: int) -> bool:
+	if id == EcsWorld.NO_ENTITY or not world.is_alive(id):
+		return false
+	return world.has(id, EcsConsumableComponent) and world.has(id, EcsPositionComponent) \
+		and not world.has(id, EcsDyingFlag)
+```
+
+`and` short-circuits, so for an animal this is `is_alive` + one `has` (consumable, false)
+— already cheapest-first inside the `return`. The cost is the volume: ~53 perceived ids,
+every brain tick, with no berry among them ever to end the search. `_is_takeable`
+(`:250`) has the same shape for pickable.
+
+### The bars — hunger and energy each ask "resting?" separately
+
+```gdscript
+# ecs_hunger_system.gd:39
+if world.has(id, EcsCollapsedFlag) or world.has(id, EcsAsleepFlag):
+	drain *= hunger.asleep_drain_scale
+
+# ecs_energy_system.gd:37
+var collapsed := world.has(id, EcsCollapsedFlag)
+var resting := collapsed or world.has(id, EcsAsleepFlag)
+...
+	var move := world.get_component(id, EcsMovementComponent) as EcsMovementComponent  # awake only
+```
+
+`health` (`ecs_health_system.gd:22`) is the minimum case — a query with an exclude and one
+get, ~9 ms of pure lookup for a `<= 0.0` test:
+
+```gdscript
+for id in world.query([EcsHealthComponent], [EcsDyingFlag]):
+	var health := world.get_component(id, EcsHealthComponent) as EcsHealthComponent
+```
+
+### Movement, collision, node_sync
+
+```gdscript
+# ecs_movement_system.gd:33 — 2 gets, ~97% bookkeeping
+for id in world.query([EcsPositionComponent, EcsMovementComponent]):
+	var move := world.get_component(id, EcsMovementComponent) as EcsMovementComponent
+	if not move.has_destination:
+		...
+	var here := world.get_component(id, EcsPositionComponent) as EcsPositionComponent
+
+# ecs_collision_system.gd:121 — rebuilds its arrays from scratch every tick
+for id in world.query([EcsPositionComponent, EcsBodyComponent]):
+	var body := _manager.node_for(id, EcsConst.NODE_BODY) as Area2D
+	var shape := world.get_component(id, EcsBodyComponent) as EcsBodyComponent
+	var place := world.get_component(id, EcsPositionComponent) as EcsPositionComponent
+	...
+	_places.append(place)
+	_movable.append(world.has(id, EcsMovementComponent))
+
+# ecs_node_sync_system.gd:38 — walks the manager's ids, not a query
+for id: int in _manager.entity_ids():
+	var place := world.get_component(id, EcsPositionComponent) as EcsPositionComponent
+	var sprite := world.get_component(id, EcsSpriteComponent) as EcsSpriteComponent
+```
+
+Collision's `_places` array is already a hand-rolled version of option 4's cache — held
+references, walked by index — rebuilt every tick because nothing tells it when the set
+changed.
+
 ## Options, cheapest first
 
 **1. Run the slow bars less often.** hunger, energy and health: ~45 ms together, all lookup.
@@ -92,6 +258,52 @@ never share a tick. **~35 ms off the game's tick; no code change beyond `main.gd
 collapse and death land up to 0.1 s later; the tests that assume per-tick bars drive the
 systems directly and are unaffected.
 
+Today (`main.gd:168`, `SLOW` is 3 at `main.gd:94`):
+
+```gdscript
+_scheduler \
+	.add(EcsLifecycleSystem.new(_manager, catalog)) \
+	.add(EcsSpawnerSystem.new()) \
+	.add(EcsHungerSystem.new()) \
+	.add(EcsEnergySystem.new()) \
+	.add(EcsHealthSystem.new()) \
+	.add(EcsSensorSystem.new(_manager), SLOW, 0) \
+	.add(EcsLowBrainSystem.new(), SLOW, 1) \
+	...
+```
+
+The change is three arguments — a sketch, rate and phases to be chosen when measured:
+
+```gdscript
+	.add(EcsHungerSystem.new(), BARS, 2) \
+	.add(EcsEnergySystem.new(), BARS, 3) \
+	.add(EcsHealthSystem.new(), BARS, 4) \
+```
+
+Delta banking is what keeps rates exact — `ecs/ecs_scheduler.gd:64`:
+
+```gdscript
+func run_all(world: EcsWorld, delta: float) -> void:
+	for i in _systems.size():
+		_accum[i] += delta
+		if _tick % _every[i] != _phase[i]:
+			continue
+		_systems[i].run(world, _accum[i])
+		_accum[i] = 0.0
+	_tick += 1
+```
+
+Health should land *after* hunger and energy in the cycle so a death from either is seen
+on the next health run, not one cycle later. Phases are per rate, so they can still collide
+with `sensor` (`tick % 3 == 0`) and `low_brain` (`tick % 3 == 1`): at `every = 6` only
+phases 2 and 5 are clear of both, so the sketch's 3 lands with `sensor` and 4 with
+`low_brain`. Three bars need either one shared slot or a rate that leaves three free —
+check the combined frame, not the average.
+
+The stress test does not use the scheduler — `_build_pipeline()` (`tests/stress_test.gd:465`)
+makes a flat `Array[EcsSystem]` and `_run_once()` calls each every tick — so to see option 1
+there, the rates have to be added to that loop.
+
 **2. Fetch once per creature in the brain — and fix the hungry scan, which is the bigger half.** Get hunger, energy, inventory, action, sensor and
 position once at the top of the per-creature loop and pass them to the rungs, instead of
 each rung fetching its own. Takes the brain from ~6.5 gets per creature to ~4–5 in the
@@ -101,6 +313,43 @@ disqualifier first (is it consumable at all — most perceived ids are other ani
 fetch position only for ids that pass, and consider letting the sensor or the world keep a
 "food in view" list so the brain never tests animals. **Fed: part of ~44 ms at 4,000;
 hungry: most of the ~38 ms the hungry state adds at 800. One file for the first part.**
+
+Note that `_is_food` already fails an animal on the consumable check (see above), so
+reordering alone buys little. What is left per animal is `is_alive` + `has(Consumable)`;
+`destroy_entity()` erases every table, so `has(Consumable)` is already false for a dead
+id and the `is_alive` in front of it is a redundant call. The real saving is not asking
+~53 times at all.
+
+A sketch of the fetch-once shape — the rungs take components instead of fetching them.
+Signatures and the bundle are illustrative, not decided:
+
+```gdscript
+for id in world.query([EcsPositionComponent, EcsMovementComponent, EcsLowBrainComponent]):
+	var brain := world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
+	var move := world.get_component(id, EcsMovementComponent) as EcsMovementComponent
+	...                       # collapsed / sleep / commitment checks unchanged
+	if move.has_destination and brain.state != EcsLowBrainComponent.State.WANDER:
+		continue              # mid-trip creatures still leave before any extra fetch
+
+	# Fetched once, only for creatures that reach the ladder; null means "has none".
+	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+	var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
+	var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
+
+	if _try_eat(world, id, brain, move, hunger, bag, action):
+		continue
+	if _try_take(world, id, brain, move, hunger, bag, action):
+		continue
+	if _try_seek_food(world, id, brain, move, hunger, bag):   # sensor, position inside
+		continue
+	if _try_sleep(world, id, brain, move, hunger):            # energy inside
+		continue
+```
+
+Fetch *after* the `has_destination` early-out, not at the top of the loop — hoisting all
+six to the top would make a mid-trip creature, which today costs 2 gets, pay for all six.
+The `SLEEP` branch above it (`_worth_waking_for` → `_starving`) fetches hunger for itself
+and can stay as it is or take the same argument.
 
 **3. Trim duplicate `has` checks.** hunger and energy each test two flags per entity to mean
 "resting". Small, a few ms each. Only worth it if 1 and 2 leave it visible.
@@ -114,6 +363,22 @@ references, skipping both `query()` and `get_component`. The movement probe alre
 measures this exact shape: **4.1 → 1.2 µs per entity, ~70% off a lookup-bound stage**,
 potentially most of the ~130 ms fetch plus ~31 ms query. Flags churn, but they are separate
 tables, so a flag change invalidates only queries that name that flag.
+
+The probe is `_probe_access()` in `tests/stress_test.gd:168`. The 1.2 µs row is this loop
+— the same arithmetic as `EcsMovementSystem`, over references gathered once:
+
+```gdscript
+var moves: Array[EcsMovementComponent] = []
+var places: Array[EcsPositionComponent] = []
+for id in _world.query([EcsPositionComponent, EcsMovementComponent]):
+	moves.append(_world.get_component(id, EcsMovementComponent) as EcsMovementComponent)
+	places.append(_world.get_component(id, EcsPositionComponent) as EcsPositionComponent)
+
+for k in moves.size():          # timed
+	var move := moves[k]
+	var here := places[k]
+	...
+```
 
 This changes `EcsWorld`, which is `HANDOFF.md` §15's storage argument — **the author's
 decision. Raise it with the numbers after 1–3; do not implement it unasked.**

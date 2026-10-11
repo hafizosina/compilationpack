@@ -10,7 +10,7 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 153 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 161 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments, the hunger/health/energy loop,
 # intent flags, items as records and the drop on death.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
