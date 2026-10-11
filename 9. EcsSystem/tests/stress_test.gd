@@ -63,6 +63,15 @@ static var SKIP := PackedStringArray()
 ## the worst case for that loop. Below 0 means "leave it at the blueprint's".
 static var FULLNESS: float = -1.0
 
+## `--every=sensor:3:0,low_brain:3:1` runs those stages at main.gd's rates —
+## `label:every:phase`, the same two numbers EcsScheduler.add() takes — with
+## delta banked the way the scheduler banks it. Without it every stage runs
+## every tick, which is the cost of a stage, not of the game's tick. A stage's
+## column is then its average over the sample, so a stage at every=6 shows a
+## sixth of its cost, and `peak ms` is the heaviest single tick, which is what
+## the phases are there to keep down.
+static var RATES: Dictionary = {}
+
 ## Reads `-- --spacing=N` off the command line. Godot hands everything after the
 ## bare `--` to the game, so the test can be swept without editing it.
 static func _resolve_spacing() -> void:
@@ -77,6 +86,11 @@ static func _resolve_spacing() -> void:
 			SKIP = arg.substr("--skip=".length()).split(",", false)
 		elif arg.begins_with("--fullness="):
 			FULLNESS = arg.substr("--fullness=".length()).to_float()
+		elif arg.begins_with("--every="):
+			for spec in arg.substr("--every=".length()).split(",", false):
+				var parts := spec.split(":")
+				if parts.size() == 3:
+					RATES[StringName(parts[0])] = Vector2i(parts[1].to_int(), parts[2].to_int())
 ## Ticks thrown away before measuring — the first few build the physics state.
 const WARMUP: int = 12
 ## Ticks averaged.
@@ -87,6 +101,12 @@ const BUDGET_MS: float = 250.0
 var _world: EcsWorld
 var _manager: EcsEntityManager
 var _systems: Array[EcsSystem] = []
+## Each stage's rate, phase and banked delta, parallel to _systems — the
+## scheduler's bookkeeping, kept here so each stage can still be timed alone.
+var _every := PackedInt32Array()
+var _phase := PackedInt32Array()
+var _accum := PackedFloat32Array()
+var _tick: int = 0
 var _overlay: EcsDebugOverlay
 var _marker: EcsSelectionMarker
 var _entities: Node2D
@@ -96,8 +116,9 @@ var _catalog: EcsEntityCatalog
 var _counting: bool = false
 
 const CountingWorld := preload("res://9. EcsSystem/tests/ecs_counting_world.gd")
-## Ticks the counting pass averages over.
-const COUNT_TICKS: int = 10
+## Ticks the counting pass averages over. A multiple of 6 so a stage at
+## every=3 or every=6 is counted a whole number of times.
+const COUNT_TICKS: int = 12
 
 func _ready() -> void:
 	_resolve_spacing()
@@ -113,9 +134,12 @@ func _ready() -> void:
 		% SPACING)
 	if not SKIP.is_empty():
 		print("[stress] skipping stages: %s" % ", ".join(SKIP))
+	for label in RATES:
+		var rate: Vector2i = RATES[label]
+		print("[stress] %s runs every %d ticks, phase %d" % [label, rate.x, rate.y])
 	if FULLNESS >= 0.0:
 		print("[stress] every animal starts at fullness %.0f — hungry, searching for food." % FULLNESS)
-	print("[stress] %6s %9s %9s %9s %8s" % ["n", "spawn ms", "tick ms", "per ent", "FPS"])
+	print("[stress] %6s %9s %9s %9s %8s %9s" % ["n", "spawn ms", "tick ms", "per ent", "FPS", "peak ms"])
 
 	var last_ok := 0
 	var first_over := 0
@@ -129,8 +153,8 @@ func _ready() -> void:
 	for n in sizes:
 		var result := await _measure(n)
 		var tick_ms: float = result["tick_ms"]
-		print("[stress] %6d %9.0f %9.2f %9.4f %8.1f"
-			% [n, result["spawn_ms"], tick_ms, tick_ms / n, 1000.0 / tick_ms])
+		print("[stress] %6d %9.0f %9.2f %9.4f %8.1f %9.2f"
+			% [n, result["spawn_ms"], tick_ms, tick_ms / n, 1000.0 / tick_ms, result["peak_ms"]])
 		worst = result
 		every.append(result)
 		if tick_ms >= BUDGET_MS:
@@ -401,11 +425,15 @@ func _measure(n: int) -> Dictionary:
 	var totals := PackedFloat64Array()
 	totals.resize(_systems.size())
 	var tick_total: float = 0.0
+	var peak: float = 0.0
 	for i in SAMPLE:
 		var costs := _run_once()
+		var this_tick: float = 0.0
 		for s in _systems.size():
 			totals[s] += costs[s]
-			tick_total += costs[s]
+			this_tick += costs[s]
+		tick_total += this_tick
+		peak = maxf(peak, this_tick)
 		await get_tree().physics_frame
 
 	var per_system: Dictionary = {}
@@ -415,6 +443,7 @@ func _measure(n: int) -> Dictionary:
 		"n": n,
 		"spawn_ms": spawn_ms,
 		"tick_ms": tick_total / SAMPLE / 1000.0,
+		"peak_ms": peak / 1000.0,
 		"systems": per_system,
 		"work": _work_done(n),
 	}
@@ -482,22 +511,35 @@ func _build_pipeline() -> void:
 		EcsInspectSystem.new(),
 	]
 	_systems = []
+	_every = PackedInt32Array()
+	_phase = PackedInt32Array()
+	_accum = PackedFloat32Array()
+	_tick = 0
 	for system in all:
 		if SKIP.has(String(system.label())):
 			continue
+		var rate: Vector2i = RATES.get(system.label(), Vector2i(1, 0))
 		_systems.append(system)
+		_every.append(rate.x)
+		_phase.append(rate.y)
+		_accum.append(0.0)
 
 ## One tick, timing each stage. Same call sequence as EcsScheduler.run_all —
-## unrolled only so the cost can be attributed.
+## unrolled only so the cost can be attributed. A stage not due this tick costs 0.
 func _run_once() -> PackedFloat64Array:
 	var costs := PackedFloat64Array()
 	costs.resize(_systems.size())
 	for s in _systems.size():
+		_accum[s] += TICK
+		if _tick % _every[s] != _phase[s]:
+			continue
 		if _counting:
 			_world.set(&"stage", _systems[s].label())
 		var began := Time.get_ticks_usec()
-		_systems[s].run(_world, TICK)
+		_systems[s].run(_world, _accum[s])
 		costs[s] = float(Time.get_ticks_usec() - began)
+		_accum[s] = 0.0
+	_tick += 1
 	return costs
 
 ## A jittered grid of alternating rabbits and monkeys, with the wander bounds
