@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" uid="uid://6f6x1yv26vgh" path="res://9. EcsSystem/tests/fetch_bench.gd" id="1_fetch"]
+
+[node name="FetchBench" type="Node"]
+script = ExtResource("1_fetch")
