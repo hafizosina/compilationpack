@@ -10,15 +10,16 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 161 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 171 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments, the hunger/health/energy loop,
 # intent flags, items as records and the drop on death.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
 
-# Population ramp: where a tick crosses 250 ms. ~3,200 entities at 4 FPS on
-# a dense grid, simulation only. Takes a few minutes. See HANDOFF.md §14.
+# Population ramp: where a tick crosses 250 ms. At the game's rates (--every=...)
+# it stays under past 9,600 entities, fed or hungry. Simulation only; takes a few
+# minutes. See HANDOFF.md §14.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"
 ```
 
@@ -54,7 +55,7 @@ Hand-edited scene/resource files are the main breakage risk in this repo: `.tscn
 | `<N>. <Name>/` | One isolated demo module per folder |
 | `docs/devlog/Summary.md` | Longer per-module write-up, one section per module |
 | `8. SimpleAiSystem/*.md` | **Design archive — the code is deleted.** Five docs kept for the reasoning module 9 is built against |
-| `9. EcsSystem/*.md` | Module 9 likewise — `HANDOFF.md` is its state-of-the-build, `ECS_REFACTOR_PLAN.md` the roadmap it follows; `HANDOFF.md` §3 covers the entity-lifecycle model. `FETCH_HANDOFF.md` is the current job (cutting component-lookup time). Plans for finished work are deleted once folded into `HANDOFF.md` |
+| `9. EcsSystem/*.md` | Module 9 likewise — `HANDOFF.md` is its state-of-the-build, `ECS_REFACTOR_PLAN.md` the roadmap it follows; `HANDOFF.md` §3 covers the entity-lifecycle model. Plans for finished work are deleted once folded into `HANDOFF.md` (the fetch-time job is in §14) |
 | `9. EcsSystem/tests/` | The repo's only tests — module 9's lifecycle acceptance test and its population stress test |
 
 Keep feature work inside the module folder it belongs to; promote something to `Global/` or `System/` only when a second module needs it.
@@ -338,7 +339,8 @@ size is the point.
 how the Godot nodes are structured (a pool per concern, one view node per entity, or
 server RIDs) and how component data is stored (dictionary-of-dictionaries, archetypes,
 whether a node handle may live inside a component). `9. EcsSystem/HANDOFF.md` §15 records
-the positions. The author has said explicitly he still wants to argue both out. **Do not
+the positions. Cached views (`EcsWorld.view()`, approved 2026-10-29) are an index over the
+existing store, not a storage change; see §14. The author has said explicitly he still wants to argue both out. **Do not
 implement any option from §8**; raise it for a decision instead. Steps 3–6 are done — 6
 on the stripped core, without combat (`9. EcsSystem/HANDOFF.md` §7, §13) — and step 7 is not
 started; it and any return of combat assume the cut combat layer.

@@ -13,7 +13,7 @@ a recorded design, not something you can run.
 ```bash
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 "$GODOT" --path . "res://9. EcsSystem/main.tscn"                          # run it (also the main scene)
-"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 161 checks, exit 0 = all pass
+"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 171 checks, exit 0 = all pass
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"    # population ramp, minutes
 "$GODOT" --headless --editor --quit --path . 2>&1 | grep -iE "error|invalid|uid"  # after any .tscn/.tres edit
 ```
@@ -469,7 +469,7 @@ after its producer keeps its data one tick old, as at full rate.
 
 ## 12. Tests
 
-`tests/lifecycle_test.tscn` — **161 checks**, exit code 0 only if all pass. Run it after
+`tests/lifecycle_test.tscn` — **171 checks**, exit code 0 only if all pass. Run it after
 touching the manager, collision, pickup, spawner, sensor, node sync, the brain or any
 executor. It covers: declared nodes built and undeclared ones not; kill takes data and nodes;
 spawn notes fulfilled a tick later; soft collision, immovable and non-solid bodies; seeing is
@@ -477,13 +477,16 @@ not reaching; the trip budget; the brain's commitments, preemption and rung orde
 starving, mending and the dead band; energy, sleep, collapse and waking on starving; the
 sleeper's slower hunger; the start roll; the eat-and-pocket race; executors with no brain;
 state/flag agreement over 400 ticks; records, uid and the reflection copy; the drop on death;
-the inspector's layout and its not naming any component; and per-stage tick rates banking
-delta.
+the inspector's layout and its not naming any component; per-stage tick rates banking
+delta; and a view rebuilding on every structural change it can see, and only then.
 
 `tests/stress_test.tscn` — the population ramp and the per-stage bookkeeping split (§14). Knobs after a bare `--`:
 `--spacing=180` (grid px), `--n=4000` (one population), `--skip=hunger,health` (leave stages
 out, by label), `--fullness=50` (start every animal hungry — the default world is fed, so the
-brain's food search never runs; hungry, the tick at 800 entities goes 47.6 → 85.3 ms).
+brain's food search never runs), `--every=sensor:3:0,...` (run stages at the game's rates).
+
+`tests/fetch_bench.tscn` — what component fetching costs on its own: skeleton systems over a
+random world, timed as query + has + get, and through a kept and a rebuilt view.
 
 ---
 
@@ -491,11 +494,9 @@ brain's food search never runs; hungry, the tick at 800 entities goes 47.6 → 8
 
 `ECS_REFACTOR_PLAN.md` is the roadmap. **Steps 0–6 are done; step 7 is not started.**
 
-**Next, decided 2026-09-27: cut the fetch time first** — about half the tick is component
-lookups (§14). The plan, numbers and code sites are in **`FETCH_HANDOFF.md`**: bars at 10 Hz,
-the brain fetching each component once per creature, trimming duplicate `has` checks, then
-§15's storage question (cached queries returning component references) raised as the
-author's decision. Fold the results back here and delete that file when it is done.
+**The fetch-time job is done** (2026-09-27 to 2026-10-29): bars at 10 Hz, cached views, the
+brain's food index. The ceiling went from 4,800–6,400 to over 9,600 entities (§14). Next is
+feature work.
 
 - **0–1** core and data-driven factory — done.
 - **2, the weapon pain case** — built, proved clean (armour and crit added without touching
@@ -520,8 +521,7 @@ looting; bag capacity and stacking. **Do not re-add breadth without being asked*
 size is the point.
 
 Smaller, not done: `EcsEntityManager.node_for()` allocates a throwaway dictionary on every
-call (`_nodes.get(id, {})`); the brain's food rung re-asks the store about every perceived id
-right after the sensor walked the same list; speed variance is per placement, so a runtime
+call (`_nodes.get(id, {})`); speed variance is per placement, so a runtime
 spawn gets the blueprint default; the Respawn button keeps keyboard focus after a click; the
 stats panel lets the wheel through to the camera.
 
@@ -529,80 +529,88 @@ stats panel lets the wheel through to the camera.
 
 ## 14. Performance
 
-`tests/stress_test.tscn` builds the pipeline `main.gd` builds and calls each stage directly
-at full rate (so the 20 Hz saving does not show — it is a worst case), on a jittered grid
-that grows with n so the neighbourhood stays the same size. It prints the ramp, each stage's
-cost in ms and µs per entity, a census of the work done, and a probe splitting one stage into
-query / fetch / arithmetic. Simulation only; nothing is drawn.
+`tests/stress_test.tscn` builds the pipeline `main.gd` builds and times each stage, on a
+jittered grid that grows with n so the neighbourhood stays the same size. It prints the ramp,
+each stage's cost, a census of the work done, and a split of every stage into query / loop /
+fetch / logic. Simulation only; nothing is drawn. Flags: `--every=label:every:phase` (the
+game's rates), `--fullness=50` (every animal hungry), `--n=`, `--skip=`, `--spacing=`.
+`tests/fetch_bench.tscn` prices the store calls on their own.
 
-**Latest ramp** (after step 6 and the inspector work, 90 px grid):
+**Latest ramp**, 2026-10-29, `86d6028`, game rates
+(`--every=sensor:3:0,low_brain:3:1,hunger:6:2,energy:6:5,health:3:2`), against `6ee5529`
+(before the views) in the same sitting. Average tick in ms, heaviest tick in brackets;
+budget 250 ms:
 
-| n | tick | FPS | | n | tick | FPS |
-|---|---|---|---|---|---|---|
-| 400 | 21.5 ms | 46.5 | | 2,400 | 144.0 ms | 6.9 |
-| 800 | 42.1 ms | 23.8 | | 3,200 | **206.6 ms** | 4.8 |
-| 1,600 | 92.0 ms | 10.9 | | 4,000 | 262.9 ms | 3.8 |
+| entities | fed, before | fed, after | hungry, before | hungry, after |
+|---|---|---|---|---|
+| 800 | 21.9 (36) | 12.5 (20) | 33.2 (62) | 14.6 (20) |
+| 1,600 | 45.2 (59) | 27.1 (59) | 72.2 (141) | 32.2 (55) |
+| 3,200 | 100.4 (170) | 61.8 (107) | 158.8 (264) | 74.8 (115) |
+| 4,000 | 123.3 (173) | 76.9 (132) | 201.1 (344) | 94.5 (138) |
+| 4,800 | 153.3 (218) | 93.9 (177) | 244.3 (427) | 114.4 (166) |
+| 6,400 | 208.5 (296) | 127.4 (217) | 341.1 (645) ✗ | 157.0 (219) |
+| 8,000 | 269.0 (377) ✗ | 162.5 (275) | — | 209.0 (370) |
+| 9,600 | — | 201.6 (354) | — | 249.7 (364) |
 
-**3,200 entities is the last step under the 250 ms budget.** At 4,000: sensor 36%, low_brain
-17%, collision 13%, node_sync 9%, energy / hunger / movement ~7% each; pickup and consume
-~0.01 ms. Each sensor returns ~53 ids per tick; cost per entity levels off at ~65 µs.
+✗ = first step over budget. **The ceiling is now over 9,600 fed and hungry** (the ramp's top
+step; neither crossed), up from 6,400 fed and 4,800 hungry. At 9,600: **fed** sensor 40%,
+node_sync 16%, collision 16%, low_brain 15%, movement 7%; **hungry** sensor 35%, low_brain
+27%, node_sync 14%, collision 13%.
+
+**How it got there** — about half the tick used to be component lookups, not work:
+
+| commit | change | measured, 4,000 entities |
+|---|---|---|
+| `2a3fe52` | hunger/energy at 10 Hz, health at 20 Hz (§11) | tick 137 → 108 ms fed |
+| `3338517` | `EcsWorld.view()` / `EcsView`; movement on it | |
+| `ca092d8` | hunger, energy, health on views | health 8.6 → 1.4, hunger 16.5 → 9.4, energy 17 → 13 ms (every tick) |
+| `4c3149c` | low_brain's main loop on a view | low_brain fed 18.5 → 14.2 ms |
+| `1200078` | the brain's food index (id → position, from a view) | low_brain hungry 102 → 33 ms; `has` per tick 147,000 → 3,500 |
+| `d349d8d` | collision's working set from views | 31 → 10 ms |
+| `86d6028` | node_sync's working set from views | 20.4 → 9.2 ms |
+
+**Views.** `world.view(include, exclude)` returns the matching ids plus one column of
+component references per included type. Every table has a version, bumped by `add`,
+`remove` and `destroy_entity`; a view is handed back as the same object until a table it
+names changes. Field writes need nothing — the columns hold the same objects as the store,
+which stays the only truth; a view is an index. Because components are fixed from spawn to
+death, a view naming only components rebuilds only on births and deaths. Rules:
+
+- Read a view, never change its arrays. A rebuild makes new arrays, so a loop over an old
+  view finishes on the snapshot it started with, as with `query()`.
+- Only included types have columns. Optional components stay `get_component()`.
+- Don't name a flag that changes every tick (intents): the view rebuilds every tick, which
+  costs more than `query()`. Rare flags (`EcsDyingFlag`) are fine.
+- Something derived from a view can be cached on the view's identity: the brain's food
+  index, collision's and node_sync's working sets rebuild only when `world.view()` hands
+  back a different object.
+- Systems that query on churning flags stay on `query()`: consume, pickup, drop, selection,
+  inspect. Spawner, debug and sensor's two queries were not worth it.
 
 **Measurement rules, learned the hard way:**
 
 - **Never compare numbers from different sittings.** Throughput drifts by up to ~50% across a
-  day on this machine — a ramp earlier the same day read 225 ms at 2,400 against 144 ms here,
-  with no relevant code changed and every stage moving by the same proportion. Use `--skip`
-  and run both arms back to back.
+  day on this machine. Run both arms back to back — for a whole-ramp comparison, check the
+  old commit out into a worktree and run the two ramps one after the other.
 - **Single-shot `--n` numbers are not comparable to ramp numbers**; the process state differs.
 - **Repeat before believing.** Run-to-run noise is ±12%; anything under ~15% needs two runs
-  at each end. A "70% regression" and a "step 4 cost a third of the ceiling" were both
-  retracted on exactly this: measured in one sitting, step 4 cost ~12% of the tick and none
-  of the ceiling.
+  at each end, interleaved.
+- **Measure fed and hungry**, at the game's rates. A fed run never exercises the food search.
+- The split's `logic` column includes engine calls (`node_for`, node writes, overlap reads),
+  so a view can save more than the `fetch` column shows — collision and node_sync both did.
 
-**What the cost is.** The system is **overhead-bound, not interaction-bound.** At 840 px
-spacing — no sensor overlaps anything, zero ids, zero pairs — the pipeline still costs
-**~41 µs per entity**, and the ceiling moves only to ~6,000. Sensor costs ~39 ms to return
-nothing, collision ~40 ms to resolve nothing. Density is a third of the ceiling: at 180 px
-spacing (13 ids per sensor instead of 53) the ceiling is 4,800, and the per-entity cost is
-flat with population; at 90 px it climbs. In `movement` — two components in, one out — **~70%
-of the stage is finding the components**, not using them (`get_component` is a double hashed
-lookup plus boxing, ~1 µs a call).
+**What is left:**
 
-**Bookkeeping vs logic, per stage.** The stress test now ends with a split of every stage's
-time at the final population: `query` (timed), `loop` and `fetch` (store calls counted in a
-separate pass on `tests/ecs_counting_world.gd`, priced by unit costs measured in the same
-sitting) and `logic`, the remainder. At 4,000 entities:
-
-| stage | total ms | bookkeeping | logic | note |
-|---|---|---|---|---|
-| sensor | 93.3 | ~22% | **72.6** | the real work is the overlap reads |
-| low_brain | 44.3 | ~100% | ~0 | 26,000 `get_component` a tick — ~6.5 per creature, the same components re-fetched in each rung |
-| collision | 34.0 | ~54% | 15.8 | |
-| node_sync | 23.8 | ~50% | 11.9 | the node writes |
-| energy, hunger | 18 each | ~100% | ~0 | 8,000 gets + 8,000 `has` each |
-| movement | 16.5 | ~97% | ~0.5 | |
-| health | 9.1 | ~100% | ~0 | |
-| **whole tick** | **257.2** | **~61–63%** | **~96** | three quarters of the logic is the sensor |
-
-The priced columns are estimates and run a few percent high — the simple stages come out
-at 104–110%, i.e. "all bookkeeping, within error". The direct movement probe agrees (71%).
-**Outside sensor, collision and node_sync, the pipeline is almost pure lookup.** That is the
-per-entity floor in another form, and the strongest case yet for the §15 storage question
-and for fetching each component once per creature in the brain.
-
-**The levers, ranked by payoff over cost:**
-
-1. **The per-entity floor** — query + component access + area bookkeeping. §15's
-   data-structure argument, with a number behind it. **The author's call; not to be
-   implemented unasked.**
-2. **Per-stage tick rates — taken** (§11): sensor and brain at 20 Hz, roughly a third of the
-   largest two stages off the average tick.
-3. **Choose the density you design for** — free. Sight radius is the same lever: ids scale
-   with πr².
-4. **Cache the brain's perception scan** — cheap, shrinks with density.
-5. **Stagger the sensor** — worth under 10%: deleting perception outright saves only ~10% of
-   the tick, because most of a sensing entity's cost is fixed overhead.
-6. **`node_for`'s throwaway dictionary** — small, free.
+1. **The heaviest tick.** It runs ~75% above the average (354 vs 202 ms at 9,600 fed): the
+   tick the 20 Hz stages land on. Splitting sensor and brain work across their three ticks
+   would flatten it.
+2. **The sensor**, the biggest stage. Most of it is overlap reads off the physics server,
+   which no view touches; the lever is reading less (fewer sensors, smaller radius, density).
+3. **The brain's optional components** — hunger, energy, bag, reach, sensor — are still
+   fetched per rung. A few ms; fetch once per creature after the mid-trip early-out.
+4. **node_sync writes texture, scale, tint and z-index every tick** though they almost never
+   change. Measure before skipping unchanged writes.
+5. Past views, the per-entity floor is §15's storage argument.
 
 ---
 
@@ -617,7 +625,8 @@ nodes for collision, sprites, animation and sound). Still unresolved: whether th
 **The data-structure argument is open, and the author wants to argue it out. Do not
 implement any option; raise it for a decision.** What exists: `{ Script : { entity_id :
 EcsComponent } }`, components as `Resource` subclasses, queries intersecting tables driven
-from the rarest.
+from the rarest, and — since 2026-10-29, approved — cached views over that store (§14),
+which are an index, not a second store.
 
 - **Dictionary-of-dictionaries or archetype / packed storage?** The API would not change.
   Measured: a stage like `movement` has a ~5× ceiling from packed access; across the whole

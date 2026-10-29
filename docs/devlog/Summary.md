@@ -125,7 +125,7 @@ A **hand-rolled ECS** and the only live simulation — the main scene. It shares
 
 **Observability.** **F1** overlay: bars for fullness / energy / health, a carry badge and a sleep icon, drawn on the entities. Left-click selects (a distance query, not a physics pick); the inspector shows whatever each component's `describe()` returns and names no component type itself.
 
-**Tests:** `tests/lifecycle_test.tscn` — 161 headless checks, exit 0 only if all pass. `tests/stress_test.tscn` — a population ramp; ~3,200 entities is where a tick crosses 250 ms on a dense 90 px grid.
+**Tests:** `tests/lifecycle_test.tscn` — 171 headless checks, exit 0 only if all pass. `tests/stress_test.tscn` — a population ramp; at the game's rates a tick stays under 250 ms past 9,600 entities, fed or hungry (`HANDOFF.md` §14).
 
 **Cut and recoverable:** the step-2 combat pipeline, proved clean and removed so the core reads in one sitting, is in git at `928b9d1`.
 
@@ -216,4 +216,4 @@ All widget styling goes through the single theme `Global/Theme/main_theme.tres`,
 | 6. GraphDb | Complete |
 | 7. JoyStick | Complete — mobile HUD, inventory, item resources |
 | 8. SimpleAiSystem | **Design archive — the code is deleted.** Complete for its milestone when it was removed; its five `.md` docs stay as the reasoning module 9 is built against. Restore with `git checkout 3346b6e -- "8. SimpleAiSystem"` |
-| 9. EcsSystem | **Active, and the only live simulation.** Hand-rolled ECS, seventeen stages, main scene. Plan steps 0–6 done (step 6 on the stripped core, without combat); step 7 (GOAP) not started. Components / flags / singletons as three kinds, intent flags, items as records, drop on death, fullness / energy / health. 161 lifecycle checks plus a population ramp. Combat is in git at `928b9d1`. The data-structure argument (`HANDOFF.md` §15) is open and the author's to settle |
+| 9. EcsSystem | **Active, and the only live simulation.** Hand-rolled ECS, seventeen stages, main scene. Plan steps 0–6 done (step 6 on the stripped core, without combat); step 7 (GOAP) not started. Components / flags / singletons as three kinds, intent flags, items as records, drop on death, fullness / energy / health. 171 lifecycle checks plus a population ramp; cached views took the ceiling past 9,600 entities. Combat is in git at `928b9d1`. The data-structure argument (`HANDOFF.md` §15) is open and the author's to settle |
