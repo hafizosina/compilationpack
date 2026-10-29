@@ -13,7 +13,7 @@ a recorded design, not something you can run.
 ```bash
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 "$GODOT" --path . "res://9. EcsSystem/main.tscn"                          # run it (also the main scene)
-"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 171 checks, exit 0 = all pass
+"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 199 checks, exit 0 = all pass
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"    # population ramp, minutes
 "$GODOT" --headless --editor --quit --path . 2>&1 | grep -iE "error|invalid|uid"  # after any .tscn/.tres edit
 ```
@@ -36,7 +36,7 @@ world1.tres ──► EcsEntityManager ──► EcsWorld                       
                 builds the nodes      World/Entities/entity_<id>/
 ```
 
-Every physics tick `EcsScheduler` runs seventeen stages. `[20 Hz]` marks the two that run
+Every physics tick `EcsScheduler` runs twenty-two stages. `[20 Hz]` marks the two that run
 every third tick (§11); the rest run every tick.
 
 | stage | does | writes |
@@ -49,10 +49,15 @@ every third tick (§11); the rest run every tick.
 | `sensor` `[20 Hz]` | what each entity sees and can touch | `EcsSensor.perceived`, `EcsAction.reached` |
 | `low_brain` `[20 Hz]` | the FSM: chooses | its own state, a destination, intent flags |
 | `consume` | carries out an eat intent | `EcsHunger`, the bag, `EcsDyingFlag` |
+| `attack` | carries out an attack intent, on cooldown | `EcsDamage.cooldown`, hits on `EcsCombatSingleton` |
+| `crit` | rolls each hit against the attacker's crit chance | the hits |
+| `damage` | applies the hits less armour, clears them | `EcsHealth` |
 | `movement` | walks toward the destination, prices the trip | `EcsPosition`, `EcsMovement` |
 | `collision` | pushes overlapping solid bodies apart | `EcsPosition` |
-| `pickup` | carries out a take intent | the bag, `EcsDyingFlag` |
-| `drop` | a dying carrier's bag goes back into the world | notes on `EcsLifecycleSingleton` |
+| `pickup` | carries out a take intent: an item off the ground, or a record looted from a bag | the bags, `EcsDyingFlag` |
+| `rot` | ages corpses; flags them dying when their time is up | `EcsRot`, `EcsDyingFlag` |
+| `corpse` | a death by health asks for a corpse holding the bag | a note on `EcsLifecycleSingleton` |
+| `drop` | a dying entity's bag goes back into the world | notes on `EcsLifecycleSingleton` |
 | `selection` | resolves a click | `EcsSelectedFlag` |
 | `node_sync` | mirrors data onto the nodes, one way | each `entity_<id>` container |
 | `debug` | reads everything for the overlay | nothing — pure reader |
@@ -68,7 +73,8 @@ systems hold all behaviour and never call each other, and nothing outside a syst
 component data. Queries key on the script object — `world.query([EcsPositionComponent])` —
 so a typo is a parse error, not a silently empty result.
 
-The world today is 10 animals and 2 bushes (`defs/world1.tres`), spread across a 3200×1680
+The world today is 11 animals — 5 rabbits, 5 monkeys, 1 crocodile — and 2 bushes
+(`defs/world1.tres`), spread across a 3200×1680
 arena, plus the berries the bushes grow.
 
 ---
@@ -302,7 +308,18 @@ creature touches the store not at all. An intent **names its target**, so the br
 | EAT | `EcsEatIntentFlag` | `EcsConsumeSystem` |
 | TAKE | `EcsTakeIntentFlag` | `EcsPickupSystem` |
 | SLEEP | `EcsAsleepFlag` | `EcsHungerSystem`, `EcsEnergySystem` (as a rate) |
-| SEEK_FOOD, WANDER | a destination | `EcsMovementSystem` |
+| ATTACK | `EcsAttackIntentFlag` | `EcsAttackSystem` |
+| SEEK_FOOD, HUNT, WANDER | a destination | `EcsMovementSystem` |
+
+**Hunting** (2026-10-29). The ladder is `eat > take > seek food > hunt > sleep > wander`. A
+creature hungry below `forage_below` that has an `EcsDamageComponent` chases the nearest
+perceived prey — anything with health, not dying, and not its own blueprint type — as a
+commitment like SEEK_FOOD. Each brain tick it follows the prey's position *without* resetting
+the trip budget, so a chase it cannot win times out. In reach it switches to ATTACK (raising
+the flag); out of reach again, back to HUNT. The commitment ends when the prey is dead or
+gone, the budget runs out, or **food it eats comes into sight** — without that last rule a
+hunter that had just killed picked new prey in the one tick before the corpse appeared, and
+killed twice before eating.
 
 **No executor reads the brain.** A creature with no brain at all eats, takes and sleeps when a
 flag is raised on it — tested. **Do not let the brain grow hands:** executors stayed separate
@@ -405,9 +422,23 @@ solid). It runs late, after everything that can kill a carrier; a system that fl
 Dying after it would lose the bag. This also fixed a leak: a dead carrier's berries used to
 live forever with no position.
 
-**Deferred on purpose:** what a carried item *does* while carried (durability, rot — a record
-does nothing), bag capacity and stacking, voluntary dropping, and corpses — death by health
-should later leave a lootable corpse rather than drop.
+**Death by health leaves a corpse** (2026-10-29). `EcsCorpseSystem` runs before drop: for a
+dying entity at zero health it writes a spawn note for the `corpse` blueprint where it fell,
+with overrides for its look (the dead sprite, darkened), its body radius and its bag's records.
+The creature dies by the ordinary kill; the corpse is a new entity — nothing changes kind. A
+corpse is a non-solid body, `EcsConsumableComponent` meat, `EcsLootableComponent`, an
+inventory, and `EcsRotComponent` (40 s). **Looting is TAKE**: the brain names a record in a
+lootable bag in reach (`EcsTakeIntentFlag.record_uid`) and `EcsPickupSystem` moves it. A
+corpse eaten or rotted is an ordinary dying entity with a bag, so `EcsDropSystem` spills what
+is left.
+
+**Diet.** `EcsConsumableComponent.diet` (`&"plant"`, `&"meat"`) and `EcsHungerComponent.eats`.
+The brain's food index keeps each food's diet and every food rung filters on it, so rabbits
+and monkeys walk past corpses and the crocodile past berries. The executor does not check
+diet — choosing is the brain's.
+
+**Deferred on purpose:** what a carried item *does* while carried (durability — a record does
+nothing), bag capacity and stacking, voluntary dropping.
 
 ---
 
@@ -469,7 +500,7 @@ after its producer keeps its data one tick old, as at full rate.
 
 ## 12. Tests
 
-`tests/lifecycle_test.tscn` — **171 checks**, exit code 0 only if all pass. Run it after
+`tests/lifecycle_test.tscn` — **199 checks**, exit code 0 only if all pass. Run it after
 touching the manager, collision, pickup, spawner, sensor, node sync, the brain or any
 executor. It covers: declared nodes built and undeclared ones not; kill takes data and nodes;
 spawn notes fulfilled a tick later; soft collision, immovable and non-solid bodies; seeing is
@@ -478,7 +509,10 @@ starving, mending and the dead band; energy, sleep, collapse and waking on starv
 sleeper's slower hunger; the start roll; the eat-and-pocket race; executors with no brain;
 state/flag agreement over 400 ticks; records, uid and the reflection copy; the drop on death;
 the inspector's layout and its not naming any component; per-stage tick rates banking
-delta; and a view rebuilding on every structural change it can see, and only then.
+delta; a view rebuilding on every structural change it can see, and only then; hits
+less armour on cooldown, crits and death by hits; a corpse holding the bag, looted, ignored
+by a plant-eater and eaten by a meat-eater; rot spilling a corpse's bag; and a hungry
+crocodile hunting prey but not its own kind, attacking in reach, killing and eating.
 
 `tests/stress_test.tscn` — the population ramp and the per-stage bookkeeping split (§14). Knobs after a bare `--`:
 `--spacing=180` (grid px), `--n=4000` (one population), `--skip=hunger,health` (leave stages
@@ -495,8 +529,10 @@ random world, timed as query + has + get, and through a kept and a rebuilt view.
 `ECS_REFACTOR_PLAN.md` is the roadmap. **Steps 0–6 are done; step 7 is not started.**
 
 **The fetch-time job is done** (2026-09-27 to 2026-10-29): bars at 10 Hz, cached views, the
-brain's food index. The ceiling went from 4,800–6,400 to over 9,600 entities (§14). Next is
-feature work.
+brain's food index. The ceiling went from 4,800–6,400 to over 9,600 entities (§14).
+
+**Combat is back** (2026-10-29), rebuilt rather than restored, in `01fbc53`, `45113d0` and
+`1533581` — see §17.
 
 - **0–1** core and data-driven factory — done.
 - **2, the weapon pain case** — built, proved clean (armour and crit added without touching
@@ -512,12 +548,11 @@ feature work.
   dearer. The cost of raising a flag under load is unmeasured — the stress population never
   raises one.
 - **7, GOAP** — a pure planner over a symbolic snapshot, run off-frame under a replan
-  budget, emitting action ids that the existing executors run. Not started. It and any
-  return of combat assume the cut combat layer.
+  budget, emitting action ids that the existing executors run. Not started; it now has
+  eat, take, loot, hunt, attack and sleep to plan over.
 
-**Open and deferred, by decision:** `MoveIntent`; an attack intent and a state worth
-preempting *for* (both wait on combat); what a carried item does while carried; corpses and
-looting; bag capacity and stacking. **Do not re-add breadth without being asked** — the small
+**Open and deferred, by decision:** `MoveIntent`; weapons, durability and broken (they wait on
+what a carried record may *do*); prey fleeing or fighting back; bag capacity and stacking. **Do not re-add breadth without being asked** — the small
 size is the point.
 
 Smaller, not done: `EcsEntityManager.node_for()` allocates a throwaway dictionary on every
@@ -651,7 +686,8 @@ git show 928b9d1 -- "9. EcsSystem"                                   # see it
 git checkout 928b9d1 -- "9. EcsSystem/systems/ecs_attack_system.gd"  # take one file back
 ```
 
-**The combat pipeline** — 10 components (`aggression`, `armor`, `attack_intent`, `broken`,
+**The combat pipeline** — rebuilt on the current architecture on 2026-10-29 (§17); the
+original is still here for reference and for weapons. It was 10 components (`aggression`, `armor`, `attack_intent`, `broken`,
 `crit_chance`, `damage`, `dead`, `durability`, `equipped`, `health`) and 8 systems
 (`aggression`, `attack`, `crit`, `damage`, `death`, `durability`, `equip`, `weapon_carry`),
 plus `ecs_event.gd` and `ecs_damage_event.gd`. It was step 2 and it landed clean: armour added
@@ -666,3 +702,31 @@ revisited for items that act while carried.
 the crocodile and dagger blueprints, `EcsWorld.count()` and the frame-event API,
 `EcsSystem.enabled`, `EcsScheduler.find()`. The observability layer went too and has since
 come back, minus those.
+
+---
+
+## 17. Combat, rebuilt
+
+Rebuilt on the current architecture rather than checked out from `928b9d1`, whose
+`EcsAggressionSystem` was a second decider measuring to every entity, whose hits went through
+a frame-event API that was cut, and whose death and weapon model predate flags and records.
+
+- **Deciding** is the brain's ATTACK state (§7). `EcsAttackIntentFlag{target_id}` is the
+  instruction.
+- **`EcsAttackSystem`** ticks every `EcsDamageComponent`'s cooldown and, for each attack
+  intent off cooldown whose target has health, is not dying and is in the attacker's
+  `EcsActionComponent.reached`, adds an `EcsHit` to `EcsCombatSingleton.hits`.
+- **`EcsCritSystem`** multiplies hits whose attacker's `EcsCritChanceComponent` rolls.
+- **`EcsDamageSystem`** applies each hit to the target's health less `EcsArmorComponent`
+  (`reduction`, floored at `minimum`), then clears the inbox. Death stays `EcsHealthSystem`'s,
+  and a death by health leaves a corpse (§9).
+- **The crocodile** (`defs/blueprints/crocodile.tres`) is the hunter: eats meat, 150 health,
+  20 damage every 1.2 s, 15% crit. One is placed in `world1.tres`.
+
+Seen headless over 180 s of the shipped world: four kills, each followed by eating the
+corpse. Animals also starve in that world (2–4 per 180 s), but they did before combat too —
+measured on `a71ff0c` with the same probe — so that is world balance, not combat.
+
+**Not back:** weapons, `EcsEquipSystem`, durability and broken. A weapon is a carried item that
+acts, which needs a decision on what a record in a bag may do (§9). `EcsArmorComponent` and
+`EcsCritChanceComponent` exist; no blueprint authors armour yet.

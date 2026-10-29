@@ -10,9 +10,10 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 171 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 199 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments, the hunger/health/energy loop,
-# intent flags, items as records and the drop on death.
+# intent flags, items as records, the drop on death, views, combat, corpses,
+# looting, rot, diet and hunting.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
@@ -204,10 +205,21 @@ goes back into the world. One record, one slot; capacity, stacking and anything 
 item *does* (durability, rot) are deferred. **When a carrier dies, `EcsDropSystem` puts
 back what it carried**, where it fell, as itself — same uid, new id, via
 `EcsEntityManager.restore()`. That also fixed a leak: a dead carrier's berries used to live
-forever with no position. Later, death by health should leave a lootable corpse instead.
+forever with no position.
+
+**Death by health leaves a corpse** (2026-10-29). `EcsCorpseSystem` turns a dying entity
+with zero health into a spawn request for the `corpse` blueprint where it fell — its
+sprite darkened, its body radius, and its bag passed as overrides — so the creature still
+dies by kill and the corpse is a new entity, never a creature that changed kind. A corpse
+is non-solid meat (`EcsConsumableComponent.diet = &"meat"`), `EcsLootableComponent`, and
+rots (`EcsRotComponent`, `EcsRotSystem`). **Looting is the TAKE rung**: `EcsTakeIntentFlag`
+names a `record_uid` in a lootable entity's bag, the same way eat names a carried record.
+When a corpse is eaten or rots, `EcsDropSystem` spills what it still holds. **Food has a
+diet** and `EcsHungerComponent.eats` says which: rabbits and monkeys eat plants, the
+crocodile meat, and the brain's food index filters on it.
 
 **Deciding is one system with state, not a rung per behaviour.** `EcsLowBrainSystem` is a
-small FSM — `IDLE > WANDER > SEEK_FOOD > TAKE > EAT > SLEEP` — and `EcsLowBrainComponent` holds its `state` and
+small FSM — `IDLE > WANDER > SEEK_FOOD > TAKE > EAT > SLEEP > HUNT > ATTACK` — and `EcsLowBrainComponent` holds its `state` and
 its `target`. It replaced `EcsForageSystem`, which was a second decider whose priority was
 its line number in `main.gd`. That read well but was stateless: a creature's only memory
 between ticks was `has_destination`, so nothing could persist ("I am going to *that*
@@ -219,6 +231,12 @@ through one helper that also zeroes `time_left`, because overwriting a live trip
 otherwise inherit the old one's budget. The brain reads components that are not its own
 (sensor, inventory) and that is accepted: it is the one place that knows several concerns
 at once, and it still *writes* only `state`, `target`, `pause_left` and a destination.
+**HUNT and ATTACK are a commitment like SEEK_FOOD.** A hungry creature with an
+`EcsDamageComponent` chases the nearest perceived prey (has health, not dying, not its own
+blueprint type), follows it as it moves — the one destination write that keeps the trip's
+budget on purpose, so a chase can time out — and raises `EcsAttackIntentFlag` in reach.
+**Food in sight ends a hunt**, or a hunter that just killed would pick new prey in the tick
+before the corpse appears.
 
 **A stage may declare how often it runs.** `EcsScheduler.add(system, every, phase)` takes a
 rate in ticks — `main.gd` runs `sensor`, `low_brain` and `health` at `SLOW` (3 ticks, 20 Hz),
@@ -277,13 +295,14 @@ been crossed.
 berry dies and becomes a record, so freeing a node is kill and only kill, and every live
 entity has a position to draw.
 
-**It is deliberately stripped to a bare-minimum core**: 15 components, 6 flags, 2
-singletons, 17 systems
-(`lifecycle > spawner > hunger > energy > health > sensor > low_brain > consume > movement > collision > pickup > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
+**It is deliberately kept to a small core**: 20 components, 7 flags, 3
+singletons, 22 systems
+(`lifecycle > spawner > hunger > energy > health > sensor > low_brain > consume > attack > crit > damage > movement > collision > pickup > rot > corpse > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
 rank in the plan's decision ladder — a planner goes *above* it at step 7 — and not for the
 wandering it happens to do), and a world
-of 10 entities in 2 types (5 rabbits, 5 monkeys — a grazer and a carrier, differing by one
-component and some authored values). `EcsDebugSystem` is a pure
+of 11 entities in 3 animal types (5 rabbits, 5 monkeys and a crocodile — a grazer, a carrier
+and a hunter, differing by a component or two and some authored values) plus two berry
+bushes. `EcsDebugSystem` is a pure
 reader feeding one dumb view, `EcsDebugOverlay`, which annotates each entity in world
 space: name, a velocity arrow, a dashed line to its destination, **fullness, energy and
 health as bars**, a **badge on the sprite's shoulder** when it is carrying something, and
@@ -328,12 +347,15 @@ of every field, by reflection. Flags are the one thing the inspector lays out it
 class: one "Flags" tab. This brings back module 8's `describe()` **for display only** — the
 argument was settled that way; it is not a door for other methods.
 
-The plan's step-2 combat pipeline was built, proved out, and then cut back out so the
-flow reads end to end; it is in git at `928b9d1`, and `9. EcsSystem/HANDOFF.md` §16 says
-what was removed and how to restore it. The observability layer was cut with it and has
-since been restored, minus its `EcsCommandSystem` and pipeline panel, which depended on
-the combat demo. **Do not re-add breadth to module 9 without being asked**; the small
-size is the point.
+**Combat is back** (2026-10-29), rebuilt on the current architecture rather than restored
+from `928b9d1`: the brain decides (ATTACK), `EcsAttackSystem` executes the flag,
+and a hit travels through an `EcsCombatSingleton` inbox — attack adds `EcsHit`s,
+`EcsCritSystem` may multiply them, `EcsDamageSystem` applies them less `EcsArmorComponent`
+and clears the list. Death stays `EcsHealthSystem`'s. **Weapons, durability and broken are
+not back**: an attack is natural (`EcsDamageComponent` on the attacker), and a weapon waits
+on deciding what a carried record may *do*. The old pipeline is still in git at `928b9d1`
+(`9. EcsSystem/HANDOFF.md` §16). **Do not re-add breadth to module 9 without being asked**;
+the small size is the point.
 
 **Two architecture questions in module 9 are open arguments, not settled plans** —
 how the Godot nodes are structured (a pool per concern, one view node per entity, or
@@ -341,9 +363,8 @@ server RIDs) and how component data is stored (dictionary-of-dictionaries, arche
 whether a node handle may live inside a component). `9. EcsSystem/HANDOFF.md` §15 records
 the positions. Cached views (`EcsWorld.view()`, approved 2026-10-29) are an index over the
 existing store, not a storage change; see §14. The author has said explicitly he still wants to argue both out. **Do not
-implement any option from §8**; raise it for a decision instead. Steps 3–6 are done — 6
-on the stripped core, without combat (`9. EcsSystem/HANDOFF.md` §7, §13) — and step 7 is not
-started; it and any return of combat assume the cut combat layer.
+implement any option from §8**; raise it for a decision instead. Steps 3–6 are done and combat
+is back without weapons (`9. EcsSystem/HANDOFF.md` §7, §13); step 7 is not started.
 
 Read `9. EcsSystem/HANDOFF.md` before touching that folder. Module 9 is the main scene,
 ahead of the plan, which held that switch until step 6, and now the only simulation in the

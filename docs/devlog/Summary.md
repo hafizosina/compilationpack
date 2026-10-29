@@ -117,17 +117,17 @@ A **hand-rolled ECS** and the only live simulation — the main scene. It shares
 
 **Perception is physics.** Sensor and action areas are culled by Godot's broadphase; only bodies are detectable. `EcsSensorSystem` and `EcsCollisionSystem` are the only two files that read back off a node. Collision is soft: overlap is allowed, then undone. Having a body, blocking and being movable are three separate questions — a berry has a body you walk over.
 
-**One brain that chooses, executors that act.** `EcsLowBrainSystem` is an FSM (`IDLE > WANDER > SEEK_FOOD > TAKE > EAT > SLEEP`). A commitment is not reconsidered; a wander is. Its decisions go out as intent flags (`EcsEatIntentFlag`, `EcsTakeIntentFlag`, `EcsAsleepFlag`) that consume, pickup, hunger and energy read — never the brain — so a creature with no brain at all acts on a raised flag. A destination is a budget, not a standing order.
+**One brain that chooses, executors that act.** `EcsLowBrainSystem` is an FSM (`IDLE > WANDER > SEEK_FOOD > TAKE > EAT > SLEEP > HUNT > ATTACK`). A commitment is not reconsidered; a wander is. Its decisions go out as intent flags (`EcsEatIntentFlag`, `EcsTakeIntentFlag`, `EcsAsleepFlag`) that consume, pickup, hunger and energy read — never the brain — so a creature with no brain at all acts on a raised flag. A destination is a budget, not a standing order.
 
 **Needs.** Fullness, energy and health are all reserves. Hunger is the motive and health the consequence: starving costs health, being well fed mends it. Energy drains awake and restores asleep; at zero the creature collapses. The rabbit (a grazer, no bag) and the monkey (a carrier) differ by one component and authored values.
 
-**Items are records.** Picking up kills the item and keeps an `EcsItemRecord` of every component and its `uid`; a dead carrier's `EcsDropSystem` puts its records back into the world as themselves.
+**Items are records.** Picking up kills the item and keeps an `EcsItemRecord` of every component and its `uid`; a death by health leaves a corpse holding the bag, which others can loot, and a corpse eaten or rotted spills what is left. Food has a diet: plant or meat.
 
 **Observability.** **F1** overlay: bars for fullness / energy / health, a carry badge and a sleep icon, drawn on the entities. Left-click selects (a distance query, not a physics pick); the inspector shows whatever each component's `describe()` returns and names no component type itself.
 
-**Tests:** `tests/lifecycle_test.tscn` — 171 headless checks, exit 0 only if all pass. `tests/stress_test.tscn` — a population ramp; at the game's rates a tick stays under 250 ms past 9,600 entities, fed or hungry (`HANDOFF.md` §14).
+**Tests:** `tests/lifecycle_test.tscn` — 199 headless checks, exit 0 only if all pass. `tests/stress_test.tscn` — a population ramp; at the game's rates a tick stays under 250 ms past 9,600 entities, fed or hungry (`HANDOFF.md` §14).
 
-**Cut and recoverable:** the step-2 combat pipeline, proved clean and removed so the core reads in one sitting, is in git at `928b9d1`.
+**Combat** is rebuilt on the current architecture (2026-10-29): the brain's ATTACK state raises an intent, hits go through a combat inbox (attack, crit, damage less armour), and a hungry crocodile hunts, kills and eats. Weapons and durability are not back; the original step-2 pipeline is in git at `928b9d1`.
 
 **Key files:** `9. EcsSystem/ecs/ecs_world.gd`, `ecs/ecs_entity_manager.gd`, `main.gd`, `systems/ecs_low_brain_system.gd`, `systems/ecs_sensor_system.gd`
 
@@ -216,4 +216,4 @@ All widget styling goes through the single theme `Global/Theme/main_theme.tres`,
 | 6. GraphDb | Complete |
 | 7. JoyStick | Complete — mobile HUD, inventory, item resources |
 | 8. SimpleAiSystem | **Design archive — the code is deleted.** Complete for its milestone when it was removed; its five `.md` docs stay as the reasoning module 9 is built against. Restore with `git checkout 3346b6e -- "8. SimpleAiSystem"` |
-| 9. EcsSystem | **Active, and the only live simulation.** Hand-rolled ECS, seventeen stages, main scene. Plan steps 0–6 done (step 6 on the stripped core, without combat); step 7 (GOAP) not started. Components / flags / singletons as three kinds, intent flags, items as records, drop on death, fullness / energy / health. 171 lifecycle checks plus a population ramp; cached views took the ceiling past 9,600 entities. Combat is in git at `928b9d1`. The data-structure argument (`HANDOFF.md` §15) is open and the author's to settle |
+| 9. EcsSystem | **Active, and the only live simulation.** Hand-rolled ECS, twenty-two stages, main scene. Plan steps 0–6 done; combat rebuilt without weapons (attack intents, armour, crits), with corpses, looting, rot, diet and a hunting crocodile; step 7 (GOAP) not started. Components / flags / singletons as three kinds, intent flags, items as records, fullness / energy / health. 199 lifecycle checks plus a population ramp; cached views took the ceiling past 9,600 entities. The data-structure argument (`HANDOFF.md` §15) is open and the author's to settle |
