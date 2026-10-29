@@ -153,6 +153,21 @@ overrides = {
 }
 }
 
+[sub_resource type="Resource" id="c0"]
+script = ExtResource("place")
+entity_name = &"crocodile_0"
+type = &"crocodile"
+position = Vector2(0, 450)
+overrides = {
+"hunger": {
+"fullness": 70.0
+},
+"energy": {
+"value": 90.0,
+"rolled": true
+}
+}
+
 [sub_resource type="Resource" id="b0"]
 script = ExtResource("place")
 entity_name = &"berry_bush_0"
@@ -167,4 +182,4 @@ position = Vector2(950, 350)
 
 [resource]
 script = ExtResource("world")
-entries = Array[ExtResource("place")]([SubResource("p0"), SubResource("p1"), SubResource("p2"), SubResource("p3"), SubResource("p4"), SubResource("p5"), SubResource("p6"), SubResource("p7"), SubResource("p8"), SubResource("p9"), SubResource("b0"), SubResource("b1")])
+entries = Array[ExtResource("place")]([SubResource("p0"), SubResource("p1"), SubResource("p2"), SubResource("p3"), SubResource("p4"), SubResource("p5"), SubResource("p6"), SubResource("p7"), SubResource("p8"), SubResource("p9"), SubResource("c0"), SubResource("b0"), SubResource("b1")])

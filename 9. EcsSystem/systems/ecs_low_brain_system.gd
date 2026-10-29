@@ -1,13 +1,14 @@
 class_name EcsLowBrainSystem
 extends EcsSystem
 
-## The creature's brain: a state machine (IDLE, WANDER, SEEK_FOOD, TAKE, EAT, SLEEP).
+## The creature's brain: a state machine (IDLE, WANDER, SEEK_FOOD, TAKE, EAT, SLEEP,
+## HUNT, ATTACK).
 ## It decides and writes a destination; executors act on the intent flags it
 ## raises in `_set_state()`.
 ##
-## Each tick: a collapse forces SLEEP; a commitment (SEEK_FOOD) is checked and
-## kept or dropped; otherwise it picks the highest rung that applies:
-## eat > take (or loot) > seek food > sleep > wander. Food is filtered by
+## Each tick: a collapse forces SLEEP; a commitment (SEEK_FOOD, HUNT, ATTACK) is
+## checked and kept or dropped (food in sight ends a hunt); otherwise it picks the
+## highest rung that applies: eat > take (or loot) > seek food > hunt > sleep > wander. Food is filtered by
 ## diet: a creature only eats and seeks what its hunger `eats`.
 
 ## The view `_food` was built from.
@@ -62,6 +63,11 @@ func run(world: EcsWorld, delta: float) -> void:
 			else:
 				continue
 
+		if brain.state == EcsLowBrainComponent.State.HUNT \
+				or brain.state == EcsLowBrainComponent.State.ATTACK:
+			if _keep_hunting(world, id, brain, move):
+				continue
+
 		# Keep walking unless it is only a wander, which may be interrupted.
 		if move.has_destination and brain.state != EcsLowBrainComponent.State.WANDER:
 			continue
@@ -72,6 +78,8 @@ func run(world: EcsWorld, delta: float) -> void:
 		if _try_take(world, id, brain, move):
 			continue
 		if _try_seek_food(world, id, brain, move, place):
+			continue
+		if _try_hunt(world, id, brain, move, place):
 			continue
 		if _try_sleep(world, id, brain, move):
 			continue
@@ -200,6 +208,86 @@ func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	_set_trip(move, (_food[best] as EcsPositionComponent).position)
 	return true
 
+## Chase the nearest prey in sight, if it can attack and is hungry enough.
+## Prey is anything with health that is not dying and not its own kind.
+func _try_hunt(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
+		move: EcsMovementComponent, place: EcsPositionComponent) -> bool:
+	if not world.has(id, EcsDamageComponent):
+		return false
+	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+	if hunger != null and hunger.fullness > hunger.forage_below:
+		return false
+	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
+	if sensor == null:
+		return false
+
+	var best := EcsWorld.NO_ENTITY
+	var best_distance := INF
+	for seen in sensor.perceived:
+		if not _is_prey(world, id, seen):
+			continue
+		var there := (world.get_component(seen, EcsPositionComponent) as EcsPositionComponent).position
+		var distance := place.position.distance_squared_to(there)
+		if distance < best_distance:
+			best_distance = distance
+			best = seen
+	if best == EcsWorld.NO_ENTITY:
+		return false
+
+	_set_state(world, id, brain, EcsLowBrainComponent.State.HUNT, best)
+	_set_trip(move, _position_of(world, best))
+	return true
+
+## Follows a HUNT or ATTACK commitment. Returns false once it ends, so the
+## rungs can choose again this tick.
+func _keep_hunting(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
+		move: EcsMovementComponent) -> bool:
+	var prey := brain.target
+	if not _is_prey(world, id, prey) or _sees_food(world, id):
+		# Dead, dying or gone, or there is food to eat instead.
+		_abandon_trip(move)
+		_release(world, id, brain)
+		return false
+	if _in_reach(world, id, prey):
+		_abandon_trip(move)
+		_set_state(world, id, brain, EcsLowBrainComponent.State.ATTACK, prey)
+		return true
+	if brain.state == EcsLowBrainComponent.State.ATTACK:
+		# It got away: chase again.
+		_set_state(world, id, brain, EcsLowBrainComponent.State.HUNT, prey)
+		_set_trip(move, _position_of(world, prey))
+		return true
+	if not move.has_destination:
+		# Out of time; give up.
+		_release(world, id, brain)
+		return false
+	# Follow it, on the same time budget.
+	move.destination = _position_of(world, prey)
+	return true
+
+## Is there food it eats in sight?
+func _sees_food(world: EcsWorld, id: int) -> bool:
+	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
+	if sensor == null:
+		return false
+	for seen in sensor.perceived:
+		if _edible(seen, hunger):
+			return true
+	return false
+
+## Can `id` hunt `other`?
+func _is_prey(world: EcsWorld, id: int, other: int) -> bool:
+	if other == id or not world.has(other, EcsHealthComponent) \
+			or not world.has(other, EcsPositionComponent) or world.has(other, EcsDyingFlag):
+		return false
+	var mine := world.get_component(id, EcsNameComponent) as EcsNameComponent
+	var theirs := world.get_component(other, EcsNameComponent) as EcsNameComponent
+	return mine == null or theirs == null or mine.type_id != theirs.type_id
+
+func _position_of(world: EcsWorld, id: int) -> Vector2:
+	return (world.get_component(id, EcsPositionComponent) as EcsPositionComponent).position
+
 ## Sleep if tired, unless starving.
 func _try_sleep(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		move: EcsMovementComponent) -> bool:
@@ -293,6 +381,10 @@ func _set_state(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 			world.add(id, take)
 		EcsLowBrainComponent.State.SLEEP:
 			world.add(id, EcsAsleepFlag.new())
+		EcsLowBrainComponent.State.ATTACK:
+			var attack := EcsAttackIntentFlag.new()
+			attack.target_id = target
+			world.add(id, attack)
 
 ## The flag a state raises, or null.
 static func _flag_for(state: EcsLowBrainComponent.State) -> Script:
@@ -303,9 +395,13 @@ static func _flag_for(state: EcsLowBrainComponent.State) -> Script:
 			return EcsTakeIntentFlag
 		EcsLowBrainComponent.State.SLEEP:
 			return EcsAsleepFlag
+		EcsLowBrainComponent.State.ATTACK:
+			return EcsAttackIntentFlag
 	return null
 
 ## Sets a destination. Zeroes `time_left` so the trip gets a fresh time budget.
+## The one other destination write is `_keep_hunting` following moving prey,
+## which keeps the budget on purpose.
 func _set_trip(move: EcsMovementComponent, point: Vector2) -> void:
 	move.destination = point
 	move.has_destination = true

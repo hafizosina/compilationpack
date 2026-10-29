@@ -80,6 +80,7 @@ func _run() -> void:
 	await _a_hit_lands_less_armour_on_cooldown_and_can_crit()
 	await _death_by_health_leaves_a_corpse_to_loot_and_eat()
 	await _a_corpse_rots_and_spills_what_it_held()
+	await _a_hungry_hunter_kills_its_prey_and_eats_the_corpse()
 
 ## Nodes match the declared NODE_KINDs (a berry gets a sprite and a body, no
 ## sensor) and hang under the entity's own container.
@@ -1410,6 +1411,81 @@ func _a_corpse_rots_and_spills_what_it_held() -> void:
 	for id in _ids_with_uids(uids):
 		_world.add(id, EcsDyingFlag.new())
 	living.run_all(_world, TICK)
+
+## A fed crocodile leaves prey alone. A hungry one hunts the nearest prey that
+## is not its own kind, attacks it in reach, kills it, and eats the corpse.
+func _a_hungry_hunter_kills_its_prey_and_eats_the_corpse() -> void:
+	var living := EcsScheduler.new()
+	living \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsHealthSystem.new()) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsLowBrainSystem.new()) \
+		.add(EcsConsumeSystem.new()) \
+		.add(EcsAttackSystem.new()) \
+		.add(EcsCritSystem.new()) \
+		.add(EcsDamageSystem.new()) \
+		.add(EcsMovementSystem.new()) \
+		.add(EcsCollisionSystem.new(_manager)) \
+		.add(EcsCorpseSystem.new()) \
+		.add(EcsDropSystem.new()) \
+		.add(EcsNodeSyncSystem.new(_manager))
+
+	var spot := Vector2(9000.0, -9000.0)
+	var hunter := _manager.spawn(_world, _catalog, &"crocodile", spot)
+	var rival := _manager.spawn(_world, _catalog, &"crocodile", spot + Vector2(-90.0, 0.0))
+	var prey := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(200.0, 0.0))
+	# Remove the brains of the rival and the prey so only the hunter acts.
+	_world.remove(rival, EcsLowBrainComponent)
+	_world.remove(prey, EcsLowBrainComponent)
+	var brain := _world.get_component(hunter, EcsLowBrainComponent) as EcsLowBrainComponent
+	var hunger := _world.get_component(hunter, EcsHungerComponent) as EcsHungerComponent
+
+	hunger.fullness = 90.0
+	var hunted := false
+	for i in 30:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		hunted = hunted or brain.state == EcsLowBrainComponent.State.HUNT
+	_check("a fed hunter leaves prey alone", not hunted)
+
+	hunger.fullness = 30.0
+	var chased_prey := false
+	var chased_rival := false
+	var attacked := false
+	var flag_matches := true
+	var corpse := EcsWorld.NO_ENTITY
+	for i in 900:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		if brain.state == EcsLowBrainComponent.State.HUNT:
+			chased_prey = chased_prey or brain.target == prey
+			chased_rival = chased_rival or brain.target == rival
+		attacked = attacked or brain.state == EcsLowBrainComponent.State.ATTACK
+		flag_matches = flag_matches and (_world.has(hunter, EcsAttackIntentFlag)
+			== (brain.state == EcsLowBrainComponent.State.ATTACK))
+		if corpse == EcsWorld.NO_ENTITY:
+			corpse = _first_of(&"corpse")
+		elif not _world.is_alive(corpse):
+			break
+	_check("a hungry hunter chases the prey", chased_prey)
+	_check("and never its own kind, though it is nearer", not chased_rival)
+	_check("it attacks once the prey is in reach", attacked)
+	_check("the attack flag is raised exactly while it attacks", flag_matches)
+	_check("the prey is killed", not _world.is_alive(prey))
+	_check("and the hunter eats the corpse", corpse != EcsWorld.NO_ENTITY
+		and not _world.is_alive(corpse) and hunger.fullness > 30.0)
+
+	_world.add(hunter, EcsDyingFlag.new())
+	_world.add(rival, EcsDyingFlag.new())
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+	var leftover := _first_of(&"corpse")
+	while leftover != EcsWorld.NO_ENTITY:
+		_world.add(leftover, EcsDyingFlag.new())
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		leftover = _first_of(&"corpse")
 
 func _corpse_pipeline(with_brain: bool) -> EcsScheduler:
 	var living := EcsScheduler.new()
