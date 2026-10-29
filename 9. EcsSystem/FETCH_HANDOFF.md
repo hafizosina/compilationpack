@@ -1,6 +1,8 @@
 # Handoff — cutting the fetch time
 
-**Status: option 1 done (2026-10-11); option 2 next.** Decided 2026-09-27 as the next job in module 9. When it is done,
+**Status: options 1, 2 (hungry scan) and 4 done (2026-10-29); see "What landed" below.**
+Left: fetch-once for the brain's optional components, and the sensor, which is now the
+biggest stage. Decided 2026-09-27 as the next job in module 9. When it is done,
 fold what it measured into `HANDOFF.md` §14 and delete this file, the same way the step 6
 plans were folded in.
 
@@ -112,6 +114,10 @@ The ids come back bare, so a system then re-fetches from the very tables `query(
 tested — every component is looked up twice per entity per stage.
 
 ## Where the lookups are
+
+*As of `6ee5529`. Movement, the bars, collision, node_sync and the brain's main loop and
+hungry scan have since moved to views, so the code and line numbers below are history; the
+brain's optional-component repeats are still as described.*
 
 | system | per entity per tick | what to look at |
 |---|---|---|
@@ -248,6 +254,69 @@ Collision's `_places` array is already a hand-rolled version of option 4's cache
 references, walked by index — rebuilt every tick because nothing tells it when the set
 changed.
 
+## What landed
+
+| commit | change |
+|---|---|
+| `2a3fe52` | option 1: hunger/energy at 10 Hz, health at 20 Hz |
+| `3338517` | option 4: `EcsWorld.view()` / `EcsView` (cached query + component columns), movement on it |
+| `ca092d8` | hunger, energy, health on views |
+| `4c3149c` | low_brain's main loop on a view |
+| `1200078` | option 2's hungry scan: the brain keeps a food index (id → position) built from a view |
+| `d349d8d` | collision builds its working set from views, only when bodies change |
+| `86d6028` | node_sync builds its working set from views, only when entities change |
+
+**How a view works.** `world.view(include, exclude)` returns the ids plus one column of
+component references per included type. Each table has a version, bumped by `add`,
+`remove` and `destroy_entity`; a view is handed back unchanged until a table it names
+changes. Field writes need nothing: the columns hold the same objects as the store.
+Optional components still go through `get_component()`, since a view only has columns for
+what every entity in it carries. Don't name a flag that changes every tick (intents) — the
+view would rebuild every tick, which costs more than `query()`.
+
+**Per stage**, 4,000 entities, game rates, before/after interleaved in one sitting each:
+
+| stage | before | after |
+|---|---|---|
+| health (every tick) | 8.4–8.8 ms | 1.3–1.6 ms |
+| hunger (every tick) | 15.6–17.4 ms | 8.7–10.0 ms |
+| energy (every tick) | 16.2–18.1 ms | 12.9–13.1 ms |
+| low_brain, fed | 18.1–18.9 ms | 13.8–14.6 ms (view) |
+| low_brain, hungry | 98.6–104.6 ms | 32.6–33.8 ms (food index; has/tick 147,000 → 3,500) |
+| collision | 30.5–31.9 ms | 9.7–10.5 ms (0 lookups) |
+| node_sync | 20.1–20.7 ms | 9.1–9.2 ms (0 lookups) |
+
+**The whole ramp**, `6ee5529` (before any views) vs `86d6028`, run back to back in one
+sitting with `--every=sensor:3:0,low_brain:3:1,hunger:6:2,energy:6:5,health:3:2`. Average
+tick in ms, heaviest tick in brackets; budget 250 ms:
+
+| entities | fed, before | fed, after | hungry, before | hungry, after |
+|---|---|---|---|---|
+| 800 | 21.9 (36) | 12.5 (20) | 33.2 (62) | 14.6 (20) |
+| 1,600 | 45.2 (59) | 27.1 (59) | 72.2 (141) | 32.2 (55) |
+| 2,400 | 72.6 (116) | 45.6 (78) | 118.8 (213) | 52.9 (77) |
+| 3,200 | 100.4 (170) | 61.8 (107) | 158.8 (264) | 74.8 (115) |
+| 4,000 | 123.3 (173) | 76.9 (132) | 201.1 (344) | 94.5 (138) |
+| 4,800 | 153.3 (218) | 93.9 (177) | 244.3 (427) | 114.4 (166) |
+| 6,400 | 208.5 (296) | 127.4 (217) | 341.1 (645) ✗ | 157.0 (219) |
+| 8,000 | 269.0 (377) ✗ | 162.5 (275) | — | 209.0 (370) |
+| 9,600 | — | 201.6 (354) | — | 249.7 (364) |
+
+✗ = first step over budget. **The ceiling went from 6,400 to over 9,600 fed and from
+4,800 to over 9,600 hungry** (9,600 is the ramp's top step; neither "after" run crossed).
+At equal population the tick is ~40% cheaper fed and ~53% cheaper hungry.
+
+Biggest stages at the top of each ramp, after: **fed** sensor 40%, node_sync 16%,
+collision 16%, low_brain 15%, movement 7%; **hungry** sensor 35%, low_brain 27%,
+node_sync 14%, collision 13%. Before, collision led fed (27%) and low_brain led hungry
+(43%).
+
+**What is left.** The sensor is now the biggest stage, and most of it is overlap reads off
+the physics server, not lookups. The heaviest tick is still well above the average
+(354 vs 202 ms at 9,600 fed) — it is the tick the 20 Hz stages land on. Fetch-once for the
+brain's optional components (the rest of option 2) is not done. Anything past views is
+`HANDOFF.md` §15's storage argument.
+
 ## Options, cheapest first
 
 **1. Run the slow bars less often — done.** `main.gd` now runs hunger and energy at `BARS`
@@ -272,7 +341,8 @@ agreeing within 2%:
 **The heaviest tick is now the brain's.** Hungry, `low_brain` averages ~74 ms over three
 ticks, so it costs ~220 ms on the one tick it runs — that is option 2's target.
 
-**2. Fetch once per creature in the brain — and fix the hungry scan, which is the bigger half.** Get hunger, energy, inventory, action, sensor and
+**2. Fetch once per creature in the brain — and fix the hungry scan, which is the bigger half.**
+*The hungry scan is done (`1200078`, a food index); fetch-once is not.* Get hunger, energy, inventory, action, sensor and
 position once at the top of the per-creature loop and pass them to the rungs, instead of
 each rung fetching its own. Takes the brain from ~6.5 gets per creature to ~4–5 in the
 fed case, and removes most of the repeats. For the hungry case — ~100 store calls per
@@ -322,7 +392,8 @@ and can stay as it is or take the same argument.
 **3. Trim duplicate `has` checks.** hunger and energy each test two flags per entity to mean
 "resting". Small, a few ms each. Only worth it if 1 and 2 leave it visible.
 
-**4. Cached queries that return component references — the big one, and not ours to start.**
+**4. Cached queries that return component references — the big one.** *Done as views
+(`3338517` onward), approved by the author; see "What landed".*
 Components are now fixed from spawn to death, and births and deaths happen only at the
 lifecycle stage. So a query's ids *and* their component references stay valid until the
 next structural change, which is most ticks. A cached query (versioned per component
@@ -367,10 +438,10 @@ GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.
 - Run each measurement **fed and hungry**: the default, and `-- --fullness=50`.
 - The split table's `gets` and `has` columns are the direct check for option 2: low_brain
   should fall from 26,003 gets at 4,000 fed, and from 82,038 has / is_alive at 800 hungry.
-- `tests/lifecycle_test.tscn` must stay at 161/161 after every step.
+- `tests/lifecycle_test.tscn` must stay at 171/171 after every step (10 checks were added for views).
 
 ## Done means
 
-- Options 1 and 2 landed, each as its own commit, each with a same-sitting before/after.
-- Option 4 raised as a decision, with the new numbers.
+- ~~Options 1 and 2 landed, each as its own commit, each with a same-sitting before/after.~~ 1 and 2's hungry scan done; fetch-once left.
+- ~~Option 4 raised as a decision, with the new numbers.~~ Approved and done as views.
 - The results folded into `HANDOFF.md` §14, and this file deleted.
