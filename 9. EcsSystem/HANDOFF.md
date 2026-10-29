@@ -814,7 +814,8 @@ a frame-event API that was cut, and whose death and weapon model predate flags a
   (`reduction`, floored at `minimum`), then clears the inbox. Death stays `EcsHealthSystem`'s,
   and a death by health leaves a corpse (§9).
 - **The crocodile** (`defs/blueprints/crocodile.tres`) is the hunter: eats meat, 150 health,
-  20 damage every 1.2 s, 15% crit. One is placed in `world1.tres`.
+  20 damage every 1.2 s, 15% crit, speed 160, sight 500, fullness drain 0.8 a second. One is
+  placed in `world1.tres`.
 
 Seen headless over 180 s of the shipped world: four kills, each followed by eating the
 corpse. Animals also starve in that world (2–4 per 180 s), but they did before combat too —
@@ -887,9 +888,13 @@ remembers the last threat and where it was. At `flee_at` the `flee` goal scores,
 crossing is the replan. Flee wins only by score: starving still outranks it, merely hungry or
 fed does not. The FLEE state re-aims a trip away from the threat each brain tick, and a
 sleeper whose plan is to flee wakes. Collapse is still the only forced override. Live, about
-8% of creature-time is spent fleeing. The crocodile still kills, but it now spends long
-stretches at zero fullness because prey runs. That is world balance (danger fill, the flee
-weight, crocodile speed), left for a decision.
+8% of creature-time is spent fleeing. Once prey fled, the shipped crocodile (speed 130,
+sight 380, drain 1.5) starved to death in 3 of 3 headless runs of 300 s: rabbits outran it
+and monkeys saw it first. Retuned on the crocodile alone to speed 160, sight 500 and drain
+0.8, it survived 5 of 5 runs, never starving, at full health, killing about 4 in 300 s and
+leaving 6 of the 10 plant-eaters. Sight alone saved it in 1 of 2 runs; speed or drain alone
+in none or 1 of 2. Nothing is born yet, so any hunter that lives long enough empties the
+world in the end.
 
 **Layer, and why at this scale.** The design doc puts GOAP at L3, for day-scale projects.
 This one plans over need-level actions, at L2 scale, because those are the actions that

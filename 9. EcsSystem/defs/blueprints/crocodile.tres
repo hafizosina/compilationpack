@@ -40,7 +40,7 @@ tint = Color(0.85, 1, 0.85, 1)
 
 [sub_resource type="Resource" id="c_movement"]
 script = ExtResource("s_movement")
-speed = 130.0
+speed = 160.0
 
 [sub_resource type="Resource" id="c_brain"]
 script = ExtResource("s_brain")
@@ -50,7 +50,7 @@ pause_max = 4.0
 
 [sub_resource type="Resource" id="c_sensor"]
 script = ExtResource("s_sensor")
-radius = 380.0
+radius = 500.0
 
 [sub_resource type="Resource" id="c_action"]
 script = ExtResource("s_action")
@@ -59,7 +59,7 @@ radius = 50.0
 [sub_resource type="Resource" id="c_hunger"]
 script = ExtResource("s_hunger")
 eats = &"meat"
-drain = 1.5
+drain = 0.8
 forage_below = 60.0
 eat_below = 75.0
 heal_above = 50.0
