@@ -58,9 +58,20 @@ func label() -> StringName:
 	return &"low_brain"
 
 func run(world: EcsWorld, delta: float) -> void:
-	for id in world.query([EcsPositionComponent, EcsMovementComponent, EcsLowBrainComponent]):
-		var brain := world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
-		var move := world.get_component(id, EcsMovementComponent) as EcsMovementComponent
+	# Only what makes a brain possible is a column. Everything the rungs read
+	# beyond that — hunger, energy, bag, reach, sensor — is optional here and
+	# stays a lookup, since a view has columns only for what all of it carries.
+	# Raising and clearing intent flags mid-loop leaves the view alone: it
+	# names no flag.
+	var brains := world.view([EcsPositionComponent, EcsMovementComponent, EcsLowBrainComponent])
+	var minds := brains.column(EcsLowBrainComponent)
+	var moves := brains.column(EcsMovementComponent)
+	var places := brains.column(EcsPositionComponent)
+	for k in brains.ids.size():
+		var id := brains.ids[k]
+		var brain := minds[k] as EcsLowBrainComponent
+		var move := moves[k] as EcsMovementComponent
+		var place := places[k] as EcsPositionComponent
 
 		# 0. Collapsed: it has no say at all. This is above the commitment check
 		# on purpose — dropping from exhaustion overrides a trip already under
@@ -119,14 +130,14 @@ func run(world: EcsWorld, delta: float) -> void:
 			continue
 		if _try_take(world, id, brain, move):
 			continue
-		if _try_seek_food(world, id, brain, move):
+		if _try_seek_food(world, id, brain, move, place):
 			continue
 		if _try_sleep(world, id, brain, move):
 			continue
 		# Nothing better came up, so an existing wander simply carries on.
 		if move.has_destination:
 			continue
-		_wander(world, id, brain, move, delta)
+		_wander(world, id, brain, move, place, delta)
 
 ## Rung 1 — eat what it is already carrying, if it is hungry enough.
 ##
@@ -266,7 +277,7 @@ func _is_takeable(world: EcsWorld, id: int) -> bool:
 ## the brain possible: a creature with no sensor simply never takes it, and
 ## needs no flag saying so.
 func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
-		move: EcsMovementComponent) -> bool:
+		move: EcsMovementComponent, place: EcsPositionComponent) -> bool:
 	# The motive. Without this the rung is motion with no reason — it gathered
 	# because it could, and stopped only when the bag filled. A creature below
 	# its forage threshold now wanders past food it can plainly see.
@@ -282,7 +293,7 @@ func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	if sensor == null or sensor.perceived.is_empty():
 		return false
 
-	var here := (world.get_component(id, EcsPositionComponent) as EcsPositionComponent).position
+	var here := place.position
 	# Nearest of what it can see wins. Squared distance: ranking needs the
 	# order, never the number, so it does not pay for the square root.
 	var best := EcsWorld.NO_ENTITY
@@ -350,15 +361,14 @@ func _starving(world: EcsWorld, id: int) -> bool:
 ## seconds walking to a berry does not then owe ten seconds of accumulated
 ## rest: its pause starts when it has nothing to do.
 func _wander(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
-		move: EcsMovementComponent, delta: float) -> void:
+		move: EcsMovementComponent, place: EcsPositionComponent, delta: float) -> void:
 	_set_state(world, id, brain, EcsLowBrainComponent.State.IDLE)
 	brain.pause_left -= delta
 	if brain.pause_left > 0.0:
 		return
 	brain.pause_left = randf_range(brain.pause_min, brain.pause_max)
-	var here := world.get_component(id, EcsPositionComponent) as EcsPositionComponent
 	_set_state(world, id, brain, EcsLowBrainComponent.State.WANDER)
-	_set_trip(move, EcsConst.random_point_near(here.position, brain.radius, 0.25))
+	_set_trip(move, EcsConst.random_point_near(place.position, brain.radius, 0.25))
 
 ## Is `id` still food that is somewhere?
 ##
