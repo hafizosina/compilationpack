@@ -1,7 +1,7 @@
 # Refactor Plan — Hand-Rolled ECS Rewrite
 
-> **Status (kept current in `HANDOFF.md` §13):** steps 0–6 are done; step 7 (GOAP) is not
-> started. Where the build diverged from this plan, on purpose: step 2's combat pipeline
+> **Status (kept current in `HANDOFF.md` §13):** steps 0–7 are done; step 7 (GOAP) is
+> `HANDOFF.md` §18, built with harvesting, utility goal choice and fleeing. Where the build diverged from this plan, on purpose: step 2's combat pipeline
 > landed clean, was **cut** so the core reads end to end (git `928b9d1`), and was later
 **rebuilt** on the current architecture without weapons (`HANDOFF.md` §17); step 3's
 > "items stay entities" was **reversed** — a carried item is a record; step 5 senses with

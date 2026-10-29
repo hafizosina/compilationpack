@@ -10,17 +10,17 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 199 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 261 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments, the hunger/health/energy loop,
 # intent flags, items as records, the drop on death, views, combat, corpses,
-# looting, rot, diet and hunting.
+# looting, rot, diet, hunting, harvesting, the planner, utility and fleeing.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
 
 # Population ramp: where a tick crosses 250 ms. At the game's rates (--every=...)
-# it stays under past 9,600 entities, fed or hungry. Simulation only; takes a few
-# minutes. See HANDOFF.md §14.
+# with 40 hunters it stays under to 8,000 entities fed, 6,400 hungry (the planner
+# took it down from 9,600+). Simulation only; takes a few minutes. See HANDOFF.md §14.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"
 ```
 
@@ -219,7 +219,7 @@ diet** and `EcsHungerComponent.eats` says which: rabbits and monkeys eat plants,
 crocodile meat, and the brain's food index filters on it.
 
 **Deciding is one system with state, not a rung per behaviour.** `EcsLowBrainSystem` is a
-small FSM — `IDLE > WANDER > SEEK_FOOD > TAKE > EAT > SLEEP > HUNT > ATTACK` — and `EcsLowBrainComponent` holds its `state` and
+small FSM — `IDLE > WANDER > SEEK_FOOD > TAKE > EAT > SLEEP > HUNT > ATTACK > HARVEST > FLEE` — and `EcsLowBrainComponent` holds its `state` and
 its `target`. It replaced `EcsForageSystem`, which was a second decider whose priority was
 its line number in `main.gd`. That read well but was stateless: a creature's only memory
 between ticks was `has_destination`, so nothing could persist ("I am going to *that*
@@ -232,14 +232,34 @@ otherwise inherit the old one's budget. The brain reads components that are not 
 (sensor, inventory) and that is accepted: it is the one place that knows several concerns
 at once, and it still *writes* only `state`, `target`, `pause_left` and a destination.
 **HUNT and ATTACK are a commitment like SEEK_FOOD.** A hungry creature with an
-`EcsDamageComponent` chases the nearest perceived prey (has health, not dying, not its own
-blueprint type), follows it as it moves — the one destination write that keeps the trip's
-budget on purpose, so a chase can time out — and raises `EcsAttackIntentFlag` in reach.
-**Food in sight ends a hunt**, or a hunter that just killed would pick new prey in the tick
-before the corpse appears.
+`EcsDamageComponent` chases the nearest perceived prey, follows it as it moves — the one
+destination write that keeps the trip's budget on purpose, so a chase can time out — and
+raises `EcsAttackIntentFlag` in reach. **Prey is diet and power, never a tag**:
+`EcsHunting.can_hunt` (`ai/ecs_hunting.gd`) lets A hunt B when A eats meat and can attack
+and B is alive, not dying and has less `EcsHealthComponent.power`. `power_of()` is the one
+read of power, so it can become derived later. **On the ladder, food in sight ends a hunt**,
+or a hunter that just killed would pick new prey in the tick before the corpse appears; a
+planned hunter needs no such rule.
+
+**Step 7 is done: a planner sits above the brain** (`9. EcsSystem/HANDOFF.md` §18).
+`EcsPlanningSystem` scores goals by utility (`defs/goals/`, weights that keep the ladder's
+order with no danger), plans the route with `EcsPlanner` — forward A*, pure, over a
+dictionary of facts and the action defs in `defs/actions/` — and writes only
+`EcsPlannerComponent`. A planned creature's brain runs **only the rung for the plan's first
+step**; one whose planner has never planned keeps the ladder, which is what the ladder tests
+still pin. **Replans happen on events**: a planner is queued only when its facts or goal
+ranking changed, at most `MAX_REPLANS` per run. A step is an action id, never an entity:
+**targets bind at execution**, so the eat after a kill binds to the corpse. **Danger** fills
+while a threat is seen and jumps on a hit (`EcsHurtFlag`, raised by damage); `flee` wins only
+by score, and collapse is still the only forced override.
+
+**Bushes are harvested, not spawners.** A berry exists only once something harvests one:
+`EcsHarvestIntentFlag` from the brain, `EcsHarvestSystem` as executor, the yield dropped
+inside the harvester's reach so the existing eat and take rungs finish the job. Keep bushes at
+1.3 per plant-eater in `world1.tres`.
 
 **A stage may declare how often it runs.** `EcsScheduler.add(system, every, phase)` takes a
-rate in ticks — `main.gd` runs `sensor`, `low_brain` and `health` at `SLOW` (3 ticks, 20 Hz),
+rate in ticks — `main.gd` runs `sensor`, `danger`, `planning`, `low_brain` and `health` at `SLOW` (3 ticks, 20 Hz),
 `hunger` and `energy` at `BARS` (6 ticks, 10 Hz), while
 `movement`, `collision` and `node_sync` stay at every tick. This is safe only because every
 system already takes `delta` and means it: **the scheduler banks delta per system**, so a
@@ -295,17 +315,18 @@ been crossed.
 berry dies and becomes a record, so freeing a node is kill and only kill, and every live
 entity has a position to draw.
 
-**It is deliberately kept to a small core**: 20 components, 7 flags, 3
-singletons, 22 systems
-(`lifecycle > spawner > hunger > energy > health > sensor > low_brain > consume > attack > crit > damage > movement > collision > pickup > rot > corpse > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
-rank in the plan's decision ladder — a planner goes *above* it at step 7 — and not for the
+**It is deliberately kept to a small core**: 23 components, 9 flags, 3
+singletons, 25 systems
+(`lifecycle > spawner > hunger > energy > health > danger > sensor > planning > low_brain > consume > harvest > attack > crit > damage > movement > collision > pickup > rot > corpse > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
+rank in the plan's decision ladder — the planner sits *above* it — and not for the
 wandering it happens to do), and a world
 of 11 entities in 3 animal types (5 rabbits, 5 monkeys and a crocodile — a grazer, a carrier
-and a hunter, differing by a component or two and some authored values) plus two berry
+and a hunter, differing by a component or two and some authored values) plus 13 berry
 bushes. `EcsDebugSystem` is a pure
 reader feeding one dumb view, `EcsDebugOverlay`, which annotates each entity in world
 space: name, a velocity arrow, a dashed line to its destination, **fullness, energy and
-health as bars**, a **badge on the sprite's shoulder** when it is carrying something, and
+health as bars** (plus a **danger** bar while there is any, and the **planner's goal** under
+the name), a **badge on the sprite's shoulder** when it is carrying something, and
 **the sleep icon** (`Global/Asset/Icon/sleep.png`, whitened once and tinted) off that
 shoulder while it sleeps — parchment for a chosen sleep, red for a collapse. Shapes
 rather than numbers, because these are readings you scan a crowd for rather than read one
@@ -363,8 +384,8 @@ server RIDs) and how component data is stored (dictionary-of-dictionaries, arche
 whether a node handle may live inside a component). `9. EcsSystem/HANDOFF.md` §15 records
 the positions. Cached views (`EcsWorld.view()`, approved 2026-10-29) are an index over the
 existing store, not a storage change; see §14. The author has said explicitly he still wants to argue both out. **Do not
-implement any option from §8**; raise it for a decision instead. Steps 3–6 are done and combat
-is back without weapons (`9. EcsSystem/HANDOFF.md` §7, §13); step 7 is not started.
+implement any option from §8**; raise it for a decision instead. Steps 3–7 are done and combat
+is back without weapons (`9. EcsSystem/HANDOFF.md` §7, §13, §18).
 
 Read `9. EcsSystem/HANDOFF.md` before touching that folder. Module 9 is the main scene,
 ahead of the plan, which held that switch until step 6, and now the only simulation in the

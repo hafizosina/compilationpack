@@ -13,7 +13,7 @@ a recorded design, not something you can run.
 ```bash
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 "$GODOT" --path . "res://9. EcsSystem/main.tscn"                          # run it (also the main scene)
-"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 199 checks, exit 0 = all pass
+"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 261 checks, exit 0 = all pass
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"    # population ramp, minutes
 "$GODOT" --headless --editor --quit --path . 2>&1 | grep -iE "error|invalid|uid"  # after any .tscn/.tres edit
 ```
@@ -36,22 +36,25 @@ world1.tres ──► EcsEntityManager ──► EcsWorld                       
                 builds the nodes      World/Entities/entity_<id>/
 ```
 
-Every physics tick `EcsScheduler` runs twenty-two stages. `[20 Hz]` marks the two that run
-every third tick (§11); the rest run every tick.
+Every physics tick `EcsScheduler` runs twenty-five stages. `[20 Hz]` and `[10 Hz]` mark the
+ones that run every third or sixth tick (§11); the rest run every tick.
 
 | stage | does | writes |
 |---|---|---|
 | `lifecycle` | births and deaths — the only stage that creates or frees | the world, the nodes |
-| `spawner` | a bush asks for a berry | a note on `EcsLifecycleSingleton` |
-| `hunger` | fullness drains; starving costs health, fed mends it | `EcsHunger`, `EcsHealth` |
-| `energy` | drains awake, restores asleep; collapse at zero | `EcsEnergy`, `EcsCollapsedFlag`, `EcsHealth` |
-| `health` | death at zero | `EcsDyingFlag` |
+| `spawner` | a spawner asks for what it spawns (no blueprint has one now; tests do) | a note on `EcsLifecycleSingleton` |
+| `hunger` `[10 Hz]` | fullness drains; starving costs health, fed mends it | `EcsHunger`, `EcsHealth` |
+| `energy` `[10 Hz]` | drains awake, restores asleep; collapse at zero | `EcsEnergy`, `EcsCollapsedFlag`, `EcsHealth` |
+| `health` `[20 Hz]` | death at zero | `EcsDyingFlag` |
+| `danger` `[20 Hz]` | fills on a threat in sight, jumps on a hit, decays | `EcsDanger`, clears `EcsHurtFlag` |
 | `sensor` `[20 Hz]` | what each entity sees and can touch | `EcsSensor.perceived`, `EcsAction.reached` |
-| `low_brain` `[20 Hz]` | the FSM: chooses | its own state, a destination, intent flags |
+| `planning` `[20 Hz]` | scores goals, replans on events, under a budget (§18) | `EcsPlanner` |
+| `low_brain` `[20 Hz]` | runs the plan's first step, or its own ladder | its own state, a destination, intent flags |
 | `consume` | carries out an eat intent | `EcsHunger`, the bag, `EcsDyingFlag` |
+| `harvest` | regrows stock; carries out a harvest intent | `EcsHarvestable`, a note on `EcsLifecycleSingleton` |
 | `attack` | carries out an attack intent, on cooldown | `EcsDamage.cooldown`, hits on `EcsCombatSingleton` |
 | `crit` | rolls each hit against the attacker's crit chance | the hits |
-| `damage` | applies the hits less armour, clears them | `EcsHealth` |
+| `damage` | applies the hits less armour, clears them | `EcsHealth`, `EcsHurtFlag` |
 | `movement` | walks toward the destination, prices the trip | `EcsPosition`, `EcsMovement` |
 | `collision` | pushes overlapping solid bodies apart | `EcsPosition` |
 | `pickup` | carries out a take intent: an item off the ground, or a record looted from a bag | the bags, `EcsDyingFlag` |
@@ -73,9 +76,9 @@ systems hold all behaviour and never call each other, and nothing outside a syst
 component data. Queries key on the script object — `world.query([EcsPositionComponent])` —
 so a typo is a parse error, not a silently empty result.
 
-The world today is 11 animals — 5 rabbits, 5 monkeys, 1 crocodile — and 2 bushes
-(`defs/world1.tres`), spread across a 3200×1680
-arena, plus the berries the bushes grow.
+The world today is 11 animals — 5 rabbits, 5 monkeys, 1 crocodile — and 13 bushes, 1.3 per
+plant-eater (`defs/world1.tres`), spread across a 3200×1680 arena. A berry exists only once
+something harvests one (§9).
 
 ---
 
@@ -95,14 +98,17 @@ break it for a good reason and write the reason down where it breaks.
 A wall that gains movement is no longer a wall — that is a kill and a spawn, not an `add()`.
 Nothing today adds or removes a component after spawn.
 
-**20 components** — `name`, `position` (both added by the manager from the placement, not the
+**23 components** — `name`, `position` (both added by the manager from the placement, not the
 blueprint), `sprite`, `body`, `movement`, `low_brain`, `sensor`, `action`, `hunger`, `health`,
-`energy`, `inventory`, `consumable`, `pickable`, `spawner`, and for combat and corpses
-`damage`, `armor`, `crit_chance`, `lootable`, `rot`.
+`energy`, `inventory`, `consumable`, `pickable`, `spawner`, `harvestable`, for combat and
+corpses `damage`, `armor`, `crit_chance`, `lootable`, `rot`, and for planning `planner` and
+`danger` (§18).
 
-**7 flags** — `EcsSelectedFlag` (selection owns it), `EcsCollapsedFlag` (energy), and four
+**9 flags** — `EcsSelectedFlag` (selection owns it), `EcsCollapsedFlag` (energy), five
 brain intents, `EcsEatIntentFlag{target_id | record_uid}`, `EcsTakeIntentFlag{target_id,
-record_uid}`, `EcsAttackIntentFlag{target_id}` and `EcsAsleepFlag`, plus `EcsDyingFlag` (§3). A flag may carry data — an intent names its target
+record_uid}`, `EcsAttackIntentFlag{target_id}`, `EcsHarvestIntentFlag{target_id, progress}`
+and `EcsAsleepFlag`, `EcsHurtFlag{by}` (damage raises it, danger reads and clears it), plus
+`EcsDyingFlag` (§3). A flag may carry data — an intent names its target
 — but nothing about a flag is decided before the game starts.
 
 **3 singletons** — `EcsLifecycleSingleton` (spawn notes), `EcsSelectionSingleton` (the
@@ -263,24 +269,36 @@ decided and deferred** until the proof of concept has run.
 ## 7. The brain: the only thing that chooses
 
 `EcsLowBrainSystem` is a small FSM, and `EcsLowBrainComponent` holds its `state`, `target` and
-pause clock. It is named for its **rank** — the bottom of the plan's decision ladder; a
-planner goes above it at step 7 — not for the wandering it happens to do.
+pause clock. It is named for its **rank** — the bottom of the plan's decision ladder, with
+the planner now above it (§18) — not for the wandering it happens to do.
+
+**Three levels.** L1 is this brain: its rungs, its commitments and the collapse reflex. L2
+is utility goal choice and L3 the route to the goal, both in `EcsPlanningSystem` (§18). A
+creature with an `EcsPlannerComponent` that has planned runs **only the rung for its plan's
+first step**, with the rung's need gate skipped (the goal already decided the need). One
+without a planner, or whose planner has never planned, keeps the ladder below. That second
+case is why the ladder tests still pin the ladder: their pipelines have no planning stage.
 
 **Each tick, per creature:**
 
-1. **Collapsed** → it has no say; SLEEP, any trip called off. This is the one thing allowed
-   to override a live commitment.
-2. **Asleep by choice** → stays down until rested (`wake_at`) or starving.
-3. **Seeking food** → a commitment is not reconsidered: kept until the target is gone
-   (eaten, taken, Dying), within reach (fulfilled — the rungs below act this same tick), or
-   the trip ends.
-4. **Wandering** → interruptible; a creature notices food mid-leg.
-5. **Choose, highest rung first:**
+1. **Collapsed** → it has no say; SLEEP, any trip called off. This is the one *forced*
+   override of a live commitment.
+2. **Asleep by choice** → stays down until rested (`wake_at`) or starving, or until its plan
+   is to flee.
+3. **Planned, and the state no longer serves the plan's step** → dropped (trip called off).
+4. **Fleeing** → re-aims away from the danger's last threat every brain tick.
+5. **Seeking food** → a commitment is not reconsidered: kept until the target is gone
+   (eaten, taken, Dying, or a bush out of stock), within reach (fulfilled — the rungs below
+   act this same tick), or the trip ends.
+6. **Wandering** → interruptible; a creature notices food mid-leg.
+7. **Choose.** Planned: the step's rung, else wander. Otherwise highest rung first:
 
 ```
 EAT        hungry enough (fullness <= eat_below), food at hand — bag first, then the ground
 TAKE       peckish (<= forage_below), room in the bag, something takeable in reach
 SEEK_FOOD  peckish, room (or no bag), food perceived — commit to the nearest
+HARVEST    peckish, room, a bush whose yield it eats: in reach → harvest, in sight → SEEK_FOOD to it
+HUNT       peckish, can attack, prey perceived (§ below)
 SLEEP      tired (energy <= rest_at) and not starving
 WANDER     after a random pause, to a random point within its radius
 ```
@@ -310,17 +328,22 @@ creature touches the store not at all. An intent **names its target**, so the br
 | TAKE | `EcsTakeIntentFlag` | `EcsPickupSystem` |
 | SLEEP | `EcsAsleepFlag` | `EcsHungerSystem`, `EcsEnergySystem` (as a rate) |
 | ATTACK | `EcsAttackIntentFlag` | `EcsAttackSystem` |
-| SEEK_FOOD, HUNT, WANDER | a destination | `EcsMovementSystem` |
+| HARVEST | `EcsHarvestIntentFlag` | `EcsHarvestSystem` |
+| SEEK_FOOD, HUNT, FLEE, WANDER | a destination | `EcsMovementSystem` |
 
-**Hunting** (2026-10-29). The ladder is `eat > take > seek food > hunt > sleep > wander`. A
-creature hungry below `forage_below` that has an `EcsDamageComponent` chases the nearest
-perceived prey — anything with health, not dying, and not its own blueprint type — as a
-commitment like SEEK_FOOD. Each brain tick it follows the prey's position *without* resetting
-the trip budget, so a chase it cannot win times out. In reach it switches to ATTACK (raising
-the flag); out of reach again, back to HUNT. The commitment ends when the prey is dead or
-gone, the budget runs out, or **food it eats comes into sight** — without that last rule a
-hunter that had just killed picked new prey in the one tick before the corpse appeared, and
-killed twice before eating.
+**Hunting** (2026-10-29). A hungry creature with an `EcsDamageComponent` chases the nearest
+perceived prey as a commitment like SEEK_FOOD. **Who is prey is diet and power**, through
+`ai/ecs_hunting.gd`: A can hunt B when A eats meat and can attack, and B has health, is not
+dying, and has less `EcsHealthComponent.power` (rabbit 10, monkey 15, crocodile 60). There is
+no prey tag and no blueprint-type check, so a stronger crocodile hunts a weaker one.
+`EcsHunting.power_of()` is the one place power is read, so it can become derived later. Each
+brain tick it follows the prey's position *without* resetting the trip budget, so a chase it
+cannot win times out. In reach it switches to ATTACK (raising the flag); out of reach again,
+back to HUNT. The commitment ends when the prey is dead or gone or the budget runs out. **On
+the ladder only, food it eats coming into sight ends it too** — without that a hunter that
+had just killed picked new prey in the one tick before the corpse appeared, and killed twice
+before eating. A planned hunter does not need the rule: the corpse coming into sight is a
+fact change, and the cheapest plan from there is to eat (§18).
 
 **No executor reads the brain.** A creature with no brain at all eats, takes and sleeps when a
 flag is raised on it — tested. **Do not let the brain grow hands:** executors stayed separate
@@ -393,6 +416,18 @@ Food is `EcsConsumableComponent` (`nutrition` 40), not `EcsPickableComponent` �
 animal must not chase a tool. What a bag will hold (`pickable`) is a wider question than what
 a mouth will (`consumable`).
 
+**Bushes are harvested, not spawners** (2026-10-29). A berry exists only once something
+harvests one. `EcsHarvestableComponent` on the bush holds `stock` (starts at `stock_max`, 3),
+regrows one unit per `regrow` (10 s) and names what it `yields` and that yield's `diet`, so the
+brain needs no catalog lookup. The brain raises `EcsHarvestIntentFlag` on a bush in reach;
+`EcsHarvestSystem` works it, and each `harvest_time` (1 s) takes one unit and asks for the
+yield **on the ground beside the harvester, inside its reach**. The existing rungs finish the
+job — a grazer eats it, a carrier pockets it — so there is no new eating path. Plant-eaters
+now have a chain of their own, `seek bush → harvest → eat | take`, beside the meat one.
+`EcsSpawnerComponent` and its system stay as generic code that no blueprint uses. The world
+has 13 bushes for 10 plant-eaters (1.3 each); over 180 s headless, before fleeing existed,
+no plant-eater's fullness went below 28.
+
 **Eating does not require an inventory.** "Hungry, and food within reach" is the condition,
 and a pocket is one place reach can mean: a carrier eats out of its bag, a grazer eats what
 its action area touches. One berry per decision.
@@ -447,7 +482,8 @@ nothing), bag capacity and stacking, voluntary dropping.
 
 **The overlay** (`EcsDebugOverlay`, fed by `EcsDebugSystem`, **F1**) annotates each entity in
 world space: name, a velocity arrow, a dashed line to its destination, fullness / energy /
-health as bars, a badge on the sprite's top-left shoulder when it carries something, and the
+health as bars (and danger while there is any; the planner's goal under the name), a badge
+on the sprite's top-left shoulder when it carries something, and the
 sleep icon (`Global/Asset/Icon/sleep.png`) off that shoulder while it sleeps — parchment for a
 chosen sleep, red for a collapse. Shapes rather than numbers, because these are read across a
 crowd; the numbers live in the inspector. The system sends **ratios and counts, never text or
@@ -488,8 +524,11 @@ shared camera reads the wheel in `_unhandled_input` and zooms once per notch.
 
 ## 11. The scheduler: a stage may declare how often it runs
 
-`EcsScheduler.add(system, every, phase)` takes a rate in ticks; `main.gd` runs `sensor` and
-`low_brain` at `SLOW` (every 3 ticks, 20 Hz) while everything the eye watches stays at 60.
+`EcsScheduler.add(system, every, phase)` takes a rate in ticks; `main.gd` runs `sensor`
+(phase 0), `danger` and `low_brain` (1), `planning` and `health` (2) at `SLOW` (every 3
+ticks, 20 Hz), `hunger` (2) and `energy` (5) at `BARS` (every 6, 10 Hz), while everything the
+eye watches stays at 60. Planning sits on its own phase rather than sensor's because the two
+together made the heaviest tick (§14).
 This is safe because every system takes `delta` and means it: **the scheduler banks delta
 per system**, so a stage run a third as often is handed three ticks' worth, and hunger still
 drains at its authored points per second. What changes is latency, never rate. **`phase` is
@@ -501,7 +540,7 @@ after its producer keeps its data one tick old, as at full rate.
 
 ## 12. Tests
 
-`tests/lifecycle_test.tscn` — **199 checks**, exit code 0 only if all pass. Run it after
+`tests/lifecycle_test.tscn` — **261 checks**, exit code 0 only if all pass. Run it after
 touching the manager, collision, pickup, spawner, sensor, node sync, the brain or any
 executor. It covers: declared nodes built and undeclared ones not; kill takes data and nodes;
 spawn notes fulfilled a tick later; soft collision, immovable and non-solid bodies; seeing is
@@ -513,12 +552,24 @@ the inspector's layout and its not naming any component; per-stage tick rates ba
 delta; a view rebuilding on every structural change it can see, and only then; hits
 less armour on cooldown, crits and death by hits; a corpse holding the bag, looted, ignored
 by a plant-eater and eaten by a meat-eater; rot spilling a corpse's bag; and a hungry
-crocodile hunting prey but not its own kind, attacking in reach, killing and eating.
+crocodile hunting prey but not its own kind, attacking in reach, killing and eating; a bush
+yielding only when harvested, one unit per harvest into reach, regrowing, and rabbits and
+monkeys harvesting then eating or pocketing; the planner's chains over the authored actions
+(bag, ground, sight, bush, the meat chain through a kill, rest not while starving, flee, no
+plan); power and diet deciding who hunts whom; utility picking the ladder's rung over a grid
+of fullness and energy for each kind; a planned crocodile killing once and eating the corpse
+with no hand rule on its path; planned harvesting with flags matching state; replans only on
+a fact or ranking change, at most `MAX_REPLANS` a run; hunger against danger both ways; and a
+rabbit fleeing a crocodile it sees, calming once it is gone, waking to flee, and fleeing a bite
+from something unseen.
 
 `tests/stress_test.tscn` — the population ramp and the per-stage bookkeeping split (§14). Knobs after a bare `--`:
 `--spacing=180` (grid px), `--n=4000` (one population), `--skip=hunger,health` (leave stages
 out, by label), `--fullness=50` (start every animal hungry — the default world is fed, so the
-brain's food search never runs), `--every=sensor:3:0,...` (run stages at the game's rates).
+brain's food search never runs), `--every=sensor:3:0,...` (run stages at the game's rates),
+`--hunters=40` (make that many of the animals crocodiles, spread over the grid). The ramp
+prints replans per second beside each tick. The grid has no bushes, so the harvest chain is
+not loaded there.
 
 `tests/fetch_bench.tscn` — what component fetching costs on its own: skeleton systems over a
 random world, timed as query + has + get, and through a kept and a rebuilt view.
@@ -527,7 +578,7 @@ random world, timed as query + has + get, and through a kept and a rebuilt view.
 
 ## 13. Where the plan stands, and what is next
 
-`ECS_REFACTOR_PLAN.md` is the roadmap. **Steps 0–6 are done; step 7 is not started.**
+`ECS_REFACTOR_PLAN.md` is the roadmap. **Steps 0–7 are done.** Step 7, the planner, is §18.
 
 **The fetch-time job is done** (2026-09-27 to 2026-10-29): bars at 10 Hz, cached views, the
 brain's food index. The ceiling went from 4,800–6,400 to over 9,600 entities (§14).
@@ -549,12 +600,14 @@ brain's food index. The ceiling went from 4,800–6,400 to over 9,600 entities (
   because they now query intent flags instead of every brain; the brain itself did not get
   dearer. The cost of raising a flag under load is unmeasured — the stress population never
   raises one.
-- **7, GOAP** — a pure planner over a symbolic snapshot, run off-frame under a replan
-  budget, emitting action ids that the existing executors run. Not started; it now has
-  eat, take, loot, hunt, attack and sleep to plan over.
+- **7, GOAP** — done (2026-10-29, `cf53229` to `ae1ef52`): harvesting first, then a pure A*
+  planner over a symbolic snapshot, utility goal choice, a budgeted replan queue that replans
+  on events, and fleeing. Single-threaded; the planner is pure, so moving it to
+  `WorkerThreadPool` is a dispatch change, to make only when the profiler asks (§14, §18).
 
 **Open and deferred, by decision:** `MoveIntent`; weapons, durability and broken (they wait on
-what a carried record may *do*); prey fleeing or fighting back; bag capacity and stacking. **Do not re-add breadth without being asked** — the small
+what a carried record may *do*); prey fighting back; bag capacity and stacking; **power as a
+derived, tweakable value** (the author's stated next step — today it is authored). **Do not re-add breadth without being asked** — the small
 size is the point.
 
 Smaller, not done: `EcsEntityManager.node_for()` allocates a throwaway dictionary on every
@@ -570,10 +623,48 @@ stats panel lets the wheel through to the camera.
 jittered grid that grows with n so the neighbourhood stays the same size. It prints the ramp,
 each stage's cost, a census of the work done, and a split of every stage into query / loop /
 fetch / logic. Simulation only; nothing is drawn. Flags: `--every=label:every:phase` (the
-game's rates), `--fullness=50` (every animal hungry), `--n=`, `--skip=`, `--spacing=`.
+game's rates), `--fullness=50` (every animal hungry), `--hunters=N`, `--n=`, `--skip=`,
+`--spacing=`. Each ramp row also prints replans per second.
 `tests/fetch_bench.tscn` prices the store calls on their own.
 
-**Latest ramp**, 2026-10-29, `86d6028`, game rates
+**Latest ramp: the planner** (2026-10-29, `ae1ef52` against `86d6028` in one sitting, from a
+worktree). Game rates, with `danger:3:1,planning:3:2` added on the new build and 40
+crocodiles mixed into the grid (`--hunters=40`). Average tick in ms, heaviest in brackets:
+
+| entities | fed, `86d6028` | fed, now | hungry, `86d6028` | hungry, now |
+|---|---|---|---|---|
+| 800 | 13.6 (31) | 26.2 (34) | 14.6 (22) | 27.6 (37) |
+| 1,600 | 27.7 (46) | 44.5 (52) | 31.4 (45) | 49.6 (58) |
+| 3,200 | 60.2 (101) | 108.5 (154) | 71.3 (103) | 109.8 (153) |
+| 4,000 | 76.9 (139) | 121.9 (158) | 89.2 (152) | 136.1 (170) |
+| 4,800 | 94.2 (161) | 147.7 (192) | 108.0 (149) | 165.4 (205) |
+| 6,400 | 126.6 (209) | 192.5 (255) | 147.7 (238) | 211.8 (258) |
+| 8,000 | 159.8 (268) | 244.1 (276) | 191.8 (296) | 270.9 (342) ✗ |
+| 9,600 | 202.1 (345) | 298.5 (351) ✗ | 234.1 (336) | — |
+
+**The ceiling fell from over 9,600 to 8,000 fed and 6,400 hungry.** Per entity the tick went
+from about 0.020 to 0.031 ms fed, and 0.024 to 0.034 hungry. The new cost is the snapshot,
+not the search: `planning` is about 6.5 µs and `danger` about 2.9 µs per entity at every size.
+A run with `MAX_REPLANS` at 0 cost the same as one at 64, so A* itself is noise. Planning
+gathers facts for every planner every run, which is the same perception scan the brain makes.
+At 9,600 fed: sensor 26%, planning 21%, low_brain 13%, danger 9%.
+
+**Replans are at the cap from 2,400 up**: 1,280 a second is 64 per run at 20 Hz. At 400
+entities it was 696 fed and 946 hungry, about 2 per creature per second: on a dense grid with
+hunters, sight facts (prey, threat, food) change that often as creatures move. Saturation
+means a replan waits a run or more; the brain re-validates targets, so a late plan is stale
+and not wrong. Before this commit planning and danger cost 62 ms each at 4,000 hungry. Three
+things cut that: danger indexes who can hunt instead of asking every perceived id, planning
+skips the sight scan when there is nothing to look for and fetches each component once for
+both facts and scores, and planning got its own phase instead of sharing sensor's. Together
+they took the average tick at 4,000 hungry from 203 to 119 ms and the heaviest from 297 to
+142 ms.
+
+If the planner needs to get cheaper, the levers are, in order: snapshot only planners whose
+sensor or reach lists changed; run planning at 10 Hz; then move `EcsPlanner.plan` to
+`WorkerThreadPool`, which only pays once replans rather than snapshots dominate.
+
+**Previous ramp**, 2026-10-29, `86d6028`, game rates
 (`--every=sensor:3:0,low_brain:3:1,hunger:6:2,energy:6:5,health:3:2`), against `6ee5529`
 (before the views) in the same sitting. Average tick in ms, heaviest tick in brackets;
 budget 250 ms:
@@ -732,3 +823,76 @@ measured on `a71ff0c` with the same probe — so that is world balance, not comb
 **Not back:** weapons, `EcsEquipSystem`, durability and broken. A weapon is a carried item that
 acts, which needs a decision on what a record in a bag may do (§9). `EcsArmorComponent` and
 `EcsCritChanceComponent` exist; no blueprint authors armour yet.
+
+---
+
+## 18. Planning: utility goals, a pure planner, replans on events
+
+Step 7 (2026-10-29). The brain's ladder chose the goal and the route in one hand-written
+order, and got the meat chain right only through a hand rule (§7). Now
+`EcsPlanningSystem` chooses the goal and plans the route; the brain still writes every
+state, flag and destination.
+
+- **Actions** are data: `ai/ecs_action_def.gd`, one `.tres` per action in `defs/actions/`
+  (`id`, `preconditions`, `effects`, `cost`). Each `id` names a brain rung, so one action is
+  one existing executor: `eat_carried`, `eat_ground`, `take`, `loot`, `seek_food`,
+  `seek_bush`, `harvest`, `hunt`, `attack`, `sleep`, `flee`. `attack`'s effect is
+  `food_in_sight` — a kill leaves a corpse — which is the predicted effect the meat chain
+  reasons over. `take` sets `has_room` false, so Provision means "fill the bag".
+- **Goals** are data too: `ai/ecs_goal_def.gd`, in `defs/goals/` — `satisfy_hunger`
+  {fed}, `provision` {bag full}, `rest` {rested}, `flee` {safe}. Each names a `need` and a
+  `weight`.
+- **`EcsPlanner.plan(facts, desired, actions)`** is forward A* over a dictionary of true
+  facts, depth 6. It is pure — it reads only its arguments — so it can run on a worker
+  thread later without being rewritten.
+- **`EcsPlannerComponent`** carries a kind's `actions` and `goals`, and the runtime plan:
+  `goal`, `steps`, the `facts` and goal `ranking` it was made from, and `replans`. Its
+  `describe()` shows the goal and the plan in the inspector; the overlay prints the goal
+  under the name.
+
+**Goal choice is utility.** Below its gate a need scores `weight × urgency`, where urgency
+runs from 0.6 at the gate to 1 at empty; above the gate it scores 0. The gates are the
+hunger and energy fields the ladder used (`eat` uses the lower of `eat_below` and
+`forage_below`). The weights — eat 10, flee 8, provision 4, rest 2 — keep the ladder's order
+when there is no danger, pinned by a test over a grid of fullness and energy for each kind,
+so plant-eaters choose as before. The current goal gets a 0.5 bonus so near-ties don't
+flicker. Planning walks the goals best first and takes the first that has a plan, which is
+the ladder's fall-through: hungry with nothing to eat in sight, it rests or wanders. Rest
+shows as the goal only until energy passes `rest_at`; the brain's own sleep-until-rested
+holds the creature down after that, so a sleeper often shows no goal.
+
+**Replans happen on events, not on a clock.** Each run snapshots every planner's facts (the
+same tests the rungs make: food in bag, reach or sight by diet, a bush with stock, prey by
+`EcsHunting.can_hunt`, room, starving, threat) and ranks its goals. A planner is queued only
+when its facts or its ranking differ from what its plan was made from. A settled creature is
+never replanned, and a need crossing its gate, a target appearing or vanishing, a hit or a
+kill each replan once. At most `MAX_REPLANS` (64) are planned per run, oldest first; the rest
+keep their plan a run longer, and the brain re-validates every target when it acts. Because
+the plan is always made from the current facts, "advancing a step" is just the next replan.
+
+**Targets bind at execution.** A step is an action id, never an entity. The brain's rung
+picks and checks the concrete target when it runs, so the eat step after a kill binds to the
+corpse — a new id spawned a tick after the death — not to the prey.
+
+**The meat chain without the hand rule.** A hungry crocodile with prey in sight plans
+`hunt > attack > seek_food > eat_ground`. When the kill lands its facts change; when the
+corpse appears they change again, and the cheapest plan is now to eat. Tested: two rabbits in
+range, one killed, the corpse eaten. Live over 300 s it left five corpses (a starved animal
+leaves one too, so that counts deaths by health, not kills).
+
+**Danger and flee.** `EcsDangerComponent.value` (0–1) fills at `fill` per second while
+anything that `EcsHunting.threatens` it is in sight, jumps by `hit_jump` on an `EcsHurtFlag`
+(raised by `EcsDamageSystem`, read and cleared by `EcsDangerSystem`), and decays otherwise; it
+remembers the last threat and where it was. At `flee_at` the `flee` goal scores, and that
+crossing is the replan. Flee wins only by score: starving still outranks it, merely hungry or
+fed does not. The FLEE state re-aims a trip away from the threat each brain tick, and a
+sleeper whose plan is to flee wakes. Collapse is still the only forced override. Live, about
+8% of creature-time is spent fleeing. The crocodile still kills, but it now spends long
+stretches at zero fullness because prey runs. That is world balance (danger fill, the flee
+weight, crocodile speed), left for a decision.
+
+**Layer, and why at this scale.** The design doc puts GOAP at L3, for day-scale projects.
+This one plans over need-level actions, at L2 scale, because those are the actions that
+exist and the meat chain is real multi-step reasoning over a predicted effect. The planner
+is a pure function over plain facts, so promoting it to longer projects or a worker thread
+is a change around it, not to it. Cost and replan rates are in §14.
