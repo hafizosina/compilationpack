@@ -81,6 +81,9 @@ func _build() -> void:
 		.add(EcsSensorSystem.new(_manager), SLOW, 0) \
 		.add(EcsLowBrainSystem.new(), SLOW, 1) \
 		.add(EcsConsumeSystem.new()) \
+		.add(EcsAttackSystem.new()) \
+		.add(EcsCritSystem.new()) \
+		.add(EcsDamageSystem.new()) \
 		.add(EcsMovementSystem.new()) \
 		.add(_collision) \
 		.add(EcsPickupSystem.new()) \
@@ -93,6 +96,7 @@ func _build() -> void:
 
 	_world.add_singleton(EcsSelectionSingleton.new())
 	_world.add_singleton(EcsLifecycleSingleton.new())
+	_world.add_singleton(EcsCombatSingleton.new())
 	_manager.spawn_world(_world, catalog, world_def)
 	EventBus.ecs_world_census.emit(_world.entity_count())
 	if Constant.DEBUG:

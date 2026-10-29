@@ -28,6 +28,7 @@ func _ready() -> void:
 	_manager = EcsEntityManager.new(_entities)
 	_world = EcsWorld.new()
 	_world.add_singleton(EcsLifecycleSingleton.new())
+	_world.add_singleton(EcsCombatSingleton.new())
 
 	# No brain or movement here, so nothing moves unless the test moves it.
 	_scheduler = EcsScheduler.new()
@@ -76,6 +77,7 @@ func _run() -> void:
 	await _animals_of_one_kind_start_differently_rested()
 	await _a_stage_on_a_slower_tick_still_simulates_the_same()
 	_a_view_is_kept_until_a_table_it_names_changes()
+	await _a_hit_lands_less_armour_on_cooldown_and_can_crit()
 
 ## Nodes match the declared NODE_KINDs (a berry gets a sprite and a body, no
 ## sensor) and hang under the entity's own container.
@@ -1234,6 +1236,90 @@ func _sleeping_slows_hunger_without_stopping_it() -> void:
 	_check("and a collapse counts as asleep too",
 		is_equal_approx(hunger.max_fullness - hunger.fullness, asleep_cost))
 	_world.remove(rabbit, EcsCollapsedFlag)
+
+## An attack intent hits a target in reach for damage less armour, once per
+## interval; a crit multiplies it; enough hits kill through EcsHealthSystem.
+func _a_hit_lands_less_armour_on_cooldown_and_can_crit() -> void:
+	var fighting := EcsScheduler.new()
+	fighting \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsAttackSystem.new()) \
+		.add(EcsCritSystem.new()) \
+		.add(EcsDamageSystem.new()) \
+		.add(EcsHealthSystem.new())
+
+	var spot := Vector2(9000.0, 9000.0)
+	var attacker := _manager.spawn(_world, _catalog, &"rabbit", spot)
+	var target := _manager.spawn(_world, _catalog, &"monkey", spot + Vector2(20.0, 0.0))
+	var attack := EcsDamageComponent.new()
+	attack.damage = 10.0
+	attack.interval = 1.0
+	_world.add(attacker, attack)
+	var armor := EcsArmorComponent.new()
+	armor.reduction = 3.0
+	armor.minimum = 1.0
+	_world.add(target, armor)
+	var health := _world.get_component(target, EcsHealthComponent) as EcsHealthComponent
+
+	var attack_intent := EcsAttackIntentFlag.new()
+	attack_intent.target_id = target
+	_world.add(attacker, attack_intent)
+	for i in 3:
+		fighting.run_all(_world, TICK)
+		await get_tree().physics_frame
+	_check("a hit in reach lands for damage less armour", is_equal_approx(health.value, 93.0))
+
+	for i in 30:
+		fighting.run_all(_world, TICK)
+		await get_tree().physics_frame
+	_check("and not again before the interval is up", is_equal_approx(health.value, 93.0))
+
+	var crit := EcsCritChanceComponent.new()
+	crit.chance = 1.0
+	crit.multiplier = 2.0
+	_world.add(attacker, crit)
+	for i in 40:
+		fighting.run_all(_world, TICK)
+		await get_tree().physics_frame
+	_check("a crit doubles the hit before armour", is_equal_approx(health.value, 76.0))
+
+	armor.reduction = 50.0
+	attack.cooldown = 0.0
+	fighting.run_all(_world, TICK)
+	await get_tree().physics_frame
+	_check("armour never takes a hit below its minimum", is_equal_approx(health.value, 75.0))
+
+	(_world.get_component(target, EcsPositionComponent) as EcsPositionComponent).position = spot + Vector2(400.0, 0.0)
+	_manager.container_for(target).position = spot + Vector2(400.0, 0.0)
+	for i in 3:
+		await get_tree().physics_frame
+	attack.cooldown = 0.0
+	fighting.run_all(_world, TICK)
+	_check("a target out of reach is not hit", is_equal_approx(health.value, 75.0))
+
+	(_world.get_component(target, EcsPositionComponent) as EcsPositionComponent).position = spot + Vector2(20.0, 0.0)
+	_manager.container_for(target).position = spot + Vector2(20.0, 0.0)
+	armor.reduction = 0.0
+	_world.remove(attacker, EcsCritChanceComponent)
+	health.value = 15.0
+	for i in 3:
+		await get_tree().physics_frame
+	attack.cooldown = 0.0
+	fighting.run_all(_world, TICK)
+	await get_tree().physics_frame
+	attack.cooldown = 0.0
+	fighting.run_all(_world, TICK)
+	_check("two hits of 10 take 15 health to zero", health.value <= 0.0)
+	_check("and EcsHealthSystem flags it dying", _world.has(target, EcsDyingFlag))
+	var before := health.value
+	attack.cooldown = 0.0
+	fighting.run_all(_world, TICK)
+	_check("a dying target is not hit again", is_equal_approx(health.value, before))
+
+	_world.add(attacker, EcsDyingFlag.new())
+	fighting.run_all(_world, TICK)
+	await get_tree().physics_frame
 
 ## Raises an intent flag, standing in for the brain.
 func _intend_take(id: int, target: int) -> void:

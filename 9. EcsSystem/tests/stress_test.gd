@@ -268,6 +268,7 @@ func _count_traffic(n: int) -> Dictionary:
 	_world = CountingWorld.new()
 	_world.add_singleton(EcsLifecycleSingleton.new())
 	_world.add_singleton(EcsSelectionSingleton.new())
+	_world.add_singleton(EcsCombatSingleton.new())
 	_build_pipeline()
 	_populate(n)
 	for i in WARMUP:
@@ -336,6 +337,7 @@ func _measure(n: int) -> Dictionary:
 	_world = EcsWorld.new()
 	_world.add_singleton(EcsLifecycleSingleton.new())
 	_world.add_singleton(EcsSelectionSingleton.new())
+	_world.add_singleton(EcsCombatSingleton.new())
 	_build_pipeline()
 
 	var began := Time.get_ticks_usec()
@@ -416,6 +418,9 @@ func _build_pipeline() -> void:
 		EcsSensorSystem.new(_manager),
 		EcsLowBrainSystem.new(),
 		EcsConsumeSystem.new(),
+		EcsAttackSystem.new(),
+		EcsCritSystem.new(),
+		EcsDamageSystem.new(),
 		EcsMovementSystem.new(),
 		EcsCollisionSystem.new(_manager),
 		EcsPickupSystem.new(),
