@@ -28,8 +28,14 @@ func label() -> StringName:
 	return &"energy"
 
 func run(world: EcsWorld, delta: float) -> void:
-	for id in world.query([EcsEnergyComponent]):
-		var energy := world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
+	# Adding or removing EcsCollapsedFlag mid-loop leaves this view alone: it
+	# names only energy. Movement and health stay lookups — both are optional
+	# here, and a view only has columns for what every entity in it carries.
+	var bars := world.view([EcsEnergyComponent])
+	var energies := bars.column(EcsEnergyComponent)
+	for k in bars.ids.size():
+		var id := bars.ids[k]
+		var energy := energies[k] as EcsEnergyComponent
 		if not energy.rolled:
 			# Rolled here, the first time this system sees the entity, rather
 			# than in the manager — which never switches on component type — or

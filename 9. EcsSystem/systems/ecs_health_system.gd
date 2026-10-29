@@ -19,8 +19,12 @@ func label() -> StringName:
 	return &"health"
 
 func run(world: EcsWorld, _delta: float) -> void:
-	for id in world.query([EcsHealthComponent], [EcsDyingFlag]):
-		var health := world.get_component(id, EcsHealthComponent) as EcsHealthComponent
-		if health.value > 0.0:
+	# Naming EcsDyingFlag costs little: it is raised only on the way to a death,
+	# and a death rebuilds this view anyway — the one extra is a berry taken,
+	# which dies without touching the health table.
+	var living := world.view([EcsHealthComponent], [EcsDyingFlag])
+	var healths := living.column(EcsHealthComponent)
+	for k in living.ids.size():
+		if (healths[k] as EcsHealthComponent).value > 0.0:
 			continue
-		world.add(id, EcsDyingFlag.new())
+		world.add(living.ids[k], EcsDyingFlag.new())

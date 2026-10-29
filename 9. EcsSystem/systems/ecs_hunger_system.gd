@@ -29,8 +29,11 @@ func label() -> StringName:
 	return &"hunger"
 
 func run(world: EcsWorld, delta: float) -> void:
-	for id in world.query([EcsHungerComponent]):
-		var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+	var bars := world.view([EcsHungerComponent])
+	var hungers := bars.column(EcsHungerComponent)
+	for k in bars.ids.size():
+		var id := bars.ids[k]
+		var hunger := hungers[k] as EcsHungerComponent
 		# Resting costs less. The condition is the same one EcsEnergySystem uses
 		# to decide whether to drain or restore, and the two must agree about
 		# what "asleep" means — both read the asleep and collapsed flags, and
@@ -40,11 +43,16 @@ func run(world: EcsWorld, delta: float) -> void:
 			drain *= hunger.asleep_drain_scale
 		hunger.fullness = maxf(hunger.fullness - drain * delta, 0.0)
 
-		var health := world.get_component(id, EcsHealthComponent) as EcsHealthComponent
-		if health == null:
-			# Nothing to spend or mend. It starves forever, and that is not a
-			# special case in here — it is the absence of one.
-			continue
+	# The health half is its own pass over its own view, so health comes as a
+	# column rather than a lookup. An entity with nothing to spend or mend is
+	# simply not in it — it starves forever, and that is not a special case in
+	# here, it is the absence of one.
+	var bodies := world.view([EcsHungerComponent, EcsHealthComponent])
+	hungers = bodies.column(EcsHungerComponent)
+	var healths := bodies.column(EcsHealthComponent)
+	for k in bodies.ids.size():
+		var hunger := hungers[k] as EcsHungerComponent
+		var health := healths[k] as EcsHealthComponent
 		if hunger.fullness <= 0.0:
 			# Empty, with nothing left to draw on, so it starts costing.
 			health.value = maxf(health.value - hunger.starve_damage * delta, 0.0)
