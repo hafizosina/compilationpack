@@ -269,7 +269,7 @@ func _harvestable(id: int, hunger: EcsHungerComponent) -> bool:
 		or (_bushes[id] as EcsHarvestableComponent).diet == hunger.eats)
 
 ## Chase the nearest prey in sight, if it can attack and is hungry enough.
-## Prey is anything with health that is not dying and not its own kind.
+## Prey is whatever EcsHunting.can_hunt allows: weaker, alive, not dying.
 func _try_hunt(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		move: EcsMovementComponent, place: EcsPositionComponent) -> bool:
 	if not world.has(id, EcsDamageComponent):
@@ -284,7 +284,7 @@ func _try_hunt(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	var best := EcsWorld.NO_ENTITY
 	var best_distance := INF
 	for seen in sensor.perceived:
-		if not _is_prey(world, id, seen):
+		if not EcsHunting.can_hunt(world, id, seen):
 			continue
 		var there := (world.get_component(seen, EcsPositionComponent) as EcsPositionComponent).position
 		var distance := place.position.distance_squared_to(there)
@@ -303,7 +303,7 @@ func _try_hunt(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 func _keep_hunting(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		move: EcsMovementComponent) -> bool:
 	var prey := brain.target
-	if not _is_prey(world, id, prey) or _sees_food(world, id):
+	if not EcsHunting.can_hunt(world, id, prey) or _sees_food(world, id):
 		# Dead, dying or gone, or there is food to eat instead.
 		_abandon_trip(move)
 		_release(world, id, brain)
@@ -335,15 +335,6 @@ func _sees_food(world: EcsWorld, id: int) -> bool:
 		if _edible(seen, hunger):
 			return true
 	return false
-
-## Can `id` hunt `other`?
-func _is_prey(world: EcsWorld, id: int, other: int) -> bool:
-	if other == id or not world.has(other, EcsHealthComponent) \
-			or not world.has(other, EcsPositionComponent) or world.has(other, EcsDyingFlag):
-		return false
-	var mine := world.get_component(id, EcsNameComponent) as EcsNameComponent
-	var theirs := world.get_component(other, EcsNameComponent) as EcsNameComponent
-	return mine == null or theirs == null or mine.type_id != theirs.type_id
 
 func _position_of(world: EcsWorld, id: int) -> Vector2:
 	return (world.get_component(id, EcsPositionComponent) as EcsPositionComponent).position

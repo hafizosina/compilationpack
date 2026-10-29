@@ -52,6 +52,7 @@ heal_rate = 5.0
 
 [sub_resource type="Resource" id="c_health"]
 script = ExtResource("s_health")
+power = 15.0
 
 
 [sub_resource type="Resource" id="c_energy"]

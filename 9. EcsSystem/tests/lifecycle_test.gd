@@ -83,6 +83,8 @@ func _run() -> void:
 	await _a_hungry_hunter_kills_its_prey_and_eats_the_corpse()
 	await _a_bush_yields_only_when_harvested()
 	await _hungry_plant_eaters_harvest_then_eat_or_take()
+	_the_planner_finds_the_cheapest_chain()
+	await _power_and_diet_decide_who_hunts_whom()
 
 ## Nodes match the declared NODE_KINDs (a berry gets a sprite and a body, no
 ## sensor) and hang under the entity's own container.
@@ -1621,6 +1623,73 @@ func _hungry_plant_eaters_harvest_then_eat_or_take() -> void:
 		_world.add(id, EcsDyingFlag.new())
 	living.run_all(_world, TICK)
 	await get_tree().physics_frame
+
+## The planner over the authored actions: shortest chains for each need, the
+## meat chain through a kill, and [] when nothing reaches the goal.
+func _the_planner_finds_the_cheapest_chain() -> void:
+	var all := _actions([&"eat_carried", &"eat_ground", &"take", &"loot", &"seek_food",
+		&"seek_bush", &"harvest", &"hunt", &"attack", &"sleep"])
+	var rabbit := _actions([&"eat_ground", &"seek_food", &"seek_bush", &"harvest", &"sleep"])
+	var monkey := _actions([&"eat_carried", &"eat_ground", &"take", &"loot", &"seek_food",
+		&"seek_bush", &"harvest", &"sleep"])
+	var croc := _actions([&"eat_ground", &"seek_food", &"hunt", &"attack", &"sleep"])
+	var fed := {&"fed": true}
+	var bagged := {&"food_in_bag": true}
+	_check("food in the bag: eat it",
+		EcsPlanner.plan({&"food_in_bag": true, &"food_in_reach": true}, fed, all)
+			== [&"eat_carried"])
+	_check("food in reach: eat it off the ground",
+		EcsPlanner.plan({&"food_in_reach": true}, fed, all) == [&"eat_ground"])
+	_check("food in sight: walk to it, then eat",
+		EcsPlanner.plan({&"food_in_sight": true}, fed, rabbit) == [&"seek_food", &"eat_ground"])
+	_check("provisioning: walk to it, then take it",
+		EcsPlanner.plan({&"food_in_sight": true, &"has_room": true}, bagged, monkey)
+			== [&"seek_food", &"take"])
+	_check("a bush in sight: walk, harvest, eat",
+		EcsPlanner.plan({&"bush_in_sight": true}, fed, rabbit)
+			== [&"seek_bush", &"harvest", &"eat_ground"])
+	_check("a carrier harvests to provision",
+		EcsPlanner.plan({&"bush_in_sight": true, &"has_room": true}, bagged, monkey)
+			== [&"seek_bush", &"harvest", &"take"])
+	_check("prey in sight: hunt, kill, then eat what the kill leaves",
+		EcsPlanner.plan({&"prey_in_sight": true}, fed, croc)
+			== [&"hunt", &"attack", &"seek_food", &"eat_ground"])
+	_check("a plant-eater has no plan for prey", EcsPlanner.plan({&"prey_in_sight": true},
+		fed, rabbit).is_empty())
+	_check("rest is a plan of one", EcsPlanner.plan({}, {&"rested": true}, all) == [&"sleep"])
+	_check("but not while starving",
+		EcsPlanner.plan({&"starving": true}, {&"rested": true}, all).is_empty())
+	_check("nothing in sight: no plan", EcsPlanner.plan({}, fed, all).is_empty())
+
+## Diet and power decide hunting: no prey tag, no blueprint check.
+func _power_and_diet_decide_who_hunts_whom() -> void:
+	var spot := Vector2(15000.0, 15000.0)
+	var croc := _manager.spawn(_world, _catalog, &"crocodile", spot)
+	var big := _manager.spawn(_world, _catalog, &"crocodile", spot + Vector2(400.0, 0.0))
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(800.0, 0.0))
+	var monkey := _manager.spawn(_world, _catalog, &"monkey", spot + Vector2(1200.0, 0.0))
+	_check("power is authored per kind", EcsHunting.power_of(_world, croc)
+		> EcsHunting.power_of(_world, monkey)
+		and EcsHunting.power_of(_world, monkey) > EcsHunting.power_of(_world, rabbit))
+	_check("a crocodile can hunt a rabbit and a monkey",
+		EcsHunting.can_hunt(_world, croc, rabbit) and EcsHunting.can_hunt(_world, croc, monkey))
+	_check("a plant-eater hunts nothing", not EcsHunting.can_hunt(_world, monkey, rabbit))
+	_check("an equal is not prey", not EcsHunting.can_hunt(_world, croc, big))
+	(_world.get_component(big, EcsHealthComponent) as EcsHealthComponent).power = 100.0
+	_check("a stronger crocodile hunts a weaker one", EcsHunting.can_hunt(_world, big, croc)
+		and not EcsHunting.can_hunt(_world, croc, big))
+	_check("and is a threat to it", EcsHunting.threatens(_world, big, croc))
+	_world.add(rabbit, EcsDyingFlag.new())
+	_check("the dying are not prey", not EcsHunting.can_hunt(_world, croc, rabbit))
+	for id in [croc, big, monkey]:
+		_world.add(id, EcsDyingFlag.new())
+	await _tick(1)
+
+func _actions(ids: Array[StringName]) -> Array[EcsActionDef]:
+	var found: Array[EcsActionDef] = []
+	for action_id in ids:
+		found.append(load("res://9. EcsSystem/defs/actions/%s.tres" % action_id) as EcsActionDef)
+	return found
 
 ## Live berries within `radius` of `spot`.
 func _berries_near(spot: Vector2, radius: float) -> Array[int]:
