@@ -392,5 +392,6 @@ Editor-previewable scripts (`status_bar.gd`, `RBoxContainer`) are `@tool`; guard
 ## Conventions
 
 - GDScript with typed declarations (`:=`, typed params/returns) and `##` doc comments on exported properties and public methods — exports are tuned in the inspector, so the comment is the only spec.
+- **Never add an unnecessary comment.** Keep comments short and plain: a 1–3 line file header, one line per export or public method, and an inline `#` only when the *why* isn't obvious from the code. No design history ("used to…"), no essays or justifications, no comments that restate the code. Longer reasoning goes in the module's docs (e.g. `9. EcsSystem/HANDOFF.md`), not in code.
 - Commits are conventional-style one-liners on `main` (`feat(joystick): ...`). When asked for a "silent" commit, use a single-line message with no trailers.
 - `.godot/` and `/android/` are gitignored; `Build/` holds committed APK artifacts.
