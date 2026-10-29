@@ -1701,7 +1701,6 @@ func _utility_picks_what_the_ladder_would() -> void:
 		var id := _manager.spawn(_world, _catalog, kind, Vector2(16000.0, -16000.0))
 		var hunger := _world.get_component(id, EcsHungerComponent) as EcsHungerComponent
 		var energy := _world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
-		var planner := _world.get_component(id, EcsPlannerComponent) as EcsPlannerComponent
 		var carrier := _world.has(id, EcsInventoryComponent)
 		var mismatches := 0
 		for f in range(0, 101, 5):
@@ -1715,7 +1714,7 @@ func _utility_picks_what_the_ladder_would() -> void:
 					expected = &"provision"
 				elif e <= energy.rest_at:
 					expected = &"rest"
-				var ranked := planning._rank(_world, id, planner)
+				var ranked := planning.rank(_world, id)
 				var top: StringName = ranked[0].id if not ranked.is_empty() else &""
 				if top != expected:
 					mismatches += 1
@@ -1907,9 +1906,8 @@ func _hunger_and_danger_are_weighed_both_ways() -> void:
 	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(17000.0, -17000.0))
 	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
 	var danger := _world.get_component(rabbit, EcsDangerComponent) as EcsDangerComponent
-	var planner := _world.get_component(rabbit, EcsPlannerComponent) as EcsPlannerComponent
 	var top := func() -> StringName:
-		var ranked := planning._rank(_world, rabbit, planner)
+		var ranked := planning.rank(_world, rabbit)
 		return ranked[0].id if not ranked.is_empty() else &""
 	danger.value = 1.0
 	hunger.fullness = 0.0

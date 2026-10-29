@@ -37,8 +37,13 @@ func run(world: EcsWorld, _delta: float) -> void:
 	for k in planners.ids.size():
 		var id := planners.ids[k]
 		var planner := columns[k] as EcsPlannerComponent
-		var facts := facts_for(world, id)
-		var ranked := _rank(world, id, planner)
+		# Fetched once, shared by the facts and the scores.
+		var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+		var energy := world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
+		var danger := world.get_component(id, EcsDangerComponent) as EcsDangerComponent
+		var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
+		var facts := _facts(world, id, hunger, bag, danger)
+		var ranked := _rank(planner, hunger, energy, danger, bag)
 		facts_of[id] = facts
 		ranked_of[id] = ranked
 		if planner.dirty:
@@ -56,25 +61,30 @@ func run(world: EcsWorld, _delta: float) -> void:
 			facts_of[id], ranked_of[id])
 		done += 1
 
-## How much `id` wants `goal` now: 0 above the need's gate, else `weight` times
-## an urgency from FLOOR at the gate to 1 at empty.
-static func score(world: EcsWorld, id: int, goal: EcsGoalDef) -> float:
+## The goals `id` scores above 0, best first. For tests and tools.
+func rank(world: EcsWorld, id: int) -> Array[EcsGoalDef]:
+	return _rank(world.get_component(id, EcsPlannerComponent) as EcsPlannerComponent,
+		world.get_component(id, EcsHungerComponent) as EcsHungerComponent,
+		world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent,
+		world.get_component(id, EcsDangerComponent) as EcsDangerComponent,
+		world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent)
+
+## How much `goal` is wanted: 0 above the need's gate, else `weight` times an
+## urgency from FLOOR at the gate to 1 at empty. Any reading may be null.
+static func score(goal: EcsGoalDef, hunger: EcsHungerComponent, energy: EcsEnergyComponent,
+		danger: EcsDangerComponent, bag: EcsInventoryComponent) -> float:
 	match goal.need:
 		&"eat":
-			var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
 			if hunger != null:
 				return goal.weight * _urgency(hunger.fullness,
 					minf(hunger.forage_below, hunger.eat_below))
 		&"provision":
-			var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
-			if hunger != null and world.has(id, EcsInventoryComponent):
+			if hunger != null and bag != null:
 				return goal.weight * _urgency(hunger.fullness, hunger.forage_below)
 		&"rest":
-			var energy := world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
 			if energy != null:
 				return goal.weight * _urgency(energy.value, energy.rest_at)
 		&"flee":
-			var danger := world.get_component(id, EcsDangerComponent) as EcsDangerComponent
 			if danger != null and danger.value >= danger.flee_at:
 				return goal.weight * (FLOOR + (1.0 - FLOOR)
 					* (danger.value - danger.flee_at) / maxf(1.0 - danger.flee_at, 0.01))
@@ -86,19 +96,23 @@ static func _urgency(value: float, gate: float) -> float:
 	return FLOOR + (1.0 - FLOOR) * (gate - value) / maxf(gate, 0.01)
 
 ## The goals that score above 0, best first, with the bonus on the current one.
-func _rank(world: EcsWorld, id: int, planner: EcsPlannerComponent) -> Array[EcsGoalDef]:
-	var scored: Array = []
+static func _rank(planner: EcsPlannerComponent, hunger: EcsHungerComponent,
+		energy: EcsEnergyComponent, danger: EcsDangerComponent,
+		bag: EcsInventoryComponent) -> Array[EcsGoalDef]:
+	var ranked: Array[EcsGoalDef] = []
+	var values := PackedFloat32Array()
 	for goal in planner.goals:
-		var value := score(world, id, goal)
+		var value := score(goal, hunger, energy, danger, bag)
 		if value <= 0.0:
 			continue
 		if goal.id == planner.goal:
 			value += COMMIT_BONUS
-		scored.append([value, goal])
-	scored.sort_custom(func(a: Array, b: Array) -> bool: return a[0] > b[0])
-	var ranked: Array[EcsGoalDef] = []
-	for pair in scored:
-		ranked.append(pair[1])
+		# Insertion keeps it sorted; there are only a few goals.
+		var at := 0
+		while at < values.size() and values[at] >= value:
+			at += 1
+		values.insert(at, value)
+		ranked.insert(at, goal)
 	return ranked
 
 func _replan(planner: EcsPlannerComponent, facts: Dictionary,
@@ -125,10 +139,9 @@ static func _ids(goals: Array[EcsGoalDef]) -> Array[StringName]:
 
 ## What is true for `id` now, as the planner's facts. Only true facts are kept,
 ## so two snapshots compare equal when nothing changed.
-func facts_for(world: EcsWorld, id: int) -> Dictionary:
+func _facts(world: EcsWorld, id: int, hunger: EcsHungerComponent, bag: EcsInventoryComponent,
+		danger: EcsDangerComponent) -> Dictionary:
 	var facts := {}
-	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
-	var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
 	if hunger != null and hunger.fullness <= 0.0:
 		facts[&"starving"] = true
 	if bag != null:
@@ -140,7 +153,6 @@ func facts_for(world: EcsWorld, id: int) -> Dictionary:
 				facts[&"food_in_bag"] = true
 				break
 	var hunts := world.has(id, EcsDamageComponent)
-	var danger := world.get_component(id, EcsDangerComponent) as EcsDangerComponent
 	if danger != null and danger.value >= danger.flee_at:
 		facts[&"threat_near"] = true
 	else:
@@ -163,7 +175,8 @@ func facts_for(world: EcsWorld, id: int) -> Dictionary:
 				facts[&"prey_in_reach"] = true
 
 	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
-	if sensor != null:
+	# Nothing to look for: skip the scan.
+	if sensor != null and (hunts or not _diet.is_empty() or not _bushes.is_empty()):
 		for seen in sensor.perceived:
 			if _edible(seen, hunger):
 				facts[&"food_in_sight"] = true

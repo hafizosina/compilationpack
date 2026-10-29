@@ -29,6 +29,9 @@ static var SKIP := PackedStringArray()
 ## food. Below 0 keeps the blueprint's value.
 static var FULLNESS: float = -1.0
 
+## `--hunters=20` makes that many of the animals crocodiles, spread over the grid.
+static var HUNTERS: int = 0
+
 ## `--every=sensor:3:0,low_brain:3:1` runs stages at `label:every:phase` rates,
 ## like EcsScheduler.add(). Without it every stage runs every tick.
 static var RATES: Dictionary = {}
@@ -44,6 +47,8 @@ static func _resolve_spacing() -> void:
 			ONLY_N = arg.substr("--n=".length()).to_int()
 		elif arg.begins_with("--skip="):
 			SKIP = arg.substr("--skip=".length()).split(",", false)
+		elif arg.begins_with("--hunters="):
+			HUNTERS = arg.substr("--hunters=".length()).to_int()
 		elif arg.begins_with("--fullness="):
 			FULLNESS = arg.substr("--fullness=".length()).to_float()
 		elif arg.begins_with("--every="):
@@ -96,7 +101,10 @@ func _ready() -> void:
 		print("[stress] %s runs every %d ticks, phase %d" % [label, rate.x, rate.y])
 	if FULLNESS >= 0.0:
 		print("[stress] every animal starts at fullness %.0f — hungry, searching for food." % FULLNESS)
-	print("[stress] %6s %9s %9s %9s %8s %9s" % ["n", "spawn ms", "tick ms", "per ent", "FPS", "peak ms"])
+	if HUNTERS > 0:
+		print("[stress] %d of the animals are crocodiles." % HUNTERS)
+	print("[stress] %6s %9s %9s %9s %8s %9s %10s"
+		% ["n", "spawn ms", "tick ms", "per ent", "FPS", "peak ms", "replans/s"])
 
 	var last_ok := 0
 	var first_over := 0
@@ -110,8 +118,9 @@ func _ready() -> void:
 	for n in sizes:
 		var result := await _measure(n)
 		var tick_ms: float = result["tick_ms"]
-		print("[stress] %6d %9.0f %9.2f %9.4f %8.1f %9.2f"
-			% [n, result["spawn_ms"], tick_ms, tick_ms / n, 1000.0 / tick_ms, result["peak_ms"]])
+		print("[stress] %6d %9.0f %9.2f %9.4f %8.1f %9.2f %10.0f"
+			% [n, result["spawn_ms"], tick_ms, tick_ms / n, 1000.0 / tick_ms, result["peak_ms"],
+				result["replans_per_s"]])
 		worst = result
 		every.append(result)
 		if tick_ms >= BUDGET_MS:
@@ -348,6 +357,7 @@ func _measure(n: int) -> Dictionary:
 		_run_once()
 		await get_tree().physics_frame
 
+	var replans_before := _replans()
 	var totals := PackedFloat64Array()
 	totals.resize(_systems.size())
 	var tick_total: float = 0.0
@@ -370,9 +380,17 @@ func _measure(n: int) -> Dictionary:
 		"spawn_ms": spawn_ms,
 		"tick_ms": tick_total / SAMPLE / 1000.0,
 		"peak_ms": peak / 1000.0,
+		"replans_per_s": (_replans() - replans_before) / (SAMPLE * TICK),
 		"systems": per_system,
 		"work": _work_done(n),
 	}
+
+## Plans made so far, over every planner.
+func _replans() -> int:
+	var total := 0
+	for id in _world.query([EcsPlannerComponent]):
+		total += (_world.get_component(id, EcsPlannerComponent) as EcsPlannerComponent).replans
+	return total
 
 ## How many ids the areas returned, to price stages per unit of work.
 func _work_done(n: int) -> Dictionary:
@@ -467,7 +485,8 @@ func _run_once() -> PackedFloat64Array:
 	_tick += 1
 	return costs
 
-## A jittered grid of rabbits and monkeys, with wander bounds to match.
+## A jittered grid of rabbits and monkeys (and `--hunters` crocodiles), with
+## wander bounds to match.
 func _populate(n: int) -> void:
 	var columns := int(ceil(sqrt(float(n))))
 	var half := columns * SPACING * 0.5
@@ -476,7 +495,10 @@ func _populate(n: int) -> void:
 		var spot := Vector2(
 			(i % columns) * SPACING - half + randf_range(-18.0, 18.0),
 			(i / columns) * SPACING - half + randf_range(-18.0, 18.0))
-		var id := _manager.spawn(_world, _catalog, &"rabbit" if i % 2 == 0 else &"monkey", spot)
+		var kind := &"rabbit" if i % 2 == 0 else &"monkey"
+		if HUNTERS > 0 and i % maxi(n / HUNTERS, 1) == 1 and i / maxi(n / HUNTERS, 1) < HUNTERS:
+			kind = &"crocodile"
+		var id := _manager.spawn(_world, _catalog, kind, spot)
 		if FULLNESS >= 0.0:
 			var hunger := _world.get_component(id, EcsHungerComponent) as EcsHungerComponent
 			if hunger != null:
