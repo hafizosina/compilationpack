@@ -87,6 +87,8 @@ func _build() -> void:
 		.add(EcsMovementSystem.new()) \
 		.add(_collision) \
 		.add(EcsPickupSystem.new()) \
+		.add(EcsRotSystem.new()) \
+		.add(EcsCorpseSystem.new()) \
 		.add(EcsDropSystem.new()) \
 		.add(EcsSelectionSystem.new(_marker)) \
 		.add(EcsNodeSyncSystem.new(_manager)) \

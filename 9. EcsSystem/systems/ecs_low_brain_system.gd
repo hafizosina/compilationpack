@@ -7,12 +7,15 @@ extends EcsSystem
 ##
 ## Each tick: a collapse forces SLEEP; a commitment (SEEK_FOOD) is checked and
 ## kept or dropped; otherwise it picks the highest rung that applies:
-## eat > take > seek food > sleep > wander.
+## eat > take (or loot) > seek food > sleep > wander. Food is filtered by
+## diet: a creature only eats and seeks what its hunger `eats`.
 
 ## The view `_food` was built from.
 var _food_view: EcsView
 ## Current food: id -> EcsPositionComponent.
 var _food: Dictionary = {}
+## Current food: id -> its diet.
+var _diet: Dictionary = {}
 
 func label() -> StringName:
 	return &"low_brain"
@@ -84,8 +87,8 @@ func _try_eat(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	if hunger == null or hunger.fullness > hunger.eat_below:
 		return false
 	# Bag first, then the ground.
-	var carried := _meal_in_bag(world, id)
-	var meal := EcsWorld.NO_ENTITY if carried != "" else _meal_on_ground(world, id)
+	var carried := _meal_in_bag(world, id, hunger)
+	var meal := EcsWorld.NO_ENTITY if carried != "" else _meal_on_ground(world, id, hunger)
 	if carried == "" and meal == EcsWorld.NO_ENTITY:
 		return false
 
@@ -93,25 +96,27 @@ func _try_eat(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	_set_state(world, id, brain, EcsLowBrainComponent.State.EAT, meal, carried)
 	return true
 
-## The uid of something edible it is carrying, or "".
-func _meal_in_bag(world: EcsWorld, id: int) -> String:
+## The uid of something it carries and eats, or "".
+func _meal_in_bag(world: EcsWorld, id: int, hunger: EcsHungerComponent) -> String:
 	var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
 	if bag != null:
 		for record in bag.items:
-			if record.component(EcsConsumableComponent) != null:
+			var food := record.component(EcsConsumableComponent) as EcsConsumableComponent
+			if food != null and food.diet == hunger.eats:
 				return record.uid
 	return ""
 
-## Something edible lying within its action area, or NO_ENTITY.
-func _meal_on_ground(world: EcsWorld, id: int) -> int:
+## Something it eats lying within its action area, or NO_ENTITY.
+func _meal_on_ground(world: EcsWorld, id: int, hunger: EcsHungerComponent) -> int:
 	var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
 	if action != null:
 		for touched in action.reached:
-			if _is_food(touched):
+			if _edible(touched, hunger):
 				return touched
 	return EcsWorld.NO_ENTITY
 
-## Pick up something in reach, if hungry enough to want food and the bag has room.
+## Pick up something in reach, or loot a record from a lootable entity in
+## reach, if hungry enough to want food and the bag has room.
 func _try_take(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		move: EcsMovementComponent) -> bool:
 	var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
@@ -125,16 +130,30 @@ func _try_take(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		return false
 
 	var item := EcsWorld.NO_ENTITY
+	var record_uid := ""
 	for touched in action.reached:
 		if _is_takeable(world, touched):
+			item = touched
+			break
+		record_uid = _loot_in(world, touched)
+		if record_uid != "":
 			item = touched
 			break
 	if item == EcsWorld.NO_ENTITY:
 		return false
 
 	_abandon_trip(move)
-	_set_state(world, id, brain, EcsLowBrainComponent.State.TAKE, item)
+	_set_state(world, id, brain, EcsLowBrainComponent.State.TAKE, item, record_uid)
 	return true
+
+## The uid of a record that can be looted from `id`, or "".
+func _loot_in(world: EcsWorld, id: int) -> String:
+	if not world.has(id, EcsLootableComponent) or world.has(id, EcsDyingFlag):
+		return ""
+	var held := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
+	if held == null or held.items.is_empty():
+		return ""
+	return held.items[0].uid
 
 ## Is `other` in this entity's reach?
 func _in_reach(world: EcsWorld, id: int, other: int) -> bool:
@@ -168,7 +187,7 @@ func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	var best_distance := INF
 	for seen in sensor.perceived:
 		var there: EcsPositionComponent = _food.get(seen)
-		if there == null:
+		if there == null or not _edible(seen, hunger):
 			continue
 		var distance := here.distance_squared_to(there.position)
 		if distance < best_distance:
@@ -220,6 +239,10 @@ func _wander(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 func _is_food(id: int) -> bool:
 	return _food.has(id)
 
+## Is `id` food on the ground that this hunger eats? Without hunger, any food.
+func _edible(id: int, hunger: EcsHungerComponent) -> bool:
+	return _food.has(id) and (hunger == null or _diet[id] == hunger.eats)
+
 ## Rebuilds `_food` when the food view changes.
 func _refresh_food(world: EcsWorld) -> void:
 	var food := world.view([EcsConsumableComponent, EcsPositionComponent], [EcsDyingFlag])
@@ -227,9 +250,12 @@ func _refresh_food(world: EcsWorld) -> void:
 		return
 	_food_view = food
 	_food = {}
+	_diet = {}
 	var places := food.column(EcsPositionComponent)
+	var foods := food.column(EcsConsumableComponent)
 	for k in food.ids.size():
 		_food[food.ids[k]] = places[k]
+		_diet[food.ids[k]] = (foods[k] as EcsConsumableComponent).diet
 
 ## Back to IDLE. Does not touch the trip.
 func _release(world: EcsWorld, id: int, brain: EcsLowBrainComponent) -> void:
@@ -241,9 +267,13 @@ func _set_state(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		state: EcsLowBrainComponent.State, target: int = EcsWorld.NO_ENTITY,
 		record_uid: String = "") -> void:
 	if brain.state == state and brain.target == target:
+		# Same target, maybe a different record: refresh the uid.
 		var eating := world.get_component(id, EcsEatIntentFlag) as EcsEatIntentFlag
 		if eating != null:
 			eating.record_uid = record_uid
+		var taking := world.get_component(id, EcsTakeIntentFlag) as EcsTakeIntentFlag
+		if taking != null:
+			taking.record_uid = record_uid
 		return
 	var old_flag: Script = _flag_for(brain.state)
 	if old_flag != null:
@@ -259,6 +289,7 @@ func _set_state(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		EcsLowBrainComponent.State.TAKE:
 			var take := EcsTakeIntentFlag.new()
 			take.target_id = target
+			take.record_uid = record_uid
 			world.add(id, take)
 		EcsLowBrainComponent.State.SLEEP:
 			world.add(id, EcsAsleepFlag.new())

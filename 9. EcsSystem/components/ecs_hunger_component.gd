@@ -3,6 +3,8 @@ extends EcsComponent
 
 ## How fed it is. `fullness` starts full and drains to zero, which is starving.
 
+## The food diet it eats: &"plant" or &"meat".
+@export var eats: StringName = &"plant"
 ## Fullness lost per second while awake.
 @export var drain: float = 2.0
 ## Fraction of `drain` while asleep. Keep above 0 or hunger can't wake a sleeper.

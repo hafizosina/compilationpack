@@ -1,0 +1,41 @@
+[gd_resource type="Resource" script_class="EcsEntityDef" format=3 uid="uid://bcorpse9ecs01"]
+
+[ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="base"]
+[ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
+[ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
+[ext_resource type="Script" uid="uid://occbigie8rhc" path="res://9. EcsSystem/components/ecs_body_component.gd" id="s_body"]
+[ext_resource type="Script" uid="uid://dv5n5s3kxd2u1" path="res://9. EcsSystem/components/ecs_consumable_component.gd" id="s_food"]
+[ext_resource type="Script" uid="uid://k3ktug7ek8s8" path="res://9. EcsSystem/components/ecs_inventory_component.gd" id="s_bag"]
+[ext_resource type="Script" uid="uid://bekybpw47aatp" path="res://9. EcsSystem/components/ecs_lootable_component.gd" id="s_loot"]
+[ext_resource type="Script" uid="uid://bi8mih42cibku" path="res://9. EcsSystem/components/ecs_rot_component.gd" id="s_rot"]
+
+[sub_resource type="Resource" id="c_sprite"]
+script = ExtResource("s_sprite")
+z_index = -1
+
+[sub_resource type="Resource" id="c_body"]
+script = ExtResource("s_body")
+radius = 22.0
+is_solid = false
+
+[sub_resource type="Resource" id="c_food"]
+script = ExtResource("s_food")
+nutrition = 60.0
+diet = &"meat"
+
+[sub_resource type="Resource" id="c_bag"]
+script = ExtResource("s_bag")
+capacity = 8
+
+[sub_resource type="Resource" id="c_loot"]
+script = ExtResource("s_loot")
+
+[sub_resource type="Resource" id="c_rot"]
+script = ExtResource("s_rot")
+lasts = 40.0
+
+[resource]
+script = ExtResource("def")
+id = &"corpse"
+display_name = "Corpse"
+components = Array[ExtResource("base")]([SubResource("c_sprite"), SubResource("c_body"), SubResource("c_food"), SubResource("c_bag"), SubResource("c_loot"), SubResource("c_rot")])

@@ -424,6 +424,8 @@ func _build_pipeline() -> void:
 		EcsMovementSystem.new(),
 		EcsCollisionSystem.new(_manager),
 		EcsPickupSystem.new(),
+		EcsRotSystem.new(),
+		EcsCorpseSystem.new(),
 		EcsDropSystem.new(),
 		EcsSelectionSystem.new(marker),
 		EcsNodeSyncSystem.new(_manager),

@@ -78,6 +78,8 @@ func _run() -> void:
 	await _a_stage_on_a_slower_tick_still_simulates_the_same()
 	_a_view_is_kept_until_a_table_it_names_changes()
 	await _a_hit_lands_less_armour_on_cooldown_and_can_crit()
+	await _death_by_health_leaves_a_corpse_to_loot_and_eat()
+	await _a_corpse_rots_and_spills_what_it_held()
 
 ## Nodes match the declared NODE_KINDs (a berry gets a sprite and a body, no
 ## sensor) and hang under the entity's own container.
@@ -1320,6 +1322,108 @@ func _a_hit_lands_less_armour_on_cooldown_and_can_crit() -> void:
 	_world.add(attacker, EcsDyingFlag.new())
 	fighting.run_all(_world, TICK)
 	await get_tree().physics_frame
+
+## A creature that dies by health leaves a corpse holding its bag. A hungry
+## carrier loots it, a plant-eater ignores the meat, a meat-eater eats it, and
+## what the corpse still held is spilled.
+func _death_by_health_leaves_a_corpse_to_loot_and_eat() -> void:
+	var living := _corpse_pipeline(true)
+	var spot := Vector2(-9000.0, 9000.0)
+	var dead := _manager.spawn(_world, _catalog, &"monkey", spot)
+	var dead_name := String((_world.get_component(dead, EcsNameComponent) as EcsNameComponent).entity_name)
+	var bag := _world.get_component(dead, EcsInventoryComponent) as EcsInventoryComponent
+	bag.capacity = 2
+	var uids: Array[String] = []
+	for i in 2:
+		var berry := _manager.spawn(_world, _catalog, &"berry", spot + Vector2(0.0, 5000.0 + i * 100.0))
+		uids.append((_world.get_component(berry, EcsNameComponent) as EcsNameComponent).uid)
+		bag.items.append(EcsItemRecord.capture(_world, berry))
+		_world.add(berry, EcsDyingFlag.new())
+	(_world.get_component(dead, EcsHealthComponent) as EcsHealthComponent).value = 0.0
+	for i in 2:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+
+	var corpse := _first_of(&"corpse")
+	_check("the creature is gone", not _world.is_alive(dead))
+	_check("and a corpse is where it fell", corpse != EcsWorld.NO_ENTITY
+		and (_world.get_component(corpse, EcsPositionComponent) as EcsPositionComponent).position.is_equal_approx(spot))
+	_check("named for it", corpse != EcsWorld.NO_ENTITY
+		and String((_world.get_component(corpse, EcsNameComponent) as EcsNameComponent).entity_name) == "corpse_of_" + dead_name)
+	var held := _world.get_component(corpse, EcsInventoryComponent) as EcsInventoryComponent
+	_check("holding the bag it carried", held != null and held.items.size() == 2
+		and held.items.all(func(r: EcsItemRecord) -> bool: return uids.has(r.uid)))
+	var body := _world.get_component(corpse, EcsBodyComponent) as EcsBodyComponent
+	_check("the same size, and walked over", is_equal_approx(body.radius, 36.0) and not body.is_solid)
+	_check("drawn darker than it was",
+		(_world.get_component(corpse, EcsSpriteComponent) as EcsSpriteComponent).tint.v < 0.6)
+
+	var looter := _manager.spawn(_world, _catalog, &"monkey", spot + Vector2(30.0, 0.0))
+	var looter_hunger := _world.get_component(looter, EcsHungerComponent) as EcsHungerComponent
+	looter_hunger.fullness = looter_hunger.forage_below - 10.0
+	var grazer := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(0.0, 30.0))
+	var grazer_hunger := _world.get_component(grazer, EcsHungerComponent) as EcsHungerComponent
+	grazer_hunger.fullness = 10.0
+	for i in 6:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+	var loot := _world.get_component(looter, EcsInventoryComponent) as EcsInventoryComponent
+	_check("a hungry carrier loots a record from the corpse", loot.items.size() == 1
+		and uids.has(loot.items[0].uid) and held.items.size() == 1)
+	_check("a plant-eater leaves the meat alone",
+		_world.is_alive(corpse) and not _world.has(corpse, EcsDyingFlag))
+
+	grazer_hunger.eats = &"meat"
+	var before := grazer_hunger.fullness
+	for i in 6:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+	_check("a meat-eater eats the corpse", not _world.is_alive(corpse) and grazer_hunger.fullness > before)
+	_check("and what it still held is spilled, as itself", _ids_with_uids(uids).size() == 1)
+
+	for id in _ids_with_uids(uids) + [looter, grazer]:
+		_world.add(id, EcsDyingFlag.new())
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+
+## A corpse flags itself dying when its time is up, and spills its bag.
+func _a_corpse_rots_and_spills_what_it_held() -> void:
+	var living := _corpse_pipeline(false)
+	var spot := Vector2(-9000.0, -9000.0)
+	var corpse := _manager.spawn(_world, _catalog, &"corpse", spot)
+	var berry := _manager.spawn(_world, _catalog, &"berry", spot + Vector2(0.0, 5000.0))
+	var uids: Array[String] = [(_world.get_component(berry, EcsNameComponent) as EcsNameComponent).uid]
+	(_world.get_component(corpse, EcsInventoryComponent) as EcsInventoryComponent).items.append(
+		EcsItemRecord.capture(_world, berry))
+	_world.add(berry, EcsDyingFlag.new())
+	var rot := _world.get_component(corpse, EcsRotComponent) as EcsRotComponent
+	living.run_all(_world, TICK)
+	_check("a fresh corpse is not rotting away yet", not _world.has(corpse, EcsDyingFlag))
+
+	rot.age = rot.lasts - TICK * 0.5
+	living.run_all(_world, TICK)
+	_check("it rots once its time is up", _world.has(corpse, EcsDyingFlag))
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+	_check("and is gone, its berry back on the ground", not _world.is_alive(corpse)
+		and _ids_with_uids(uids).size() == 1)
+	for id in _ids_with_uids(uids):
+		_world.add(id, EcsDyingFlag.new())
+	living.run_all(_world, TICK)
+
+func _corpse_pipeline(with_brain: bool) -> EcsScheduler:
+	var living := EcsScheduler.new()
+	living.add(EcsLifecycleSystem.new(_manager, _catalog))
+	living.add(EcsHealthSystem.new())
+	living.add(EcsSensorSystem.new(_manager))
+	if with_brain:
+		living.add(EcsLowBrainSystem.new())
+	living.add(EcsConsumeSystem.new())
+	living.add(EcsPickupSystem.new())
+	living.add(EcsRotSystem.new())
+	living.add(EcsCorpseSystem.new())
+	living.add(EcsDropSystem.new())
+	return living
 
 ## Raises an intent flag, standing in for the brain.
 func _intend_take(id: int, target: int) -> void:
