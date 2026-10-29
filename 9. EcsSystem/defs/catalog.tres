@@ -4,7 +4,7 @@
 [ext_resource type="Resource" uid="uid://bry900ecs0002" path="res://9. EcsSystem/defs/blueprints/berry_bush.tres" id="bp_bush"]
 [ext_resource type="Resource" uid="uid://47rm6ng56roo" path="res://9. EcsSystem/defs/blueprints/monkey.tres" id="bp_monkey"]
 [ext_resource type="Resource" uid="uid://mpxtvninay8a" path="res://9. EcsSystem/defs/blueprints/rabbit.tres" id="bp_rabbit"]
-[ext_resource type="Resource" uid="uid://bcorpse9ecs01" path="res://9. EcsSystem/defs/blueprints/corpse.tres" id="bp_corpse"]
+[ext_resource type="Resource" uid="uid://bcorpsfaecs01" path="res://9. EcsSystem/defs/blueprints/corpse.tres" id="bp_corpse"]
 [ext_resource type="Resource" uid="uid://bcroc0ecs0001" path="res://9. EcsSystem/defs/blueprints/crocodile.tres" id="bp_croc"]
 [ext_resource type="Script" uid="uid://dj08sroj0ed18" path="res://9. EcsSystem/defs/ecs_entity_catalog.gd" id="cat"]
 [ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
