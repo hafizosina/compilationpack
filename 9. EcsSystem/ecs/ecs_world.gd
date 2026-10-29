@@ -21,6 +21,13 @@ var _next_id: int = 1
 var _alive: Dictionary = {}  # entity_id -> true
 var _store: Dictionary = {}  # Script -> { entity_id -> EcsComponent }
 var _singletons: Dictionary = {}  # Script -> EcsComponent
+## Script -> int, bumped whenever that table gains, loses or replaces an entry.
+## A view compares these to the ones it was built from, and that comparison is
+## the whole of its invalidation.
+var _versions: Dictionary = {}
+## [include, exclude] -> EcsView. Keyed on the arrays a system passes, which
+## Godot hashes by content, so two systems asking the same question share one.
+var _views: Dictionary = {}
 
 # --- entities ---------------------------------------------------------------
 
@@ -36,8 +43,9 @@ func create_entity() -> int:
 func destroy_entity(id: int) -> void:
 	if not _alive.erase(id):
 		return
-	for table: Dictionary in _store.values():
-		table.erase(id)
+	for type: Script in _store:
+		if (_store[type] as Dictionary).erase(id):
+			_versions[type] = int(_versions.get(type, 0)) + 1
 
 func is_alive(id: int) -> bool:
 	return _alive.has(id)
@@ -60,6 +68,9 @@ func add(id: int, component: EcsComponent) -> EcsComponent:
 	if not _store.has(type):
 		_store[type] = {}
 	_store[type][id] = component
+	# Bumped on a replace as well as a new entry: a view holds the reference,
+	# and the old one is no longer what is filed here.
+	_versions[type] = int(_versions.get(type, 0)) + 1
 	return component
 
 func get_component(id: int, type: Script) -> EcsComponent:
@@ -72,8 +83,45 @@ func has(id: int, type: Script) -> bool:
 
 func remove(id: int, type: Script) -> void:
 	var table: Dictionary = _store.get(type)
-	if table != null:
-		table.erase(id)
+	if table != null and table.erase(id):
+		_versions[type] = int(_versions.get(type, 0)) + 1
+
+## The answer to `query(include, exclude)`, with the components beside the ids
+## — see EcsView. Built the first time it is asked for, then handed back as the
+## same object until one of the tables it names changes, which in this module is
+## a birth or death at the lifecycle stage, or a flag it names being raised or
+## cleared. A view that names no flag is therefore rebuilt only on the ticks
+## something is born or dies.
+##
+## A rebuild is one query() plus one dictionary read per component, so a view
+## over a table that changes every tick costs more than query() does. Name a
+## flag only if it changes rarely.
+func view(include: Array, exclude: Array = []) -> EcsView:
+	var key := [include, exclude]
+	var cached: EcsView = _views.get(key)
+	if cached != null and _is_current(cached):
+		return cached
+
+	var fresh := EcsView.new()
+	fresh.ids = query(include, exclude)
+	for type: Script in include:
+		var table: Dictionary = _store.get(type, {})
+		var column: Array = []
+		column.resize(fresh.ids.size())
+		for k in fresh.ids.size():
+			column[k] = table[fresh.ids[k]]
+		fresh._columns[type] = column
+	for type: Script in include + exclude:
+		fresh._types.append(type)
+		fresh._stamp.append(int(_versions.get(type, 0)))
+	_views[key] = fresh
+	return fresh
+
+func _is_current(cached: EcsView) -> bool:
+	for k in cached._types.size():
+		if int(_versions.get(cached._types[k], 0)) != cached._stamp[k]:
+			return false
+	return true
 
 ## Every entity carrying all of `include` and none of `exclude`, as a fresh
 ## array — safe to mutate the world while iterating the result.

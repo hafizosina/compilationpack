@@ -30,12 +30,15 @@ func label() -> StringName:
 	return &"movement"
 
 func run(world: EcsWorld, delta: float) -> void:
-	for id in world.query([EcsPositionComponent, EcsMovementComponent]):
-		var move := world.get_component(id, EcsMovementComponent) as EcsMovementComponent
+	var view := world.view([EcsPositionComponent, EcsMovementComponent])
+	var moves := view.column(EcsMovementComponent)
+	var places := view.column(EcsPositionComponent)
+	for k in view.ids.size():
+		var move := moves[k] as EcsMovementComponent
 		if not move.has_destination:
 			move.velocity = Vector2.ZERO
 			continue
-		var here := world.get_component(id, EcsPositionComponent) as EcsPositionComponent
+		var here := places[k] as EcsPositionComponent
 		var to_go := move.destination - here.position
 		var step := move.speed * delta
 		if to_go.length() <= maxf(step, move.arrive_radius):

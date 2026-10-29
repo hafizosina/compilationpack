@@ -116,7 +116,78 @@ func _ready() -> void:
 	print("[fetch] unit cost: has %.3f us, get_component %.3f us (loop removed)"
 		% [1000.0 * sums["has"] / maxi(sums["gets"], 1), 1000.0 * sums["get"] / maxi(sums["gets"], 1)])
 	_compare_gets(world, systems, sums["gets"])
+	_compare_views(world, systems)
 	get_tree().quit(0)
+
+## Each skeleton whole, written the old way and through a cached view, so the
+## number is what one bare-bones system costs per tick either way.
+##
+##   query+has+get — the skeleton's run(): query, then has and get per type
+##   query+get     — the same without has, which query already answered
+##   view, kept    — world.view() handing back the cached view, then reading
+##                   every column; the tick nothing was born or died
+##   view, rebuilt — the same with the cache emptied first, so view() runs the
+##                   query and fills the columns; the tick something did
+func _compare_views(world: EcsWorld, systems: Array[SkeletonSystem]) -> void:
+	var views: Dictionary = world.get(&"_views")
+	print("")
+	print("[fetch] each system whole, ms per tick:")
+	print("[fetch] %-6s %6s %14s %10s %11s %14s %8s"
+		% ["system", "ents", "query+has+get", "query+get", "view, kept", "view, rebuilt", "kept vs"])
+	var sums := [0.0, 0.0, 0.0, 0.0]
+	var ents_all := 0
+	for system in systems:
+		var required: Array[Script] = system.required
+		var ents := world.query(required).size()
+		var row := [0.0, 0.0, 0.0, 0.0]
+
+		var began := Time.get_ticks_usec()
+		for i in SAMPLE:
+			system.run(world, 0.0)
+		row[0] = float(Time.get_ticks_usec() - began)
+
+		began = Time.get_ticks_usec()
+		for i in SAMPLE:
+			for id in world.query(required):
+				for type in required:
+					var _c := world.get_component(id, type)
+		row[1] = float(Time.get_ticks_usec() - began)
+
+		world.view(required)
+		began = Time.get_ticks_usec()
+		for i in SAMPLE:
+			var view := world.view(required)
+			var columns: Array = []
+			for type in required:
+				columns.append(view.column(type))
+			for k in view.ids.size():
+				for column: Array in columns:
+					var _c: EcsComponent = column[k]
+		row[2] = float(Time.get_ticks_usec() - began)
+
+		began = Time.get_ticks_usec()
+		for i in SAMPLE:
+			views.clear()
+			var view := world.view(required)
+			var columns: Array = []
+			for type in required:
+				columns.append(view.column(type))
+			for k in view.ids.size():
+				for column: Array in columns:
+					var _c: EcsComponent = column[k]
+		row[3] = float(Time.get_ticks_usec() - began)
+
+		for c in 4:
+			row[c] = row[c] / SAMPLE / 1000.0
+			sums[c] += row[c]
+		ents_all += ents
+		print("[fetch] %-6s %6d %14.3f %10.3f %11.3f %14.3f %7.0f%%"
+			% [system.name, ents, row[0], row[1], row[2], row[3], 100.0 * row[2] / row[0]])
+	print("[fetch] %-6s %6d %14.3f %10.3f %11.3f %14.3f %7.0f%%"
+		% ["TOTAL", ents_all, sums[0], sums[1], sums[2], sums[3], 100.0 * sums[2] / sums[0]])
+	print("[fetch] per entity walked: %.3f / %.3f / %.3f / %.3f us"
+		% [1000.0 * sums[0] / ents_all, 1000.0 * sums[1] / ents_all,
+			1000.0 * sums[2] / ents_all, 1000.0 * sums[3] / ents_all])
 
 ## The same gets every skeleton makes, fetched four ways, all twenty systems
 ## together. Each is timed over the ids its query returned, with a bare loop of

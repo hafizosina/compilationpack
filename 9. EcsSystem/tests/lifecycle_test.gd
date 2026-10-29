@@ -89,6 +89,7 @@ func _run() -> void:
 	await _a_dead_carrier_puts_back_what_it_carried()
 	await _animals_of_one_kind_start_differently_rested()
 	await _a_stage_on_a_slower_tick_still_simulates_the_same()
+	_a_view_is_kept_until_a_table_it_names_changes()
 
 ## A component's `const NODE_KIND` is what gets it a node, so a berry — sprite,
 ## no shape — must come out with a sprite and no body. And everything an entity
@@ -1392,6 +1393,46 @@ func _first_of(type_id: StringName) -> int:
 
 func _radius_of(id: int) -> float:
 	return (_world.get_component(id, EcsBodyComponent) as EcsBodyComponent).radius
+
+## A view is a cache, so the failure to fear is a stale one: an id that died
+## still walked, or a component replaced while the old reference is handed out.
+## Each structural change it can see must rebuild it, and nothing else may.
+func _a_view_is_kept_until_a_table_it_names_changes() -> void:
+	var world := EcsWorld.new()
+	var a := world.create_entity()
+	var b := world.create_entity()
+	world.add(a, EcsPositionComponent.new())
+	world.add(a, EcsMovementComponent.new())
+	world.add(b, EcsPositionComponent.new())
+	var include := [EcsPositionComponent, EcsMovementComponent]
+
+	var first := world.view(include)
+	_check("a view holds what query() returns", first.ids == world.query(include))
+	_check("with each component beside its id",
+		first.column(EcsMovementComponent)[0] == world.get_component(a, EcsMovementComponent))
+	_check("asked again with nothing changed, it is the same view", world.view(include) == first)
+
+	world.add(a, EcsHungerComponent.new())
+	_check("a change to a table it does not name leaves it alone", world.view(include) == first)
+
+	world.add(b, EcsMovementComponent.new())
+	var grown := world.view(include)
+	_check("an entity gaining a named type rebuilds it", grown != first and grown.ids.size() == 2)
+	_check("and the old one is left as it was, for anyone still walking it", first.ids.size() == 1)
+
+	var fresh_move := EcsMovementComponent.new()
+	world.add(a, fresh_move)
+	_check("a replaced component is the one the column hands out",
+		world.view(include).column(EcsMovementComponent).has(fresh_move))
+
+	world.destroy_entity(b)
+	_check("a death rebuilds it without the dead", world.view(include).ids == [a])
+
+	world.add(a, EcsDyingFlag.new())
+	_check("an excluded flag being raised rebuilds it",
+		world.view(include, [EcsDyingFlag]).ids.is_empty())
+	world.remove(a, EcsDyingFlag)
+	_check("and being cleared rebuilds it again", world.view(include, [EcsDyingFlag]).ids == [a])
 
 func _check(what: String, passed: bool) -> void:
 	_checks += 1
