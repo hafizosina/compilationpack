@@ -21,6 +21,7 @@ const BAR_EDGE := Color(0.0, 0.0, 0.0, 0.5)
 const HUNGER_COLOR := Color(0.725, 0.541, 0.196)
 const ENERGY_COLOR := Color(0.369, 0.541, 0.18)
 const HEALTH_COLOR := Color(0.62, 0.169, 0.145)
+const DANGER_COLOR := Color(0.85, 0.4, 0.85)
 
 ## Sleep icon tint: parchment when asleep, red when collapsed.
 const ASLEEP_COLOR := Color(0.906, 0.839, 0.675, 0.95)
@@ -98,6 +99,12 @@ func _draw() -> void:
 		if health >= 0.0:
 			_bar(pos + Vector2(bar_left, stacked), health, bar_width, bar_height,
 				HEALTH_COLOR, px)
+			stacked += bar_height + 2.0 * px
+		# Danger shows only while there is some.
+		var danger: float = row["danger"]
+		if danger > 0.0:
+			_bar(pos + Vector2(bar_left, stacked), danger, bar_width, bar_height,
+				DANGER_COLOR, px)
 
 		# Carried-count badge on the sprite's top-left corner, only when carrying.
 		var shoulder := SPRITE_HALF * float(row["sprite_scale"])

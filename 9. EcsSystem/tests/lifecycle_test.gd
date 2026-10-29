@@ -89,6 +89,8 @@ func _run() -> void:
 	await _a_planned_hunter_kills_once_and_eats_the_corpse()
 	await _planned_plant_eaters_harvest_then_eat_or_take()
 	await _replans_follow_events_not_the_clock()
+	await _hunger_and_danger_are_weighed_both_ways()
+	await _a_rabbit_flees_what_could_hunt_it()
 
 ## Nodes match the declared NODE_KINDs (a berry gets a sprite and a body, no
 ## sensor) and hang under the entity's own container.
@@ -1664,6 +1666,8 @@ func _the_planner_finds_the_cheapest_chain() -> void:
 	_check("but not while starving",
 		EcsPlanner.plan({&"starving": true}, {&"rested": true}, all).is_empty())
 	_check("nothing in sight: no plan", EcsPlanner.plan({}, fed, all).is_empty())
+	_check("a threat near: flee", EcsPlanner.plan({&"threat_near": true}, {&"safe": true},
+		_actions([&"flee"])) == [&"flee"])
 
 ## Diet and power decide hunting: no prey tag, no blueprint check.
 func _power_and_diet_decide_who_hunts_whom() -> void:
@@ -1896,6 +1900,126 @@ func _replans_follow_events_not_the_clock() -> void:
 	for id in crowd:
 		_world.add(id, EcsDyingFlag.new())
 	await _tick(1)
+
+## Starving outranks danger; merely hungry or fed, danger wins.
+func _hunger_and_danger_are_weighed_both_ways() -> void:
+	var planning := EcsPlanningSystem.new()
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(17000.0, -17000.0))
+	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
+	var danger := _world.get_component(rabbit, EcsDangerComponent) as EcsDangerComponent
+	var planner := _world.get_component(rabbit, EcsPlannerComponent) as EcsPlannerComponent
+	var top := func() -> StringName:
+		var ranked := planning._rank(_world, rabbit, planner)
+		return ranked[0].id if not ranked.is_empty() else &""
+	danger.value = 1.0
+	hunger.fullness = 0.0
+	_check("starving, it keeps after food", top.call() == &"satisfy_hunger")
+	hunger.fullness = hunger.forage_below - 5.0
+	_check("merely hungry, it flees", top.call() == &"flee")
+	hunger.fullness = hunger.max_fullness
+	danger.value = danger.flee_at
+	_check("fed, any danger past the gate sends it off", top.call() == &"flee")
+	danger.value = danger.flee_at - 0.01
+	_check("below the gate danger doesn't count", top.call() == &"")
+	_world.add(rabbit, EcsDyingFlag.new())
+	await _tick(1)
+
+## A rabbit that sees a crocodile fills with danger and runs; with the threat
+## gone the danger decays and it stops. A sleeper wakes to flee, and a bite
+## from something unseen is enough.
+func _a_rabbit_flees_what_could_hunt_it() -> void:
+	var living := EcsScheduler.new()
+	living \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsEnergySystem.new()) \
+		.add(EcsDangerSystem.new()) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsPlanningSystem.new()) \
+		.add(EcsLowBrainSystem.new()) \
+		.add(EcsDamageSystem.new()) \
+		.add(EcsMovementSystem.new()) \
+		.add(EcsCollisionSystem.new(_manager)) \
+		.add(EcsNodeSyncSystem.new(_manager))
+
+	var bounds := EcsConst.world_bounds
+	var spot := Vector2(20000.0, 0.0)
+	EcsConst.world_bounds = Rect2(spot - Vector2(3000.0, 3000.0), Vector2(6000.0, 6000.0))
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(200.0, 0.0))
+	var croc := _manager.spawn(_world, _catalog, &"crocodile", spot)
+	_world.remove(croc, EcsLowBrainComponent)
+	var energy := _world.get_component(rabbit, EcsEnergyComponent) as EcsEnergyComponent
+	energy.rolled = true  # the test sets energy by hand; no start roll
+	energy.value = energy.max_energy
+	var danger := _world.get_component(rabbit, EcsDangerComponent) as EcsDangerComponent
+	var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
+	var planner := _world.get_component(rabbit, EcsPlannerComponent) as EcsPlannerComponent
+	var at := _world.get_component(rabbit, EcsPositionComponent) as EcsPositionComponent
+	var croc_at := (_world.get_component(croc, EcsPositionComponent) as EcsPositionComponent).position
+
+	var fled := false
+	for i in 120:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		fled = fled or brain.state == EcsLowBrainComponent.State.FLEE
+	_check("seeing a crocodile fills its danger (%.2f)" % danger.value,
+		danger.value >= danger.flee_at)
+	_check("and it flees", fled and planner.goal == &"flee")
+	_check("away from it (%.0f px)" % at.position.distance_to(croc_at),
+		at.position.distance_to(croc_at) > 400.0)
+
+	_world.add(croc, EcsDyingFlag.new())
+	for i in 600:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		if danger.value <= 0.0:
+			break
+	_check("with the threat gone danger decays", danger.value <= 0.0)
+	_check("and it stops fleeing", planner.goal != &"flee"
+		and brain.state != EcsLowBrainComponent.State.FLEE)
+
+	energy.value = energy.rest_at - 1.0
+	for i in 60:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+	var slept := brain.state == EcsLowBrainComponent.State.SLEEP
+	var wolf := _manager.spawn(_world, _catalog, &"crocodile", at.position + Vector2(150.0, 0.0))
+	_world.remove(wolf, EcsLowBrainComponent)
+	var woke := false
+	for i in 90:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		woke = woke or brain.state == EcsLowBrainComponent.State.FLEE
+	_check("a sleeper wakes to flee", slept and woke and not _world.has(rabbit, EcsAsleepFlag))
+	_world.add(wolf, EcsDyingFlag.new())
+	for i in 600:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		if danger.value <= 0.0 and planner.goal != &"flee":
+			break
+
+	energy.value = energy.max_energy
+	var biter := _manager.spawn(_world, _catalog, &"crocodile", at.position + Vector2(1500.0, 0.0))
+	_world.remove(biter, EcsLowBrainComponent)
+	var hit := EcsHit.new()
+	hit.from = biter
+	hit.to = rabbit
+	hit.amount = 5.0
+	(_world.get_singleton(EcsCombatSingleton) as EcsCombatSingleton).hits.append(hit)
+	var bitten := false
+	for i in 30:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		bitten = bitten or brain.state == EcsLowBrainComponent.State.FLEE
+	_check("a bite from something unseen raises danger", danger.value >= danger.flee_at
+		and danger.threat == biter)
+	_check("and sends it off", bitten)
+	_check("the hurt flag is read and cleared", not _world.has(rabbit, EcsHurtFlag))
+
+	for id in [rabbit, biter]:
+		_world.add(id, EcsDyingFlag.new())
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+	EcsConst.world_bounds = bounds
 
 func _actions(ids: Array[StringName]) -> Array[EcsActionDef]:
 	var found: Array[EcsActionDef] = []

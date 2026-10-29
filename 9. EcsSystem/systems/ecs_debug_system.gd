@@ -35,6 +35,7 @@ func run(world: EcsWorld, _delta: float) -> void:
 			"hunger": -1.0,
 			"energy": -1.0,
 			"health": -1.0,
+			"danger": -1.0,
 			# 0 awake, 1 asleep, 2 collapsed.
 			"sleep": 2 if world.has(id, EcsCollapsedFlag)
 				else (1 if world.has(id, EcsAsleepFlag) else 0),
@@ -63,6 +64,9 @@ func run(world: EcsWorld, _delta: float) -> void:
 			row["energy"] = clampf(energy.value / maxf(energy.max_energy, 0.01), 0.0, 1.0)
 		if health != null:
 			row["health"] = clampf(health.value / maxf(health.max_health, 0.01), 0.0, 1.0)
+		var danger := world.get_component(id, EcsDangerComponent) as EcsDangerComponent
+		if danger != null:
+			row["danger"] = danger.value
 		rows.append(row)
 
 	_overlay.show_rows(rows)

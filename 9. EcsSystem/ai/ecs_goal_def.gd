@@ -8,7 +8,8 @@ extends Resource
 @export var id: StringName = &""
 ## Facts it wants to hold: fact -> bool.
 @export var desired: Dictionary = {}
-## The reading it answers: &"eat", &"provision" or &"rest".
+## The reading it answers: &"eat", &"provision", &"rest" or &"flee".
 @export var need: StringName = &""
-## Score scale. The default weights keep the ladder's order: eat > provision > rest.
+## Score scale. The default weights keep the ladder's order: eat > provision > rest,
+## and put flee between eating when starving and eating when merely hungry.
 @export var weight: float = 1.0

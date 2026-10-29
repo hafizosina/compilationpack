@@ -73,6 +73,11 @@ static func score(world: EcsWorld, id: int, goal: EcsGoalDef) -> float:
 			var energy := world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
 			if energy != null:
 				return goal.weight * _urgency(energy.value, energy.rest_at)
+		&"flee":
+			var danger := world.get_component(id, EcsDangerComponent) as EcsDangerComponent
+			if danger != null and danger.value >= danger.flee_at:
+				return goal.weight * (FLOOR + (1.0 - FLOOR)
+					* (danger.value - danger.flee_at) / maxf(1.0 - danger.flee_at, 0.01))
 	return 0.0
 
 static func _urgency(value: float, gate: float) -> float:
@@ -135,6 +140,11 @@ func facts_for(world: EcsWorld, id: int) -> Dictionary:
 				facts[&"food_in_bag"] = true
 				break
 	var hunts := world.has(id, EcsDamageComponent)
+	var danger := world.get_component(id, EcsDangerComponent) as EcsDangerComponent
+	if danger != null and danger.value >= danger.flee_at:
+		facts[&"threat_near"] = true
+	else:
+		facts[&"safe"] = true
 
 	var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
 	if action != null:

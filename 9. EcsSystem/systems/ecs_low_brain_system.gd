@@ -2,7 +2,7 @@ class_name EcsLowBrainSystem
 extends EcsSystem
 
 ## The creature's brain: a state machine (IDLE, WANDER, SEEK_FOOD, TAKE, EAT, SLEEP,
-## HUNT, ATTACK, HARVEST).
+## HUNT, ATTACK, HARVEST, FLEE).
 ## It decides and writes a destination; executors act on the intent flags it
 ## raises in `_set_state()`.
 ##
@@ -53,9 +53,9 @@ func run(world: EcsWorld, delta: float) -> void:
 				_set_state(world, id, brain, EcsLowBrainComponent.State.SLEEP)
 			continue
 
-		# Asleep: stay down until rested or starving.
+		# Asleep: stay down until rested or starving, or the plan is to flee.
 		if brain.state == EcsLowBrainComponent.State.SLEEP:
-			if not _worth_waking_for(world, id):
+			if not _worth_waking_for(world, id) and step != &"flee":
 				continue
 			_release(world, id, brain)
 
@@ -63,6 +63,11 @@ func run(world: EcsWorld, delta: float) -> void:
 		if planned and not _serves(brain.state, step):
 			_abandon_trip(move)
 			_release(world, id, brain)
+
+		# Fleeing: keep running from where the threat was last seen.
+		if brain.state == EcsLowBrainComponent.State.FLEE:
+			_run_from(world, id, move, place)
+			continue
 
 		# Check the current commitment.
 		if brain.state == EcsLowBrainComponent.State.SEEK_FOOD:
@@ -129,7 +134,23 @@ func _try_step(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 			return _try_hunt(world, id, brain, move, place, false)
 		&"sleep":
 			return _try_sleep(world, id, brain, move, false)
+		&"flee":
+			if not world.has(id, EcsDangerComponent):
+				return false
+			_set_state(world, id, brain, EcsLowBrainComponent.State.FLEE)
+			_run_from(world, id, move, place)
+			return true
 	return false
+
+## Sets a fresh trip `radius` away from the danger's last threat.
+func _run_from(world: EcsWorld, id: int, move: EcsMovementComponent,
+		place: EcsPositionComponent) -> void:
+	var danger := world.get_component(id, EcsDangerComponent) as EcsDangerComponent
+	var brain := world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
+	var away := place.position - danger.threat_at
+	if away.is_zero_approx():
+		away = Vector2.RIGHT.rotated(randf() * TAU)
+	_set_trip(move, EcsConst.inside(place.position + away.normalized() * brain.radius))
 
 ## Does `state` carry out plan step `step`? IDLE has nothing to drop.
 static func _serves(state: EcsLowBrainComponent.State, step: StringName) -> bool:
@@ -150,6 +171,8 @@ static func _serves(state: EcsLowBrainComponent.State, step: StringName) -> bool
 			return step == &"hunt" or step == &"attack"
 		EcsLowBrainComponent.State.HARVEST:
 			return step == &"harvest"
+		EcsLowBrainComponent.State.FLEE:
+			return step == &"flee"
 	return false
 
 ## Eat food from the bag or within reach, if hungry enough. Stops any trip.
