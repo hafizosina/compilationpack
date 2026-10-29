@@ -54,10 +54,18 @@ extends EcsSystem
 ## — decide again, highest rung first. A creature that is mid-trip falls out at
 ## the first or second check and costs almost nothing.
 
+## The view `_food` was built from; a different one handed back means the food
+## changed and the index is rebuilt.
+var _food_view: EcsView
+## Everything that is food right now, id -> its EcsPositionComponent. What
+## `_is_food` asks, and where a berry's position is read from.
+var _food: Dictionary = {}
+
 func label() -> StringName:
 	return &"low_brain"
 
 func run(world: EcsWorld, delta: float) -> void:
+	_refresh_food(world)
 	# Only what makes a brain possible is a column. Everything the rungs read
 	# beyond that — hunger, energy, bag, reach, sensor — is optional here and
 	# stays a lookup, since a view has columns only for what all of it carries.
@@ -90,7 +98,7 @@ func run(world: EcsWorld, delta: float) -> void:
 
 		# 1. Does the standing commitment still hold?
 		if brain.state == EcsLowBrainComponent.State.SEEK_FOOD:
-			if not _is_food(world, brain.target):
+			if not _is_food(brain.target):
 				# The thing it was going to is gone — eaten, taken, killed. It
 				# is walking to a spot with nothing in it, so take the trip off
 				# it and let it choose again this same tick. *This* is what the
@@ -195,7 +203,7 @@ func _meal_on_ground(world: EcsWorld, id: int) -> int:
 	var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
 	if action != null:
 		for touched in action.reached:
-			if _is_food(world, touched):
+			if _is_food(touched):
 				return touched
 	return EcsWorld.NO_ENTITY
 
@@ -299,10 +307,10 @@ func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	var best := EcsWorld.NO_ENTITY
 	var best_distance := INF
 	for seen in sensor.perceived:
-		if not _is_food(world, seen):
+		var there: EcsPositionComponent = _food.get(seen)
+		if there == null:
 			continue
-		var there := (world.get_component(seen, EcsPositionComponent) as EcsPositionComponent).position
-		var distance := here.distance_squared_to(there)
+		var distance := here.distance_squared_to(there.position)
 		if distance < best_distance:
 			best_distance = distance
 			best = seen
@@ -310,7 +318,7 @@ func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		return false
 
 	_set_state(world, id, brain, EcsLowBrainComponent.State.SEEK_FOOD, best)
-	_set_trip(move, (world.get_component(best, EcsPositionComponent) as EcsPositionComponent).position)
+	_set_trip(move, (_food[best] as EcsPositionComponent).position)
 	return true
 
 ## Rung 4 — lie down, if nothing above wanted anything.
@@ -380,13 +388,29 @@ func _wander(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 ## A berry someone else took this tick has lost its EcsPositionComponent and is
 ## no longer anywhere; one that was eaten is not alive at all. The sensor's
 ## overlap list is a tick behind and can still name either, so *existence* is
-## re-asked of the components before anything is committed to. How far away it
-## is, by contrast, is the physics server's answer and is not second-guessed.
-func _is_food(world: EcsWorld, id: int) -> bool:
-	if id == EcsWorld.NO_ENTITY or not world.is_alive(id):
-		return false
-	return world.has(id, EcsConsumableComponent) and world.has(id, EcsPositionComponent) \
-		and not world.has(id, EcsDyingFlag)
+## re-asked before anything is committed to. How far away it is, by contrast, is
+## the physics server's answer and is not second-guessed.
+##
+## Asked of `_food`, not of the store. A hungry creature asks it of everything
+## it perceives, and nearly all of that is other animals, so the question has
+## to be cheap to answer "no": one dictionary read, where four calls into the
+## world used to be. A dead id is in no table and so in no view — the old
+## `is_alive` asked nothing the others did not.
+func _is_food(id: int) -> bool:
+	return _food.has(id)
+
+## Rebuilds `_food` when the food view changes — a berry born, eaten, taken, or
+## marked dying — and leaves it alone otherwise. Nothing this system does can
+## change what is food, so it holds for the whole run.
+func _refresh_food(world: EcsWorld) -> void:
+	var food := world.view([EcsConsumableComponent, EcsPositionComponent], [EcsDyingFlag])
+	if food == _food_view:
+		return
+	_food_view = food
+	_food = {}
+	var places := food.column(EcsPositionComponent)
+	for k in food.ids.size():
+		_food[food.ids[k]] = places[k]
 
 ## Ends a commitment. Only the brain's own state and flags — whether the trip
 ## it implied is also called off is a separate decision, made above.
