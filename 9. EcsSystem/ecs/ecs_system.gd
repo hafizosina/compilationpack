@@ -1,10 +1,7 @@
 class_name EcsSystem
 extends RefCounted
 
-## Base for every system. Systems hold ALL behaviour: a system reads components
-## through `world.query()`, writes components, and never calls another system.
-## Coordination happens through shared components and the scheduler's run order
-## — nothing else.
+## Base for every system. Systems hold all behaviour and never call each other.
 
 ## Short name for debug listings.
 func label() -> StringName:

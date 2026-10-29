@@ -1,22 +1,7 @@
 extends CanvasLayer
 
-## Module 9's read-outs, laid out like module 8's: a stats block top-right and a
-## tabbed inspector bottom-left. Each is anchored to its own corner rather than
-## sharing a column, so neither can push or cover the other however tall the
-## inspector grows.
-##
-## The inspector's tabs are not hardcoded and, unlike module 8's, no component
-## had to describe itself to earn one. EcsInspectSystem reflects over whatever
-## components the selected entity carries; this panel just renders the sections
-## it is handed. Adding a component kind adds its tab with no change here and
-## none in the component.
-##
-## Its height is fixed and the fields scroll, so the panel never changes size
-## under the cursor as you switch tabs or entities.
-##
-## The panel holds no reference to an entity or to the world. Counts and
-## snapshots both arrive on the EventBus already formatted, and the respawn
-## button asks for a rebuild the same way.
+## Module 9 HUD: a stats block top-right and a tabbed inspector bottom-left.
+## Renders what arrives on EventBus; holds no reference to the world.
 
 ## Width reserved for the key column so values line up.
 const KEY_WIDTH := 96.0
@@ -47,11 +32,7 @@ func _ready() -> void:
 	inspector_panel.gui_input.connect(_on_inspector_input)
 	_on_entity_inspected({})
 
-## The wheel over the panel belongs to the panel. The scroll list inside it has
-## already had its turn by the time the event bubbles up here; accepting it is
-## what stops the camera zooming as well — a mouse_filter of STOP does not
-## consume wheel events on its own (measured), so the event reached the
-## camera's _unhandled_input even with nothing left to scroll.
+## Consume wheel events over the panel so the camera doesn't zoom.
 func _on_inspector_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index in [
 			MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN,
@@ -64,10 +45,8 @@ func _process(_delta: float) -> void:
 func _on_census(count: int) -> void:
 	count_label.text = "%d entities" % count
 
-## Rebuilds the inspector from a snapshot; an empty dictionary means nothing is
-## selected. Snapshots arrive several times a second, so the tab strip is only
-## rebuilt when the set of sections actually changes — otherwise the tab you are
-## reading would reset under you.
+## Shows a snapshot; empty means nothing selected. Tabs rebuild only when the set
+## of sections changes.
 func _on_entity_inspected(details: Dictionary) -> void:
 	if details.is_empty():
 		_tab_keys = []
@@ -85,8 +64,7 @@ func _on_entity_inspected(details: Dictionary) -> void:
 	name_label.text = "%s   (%s)" % [details.get("name", "—"), details.get("type", "—")]
 
 	if keys != _tab_keys:
-		# Stay on the same section when it survives the rebuild, so clicking
-		# between entities doesn't keep throwing you back to the first tab.
+		# Keep the current tab if it still exists.
 		var wanted := _tab_keys[tabs.current_tab] if _has_valid_tab() else ""
 		_tab_keys = keys
 		tabs.clear_tabs()
@@ -102,9 +80,7 @@ func _on_tab_changed(_tab: int) -> void:
 func _on_respawn_pressed() -> void:
 	EventBus.ecs_respawn_requested.emit()
 
-## One section for the entity's own facts, then one per component exactly as the
-## inspect system reported it — heading, fields and field order all come from
-## the component's own declarations, so nothing here names a component type.
+## The entity section, then one section per component, as sent.
 func _sections_from(details: Dictionary) -> Dictionary:
 	var sections := {}
 	sections["entity"] = {"label": "Entity", "fields": details.get("fields", {})}
@@ -118,9 +94,7 @@ func _sections_from(details: Dictionary) -> Dictionary:
 		}
 	return sections
 
-## Lays the rows out once per field set, then only rewrites their text. A full
-## rebuild several times a second would churn nodes and reset the scroll
-## position out from under whoever is reading.
+## Builds rows once per field set, then only updates their text.
 func _render_current() -> void:
 	if not _has_valid_tab():
 		_clear_rows()
@@ -136,7 +110,7 @@ func _render_current() -> void:
 		_row_keys = keys
 		for field in keys:
 			_row_values[field] = _add_row(field)
-		# A different field set means a different section — start from the top.
+		# New field set: scroll back to the top.
 		scroll.set_deferred("scroll_vertical", 0)
 
 	for field in keys:
@@ -146,8 +120,7 @@ func _render_current() -> void:
 func _has_valid_tab() -> bool:
 	return tabs.current_tab >= 0 and tabs.current_tab < _tab_keys.size()
 
-## Detaches before freeing: queue_free() alone leaves the old rows parented for
-## the rest of the frame, so the panel would briefly show two sections at once.
+## Detaches before freeing so old rows don't show for a frame.
 func _clear_rows() -> void:
 	for child in detail.get_children():
 		detail.remove_child(child)
@@ -167,7 +140,7 @@ func _add_row(key: String) -> Label:
 	var value_label := Label.new()
 	value_label.theme_type_variation = &"SimLabel"
 	value_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	# Long values (the component list) wrap instead of widening the panel.
+	# Long values wrap.
 	value_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	row.add_child(key_label)
 	row.add_child(value_label)

@@ -1,17 +1,8 @@
 class_name EcsSelectionSystem
 extends EcsSystem
 
-## Picking, the selection tag, and the marker that shows it.
-##
-## Module 8 picked with a physics point query against a per-entity Area2D. There
-## are no areas here and no second set of hitboxes to keep in sync — a pick is a
-## distance test over EcsPositionComponent, which is the plan's point about
-## perception and selection both collapsing into queries.
-##
-## Each candidate's hit radius comes from its own sprite, so the clickable area
-## is whatever you can see rather than a constant somebody has to remember to
-## update. Entities overlap freely, so the nearest centre wins; without that,
-## clicking a monkey standing on a berry selects whichever was stored first.
+## Resolves a click to the nearest entity under it, by sprite size, and moves
+## EcsSelectedFlag there. Also draws the selection marker.
 
 var _marker: EcsSelectionMarker
 
@@ -62,9 +53,7 @@ func _draw_marker(world: EcsWorld) -> void:
 		_marker.clear()
 		return
 	var id: int = selected[0]
-	# The ring shows the entity's own body radius. It used to show an attack
-	# reach, which went with the combat layer; EcsBodyComponent is the reading
-	# that still exists, and a berry — which has no body — gets the dot alone.
+	# Ring at the body radius; no body draws just the dot.
 	var shape := world.get_component(id, EcsBodyComponent) as EcsBodyComponent
 	_marker.show_at(
 		(world.get_component(id, EcsPositionComponent) as EcsPositionComponent).position,

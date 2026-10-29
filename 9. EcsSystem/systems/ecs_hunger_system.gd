@@ -1,29 +1,8 @@
 class_name EcsHungerSystem
 extends EcsSystem
 
-## Fullness drains — slower while asleep — and running empty costs health while
-## being well fed mends it.
-##
-## One loop, one field, the ECS-native version of a self-ticking bar: the
-## component is the reading and this is the clock. Module 8 would have put a
-## `_process` on the bar itself and let each creature tick its own; here 4,000
-## creatures are one query and one multiply.
-##
-## It writes health as well as hunger, which is worth being clear about. That is
-## not this system reaching into another's business — **what being empty or full
-## does to you is hunger's rule**, so both halves live with hunger, and what
-## happens when health runs out is EcsHealthSystem's rule and lives there. Each
-## system owns the consequences of the component it is named for, and neither
-## has to know the other exists.
-##
-## Regeneration was argued against while starvation was the only damage source,
-## on the grounds that it would simply undo it. Gating it on `heal_above` is
-## what answers that: mending is not the absence of starving, it is the reward
-## for having eaten, and the band between the two thresholds is a creature that
-## is neither getting better nor worse.
-##
-## An entity with no EcsHealthComponent starves forever without dying. That is
-## not a special case in here; it is the absence of one.
+## Drains fullness (slower while asleep or collapsed). At zero it costs health;
+## above `heal_above` health regenerates.
 
 func label() -> StringName:
 	return &"hunger"
@@ -34,19 +13,13 @@ func run(world: EcsWorld, delta: float) -> void:
 	for k in bars.ids.size():
 		var id := bars.ids[k]
 		var hunger := hungers[k] as EcsHungerComponent
-		# Resting costs less. The condition is the same one EcsEnergySystem uses
-		# to decide whether to drain or restore, and the two must agree about
-		# what "asleep" means — both read the asleep and collapsed flags, and
-		# neither reads the other or the brain.
+		# Slower while asleep; must match EcsEnergySystem's idea of asleep.
 		var drain := hunger.drain
 		if world.has(id, EcsCollapsedFlag) or world.has(id, EcsAsleepFlag):
 			drain *= hunger.asleep_drain_scale
 		hunger.fullness = maxf(hunger.fullness - drain * delta, 0.0)
 
-	# The health half is its own pass over its own view, so health comes as a
-	# column rather than a lookup. An entity with nothing to spend or mend is
-	# simply not in it — it starves forever, and that is not a special case in
-	# here, it is the absence of one.
+	# Second pass: only entities that also have health.
 	var bodies := world.view([EcsHungerComponent, EcsHealthComponent])
 	hungers = bodies.column(EcsHungerComponent)
 	var healths := bodies.column(EcsHealthComponent)
@@ -54,7 +27,6 @@ func run(world: EcsWorld, delta: float) -> void:
 		var hunger := hungers[k] as EcsHungerComponent
 		var health := healths[k] as EcsHealthComponent
 		if hunger.fullness <= 0.0:
-			# Empty, with nothing left to draw on, so it starts costing.
 			health.value = maxf(health.value - hunger.starve_damage * delta, 0.0)
 		elif hunger.fullness >= hunger.heal_above:
 			health.value = minf(health.value + hunger.heal_rate * delta, health.max_health)

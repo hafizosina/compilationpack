@@ -1,31 +1,11 @@
 class_name EcsDebugOverlay
 extends Node2D
 
-## World-space debug gizmos, drawn on the entities themselves: the name, a
-## velocity arrow, a dashed line to the spot the brain picked, fullness, energy
-## and health as bars, a badge on the sprite's shoulder when it is carrying
-## something, and a sleep icon off that shoulder while it sleeps.
-##
-## Shapes rather than numbers, because these are readings you scan a crowd for
-## rather than ones you read. A dozen creatures' worth of "hunger 43%" and
-## "v(62, -34) 151°" is a wall of text parsed one entity at a time; a dozen
-## part-filled bars is a picture taken in at a glance, which is the whole job of
-## an overlay. Where a number is genuinely wanted — the exact velocity, the
-## exact hunger — the inspector has it for the one entity you click, and a
-## vector is better read as the arrow anyway.
-##
-## It does NOT draw bodies. EcsBodyComponent's radius reaches the screen as a
-## real CollisionShape2D under World/Bodies now, so Godot's own Debug > Visible
-## Collision Shapes draws it, and a second hand-rolled circle would only be a
-## copy that can disagree with the shape the physics server is actually using.
-##
-## Dumb on purpose. It holds rows and draws them — it never queries the world,
-## never reads a component and never decides anything. EcsDebugSystem hands it
-## a fresh snapshot each frame, exactly as EcsNodeSyncSystem hands the Sprite2Ds
-## their values. The overlay is a view, like the sprites are.
+## Debug drawing on each entity: name, velocity arrow, line to destination,
+## fullness/energy/health bars, a carried-count badge and a sleep icon.
+## Draws only what EcsDebugSystem sends; never reads the world.
 
-## Half the drawn height of the ~128px art at EcsConst.SPRITE_SCALE — how far a
-## label must sit from an entity's centre to clear its sprite.
+## Half the sprite's drawn height at the default scale.
 const SPRITE_HALF := 64.0 * EcsConst.SPRITE_SCALE
 
 const NAME_COLOR := Color(1.0, 0.98, 0.9, 0.95)
@@ -34,24 +14,18 @@ const BADGE_INK := Color(0.09, 0.07, 0.05, 0.95)
 const VELOCITY_COLOR := Color(0.35, 0.9, 1.0)
 const DESTINATION_COLOR := Color(1.0, 0.45, 0.85)
 
-## Bar colours, taken from the project palette so the overlay reads as part of
-## the same game: health is the palette's blood red, fullness its brass. Both
-## drain in the same direction now — a short bar is bad news on either — so the
-## colour says *which* reading it is, not which way to read it.
+## Bar colours, from the project palette.
 const BAR_BACK := Color(0.165, 0.125, 0.086, 0.7)
 const BAR_EDGE := Color(0.0, 0.0, 0.0, 0.5)
 const HUNGER_COLOR := Color(0.725, 0.541, 0.196)
 const ENERGY_COLOR := Color(0.369, 0.541, 0.18)
 const HEALTH_COLOR := Color(0.62, 0.169, 0.145)
 
-## The sleep icon in parchment for a sleep it chose, in health red for a
-## collapse — the same icon, because both are down, and the colour says which.
+## Sleep icon tint: parchment when asleep, red when collapsed.
 const ASLEEP_COLOR := Color(0.906, 0.839, 0.675, 0.95)
 const COLLAPSED_COLOR := Color(0.85, 0.25, 0.2, 0.95)
 
-## The sleep icon. The art is black line-work, and tinting only multiplies, so
-## black would stay black on dark ground; `_ready` turns a small copy white so
-## the draw call can tint it either colour.
+## The sleep icon. `_ready` makes a white copy so it can be tinted.
 const SLEEP_ICON := preload("res://Global/Asset/Icon/sleep.png")
 const SLEEP_ICON_SIZE := 64
 
@@ -70,7 +44,7 @@ func _ready() -> void:
 			image.set_pixel(x, y, Color(1.0, 1.0, 1.0, image.get_pixel(x, y).a))
 	_sleep_icon = ImageTexture.create_from_image(image)
 
-## Takes this frame's snapshot and asks for a redraw. The only entry point.
+## Takes this frame's rows and redraws.
 func show_rows(rows: Array[Dictionary]) -> void:
 	_rows = rows
 	queue_redraw()
@@ -80,23 +54,18 @@ func clear() -> void:
 	queue_redraw()
 
 func _draw() -> void:
-	# Text and gizmo furniture are sized in world units, so zooming out would
-	# shrink them away. Dividing by the camera's scale keeps them a constant
-	# size on screen at any zoom. The velocity arrow's *length* is deliberately
-	# left alone: it is the velocity, and shrinking with the view is honest.
+	# Divide sizes by the zoom so text and bars stay the same size on screen.
 	var zoom := get_viewport_transform().get_scale().x
 	if zoom <= 0.0:
 		zoom = 1.0
 	var px := 1.0 / zoom
 
-	# Vertical offsets clear the sprite (a world-space distance) and then add a
-	# small screen-space gap, so a label neither overlaps the art when zoomed in
-	# nor floats away from it when zoomed out.
+	# Offsets clear the sprite, plus a small screen-space gap.
 	var above := -SPRITE_HALF - 10.0 * px
 	var left := -110.0 * px
 	var width := 220.0 * px
 
-	# Bars sit directly under the sprite, above the text, centred on the entity.
+	# Bars under the sprite, above the text.
 	var bar_width := 46.0 * px
 	var bar_height := 5.0 * px
 	var bar_left := -bar_width * 0.5
@@ -107,9 +76,7 @@ func _draw() -> void:
 
 		_label(pos + Vector2(left, above), String(row["name"]), 13.0 * px, width, NAME_COLOR)
 
-		# Only what the entity actually has. A berry carries neither bar and a
-		# bush carries no bag, and each simply draws nothing — the absence is
-		# the statement, the same way the missing velocity line below is.
+		# Draw only the bars the entity has.
 		var stacked := bar_top
 		var hunger: float = row["hunger"]
 		if hunger >= 0.0:
@@ -126,27 +93,16 @@ func _draw() -> void:
 			_bar(pos + Vector2(bar_left, stacked), health, bar_width, bar_height,
 				HEALTH_COLOR, px)
 
-		# A badge on the sprite's top-left shoulder, and only when there is
-		# something in the bag: an empty one is the common case and a "0" on
-		# every creature is noise. Nothing shown therefore means either empty
-		# hands or no inventory at all, which for scanning a crowd is the same
-		# fact — neither one is carrying anything.
-		# The shoulder is the corner of the sprite actually drawn: blueprints
-		# scale their own art, so the nominal half-size would float a marker
-		# off a small rabbit into empty grass.
+		# Carried-count badge on the sprite's top-left corner, only when carrying.
 		var shoulder := SPRITE_HALF * float(row["sprite_scale"])
 		var carried: int = row["carried"]
 		if carried > 0:
 			_badge(pos + Vector2(-shoulder, -shoulder), carried, px)
 
-		# Asleep: the icon off the top-left shoulder — left of where the bag
-		# badge sits so a sleeping carrier shows both, and below the name line
-		# so the two never overlap.
+		# Sleep icon left of the badge, below the name.
 		var sleep: int = row["sleep"]
 		if sleep > 0 and _sleep_icon != null:
-			# Sized off the sprite, in world units, so it zooms with the animal
-			# it belongs to rather than holding a fixed size on screen the way
-			# the text and bars do.
+			# Sized in world units, so it zooms with the sprite.
 			var icon := shoulder * 0.9
 			var icon_at := pos + Vector2(-shoulder * 1.25 - icon, -shoulder * 1.3)
 			draw_texture_rect(_sleep_icon, Rect2(icon_at, Vector2(icon, icon)), false,
@@ -155,7 +111,7 @@ func _draw() -> void:
 		if not row["has_movement"]:
 			continue
 
-		# Where it is heading: dashed line to the destination, ring on the spot.
+		# Dashed line and ring at the destination.
 		if row["has_destination"]:
 			var dest: Vector2 = row["destination"]
 			draw_dashed_line(pos, dest, DESTINATION_COLOR, 1.0 * px, 6.0 * px)
@@ -165,9 +121,7 @@ func _draw() -> void:
 			draw_line(dest + Vector2(0.0, -13.0 * px), dest + Vector2(0.0, 13.0 * px),
 				DESTINATION_COLOR, 1.0 * px)
 
-		# Which way it is actually moving. The arrow *is* the vector — its
-		# direction is the heading and its length is the speed — so the numbers
-		# that used to sit under it said nothing the picture did not.
+		# Velocity arrow.
 		var velocity: Vector2 = row["velocity"]
 		if velocity.length() > 0.01:
 			var head := pos + velocity * 0.35
@@ -176,8 +130,7 @@ func _draw() -> void:
 			draw_line(head, head + barb.rotated(0.45), VELOCITY_COLOR, 2.0 * px)
 			draw_line(head, head + barb.rotated(-0.45), VELOCITY_COLOR, 2.0 * px)
 
-## One bar: a dark trough, a fill proportional to `ratio`, and an outline to
-## keep it legible over pale ground. Sizes arrive already scaled for the camera.
+## One bar filled to `ratio`. Sizes are already zoom-scaled.
 func _bar(at: Vector2, ratio: float, width: float, height: float,
 		fill: Color, px: float) -> void:
 	var box := Rect2(at, Vector2(width, height))
@@ -192,8 +145,7 @@ func _badge(at: Vector2, count: int, px: float) -> void:
 	draw_circle(at, radius, BAG_COLOR)
 	draw_arc(at, radius, 0.0, TAU, 16, BADGE_INK, 1.0 * px)
 	var size := 10.0 * px
-	# draw_string puts the baseline on `at`, so nudge down by roughly a third of
-	# the glyph height to sit the digit in the middle of the disc.
+	# Nudge down to centre the digit on the disc.
 	_label(at + Vector2(-radius, size * 0.36), str(count), size, radius * 2.0, BADGE_INK)
 
 ## One line of centred text. Sizes arrive already scaled for the camera.

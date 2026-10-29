@@ -1,8 +1,7 @@
 class_name EcsEntityCatalog
 extends Resource
 
-## The blueprint book: id -> EcsEntityDef. Kept separate from the placement list
-## so thirty rabbits do not each repeat their component block.
+## Every blueprint, looked up by id.
 
 ## Every blueprint this world can spawn.
 @export var defs: Array[EcsEntityDef] = []:
@@ -13,8 +12,7 @@ extends Resource
 var _index: Dictionary = {}
 var _index_built: bool = false
 
-## The blueprint registered under `id`, or null with an error pushed. Never
-## crashes the spawn loop.
+## The blueprint with id `wanted`, or null with an error pushed.
 func get_def(wanted: StringName) -> EcsEntityDef:
 	if not _index_built:
 		_rebuild_index()

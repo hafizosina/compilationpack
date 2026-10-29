@@ -1,45 +1,22 @@
 class_name EcsSpawnerComponent
 extends EcsComponent
 
-## Periodically puts another entity into the world nearby — a berry bush
-## dropping berries.
-##
-## Compare module 8's SimEntitySpawnerComponent, which did this itself in
-## `_process` and found the factory through a group lookup. Here the component
-## is the *settings*, and EcsSpawnerSystem is the doing. What it spawns is a
-## blueprint id, so a spawner produces anything in the catalog with no code
-## change — that part module 8 already had right.
+## Periodically spawns an entity nearby, like a bush dropping berries.
 
-## Blueprint id to spawn, looked up in the EcsEntityCatalog.
+## Blueprint id to spawn.
 @export var spawns: StringName = &"berry"
-## Spawns land at a random point within this radius of the spawner.
+## Spawns land within this radius.
 @export var radius: float = 260.0
 ## Seconds between spawns.
 @export var interval: float = 2.0
-## Ceiling on how many of this spawner's entities may be lying on the ground at
-## once. Without a cap a one-every-two-seconds spawner litters without bound.
-##
-## It counts *loose* ones, not held ones: a berry in someone's inventory has no
-## EcsPositionComponent, so it stops counting here and the bush resumes. Nothing
-## tells the spawner a berry was picked up — the same missing component that
-## un-renders it also un-counts it.
+## Most of its spawns that may be on the ground at once.
 @export var max_loose: int = 12
 
-## Seconds until the next spawn. Runtime state.
+## Seconds until the next spawn.
 var cooldown: float = 0.0
-## Notes handed to EcsEntityManager and not yet fulfilled.
-##
-## Spawning is no longer something this spawner does itself, so the id does not
-## come back in the same tick it is asked for. The note does: the spawner keeps
-## it here, and harvests `born` off it on the following tick. One tick of delay
-## before a berry appears, and nothing else changes.
+## Spawn requests not yet fulfilled.
 var pending: Array[EcsSpawnRequest] = []
-## Entity ids this spawner has produced and that are still alive.
-##
-## Module 8 kept node references here and pruned with `is_instance_valid()`.
-## Ids are better: they are never reused, so a harvested berry's id goes
-## permanently false through `world.is_alive()` and can never be confused with
-## a later entity that happens to occupy the same memory.
+## Ids of its spawns that are still alive.
 var spawned: Array[int] = []
 
 func key() -> StringName:

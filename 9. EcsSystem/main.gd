@@ -1,117 +1,23 @@
 extends Node2D
 
-## Module 9 entry point — a hand-rolled ECS, stripped to the smallest thing that
-## still runs, so the shape of a frame is readable end to end.
+## Module 9 entry point. Builds the world from world1.tres and runs the system
+## pipeline (see `_build()`) on every physics tick.
 ##
-## Everything on screen is a row in an EcsWorld: an entity is an integer id, a
-## component is a field-only Resource, and every behaviour is an EcsSystem that
-## queries for the components it cares about. The Sprite2Ds under World/Entities
-## and the ring beside them are views the systems write, not the entities. An
-## `entity_<id>` node is a container, never an entity: no script, no data, and
-## nothing is ever read back off it.
-##
-## A component can declare that it implies a node — `const NODE_KIND` on
-## EcsSpriteComponent and EcsBodyComponent — and EcsEntityManager reads those
-## declarations at spawn to build exactly the nodes an entity needs. It never
-## switches on a component type, so a new node-backed component is a new
-## constant and no edit here.
-##
-## Left-click an entity to inspect it in the bottom-left panel; click bare
-## ground to clear. A click is not handled here beyond being written to the
-## selection singleton — a system resolves it on the next tick, so the rule that
-## only a system reads the world and writes components holds for input too.
-##
-## The whole flow, in the order it happens:
-##
-##   world1.tres  ──►  EcsEntityManager ──►  EcsWorld       (once, at startup)
-##   (placements)      (resolves each row     (ids + component
-##                      against catalog.tres,  tables)
-##                      builds the nodes)
-##
-##   the nodes are grouped per entity, and hold nothing:
-##
-##     World/Entities/entity_7/Sprite2D
-##                             Area2dForBody      ← soft collision
-##                             Area2dForSensor    ← what it can see
-##                             Area2dForAction    ← what it can reach
-##
-##   every tick, EcsScheduler runs these systems over that world, in order:
-##
-##     lifecycle  births and deaths    → the only stage that creates or frees
-##     spawner    asks for a berry     → writes a note to the lifecycle inbox
-##     hunger     fullness drains      → writes EcsHunger/EcsHealthComponent
-##     energy     tires, rests, collapses → writes EcsEnergy/EcsCollapsedFlag
-##     health     and death at zero    → writes EcsDyingFlag
-##     sensor     what can it see/reach→ writes EcsSensor/EcsActionComponent  [20 Hz]
-##     low_brain  decides, and remembers → writes EcsMovementComponent + intent flags [20 Hz]
-##     consume    carries out "eat"    → writes EcsHunger/EcsInventory, EcsDyingFlag
-##     movement   walks toward it      → writes EcsPositionComponent
-##     collision  unstacks the bodies  → writes EcsPositionComponent
-##                (the Area2Ds it reads overlaps off are a derived index only)
-##     pickup     carries out "take"   → writes EcsInventoryComponent, EcsDyingFlag
-##     drop       a dead carrier's bag → writes notes to the lifecycle inbox
-##     selection  resolves a click     → writes EcsSelectedFlag
-##     node_sync  draws where it ended → writes each entity_<id> container
-##     debug      reports all of it    → writes the on-entity overlay
-##     census     counts the world     → emits on the EventBus
-##     inspect    reflects the selected → emits on the EventBus
-##
-## Perception is physics, not arithmetic: an entity sees what its sensor area
-## overlaps and can pick up what its action area touches, both culled by Godot's
-## broadphase in C++ rather than by measuring to every entity in GDScript. Only
-## bodies carry a collision layer, so sensors are never reported to each other.
-##
-## Deciding is one stage, not a rung each. EcsLowBrainSystem is a small state
-## machine — idle, wander, seek food — holding its state and its target on
-## EcsLowBrainComponent, so a decision survives the tick that made it. Read
-## low_brain, movement and node_sync in that order and you have seen every
-## behaviour. The last three stages are pure readers: pull debug, census or
-## inspect out of the chain and the simulation does not notice.
-##
-## Structure is separated from behaviour on purpose. EcsEntityManager is the
-## only thing that creates or destroys an entity, its data or its nodes, and it
-## does so at one instant — the lifecycle stage — so no system ever changes the
-## shape of the world while another is walking it. Everything after that stage
-## only ever writes values.
-##
-## Keys:
-##   F1  show/hide the on-entity debug overlay
-##   F5  rebuild the world from data — edit world1.tres or a blueprint,
-##       press F5, and see the change with no code touched.
+## Left-click selects an entity for the inspector. F1 toggles the debug overlay,
+## F5 rebuilds the world from data.
 
-## Ticks between runs for the stages that do not need 60 Hz — 3 is 20 Hz.
-##
-## Perception and deciding are the two most expensive stages and the two least
-## sensitive to being late: a sensor list is already a tick stale, and a
-## creature that takes 50 ms to notice something is a creature. Movement,
-## collision and node_sync stay at every tick, because those are what the eye
-## actually watches — this is why the rate is per stage and not one global sim
-## clock, which would buy the same time and make the picture stutter.
-##
-## The two run on different phases so they never share a tick. That keeps the
-## frame even, and it puts the brain one tick *after* the sensor, which is the
-## same freshness it had at full rate.
+## Ticks between runs for sensor, low_brain and health (3 = 20 Hz).
 const SLOW: int = 3
 
-## Ticks between runs for hunger and energy — 6 is 10 Hz.
-##
-## The bars are almost all lookup and change slowly, so a tenth of a second
-## late is invisible. Banked delta keeps every drain and heal rate exact; what
-## moves is when a threshold is noticed — a collapse, or starving — and the
-## state a run sees (asleep, moving) is charged for the whole tenth.
-##
-## They take the two ticks SLOW leaves free, 2 and 5, so no bar shares a tick
-## with the sensor or the brain. Health is the threshold for both, so it runs
-## at SLOW on phase 2 — ticks 2 and 5, after whichever bar just ran — and a
-## death from either is seen the tick it is caused, not one cycle later.
+## Ticks between runs for hunger and energy (6 = 10 Hz). Phases are chosen so no
+## slow stages share a tick.
 const BARS: int = 6
 
 ## Blueprint book to resolve placement `type` ids against.
 @export var catalog: EcsEntityCatalog
 ## Placement list describing what to spawn and where.
 @export var world_def: EcsWorldDef
-## Playable extents, in global pixels. Adopted as the wander bounds at startup,
-## so moving the ground plate moves where things drift.
+## Playable area in global pixels; also the wander bounds.
 @export var arena: Rect2 = Rect2(-1600.0, -840.0, 3200.0, 1680.0)
 
 @onready var _entities_root: Node2D = $World/Entities
@@ -125,24 +31,19 @@ var _manager: EcsEntityManager
 
 func _ready() -> void:
 	EcsConst.world_bounds = arena
-	# The manager outlives any one world: it is what frees the previous world's
-	# nodes when F5 builds the next one. Everything it makes hangs under one
-	# parent, grouped per entity — World/Entities/entity_<id>/{Sprite2D, ...}.
+	# The manager outlives each world, so it can free the old nodes on F5.
 	_manager = EcsEntityManager.new(_entities_root)
 	EventBus.ecs_respawn_requested.connect(_build)
 	_build()
 
-## The pipeline runs on the physics tick, not the render frame. Two reasons:
-## a simulation wants a fixed timestep, and EcsCollisionSystem reads overlaps
-## the physics server refreshes once per tick — running faster than that would
-## just re-read the same answer.
+## Runs on the physics tick: a fixed timestep, and overlaps refresh once per tick.
 func _physics_process(delta: float) -> void:
 	_scheduler.run_all(_world, delta)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed \
 			and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
-		# Recorded, not resolved. EcsSelectionSystem drains this next tick.
+		# Resolved by EcsSelectionSystem next tick.
 		var selection := _world.get_singleton(EcsSelectionSingleton) as EcsSelectionSingleton
 		selection.pending = true
 		selection.pick_at = get_global_mouse_position()
@@ -153,20 +54,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	match (event as InputEventKey).keycode:
 		KEY_F1:
-			# Visibility is view state, not component data, so this is the one
-			# thing a key may change directly.
 			_debug_overlay.visible = not _debug_overlay.visible
 			get_viewport().set_input_as_handled()
 		KEY_F5:
 			_build()
 			get_viewport().set_input_as_handled()
 
-## Builds a fresh world and the pipeline that runs it. The scheduler's order is
-## the whole story of a frame, which is why it is one readable chain: decide
-## where to go, then go there, then fix up where that actually left everyone,
-## then draw the result. EcsLowBrainSystem is named for
-## its rank, not its behaviour: the plan's planner goes *above* it later and
-## writes the same destination field.
+## Builds a fresh world and the pipeline. The system order is the frame order.
 func _build() -> void:
 	if _collision != null:
 		_collision.clear()
@@ -204,15 +98,7 @@ func _build() -> void:
 	if Constant.DEBUG:
 		_debug_report()
 
-## Prints what spawned. Speed is shown because it is authored in two places —
-## the blueprint's default and a placement override on every animal — so the
-## listing makes the per-instance copy visible without opening the .tres.
-##
-## Ten different numbers in that column is the proof that matters: components
-## are deep-copied per entity, and if that ever broke, every animal of a type
-## would report the same speed. It used to be one deliberately crawling rabbit
-## making the same point more loudly; now the whole column says it, and the
-## individuals read as individuals while they are at it.
+## Prints what spawned, with each entity's speed.
 func _debug_report() -> void:
 	print("[ecs] %d entities from %d placements"
 		% [_world.entity_count(), world_def.entries.size()])

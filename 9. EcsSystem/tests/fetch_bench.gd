@@ -1,31 +1,12 @@
 extends Node
 
-## What fetching components costs, with nothing else in the way. Twenty
-## skeleton systems, each asking for a random set of the module's real
-## components, each walking every entity that has them: `query()`, then `has()`
-## and `get_component()` per required type per entity, and no logic at all.
-## Whatever a skeleton costs is the store's cost, so this is the floor every
-## real system pays before it does any work.
+## Measures what fetching components costs. Twenty skeleton systems each query a
+## random set of components and fetch them, with no logic. No nodes or physics.
 ##
-## Run it:
-##   GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
-##   "$GODOT" --headless --path . "res://9. EcsSystem/tests/fetch_bench.tscn"
 ##   "$GODOT" --headless --path . "res://9. EcsSystem/tests/fetch_bench.tscn" -- --n=4000 --systems=20 --density=0.7 --seed=1
 ##
-## Entities are not spawned through the manager — no blueprints, no nodes, just
-## ids in an EcsWorld with components added directly — so physics, sprites and
-## the scene tree cost nothing here. Each entity carries each component with
-## probability `--density`, so a system asking for more types matches fewer
-## entities, the way a real query narrows. The seed fixes both the world and
-## each system's requirements, so two runs are the same question.
-##
-## Each system is timed four ways over the same ticks:
-##   total — its run(): query, then has + get per required type per entity
-##   query — query() alone
-##   loop  — walking those ids and types with no call inside, the floor
-##   has   — the has() calls alone, over the ids query returned, minus loop
-##   get   — the get_component() calls alone, over the same ids, minus loop
-##   rest  — total minus all four; near zero, and noise if it is not
+## `--density` is the chance each entity has each component. Columns: total
+## (run()), query, loop (bare iteration), has, get, rest (should be near zero).
 
 ## Every component type the module has. A skeleton picks its requirements from these.
 var TYPES: Array[Script] = [
@@ -47,8 +28,7 @@ var SYSTEMS: int = 20
 var DENSITY: float = 0.7
 var SEED: int = 1
 
-## A system with no behaviour: the loop every real system opens with, and
-## nothing after it.
+## A system that only queries and fetches.
 class SkeletonSystem extends EcsSystem:
 	var name: StringName
 	var required: Array[Script] = []
@@ -119,15 +99,8 @@ func _ready() -> void:
 	_compare_views(world, systems)
 	get_tree().quit(0)
 
-## Each skeleton whole, written the old way and through a cached view, so the
-## number is what one bare-bones system costs per tick either way.
-##
-##   query+has+get — the skeleton's run(): query, then has and get per type
-##   query+get     — the same without has, which query already answered
-##   view, kept    — world.view() handing back the cached view, then reading
-##                   every column; the tick nothing was born or died
-##   view, rebuilt — the same with the cache emptied first, so view() runs the
-##                   query and fills the columns; the tick something did
+## Each skeleton timed whole: query+has+get, query+get, a cached view, and a
+## view rebuilt every time.
 func _compare_views(world: EcsWorld, systems: Array[SkeletonSystem]) -> void:
 	var views: Dictionary = world.get(&"_views")
 	print("")
@@ -189,21 +162,8 @@ func _compare_views(world: EcsWorld, systems: Array[SkeletonSystem]) -> void:
 		% [1000.0 * sums[0] / ents_all, 1000.0 * sums[1] / ents_all,
 			1000.0 * sums[2] / ents_all, 1000.0 * sums[3] / ents_all])
 
-## The same gets every skeleton makes, fetched four ways, all twenty systems
-## together. Each is timed over the ids its query returned, with a bare loop of
-## the same shape subtracted, so what is left is the fetch alone.
-##
-##   world.get_component — what every system calls today
-##   fixed get_component — the same two lookups without `_store.get(type, {})`,
-##                         whose `{}` is built on every call whether it is
-##                         needed or not
-##   table once          — the system takes each type's table once per run
-##                         and indexes it itself: one lookup per get, no call
-##   gathered refs       — the references already sitting in arrays, as a
-##                         cached view would hand them over; no lookup at all
-##
-## It reads EcsWorld's private `_store` to price the last three without
-## changing EcsWorld first. A probe, not a pattern.
+## The same gets, fetched four ways: get_component, a fixed get_component, the
+## table looked up once, and pre-gathered references. Reads `_store` directly.
 func _compare_gets(world: EcsWorld, systems: Array[SkeletonSystem], gets: int) -> void:
 	var store: Dictionary = world.get(&"_store")
 	var ids_of: Array = []
@@ -303,8 +263,7 @@ func _fixed_get(store: Dictionary, id: int, type: Script) -> EcsComponent:
 		return null
 	return (table as Dictionary).get(id)
 
-## N entities, each carrying each component type with probability DENSITY. At
-## least one, so no entity is an id with nothing filed against it.
+## N entities, each with each component at probability DENSITY (at least one).
 func _populate(rng: RandomNumberGenerator) -> EcsWorld:
 	var world := EcsWorld.new()
 	for i in N:
@@ -330,9 +289,7 @@ func _make_systems(rng: RandomNumberGenerator) -> Array[SkeletonSystem]:
 		made.append(system)
 	return made
 
-## One system, timed whole and then in parts, each averaged over SAMPLE ticks.
-## The parts walk the same ids the query returns, so has and get are priced on
-## exactly the calls run() makes.
+## Times one system whole and in parts, averaged over SAMPLE ticks.
 func _time(world: EcsWorld, system: SkeletonSystem) -> Dictionary:
 	for i in WARMUP:
 		system.run(world, 0.0)

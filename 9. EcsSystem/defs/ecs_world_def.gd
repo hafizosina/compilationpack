@@ -1,8 +1,7 @@
 class_name EcsWorldDef
 extends Resource
 
-## The placement list — one world, authored as data. Blueprints live in the
-## catalog; this file only says what goes where.
+## The placements that make up one world.
 
 ## Every entity in this world, one row each.
 @export var entries: Array[EcsPlacement] = []

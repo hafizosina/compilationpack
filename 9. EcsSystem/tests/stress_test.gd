@@ -1,79 +1,39 @@
 extends Node2D
 
-## How many entities module 9 carries before a tick costs more than it can
-## afford. Ramps the population, runs the real pipeline over it, and reports the
-## per-tick cost and the frame rate that implies.
+## Population ramp: how many entities the simulation handles before a tick costs
+## more than the budget. Simulation only; nothing is drawn.
 ##
-## Run it:
-##   GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 ##   "$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"
 ##
-## **It measures the simulation, not the frame.** Headless draws nothing, so
-## these numbers are the scheduler's cost alone: the entity count at which the
-## *sim* can no longer keep up. A windowed run also pays for drawing the
-## sprites, so the real frame rate at any of these counts is lower, never
-## higher.
-##
-## Entities are laid out on a jittered grid at a fixed spacing rather than
-## scattered in a fixed arena. Crowding, not population, is what makes collision
-## and perception expensive — pack 6400 entities into the shipped arena and the
-## answer says more about the stacking than about the system. Fixed spacing
-## keeps each entity's neighbourhood the same size as the population grows, so
-## the curve below is the cost of *more entities*, which is the question.
+## Entities sit on a jittered grid at fixed spacing, so density stays constant
+## as the population grows.
 
 ## The delta handed to every system, matching a 60 Hz physics step.
 const TICK: float = 1.0 / 60.0
 ## Population steps. The ramp stops as soon as a tick crosses the budget.
 const SIZES: Array[int] = [1, 10, 25, 50, 100, 200, 400, 800, 1200, 1600, 2000,
 	2400, 2800, 3200, 4000, 4800, 6400, 8000, 9600]
-## Pixels between entities, and the one knob that separates *population* from
-## *crowding*. Above the largest body (36) so nothing is born permanently
-## overlapping; below the smallest sensor (280) so everything has neighbours to
-## perceive. The arena is sized from it — sqrt(n) columns at this spacing — so
-## the area already grows with the population and density is what stays fixed.
-##
-## Override it to ask the other question:
-##
-##   "$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn" -- --spacing=180
-##
-## Ids in perception scale with density x pi r squared, so doubling this should
-## quarter what the sensor returns per entity. Whether the ceiling moves by the
-## same factor is the measurement.
+## Pixels between entities. Override with `-- --spacing=180`.
 const DEFAULT_SPACING: float = 90.0
 
 ## Resolved from the command line at startup; DEFAULT_SPACING when absent.
 static var SPACING: float = DEFAULT_SPACING
 
-## `--n=4000` measures one population instead of walking the ramp. For probing
-## a single point repeatedly without paying for the whole curve.
+## `--n=4000` measures one population instead of the whole ramp.
 static var ONLY_N: int = 0
 
-## `--skip=hunger,health,consume` leaves those stages out of the pipeline, by
-## label. The point is to add systems one at a time and watch whether the
-## *other* stages move — a stage that gets slower when an unrelated one is added
-## is not paying for its own work.
+## `--skip=hunger,health,consume` leaves those stages out, by label.
 static var SKIP := PackedStringArray()
 
-## `--fullness=50` starts every animal at that fullness instead of full. A fed
-## animal skips every food rung, so the default world never exercises the
-## brain's food search. At 50 both kinds are below `forage_below` (rabbit 65,
-## monkey 70) and above the monkey's `eat_below` (40), so every animal looks for
-## food: `_try_seek_food` walks everything its sensor returns, and the stress
-## world has no berries, so it never finds any and rescans every brain tick —
-## the worst case for that loop. Below 0 means "leave it at the blueprint's".
+## `--fullness=50` starts every animal at that fullness, so they all look for
+## food. Below 0 keeps the blueprint's value.
 static var FULLNESS: float = -1.0
 
-## `--every=sensor:3:0,low_brain:3:1` runs those stages at main.gd's rates —
-## `label:every:phase`, the same two numbers EcsScheduler.add() takes — with
-## delta banked the way the scheduler banks it. Without it every stage runs
-## every tick, which is the cost of a stage, not of the game's tick. A stage's
-## column is then its average over the sample, so a stage at every=6 shows a
-## sixth of its cost, and `peak ms` is the heaviest single tick, which is what
-## the phases are there to keep down.
+## `--every=sensor:3:0,low_brain:3:1` runs stages at `label:every:phase` rates,
+## like EcsScheduler.add(). Without it every stage runs every tick.
 static var RATES: Dictionary = {}
 
-## Reads `-- --spacing=N` off the command line. Godot hands everything after the
-## bare `--` to the game, so the test can be swept without editing it.
+## Reads the flags after `--` on the command line.
 static func _resolve_spacing() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--spacing="):
@@ -101,8 +61,7 @@ const BUDGET_MS: float = 250.0
 var _world: EcsWorld
 var _manager: EcsEntityManager
 var _systems: Array[EcsSystem] = []
-## Each stage's rate, phase and banked delta, parallel to _systems — the
-## scheduler's bookkeeping, kept here so each stage can still be timed alone.
+## Each stage's rate, phase and banked delta, parallel to _systems.
 var _every := PackedInt32Array()
 var _phase := PackedInt32Array()
 var _accum := PackedFloat32Array()
@@ -111,13 +70,11 @@ var _overlay: EcsDebugOverlay
 var _marker: EcsSelectionMarker
 var _entities: Node2D
 var _catalog: EcsEntityCatalog
-## True while the counting pass runs, so each stage's store traffic is filed
-## under its own label.
+## True during the counting pass, so traffic is filed under each stage.
 var _counting: bool = false
 
 const CountingWorld := preload("res://9. EcsSystem/tests/ecs_counting_world.gd")
-## Ticks the counting pass averages over. A multiple of 6 so a stage at
-## every=3 or every=6 is counted a whole number of times.
+## Ticks the counting pass averages over. A multiple of 6.
 const COUNT_TICKS: int = 12
 
 func _ready() -> void:
@@ -178,17 +135,8 @@ func _ready() -> void:
 		_report_split(worst, traffic, units)
 	get_tree().quit(0)
 
-## Splits the per-entity floor into query, component fetch, and the actual work,
-## using EcsMovementSystem as the probe because it is the purest per-entity
-## stage in the pipeline: two components in, one position out, no neighbours.
-##
-## This exists to put a number on HANDOFF.md §15's data-structure argument.
-## Dictionary-of-dictionaries pays for `query()` building an id list and then two
-## hashed `get_component` lookups per entity; archetype or packed-array storage
-## would replace both with walking arrays that are already in the right order.
-## The fourth measurement is that ceiling: the identical arithmetic over
-## pre-gathered component references, which is what "the fetch is free" would
-## cost.
+## Splits movement's per-entity cost into query, fetch and work, and times the
+## same maths over pre-gathered references.
 func _probe_access(result: Dictionary) -> void:
 	if result.is_empty():
 		return
@@ -214,8 +162,6 @@ func _probe_access(result: Dictionary) -> void:
 			sink += move.speed + here.position.x
 		fetch_us += float(Time.get_ticks_usec() - began)
 
-	# Gathered once, then walked — the shape archetype storage would hand a
-	# system for free.
 	var moves: Array[EcsMovementComponent] = []
 	var places: Array[EcsPositionComponent] = []
 	for id in _world.query([EcsPositionComponent, EcsMovementComponent]):
@@ -239,10 +185,7 @@ func _probe_access(result: Dictionary) -> void:
 				move.velocity = Vector2.ZERO
 				move.time_left = 0.0
 				continue
-			# Mirrors the trip clock in EcsMovementSystem. It has to: this
-			# block is only worth timing while it is the same arithmetic the
-			# real stage does, and the moment it drifts the µs/entity below
-			# stops being comparable to the stage above it.
+			# Must match EcsMovementSystem's trip clock.
 			if move.time_left <= 0.0:
 				move.time_left = to_go.length() / maxf(move.speed, 0.01) \
 					* move.timeout_slack + move.timeout_grace
@@ -272,11 +215,7 @@ func _probe_access(result: Dictionary) -> void:
 		print("[stress]   => access overhead is %.0f%% of the stage (%.2f of %.2f ms)"
 			% [100.0 * (full - pk) / full, full - pk, full])
 
-## What one store call costs, measured on the plain world the ramp just timed,
-## in this sitting. The counting pass says how many calls each stage makes;
-## these say what each one costs. `loop` is one bare iteration over an id list;
-## the others are one call *on top of* that iteration, cast included, because
-## systems always cast what they fetch.
+## The cost of one loop iteration and of each store call, measured now.
 func _unit_costs() -> Dictionary:
 	var ids := _world.query([EcsPositionComponent])
 	var n := ids.size()
@@ -323,11 +262,7 @@ func _unit_costs() -> Dictionary:
 		"alive": maxf(alive_us / rounds / n - loop, 0.0),
 	}
 
-## Rebuilds a world of `n` on the counting world, lets it settle exactly as the
-## timed run did, then counts each stage's store traffic over a few ticks and
-## returns it per tick. A separate world, so its counting cannot slow the
-## timings being divided up; the same size, grid and warmup, so the traffic is
-## the same traffic.
+## Counts each stage's store calls per tick on a separate counting world of `n`.
 func _count_traffic(n: int) -> Dictionary:
 	_manager.clear()
 	_world = CountingWorld.new()
@@ -356,19 +291,8 @@ func _count_traffic(n: int) -> Dictionary:
 		per_tick[label] = averaged
 	return per_tick
 
-## Every stage's measured time, divided into what it spent asking the store and
-## walking the answer, and what it spent doing its job.
-##
-##   query  — world.query() calls, timed directly in the counting pass
-##   loop   — ids walked x the cost of one bare iteration
-##   fetch  — get_component / has / is_alive calls x their measured unit cost
-##   logic  — the rest: the stage's own arithmetic and decisions, and any
-##            engine calls it makes (overlap reads, node writes)
-##
-## query, loop and fetch are the ECS bookkeeping; logic is the work. The first
-## two columns are measured; loop and fetch are counts priced by unit costs, so
-## they are estimates, and logic is whatever remains. A tiny stage can come out
-## slightly negative, which reads as "all bookkeeping, within noise".
+## Splits each stage's time into query, loop, fetch (counted calls times unit
+## cost) and logic (the rest). A tiny negative logic means all bookkeeping.
 func _report_split(result: Dictionary, traffic: Dictionary, units: Dictionary) -> void:
 	if units.is_empty():
 		return
@@ -448,9 +372,7 @@ func _measure(n: int) -> Dictionary:
 		"work": _work_done(n),
 	}
 
-## What the pipeline actually chewed on this tick, so a stage's cost can be read
-## per unit of work instead of per entity. Most stages here are not paying for
-## the entity, they are paying for its neighbours.
+## How many ids the areas returned, to price stages per unit of work.
 func _work_done(n: int) -> Dictionary:
 	var perceived: int = 0
 	var reached: int = 0
@@ -473,15 +395,9 @@ func _work_done(n: int) -> Dictionary:
 		"overlaps_each": float(overlaps) / maxi(bodies, 1),
 	}
 
-## The pipeline main.gd builds, in the same order. The two views it needs are
-## real nodes but inert: the overlay is hidden, so EcsDebugSystem returns early
-## exactly as it does with F1 off, which is how anyone measuring anything would
-## be running.
+## The same pipeline as main.gd. The overlay is hidden, as with F1 off.
 func _build_pipeline() -> void:
-	# Built once and reused. These used to be created per population and added
-	# to the tree without ever being freed, so a ramp of thirteen sizes left
-	# thirteen overlays and thirteen markers behind — measurement litter that
-	# grows as the ramp goes on, which is exactly the wrong direction.
+	# Built once and reused across populations.
 	if _overlay == null:
 		_overlay = EcsDebugOverlay.new()
 		_overlay.visible = false
@@ -524,8 +440,7 @@ func _build_pipeline() -> void:
 		_phase.append(rate.y)
 		_accum.append(0.0)
 
-## One tick, timing each stage. Same call sequence as EcsScheduler.run_all —
-## unrolled only so the cost can be attributed. A stage not due this tick costs 0.
+## One tick, timing each stage. A stage not due this tick costs 0.
 func _run_once() -> PackedFloat64Array:
 	var costs := PackedFloat64Array()
 	costs.resize(_systems.size())
@@ -542,8 +457,7 @@ func _run_once() -> PackedFloat64Array:
 	_tick += 1
 	return costs
 
-## A jittered grid of alternating rabbits and monkeys, with the wander bounds
-## grown to match so nothing spends the run walking into a wall.
+## A jittered grid of rabbits and monkeys, with wander bounds to match.
 func _populate(n: int) -> void:
 	var columns := int(ceil(sqrt(float(n))))
 	var half := columns * SPACING * 0.5
@@ -558,11 +472,7 @@ func _populate(n: int) -> void:
 			if hunger != null:
 				hunger.fullness = FULLNESS
 
-## Every stage at every population, so the shape of each curve is visible
-## rather than one snapshot at the crossing. The second table is the one that
-## says something: a stage whose us/entity is flat costs what it costs, and a
-## stage whose us/entity climbs is being paid for by something other than the
-## entity — its neighbours.
+## Every stage at every population, in ms and in us per entity.
 const COLUMNS: Array[StringName] = [&"sensor", &"collision", &"node_sync", &"pickup",
 	&"movement", &"low_brain", &"consume", &"hunger", &"energy"]
 
@@ -620,9 +530,7 @@ func _report_breakdown(result: Dictionary) -> void:
 			continue
 		print("[stress]   %-11s %8.2f ms  %5.1f%%  %7.4f ms/entity"
 			% [name_key, ms, 100.0 * ms / float(result["tick_ms"]), ms / n])
-	# Printed so a table copied out of this output can be checked against the
-	# tick it claims to break down. A breakdown that does not add up is a
-	# breakdown with a row from another run in it.
+	# Printed so the breakdown can be checked against the measured tick.
 	print("[stress]   %-11s %8.2f ms  (stages below 0.01 ms, folded in)" % ["rest", quiet])
 	print("[stress]   %-11s %8.2f ms  vs %.2f ms measured" % ["TOTAL", summed, result["tick_ms"]])
 

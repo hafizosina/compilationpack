@@ -1,64 +1,17 @@
 class_name EcsLowBrainSystem
 extends EcsSystem
 
-## The creature's brain: one state machine, one place to read a decision.
+## The creature's brain: a state machine (IDLE, WANDER, SEEK_FOOD, TAKE, EAT, SLEEP).
+## It decides and writes a destination; executors act on the intent flags it
+## raises in `_set_state()`.
 ##
-## It reads the world and writes a destination into EcsMovementComponent. That
-## is still the only thing it says to the rest of the pipeline — movement,
-## collision and node_sync are as unaware of brains as they ever were, and a
-## planner replacing this at step 7 changes nothing downstream.
-##
-## ## Why one system and not a rung each
-##
-## Deciding used to be split: EcsForageSystem wrote a destination toward food,
-## this one wrote a destination to wander to, and priority was the order the two
-## sat in the scheduler. That is a genuinely nice property — a rung was one file
-## and one scheduler line, and neither existing rung changed when a third
-## arrived — but it bought it with statelessness, and three things fall out of
-## that which a creature needs:
-##
-##   - **Persistence.** "I am going to that berry" had nowhere to live, so it
-##     was re-derived every tick from whatever the sensor happened to report.
-##   - **Preemption.** A rung could only fill an *empty* destination slot. A
-##     wolf appearing mid-forage could not interrupt, because every rung
-##     politely skips an entity that already has somewhere to be.
-##   - **Hysteresis.** A threshold sitting near its trigger flickers the
-##     creature between rungs on consecutive ticks, because nothing remembers
-##     which side it was on last — and step 4's hunger thresholds are exactly
-##     that shape, which is what forced the issue.
-##
-## So the rungs moved inside one function, where the ladder is the order of the
-## branches and the state is a field. The priority is no less explicit for being
-## a sequence of `if`s — it is arguably more so, since the whole decision reads
-## top to bottom in one place instead of across two files and a scheduler.
-##
-## The cost, stated plainly: this system reads components that are not its own
-## (sensor, inventory) and will read more as behaviours arrive, so it is the one
-## place in the module that knows about several concerns at once. That is what a
-## brain is. The line it must not cross is *doing* anything with them — it still
-## writes nothing but `state`, `target`, `pause_left`, a destination and its
-## own intent flags.
-##
-## ## Decisions go out as flags
-##
-## `state` is this brain's memory. What the rest of the pipeline acts on is a
-## flag — EcsEatIntentFlag, EcsTakeIntentFlag, EcsAsleepFlag — raised and
-## cleared in `_set_state()`, the one place `state` is written, so the two can
-## never disagree. The executors and the hunger and energy systems read the
-## flags and never this brain's component, which is what lets anything else —
-## a planner, a test — drive them with no brain at all.
-##
-## ## The shape of a tick
-##
-## Validate the standing commitment, then — only if there is no commitment left
-## — decide again, highest rung first. A creature that is mid-trip falls out at
-## the first or second check and costs almost nothing.
+## Each tick: a collapse forces SLEEP; a commitment (SEEK_FOOD) is checked and
+## kept or dropped; otherwise it picks the highest rung that applies:
+## eat > take > seek food > sleep > wander.
 
-## The view `_food` was built from; a different one handed back means the food
-## changed and the index is rebuilt.
+## The view `_food` was built from.
 var _food_view: EcsView
-## Everything that is food right now, id -> its EcsPositionComponent. What
-## `_is_food` asks, and where a berry's position is read from.
+## Current food: id -> EcsPositionComponent.
 var _food: Dictionary = {}
 
 func label() -> StringName:
@@ -66,11 +19,7 @@ func label() -> StringName:
 
 func run(world: EcsWorld, delta: float) -> void:
 	_refresh_food(world)
-	# Only what makes a brain possible is a column. Everything the rungs read
-	# beyond that — hunger, energy, bag, reach, sensor — is optional here and
-	# stays a lookup, since a view has columns only for what all of it carries.
-	# Raising and clearing intent flags mid-loop leaves the view alone: it
-	# names no flag.
+	# Hunger, energy, bag, reach and sensor are optional, so they are looked up.
 	var brains := world.view([EcsPositionComponent, EcsMovementComponent, EcsLowBrainComponent])
 	var minds := brains.column(EcsLowBrainComponent)
 	var moves := brains.column(EcsMovementComponent)
@@ -81,59 +30,40 @@ func run(world: EcsWorld, delta: float) -> void:
 		var move := moves[k] as EcsMovementComponent
 		var place := places[k] as EcsPositionComponent
 
-		# 0. Collapsed: it has no say at all. This is above the commitment check
-		# on purpose — dropping from exhaustion overrides a trip already under
-		# way, which nothing else in this brain is allowed to do.
+		# Collapsed: forced to sleep, even mid-trip.
 		if world.has(id, EcsCollapsedFlag):
 			if brain.state != EcsLowBrainComponent.State.SLEEP:
 				_abandon_trip(move)
 				_set_state(world, id, brain, EcsLowBrainComponent.State.SLEEP)
 			continue
 
-		# 0b. Sleeping by choice: stay down until rested, or until starving.
+		# Asleep: stay down until rested or starving.
 		if brain.state == EcsLowBrainComponent.State.SLEEP:
 			if not _worth_waking_for(world, id):
 				continue
 			_release(world, id, brain)
 
-		# 1. Does the standing commitment still hold?
+		# Check the current commitment.
 		if brain.state == EcsLowBrainComponent.State.SEEK_FOOD:
 			if not _is_food(brain.target):
-				# The thing it was going to is gone — eaten, taken, killed. It
-				# is walking to a spot with nothing in it, so take the trip off
-				# it and let it choose again this same tick. *This* is what the
-				# state was for: the old stateless rung could only fill an empty
-				# destination slot, never take a full one, so a forager whose
-				# berry was stolen walked to the empty grass anyway.
+				# Target gone: stop and choose again.
 				_abandon_trip(move)
 				_release(world, id, brain)
 			elif _in_reach(world, id, brain.target):
-				# Close enough to touch it, which is what it set out for. The
-				# trip's destination is the berry's *centre*, so waiting for
-				# the trip to end would walk it onto the thing before taking
-				# it — fulfilling a commitment is not reconsidering one, so the
-				# rungs below get to act this same tick.
+				# In reach: stop so the rungs below can take or eat it.
 				_abandon_trip(move)
 				_release(world, id, brain)
 			elif not move.has_destination:
-				# The trip ended without arriving: given up, or the target was
-				# taken and re-placed out of reach. Either way it is no longer
-				# seeking, and whether it got anything is not this brain's
-				# business to ask.
+				# Trip ended without reaching it.
 				_release(world, id, brain)
 			else:
 				continue
 
-		# 2. A commitment is not reconsidered; a wander is. This is the whole
-		# difference state makes. A creature that is walking nowhere in
-		# particular should be free to notice a berry *this* tick rather than
-		# when its aimless leg happens to end — and without a state field there
-		# was no way to tell those two trips apart, so neither could be
-		# interrupted and both ran to completion.
+		# Keep walking unless it is only a wander, which may be interrupted.
 		if move.has_destination and brain.state != EcsLowBrainComponent.State.WANDER:
 			continue
 
-		# 3. Choose, highest rung first.
+		# Choose, highest rung first.
 		if _try_eat(world, id, brain, move):
 			continue
 		if _try_take(world, id, brain, move):
@@ -142,44 +72,18 @@ func run(world: EcsWorld, delta: float) -> void:
 			continue
 		if _try_sleep(world, id, brain, move):
 			continue
-		# Nothing better came up, so an existing wander simply carries on.
+		# Keep wandering.
 		if move.has_destination:
 			continue
 		_wander(world, id, brain, move, place, delta)
 
-## Rung 1 — eat what it is already carrying, if it is hungry enough.
-##
-## Above fetching on purpose: a creature with food in its bag has no business
-## walking across the arena for more. It only *decides* here — the berry leaves
-## the bag in EcsConsumeSystem, which runs straight after this one and reads the
-## EAT state as its instruction. The brain deciding and a system acting is the
-## same split the module runs on everywhere, and it is what stops this file
-## growing hands.
-##
-## Eating stands still, so any trip in progress is called off. There is no
-## commitment to hold: the decision is re-made next tick from whatever hunger
-## and the food at hand then say, which is what lets one bite per tick add up
-## to a meal.
-##
-## **A bag is one way to have food at hand, not the only one.** A carrier eats
-## out of its inventory; a grazer with no EcsInventoryComponent at all eats what
-## its action area is touching, off the ground, where it stands. Both are "there
-## is food within reach", and neither is a special case of the other — which is
-## why this asks that question rather than asking about a bag.
-##
-## Reach itself is decided by the physics server and taken at its word, to
-## within about a tick of motion. What this and EcsConsumeSystem both re-ask is
-## the other question — whether the thing named is still in the world at all,
-## since it may have been eaten or pocketed since the list was written.
+## Eat food from the bag or within reach, if hungry enough. Stops any trip.
 func _try_eat(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		move: EcsMovementComponent) -> bool:
 	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
 	if hunger == null or hunger.fullness > hunger.eat_below:
 		return false
-	# The bag first, only because a thing already held is the nearer of the
-	# two; then whatever its action area is touching. This order used to live in
-	# EcsConsumeSystem — it is a choice, so it lives here now, and the executor
-	# is handed the answer.
+	# Bag first, then the ground.
 	var carried := _meal_in_bag(world, id)
 	var meal := EcsWorld.NO_ENTITY if carried != "" else _meal_on_ground(world, id)
 	if carried == "" and meal == EcsWorld.NO_ENTITY:
@@ -207,27 +111,7 @@ func _meal_on_ground(world: EcsWorld, id: int) -> int:
 				return touched
 	return EcsWorld.NO_ENTITY
 
-## Rung 2 — put something within reach into the bag.
-##
-## Taking used to happen without anyone deciding it. EcsPickupSystem ran over
-## anything with a bag and an action area and took whatever it touched, so a
-## perfectly full monkey hoovered up every berry it wandered across. That was a
-## reflex, and the module had settled that the brain is the only thing that
-## chooses — so it is a rung now, and pickup does nothing until it fires.
-##
-## Gated on the same `forage_below` that sends it out in the first place: a
-## creature wants a berry for one reason, and a fed one has no more business
-## pocketing food than it has walking to it. Eating outranks this, so a hungry
-## creature standing over a berry eats it where it lies rather than bagging it
-## first — bagging is for when you are peckish now and hungry later.
-##
-## Having no EcsInventoryComponent is the whole of "cannot carry": a rabbit
-## never takes the rung, and no flag says so.
-##
-## It only decides. The berry moves in EcsPickupSystem, which reads TAKE as its
-## instruction exactly as EcsConsumeSystem reads EAT — and which stays a system
-## of its own because step 7's planner emits action ids that need one executor
-## each. Standing still to do it, so any wander in progress is called off.
+## Pick up something in reach, if hungry enough to want food and the bag has room.
 func _try_take(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		move: EcsMovementComponent) -> bool:
 	var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
@@ -252,48 +136,25 @@ func _try_take(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	_set_state(world, id, brain, EcsLowBrainComponent.State.TAKE, item)
 	return true
 
-## Is `other` close enough for this entity to act on?
-##
-## The physics server's answer, taken at its word — the same reading
-## EcsPickupSystem and EcsConsumeSystem act on, so the brain cannot decide to
-## take something they will then decline to reach.
+## Is `other` in this entity's reach?
 func _in_reach(world: EcsWorld, id: int, other: int) -> bool:
 	var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
 	return action != null and action.reached.has(other)
 
-## Is `id` something that could go in a bag, and still there to be put in one?
-##
-## Pickable rather than consumable: what a bag will hold is a wider question
-## than what a mouth will, and the day a tool exists this rung should want it
-## while the eat rung still does not.
+## Is `id` still on the ground and pickable?
 func _is_takeable(world: EcsWorld, id: int) -> bool:
 	if id == EcsWorld.NO_ENTITY or not world.is_alive(id):
 		return false
 	return world.has(id, EcsPickableComponent) and world.has(id, EcsPositionComponent) \
 		and not world.has(id, EcsDyingFlag)
 
-## Rung 3 — go and get a berry, if it is hungry enough and has room to put one.
-##
-## The candidates are the ids in the entity's own EcsSensorComponent.perceived:
-## what its sensor area overlapped last tick. A berry across the map does not
-## exist as far as this rung is concerned, and that is what keeps it from being
-## O(foragers x berries) — the broadphase culls to a handful of neighbours in
-## C++ and the ranking below sorts those few.
-##
-## Sensor and inventory are read through `get_component` rather than named in
-## the query, because they are what make this rung *possible*, not what makes
-## the brain possible: a creature with no sensor simply never takes it, and
-## needs no flag saying so.
+## Walk to the nearest food in sight, if hungry enough and the bag has room.
 func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		move: EcsMovementComponent, place: EcsPositionComponent) -> bool:
-	# The motive. Without this the rung is motion with no reason — it gathered
-	# because it could, and stopped only when the bag filled. A creature below
-	# its forage threshold now wanders past food it can plainly see.
 	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
 	if hunger != null and hunger.fullness > hunger.forage_below:
 		return false
-	# A bag caps how much it may fetch; having none does not stop it going.
-	# A grazer walks to the berry and eats it where it lies.
+	# A full bag stops it; having no bag does not.
 	var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
 	if bag != null and bag.items.size() >= bag.capacity:
 		return false
@@ -302,8 +163,7 @@ func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		return false
 
 	var here := place.position
-	# Nearest of what it can see wins. Squared distance: ranking needs the
-	# order, never the number, so it does not pay for the square root.
+	# Nearest wins.
 	var best := EcsWorld.NO_ENTITY
 	var best_distance := INF
 	for seen in sensor.perceived:
@@ -321,53 +181,31 @@ func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	_set_trip(move, (_food[best] as EcsPositionComponent).position)
 	return true
 
-## Rung 4 — lie down, if nothing above wanted anything.
-##
-## Below the food rungs deliberately: a tired, hungry creature that can see a
-## berry goes for it, and only one with nothing in sight sleeps. A creature that
-## keeps finding food can therefore run itself to collapse, which is the price
-## of food outranking rest rather than a bug.
-##
-## Entering sleep only ever happens from IDLE or WANDER, because a SEEK_FOOD
-## commitment is not reconsidered — the one thing that overrides it is a
-## collapse, handled above. The trip is called off through the same helper as
-## everything else, so the clock is zeroed and movement, which is told nothing,
-## simply finds no destination and stops.
+## Sleep if tired, unless starving.
 func _try_sleep(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		move: EcsMovementComponent) -> bool:
 	var energy := world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
 	if energy == null or energy.value > energy.rest_at:
 		return false
 	if _starving(world, id):
-		# Too hungry to lie down. Without this a starving creature woken by its
-		# stomach would be put straight back to sleep by this rung while it is
-		# still tired, and starve where it lay.
 		return false
 	_abandon_trip(move)
 	_set_state(world, id, brain, EcsLowBrainComponent.State.SLEEP)
 	return true
 
-## Is there anything worth getting up for? Rested is the ordinary end of a
-## sleep; starving is the interruption — the first thing in this module that
-## preempts a standing state rather than filling an empty slot.
+## Wake when rested or starving.
 func _worth_waking_for(world: EcsWorld, id: int) -> bool:
 	var energy := world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
 	if energy == null or energy.value >= energy.wake_at:
 		return true
 	return _starving(world, id)
 
-## Empty, with nothing left to draw on. The same condition EcsHungerSystem
-## spends health on, asked here so the two never disagree about what starving
-## is — and it is the only thing that outranks being tired.
+## Fullness at zero.
 func _starving(world: EcsWorld, id: int) -> bool:
 	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
 	return hunger != null and hunger.fullness <= 0.0
 
-## Rung 5, and the floor — drift somewhere nearby, having rested first.
-##
-## The pause clock runs only here, which is why a creature that spent ten
-## seconds walking to a berry does not then owe ten seconds of accumulated
-## rest: its pause starts when it has nothing to do.
+## Idle for a pause, then wander to a random nearby point.
 func _wander(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		move: EcsMovementComponent, place: EcsPositionComponent, delta: float) -> void:
 	_set_state(world, id, brain, EcsLowBrainComponent.State.IDLE)
@@ -378,30 +216,11 @@ func _wander(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	_set_state(world, id, brain, EcsLowBrainComponent.State.WANDER)
 	_set_trip(move, EcsConst.random_point_near(place.position, brain.radius, 0.25))
 
-## Is `id` still food that is somewhere?
-##
-## Consumable and not merely pickable: since hunger became the motive, the food
-## rung wants *food*, and a future carryable that is not edible — a tool, a
-## stick — must not be chased by a hungry animal. Whether it can also be carried
-## away is EcsPickupSystem's question, asked separately and for its own reasons.
-##
-## A berry someone else took this tick has lost its EcsPositionComponent and is
-## no longer anywhere; one that was eaten is not alive at all. The sensor's
-## overlap list is a tick behind and can still name either, so *existence* is
-## re-asked before anything is committed to. How far away it is, by contrast, is
-## the physics server's answer and is not second-guessed.
-##
-## Asked of `_food`, not of the store. A hungry creature asks it of everything
-## it perceives, and nearly all of that is other animals, so the question has
-## to be cheap to answer "no": one dictionary read, where four calls into the
-## world used to be. A dead id is in no table and so in no view — the old
-## `is_alive` asked nothing the others did not.
+## Is `id` currently food on the ground?
 func _is_food(id: int) -> bool:
 	return _food.has(id)
 
-## Rebuilds `_food` when the food view changes — a berry born, eaten, taken, or
-## marked dying — and leaves it alone otherwise. Nothing this system does can
-## change what is food, so it holds for the whole run.
+## Rebuilds `_food` when the food view changes.
 func _refresh_food(world: EcsWorld) -> void:
 	var food := world.view([EcsConsumableComponent, EcsPositionComponent], [EcsDyingFlag])
 	if food == _food_view:
@@ -412,17 +231,12 @@ func _refresh_food(world: EcsWorld) -> void:
 	for k in food.ids.size():
 		_food[food.ids[k]] = places[k]
 
-## Ends a commitment. Only the brain's own state and flags — whether the trip
-## it implied is also called off is a separate decision, made above.
+## Back to IDLE. Does not touch the trip.
 func _release(world: EcsWorld, id: int, brain: EcsLowBrainComponent) -> void:
 	_set_state(world, id, brain, EcsLowBrainComponent.State.IDLE)
 
-## The only place `state` and `target` are written, and the reason the intent
-## flags can never disagree with them: leaving a state clears its flag, entering
-## one raises it with the target named. Unchanged state and target is a no-op,
-## so an idle creature re-entering IDLE every tick touches the store not at all
-## — except that eating from the bag names its meal by uid, which `target` does
-## not hold, so a still-eating creature has the uid refreshed on its flag.
+## The only place `state` and `target` are written. Clears the old state's flag
+## and raises the new one's, so the flags always match the state.
 func _set_state(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		state: EcsLowBrainComponent.State, target: int = EcsWorld.NO_ENTITY,
 		record_uid: String = "") -> void:
@@ -449,8 +263,7 @@ func _set_state(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		EcsLowBrainComponent.State.SLEEP:
 			world.add(id, EcsAsleepFlag.new())
 
-## The flag a state raises, or null for the states that say nothing but a
-## destination (IDLE, WANDER, SEEK_FOOD).
+## The flag a state raises, or null.
 static func _flag_for(state: EcsLowBrainComponent.State) -> Script:
 	match state:
 		EcsLowBrainComponent.State.EAT:
@@ -461,21 +274,13 @@ static func _flag_for(state: EcsLowBrainComponent.State) -> Script:
 			return EcsAsleepFlag
 	return null
 
-## Sends an entity to a spot — the only place this system writes a destination.
-##
-## Zeroing `time_left` is not optional. EcsMovementSystem prices a trip on the
-## tick it first sees one and reads a non-zero clock as "already priced", so a
-## destination written over a trip already in progress would inherit whatever
-## was left of the old budget and time out early. Routing every write through
-## here is what makes overwriting a live destination safe, which is what
-## preemption is.
+## Sets a destination. Zeroes `time_left` so the trip gets a fresh time budget.
 func _set_trip(move: EcsMovementComponent, point: Vector2) -> void:
 	move.destination = point
 	move.has_destination = true
 	move.time_left = 0.0
 
-## Calls off a trip in progress — the reason a brain with state can do something
-## the old stateless rungs could not.
+## Cancels the current trip.
 func _abandon_trip(move: EcsMovementComponent) -> void:
 	move.has_destination = false
 	move.velocity = Vector2.ZERO

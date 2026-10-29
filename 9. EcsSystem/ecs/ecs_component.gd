@@ -1,35 +1,15 @@
 class_name EcsComponent
 extends Resource
 
-## Base for every component. A component is DATA: exported fields and nothing
-## else. No apply(), no use(), no tick(). All behaviour lives in an EcsSystem.
+## Base for every component. Components hold data only; behaviour lives in systems.
 ##
-## **One exception, for display only: `describe()`.** A component may define
-##
-##     func describe() -> Dictionary
-##         {"tab": &"entity" | &"own" | &"hidden",   # where the inspector puts it
-##          "lines": {label: text},                  # what it says, in order
-##          "title": {"name": ..., "type": ...}}     # optional: names the panel
-##
-## and EcsInspectSystem shows whatever it returns, knowing no component type.
-## It reads the component's own fields and changes nothing — it is how the
-## component reads to a person, not something it does. That is the whole of the
-## exception: a method that computes, decides or writes still belongs in a
-## system. A component without describe() gets its own inspector tab of every
-## field, by reflection.
-##
-## `key()` is the single exception and it is *identity*, not behaviour — a
-## stable name for the type so a .tres placement can address it in an override
-## block and the HUD can label it. Storage and queries key on the script object
-## itself (`EcsPositionComponent`, never `"position"`), so a mistyped query is a
-## parse error rather than a silently empty result.
-##
-## A subclass may also declare `const NODE_KIND: StringName`, naming a kind from
-## EcsConst, to say that an entity carrying it needs a node of that kind.
-## EcsEntityManager reads the constant at spawn and builds one. It is a
-## constant and not a method for the reason above: the component states what it
-## implies and still does nothing. Nothing gives a component the node back —
-## systems look nodes up on the manager by entity id.
+## Exceptions:
+## - `key()`: a stable name for the type, used by .tres overrides and labels.
+## - `describe()`: optional, display only. Returns
+##   `{"tab": &"entity" | &"own" | &"hidden", "lines": {label: text}, "title"?: {name, type}}`
+##   for the inspector. Without it the inspector lists every field.
+## - `const NODE_KIND`: optional. Names a node kind from EcsConst that
+##   EcsEntityManager builds for the entity.
 
 ## Stable name for this component kind. Override in every subclass.
 func key() -> StringName:

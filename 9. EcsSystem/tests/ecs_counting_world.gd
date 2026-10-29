@@ -1,17 +1,7 @@
 extends EcsWorld
 
-## An EcsWorld that counts its own traffic, per pipeline stage, for the stress
-## test's breakdown of where each stage's time goes.
-##
-## It times every `query()` directly — there are only a few per stage, so the
-## clock's own cost is lost in the noise — and counts every `get_component`,
-## `has` and `is_alive`, which are far too many and too cheap to time one by
-## one. The stress test prices those counts with per-call costs it measures on
-## a plain world in the same sitting.
-##
-## Counting slows every call a little, so this world is only used for a
-## separate counting pass. The stage timings the report divides up come from a
-## plain EcsWorld.
+## An EcsWorld that times query() and counts get_component, has and is_alive per
+## stage. Only used for the stress test's separate counting pass.
 
 ## The stage currently running; the stress test sets it before each system.
 var stage: StringName = &""

@@ -1,27 +1,20 @@
 class_name EcsSpriteComponent
 extends EcsComponent
 
-## What the entity looks like — still data. EcsNodeSyncSystem reads it and
-## pushes the values onto a pooled Sprite2D; anything wanting to change an
-## entity's appearance writes here rather than reaching for a node.
+## How the entity looks. EcsNodeSyncSystem copies it onto the Sprite2D.
 
-## Declares that an entity carrying this component needs a Sprite2D.
-## EcsEntityManager reads the constant at spawn and builds one. A constant and
-## not a method: the component states what it implies and still does nothing.
 const NODE_KIND: StringName = EcsConst.NODE_SPRITE
 
 @export var texture: Texture2D
-## Uniform scale for the texture. The ~128px animal art needs 0.5 per tile.
+## Uniform scale for the texture.
 @export var scale_factor: float = EcsConst.SPRITE_SCALE
-## Colour multiplier — the per-type tint that makes the eyeball test work.
+## Colour multiplier.
 @export var tint: Color = Color.WHITE
-## Draw order, so a wielded dagger sits over its wielder.
+## Draw order.
 @export var z_index: int = 0
 
 func key() -> StringName:
 	return &"sprite"
 
-## How the inspector shows it: not at all — plumbing a person clicking an animal
-## does not want to read. Display only; see EcsComponent.describe().
 func describe() -> Dictionary:
 	return {"tab": &"hidden", "lines": {}}

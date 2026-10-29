@@ -1,13 +1,8 @@
 class_name EcsSpawnRequest
 extends RefCounted
 
-## One "please build me an entity" note, written by a system and fulfilled by
-## EcsEntityManager at the top of the next tick.
-##
-## It is a two-way slip rather than a one-way message: the requester keeps its
-## own reference and reads `born` back once the manager has filled it in. That
-## is what lets EcsSpawnerSystem go on counting its own berries without the
-## manager ever learning that a spawner exists.
+## A request to create an entity, fulfilled by EcsEntityManager at the next
+## lifecycle stage. The requester keeps it and reads `born` afterwards.
 
 ## Blueprint id, resolved against the catalog.
 var type_id: StringName = &""
@@ -17,17 +12,11 @@ var position: Vector2 = Vector2.ZERO
 var overrides: Dictionary = {}
 ## Optional name. Blank means the manager numbers it after its type.
 var entity_name: StringName = &""
-## Set instead of `type_id` to put a carried item back into the world as
-## itself: built from the record's components — instance values and uid intact —
-## rather than from the blueprint's defaults. `position` still says where.
+## Set instead of `type_id` to restore a carried item from its record.
 var record: EcsItemRecord = null
 
-## Set by the manager once it has dealt with this note, whatever the outcome.
-## Kept separate from `born` because a blueprint that fails to resolve also
-## leaves `born` at NO_ENTITY, and a requester waiting on the id alone would
-## wait forever for one that is never coming.
+## True once the manager has handled this request, even if it failed.
 var fulfilled: bool = false
 
-## Filled in by the manager: the new entity id, or NO_ENTITY if the blueprint
-## did not resolve.
+## The new entity id, or NO_ENTITY if the blueprint did not resolve.
 var born: int = EcsWorld.NO_ENTITY

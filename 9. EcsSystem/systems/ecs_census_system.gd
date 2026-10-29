@@ -1,12 +1,9 @@
 class_name EcsCensusSystem
 extends EcsSystem
 
-## Pushes the entity count to the stats panel on an interval. Pushed rather than
-## polled so the panel never reaches into the world, and on an interval rather
-## than at spawn because the count will start moving on its own once entities
-## are born and eaten.
+## Sends the entity count to the UI every INTERVAL seconds.
 
-## How often the count is sent. Nothing reads it faster than a person can.
+## Seconds between updates.
 const INTERVAL: float = 0.5
 
 var _since: float = 0.0

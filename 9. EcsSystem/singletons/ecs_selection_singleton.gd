@@ -1,14 +1,11 @@
 class_name EcsSelectionSingleton
 extends EcsSingleton
 
-## World singleton: the click inbox. `_unhandled_input` records where the mouse
-## went down and EcsSelectionSystem resolves it at the top of the next frame,
-## so picking obeys the same rule as everything else — only a system reads the
-## world and only a system writes components.
+## A click waiting to be resolved by EcsSelectionSystem.
 
-## True when a click is waiting to be resolved.
+## True when a click is waiting.
 var pending: bool = false
-## Where that click landed, in world coordinates.
+## Where the click landed, in world coordinates.
 var pick_at: Vector2 = Vector2.ZERO
 
 func key() -> StringName:

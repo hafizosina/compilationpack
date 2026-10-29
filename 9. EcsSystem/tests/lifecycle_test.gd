@@ -1,24 +1,12 @@
 extends Node2D
 
-## Headless acceptance test for the lifecycle refactor — EcsEntityManager owning
-## spawn and kill, EcsNodeSyncSystem owning the per-tick mirror.
+## Headless acceptance test for module 9: lifecycle, sensors, collision, the
+## brain, needs, intent flags, item records and views.
 ##
-## It exists because the refactor's own handoff proposed re-running the Step-2
-## combat acceptance test as proof that behaviour was undisturbed, and that test
-## went out of the tree with the combat layer at d50aaf9. This covers the thing
-## most likely to have broken instead: node lifetime used to be *inferred* from
-## a query, and is now *commanded*, so the cases where an entity stops matching
-## without dying are exactly where the two models diverge.
-##
-## Run it:
-##   GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 ##   "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
 ##
-## Exit code is 0 only if every check passed.
-##
-## Every tick awaits a physics frame. Overlaps resolve on the physics server's
-## schedule, not the instant a body is moved, so a test that did its work
-## synchronously would read an empty overlap list and blame Area2D for it.
+## Exits 0 only if every check passes. Each tick awaits a physics frame so
+## overlaps are reported.
 
 const TICK: float = 1.0 / 60.0
 
@@ -41,9 +29,7 @@ func _ready() -> void:
 	_world = EcsWorld.new()
 	_world.add_singleton(EcsLifecycleSingleton.new())
 
-	# No brain, no movement: nothing wanders, so every position in this test is
-	# one the test put there or one collision corrected. The stages that are
-	# here are the ones the refactor touched.
+	# No brain or movement here, so nothing moves unless the test moves it.
 	_scheduler = EcsScheduler.new()
 	_scheduler \
 		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
@@ -91,13 +77,10 @@ func _run() -> void:
 	await _a_stage_on_a_slower_tick_still_simulates_the_same()
 	_a_view_is_kept_until_a_table_it_names_changes()
 
-## A component's `const NODE_KIND` is what gets it a node, so a berry — sprite,
-## no shape — must come out with a sprite and no body. And everything an entity
-## owns must hang under that entity's own container.
+## Nodes match the declared NODE_KINDs (a berry gets a sprite and a body, no
+## sensor) and hang under the entity's own container.
 func _spawn_builds_declared_nodes() -> void:
-	# A monkey: it carries, and the next test picks this same berry up out of
-	# the world it leaves behind. A rabbit has no inventory at all since it
-	# became a grazer.
+	# A monkey, since the next test picks this berry up and only carriers can.
 	var rabbit := _manager.spawn(_world, _catalog, &"monkey", Vector2(50.0, 0.0))
 	var berry := _manager.spawn(_world, _catalog, &"berry", Vector2(60.0, 0.0))
 	await _tick(1)
@@ -130,8 +113,7 @@ func _spawn_builds_declared_nodes() -> void:
 	_check("a forager declares all four",
 		_manager.node_for(rabbit, EcsConst.NODE_SENSOR) != null
 		and _manager.node_for(rabbit, EcsConst.NODE_ACTION) != null)
-	# The layer policy is declared on the components, so these assert that the
-	# manager built what EcsShape/Sensor/ActionComponent asked for.
+	# Layers come from the components' NODE_LAYER / NODE_MASK.
 	var sensor_area := _manager.node_for(rabbit, EcsConst.NODE_SENSOR) as Area2D
 	var action_area := _manager.node_for(rabbit, EcsConst.NODE_ACTION) as Area2D
 	var body_area := body as Area2D
@@ -146,20 +128,16 @@ func _spawn_builds_declared_nodes() -> void:
 		sensor_area.collision_mask == EcsConst.LAYER_BODY
 		and action_area.collision_mask == EcsConst.LAYER_BODY)
 
-## Picking up is a death with a record kept. The berry is captured — every
-## component, and its uid — into the bag, flagged Dying on the spot, and gone
-## with its nodes the tick after. What survives is data, and it is the same
-## berry: the record's uid is the one the entity had.
+## Picking up stores a record (same uid) in the bag and kills the entity and its
+## nodes the next tick.
 func _pickup_keeps_a_record_and_ends_the_berry() -> void:
 	var monkey := _first_of(&"monkey")
 	var berry := _first_of(&"berry")
 	var uid := (_world.get_component(berry, EcsNameComponent) as EcsNameComponent).uid
 	var food := _world.get_component(berry, EcsConsumableComponent) as EcsConsumableComponent
-	# An instance value the catalog does not know, to prove the snapshot is of
-	# this berry and not of its blueprint.
+	# An instance value, to show the record copies this berry, not its blueprint.
 	food.nutrition = 37.5
-	# Taking is a decision, and this scheduler has no brain in it on purpose.
-	# The test plays the brain by raising the flag the brain would.
+	# No brain here, so the test raises the intent flag itself.
 	_intend_take(monkey, berry)
 	# Two ticks: reach is what physics reported, and it reports after a step.
 	await _tick(2)
@@ -196,9 +174,7 @@ func _kill_takes_the_data_and_the_nodes() -> void:
 	_check("one container freed takes the whole entity with it",
 		_entities.get_child_count() == containers_before - 1)
 
-## A component is what an entity is and gets a tab of its own; a flag is what is
-## true of it now, and all of them share one "Flags" tab, a line each. The
-## inspector tells them apart by base class alone, naming no flag type.
+## Components get their own inspector tab; flags share one "Flags" tab.
 func _flags_share_one_inspector_tab() -> void:
 	var monkey := _first_of(&"monkey")
 	var inspect := EcsInspectSystem.new()
@@ -245,9 +221,7 @@ func _flags_share_one_inspector_tab() -> void:
 	_world.remove(monkey, EcsSelectedFlag)
 	_world.remove(monkey, EcsCollapsedFlag)
 
-## The spawner no longer builds anything itself. It leaves a note and the
-## lifecycle stage fulfils it at the top of the next tick — one tick later, and
-## the spawner picks the id back off its own note.
+## A spawner's request is fulfilled next tick and it records the new id.
 func _a_spawner_note_is_fulfilled_next_tick() -> void:
 	var bush := _manager.spawn(_world, _catalog, &"berry_bush", Vector2(-800.0, -400.0))
 	var spawner := _world.get_component(bush, EcsSpawnerComponent) as EcsSpawnerComponent
@@ -263,14 +237,11 @@ func _a_spawner_note_is_fulfilled_next_tick() -> void:
 	_check("the spawned entity got its sprite",
 		_manager.node_for(born, EcsConst.NODE_SPRITE) != null)
 
-## The behaviour that had to survive all of the above: soft collision reading
-## overlaps off bodies it no longer creates.
+## Soft collision separates overlapping bodies.
 func _collision_still_separates_manager_owned_bodies() -> void:
 	var a := _manager.spawn(_world, _catalog, &"rabbit", Vector2(1000.0, 0.0))
 	var b := _manager.spawn(_world, _catalog, &"rabbit", Vector2(1002.0, 0.0))
-	# Nothing writes the areas' positions any more — they ride their containers,
-	# which EcsNodeSyncSystem moves. If that wiring were wrong the broadphase
-	# would see two bodies stacked at the origin and this would not separate.
+	# Areas follow their containers; if not, both would sit at the origin.
 	var pa := _world.get_component(a, EcsPositionComponent) as EcsPositionComponent
 	var pb := _world.get_component(b, EcsPositionComponent) as EcsPositionComponent
 	var started := pa.position.distance_to(pb.position)
@@ -283,9 +254,8 @@ func _collision_still_separates_manager_owned_bodies() -> void:
 		% [started, ended, touching], ended > started)
 	_check("and settled at least their combined radii apart", ended >= touching - 0.5)
 
-## The chain the whole sensor/action layer exists for: a forager knows about a
-## berry only if its sensor area overlaps it, and takes it only once its action
-## area is touching the berry's body.
+## A forager perceives a berry inside its sensor and reaches it only once its
+## action area touches the berry's body.
 func _it_sees_before_it_takes() -> void:
 	# A monkey, because this one ends in a pickup and only a carrier picks up.
 	var rabbit := _manager.spawn(_world, _catalog, &"monkey", Vector2(2000.0, 2000.0))
@@ -315,9 +285,7 @@ func _it_sees_before_it_takes() -> void:
 	_check("the one it never saw is untouched",
 		_world.has(far, EcsPositionComponent) and not _holds(bag, far))
 
-## A bush is solid and has no EcsMovementComponent, so a walker must be pushed
-## out of it and it must not give an inch — solidity and movability are separate
-## questions and this is the pair that proves the second one.
+## A walker is pushed out of a solid immovable bush, and the bush doesn't move.
 func _an_immovable_body_is_not_shoved_around() -> void:
 	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-2000.0, -2000.0))
 	var bush := _manager.spawn(_world, _catalog, &"berry_bush", Vector2(-1990.0, -2000.0))
@@ -332,12 +300,8 @@ func _an_immovable_body_is_not_shoved_around() -> void:
 	_check("the walker was the one pushed out",
 		not rabbit_at.position.is_equal_approx(rabbit_started))
 
-## And the other half of that split: a berry has a body so it can be seen and
-## reached, but `is_solid` off, so it is walked over rather than bumped
-## into. Nobody moves — not the walker, and not the thing on the ground.
-##
-## Its own scheduler, with no pickup in it: the rabbit taking the berry would
-## end the overlap and the test would pass without proving anything.
+## A non-solid berry is walked over: nothing moves. No pickup in this scheduler,
+## so the overlap stays.
 func _a_ground_item_is_walked_over_not_bumped_into() -> void:
 	var loose := EcsScheduler.new()
 	loose \
@@ -350,8 +314,7 @@ func _a_ground_item_is_walked_over_not_bumped_into() -> void:
 	var rabbit_at := _world.get_component(rabbit, EcsPositionComponent) as EcsPositionComponent
 	var berry_started := berry_at.position
 	var rabbit_started := rabbit_at.position
-	# 10 px apart with bodies of 22 and 14: deep inside each other, and under
-	# the old rule the rabbit would have been shoved 26 px clear.
+	# 10 px apart with bodies of 22 and 14: deeply overlapping.
 	for i in 20:
 		loose.run_all(_world, TICK)
 		await get_tree().physics_frame
@@ -364,16 +327,8 @@ func _a_ground_item_is_walked_over_not_bumped_into() -> void:
 		_world.has(berry, EcsBodyComponent)
 		and not (_world.get_component(berry, EcsBodyComponent) as EcsBodyComponent).is_solid)
 
-## The whole loop, driven end to end: a forager spots a berry it cannot reach,
-## walks to it, and takes it the moment its action area meets the berry's body.
-##
-## This one runs its own scheduler, with the brain and movement added, because
-## every other test above deliberately has no brain and no legs so that nothing
-## moves except what the test moves.
-##
-## The brain now owns wandering too, so "it walked that way" could in principle
-## be a coincidence. That is what the state check is for: it must be in
-## SEEK_FOOD, aimed at *that* berry, before any of the distances mean anything.
+## End to end: a forager sees a berry out of reach, commits to it (SEEK_FOOD),
+## walks to it and takes it.
 func _it_walks_to_what_it_sees_and_takes_it() -> void:
 	var walking := EcsScheduler.new()
 	walking \
@@ -384,27 +339,19 @@ func _it_walks_to_what_it_sees_and_takes_it() -> void:
 		.add(EcsPickupSystem.new()) \
 		.add(EcsNodeSyncSystem.new(_manager))
 
-	# Far from everything else in this file, and outside the arena the wander
-	# bounds clamp to, so no other entity drifts into the experiment.
-	# A monkey, because this one is about carrying: a rabbit has no bag at all.
+	# Far from the rest of the test and outside the wander bounds.
+	# A monkey, because this test is about carrying.
 	var rabbit := _manager.spawn(_world, _catalog, &"monkey", Vector2(2000.0, -2000.0))
 	var berry := _manager.spawn(_world, _catalog, &"berry", Vector2(2200.0, -2000.0))
 	var bag := _world.get_component(rabbit, EcsInventoryComponent) as EcsInventoryComponent
 	var at := _world.get_component(rabbit, EcsPositionComponent) as EcsPositionComponent
 	var started := at.position
-	# Since step 4 the food rung has a motive gate, and a rabbit spawns fed.
-	# Empty enough to fetch, not empty enough to eat what it fetches — this
-	# test is about walking and taking, and eating would end the berry early.
+	# Hungry enough to fetch, not hungry enough to eat it.
 	var appetite := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
 	appetite.fullness = appetite.forage_below - 1.0
 
 	var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
-	# Not on the first tick. `sensor.perceived` is written from physics overlaps,
-	# and a freshly spawned entity has none reported yet, so its opening move is
-	# always a wander. The tick after, perception arrives and the food rung
-	# preempts the wander mid-leg — which is the behaviour worth pinning down,
-	# so this asserts it happens within a couple of ticks and not that it
-	# happened instantly.
+	# Perception arrives a tick after spawn, so allow a couple of ticks.
 	for i in 3:
 		walking.run_all(_world, TICK)
 		await get_tree().physics_frame
@@ -414,8 +361,7 @@ func _it_walks_to_what_it_sees_and_takes_it() -> void:
 		brain.state == EcsLowBrainComponent.State.SEEK_FOOD)
 	_check("and committed to the berry it saw", brain.target == berry)
 
-	# 200 px at the monkey's 130 px/sec is about 1.5 seconds. 240 ticks is four,
-	# and the loop breaks the moment the berry is in the bag anyway.
+	# About 1.5 s of walking; 240 ticks is plenty.
 	for i in 240:
 		walking.run_all(_world, TICK)
 		await get_tree().physics_frame
@@ -429,23 +375,15 @@ func _it_walks_to_what_it_sees_and_takes_it() -> void:
 	_check("it stopped at arm's length, not on top of it",
 		at.position.distance_to(Vector2(2200.0, -2000.0)) > 20.0)
 
-	# The brain runs before pickup, so on the tick the berry was taken it still
-	# believed it was seeking. It finds out on the next one — the ordinary
-	# one-tick lag of a pipeline where each stage reads what the last one left.
+	# The brain notices the pickup one tick later.
 	walking.run_all(_world, TICK)
 	await get_tree().physics_frame
 	_check("and let the commitment go once the berry was gone",
 		brain.target == EcsWorld.NO_ENTITY
 		and brain.state != EcsLowBrainComponent.State.SEEK_FOOD)
 
-## A destination it can never stand on. Soft collision holds the walker and the
-## bush 67 px apart — bodies of 22 and 45 — while its arrive radius is 6, so
-## walking at the middle of a bush is a trip that cannot end. Before the trip
-## clock it pushed at it forever, and because `has_destination` stayed true,
-## forage and low_brain both skipped it every tick: stuck for good.
-##
-## A bush and not a berry, now that a berry is walked over: this has to be a
-## thing that really does block, or the test proves nothing.
+## A destination it can never reach (the centre of a solid bush) times out
+## instead of leaving the walker stuck.
 func _a_trip_it_cannot_finish_is_given_up_on() -> void:
 	var blocked := EcsScheduler.new()
 	blocked \
@@ -460,10 +398,8 @@ func _a_trip_it_cannot_finish_is_given_up_on() -> void:
 	var move := _world.get_component(rabbit, EcsMovementComponent) as EcsMovementComponent
 	var started := at.position
 
-	# Tightened from the blueprint's defaults so the test runs in a couple of
-	# seconds rather than eight. The expected budget is then derived from the
-	# component rather than written down, so retuning a creature's speed cannot
-	# quietly turn this into a test of nothing.
+	# Tighter than the defaults so the test is quick; the expected budget is
+	# computed from the component.
 	move.timeout_slack = 1.0
 	move.timeout_grace = 0.5
 	move.destination = bush_at
@@ -489,12 +425,8 @@ func _a_trip_it_cannot_finish_is_given_up_on() -> void:
 	_check("and the clock is back to zero for the next trip",
 		is_zero_approx(move.time_left))
 
-## What the state machine bought. A forager commits to a berry, and the berry
-## is taken by somebody else mid-walk. The old stateless rung could only fill an
-## *empty* destination slot, never take a full one, so it kept walking to the
-## empty grass and only re-decided on arrival. With `target` on the component
-## the brain can tell its commitment died, and calls the trip off on the tick it
-## notices.
+## When a committed target is taken by someone else, the brain drops the trip on
+## the tick it notices.
 func _a_stolen_target_is_dropped_the_tick_it_vanishes() -> void:
 	var thinking := EcsScheduler.new()
 	thinking \
@@ -520,8 +452,7 @@ func _a_stolen_target_is_dropped_the_tick_it_vanishes() -> void:
 	var committed_to := move.destination
 	_check("and walking to it", move.has_destination)
 
-	# Somebody else takes it: losing its position is what leaving the world
-	# means, and it is exactly what EcsPickupSystem does.
+	# Someone else takes it.
 	_world.remove(berry, EcsPositionComponent)
 	thinking.run_all(_world, TICK)
 	await get_tree().physics_frame
@@ -536,10 +467,7 @@ func _a_stolen_target_is_dropped_the_tick_it_vanishes() -> void:
 		is_zero_approx(move.time_left) or move.has_destination)
 
 
-## Hunger is the *motive*: below its forage threshold a creature must wander
-## past food it can plainly see, and above it must go and get it. Before step 4
-## the food rung fired whenever the bag had room, which is gathering with no
-## reason behind it.
+## Above `forage_below` it ignores food in sight; below it, it goes for it.
 func _hunger_climbs_and_gates_the_food_rung() -> void:
 	var living := EcsScheduler.new()
 	living \
@@ -577,12 +505,11 @@ func _hunger_climbs_and_gates_the_food_rung() -> void:
 	_check("a hungry one goes after the same berry",
 		brain.state == EcsLowBrainComponent.State.SEEK_FOOD)
 
-## Eating is a kill, where picking up is not: the berry leaves the bag AND the
-## world, nodes and all, through the one owner of entity lifetime.
+## Eating from the bag removes the record, and eating from the ground kills the
+## entity and its nodes.
 func _eating_empties_the_bag_and_ends_the_berry() -> void:
 	var living := EcsScheduler.new()
-	# No EcsHungerSystem on purpose: it would add a tick's worth of hunger in
-	# the same frame the meal takes some off, and this checks the meal exactly.
+	# No EcsHungerSystem, so the meal's effect can be checked exactly.
 	living \
 		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
 		.add(EcsLowBrainSystem.new()) \
@@ -613,8 +540,7 @@ func _eating_empties_the_bag_and_ends_the_berry() -> void:
 	_check("the intent named the record, not an entity",
 		brain.target == EcsWorld.NO_ENTITY)
 
-## The consequence that makes hunger more than a number: pinned at the top it
-## costs health, and health at zero is the module's first death by simulation.
+## Starving costs health, and zero health kills.
 func _starving_costs_health_and_then_the_entity() -> void:
 	var living := EcsScheduler.new()
 	living \
@@ -650,13 +576,7 @@ func _starving_costs_health_and_then_the_entity() -> void:
 	_check("and dead at the next lifecycle stage", not _world.is_alive(rabbit))
 	_check("with its container freed", _manager.container_for(rabbit) == null)
 
-## Eating must not depend on owning a pocket. A rabbit has no
-## EcsInventoryComponent at all: it walks to the berry and eats it where it
-## lies, off the ground, through the action area it already had for reaching.
-##
-## The whole chain end to end, with nothing handed to it by the test: hunger
-## climbs, the food rung fires, it walks, the eat rung fires on arrival, and
-## the berry is killed rather than pocketed.
+## A grazer (no inventory) walks to a berry and eats it off the ground, end to end.
 func _a_grazer_eats_off_the_ground_with_no_inventory() -> void:
 	var grazing := EcsScheduler.new()
 	grazing \
@@ -678,8 +598,7 @@ func _a_grazer_eats_off_the_ground_with_no_inventory() -> void:
 	_check("a rabbit carries nothing at all",
 		not _world.has(rabbit, EcsInventoryComponent))
 
-	# Empty enough to fetch. Its eat_below sits *above* forage_below precisely
-	# because it cannot stockpile — it eats what it walks to, on arrival.
+	# Hungry enough to fetch; a grazer eats on arrival.
 	hunger.fullness = hunger.forage_below - 1.0
 	_check("and its thresholds say graze, not hoard", hunger.eat_below > hunger.forage_below)
 	var before := hunger.fullness
@@ -703,10 +622,7 @@ func _tick(count: int) -> void:
 		_scheduler.run_all(_world, TICK)
 		await get_tree().physics_frame
 
-## What making pickup a decision is for. A full monkey standing on a berry used
-## to pocket it anyway, because EcsPickupSystem ran on reach alone and nothing
-## had chosen anything. Now the brain gates it on the same hunger that would
-## send it out for food in the first place.
+## A fed monkey standing on a berry doesn't pick it up; a hungry one does.
 func _a_sated_carrier_leaves_the_berry_alone() -> void:
 	var living := EcsScheduler.new()
 	living \
@@ -742,16 +658,8 @@ func _a_sated_carrier_leaves_the_berry_alone() -> void:
 	_check("which is a decision, not a reflex — it had to want it first",
 		not _world.is_alive(berry) or _world.has(berry, EcsDyingFlag))
 
-## The rung order, pinned. A carrier hungry enough to eat, standing over a
-## berry, must eat it where it lies — not pocket it and then take it back out.
-##
-## The end state cannot tell you which happened: with a one-slot bag, TAKE then
-## EAT leaves exactly the same dead berry and the same fed monkey as EAT alone.
-## So this watches the *path* and fails if the bag is ever non-empty. Reorder
-## EAT below TAKE and only this check notices.
-##
-## Carrying is provisioning, not a step on the way to a meal: you fill the bag
-## while wandering so that later hunger is answered on the spot.
+## A carrier hungry enough to eat, standing on a berry, eats it from the ground
+## and never bags it first (EAT outranks TAKE). Checks the bag stays empty.
 func _a_hungry_carrier_eats_off_the_ground_without_pocketing() -> void:
 	var living := EcsScheduler.new()
 	living \
@@ -768,8 +676,7 @@ func _a_hungry_carrier_eats_off_the_ground_without_pocketing() -> void:
 	var bag := _world.get_component(monkey, EcsInventoryComponent) as EcsInventoryComponent
 
 	_check("the carrier has a bag it could have used", bag != null)
-	# Empty enough to eat, which is past the threshold that would pocket it.
-	# No EcsHungerSystem here, so the bar stays where the test puts it.
+	# Hungry enough to eat. No EcsHungerSystem, so the bar stays put.
 	hunger.fullness = hunger.eat_below - 5.0
 	var before := hunger.fullness
 
@@ -788,13 +695,8 @@ func _a_hungry_carrier_eats_off_the_ground_without_pocketing() -> void:
 	_check("and never put it in the bag on the way", not pocketed)
 	_check("the meal went onto its fullness", hunger.fullness > before)
 
-## Two executors, one berry, one tick: a grazer eating it off the ground and a
-## carrier taking it into its bag. Consume runs first, so the grazer wins — and
-## the carrier must then find it claimed. Death is deferred to the next tick, so
-## for the rest of this one the berry still exists; what stops the second taker
-## is that the claim is instant, not that the berry is gone. Neither creature
-## learns the other meant to have it: the executors, running one at a time, are
-## the single authority that settles it.
+## A grazer and a carrier going for the same berry in one tick: consume runs
+## first, so the grazer gets it and pickup sees it claimed.
 func _one_berry_two_takers_one_tick() -> void:
 	var contest := EcsScheduler.new()
 	contest \
@@ -834,10 +736,8 @@ func _one_berry_two_takers_one_tick() -> void:
 		_world.add(id, EcsDyingFlag.new())
 	contest.run_all(_world, TICK)
 
-## Step 6's point, tested directly: the executors and the rate systems act on a
-## flag, so an entity with **no brain at all** eats, takes and sleeps when one is
-## raised on it. Nothing here ever reads EcsLowBrainComponent — the brain is
-## removed first so that nothing could.
+## With no brain at all, raising intent flags still makes an entity eat, take
+## and sleep.
 func _executors_need_a_flag_not_a_brain() -> void:
 	var acting := EcsScheduler.new()
 	acting \
@@ -851,8 +751,7 @@ func _executors_need_a_flag_not_a_brain() -> void:
 	var monkey := _manager.spawn(_world, _catalog, &"monkey", Vector2(-15000.0, 3000.0))
 	var meal := _manager.spawn(_world, _catalog, &"berry", Vector2(-15000.0, 20.0))
 	var prize := _manager.spawn(_world, _catalog, &"berry", Vector2(-15000.0, 3020.0))
-	# Deliberately breaking the component guideline, for a test: nothing may be
-	# able to consult a brain, so there is none to consult.
+	# Remove the brain so nothing can read it.
 	_world.remove(rabbit, EcsLowBrainComponent)
 	_world.remove(monkey, EcsLowBrainComponent)
 	for i in 3:
@@ -886,11 +785,8 @@ func _executors_need_a_flag_not_a_brain() -> void:
 			_world.add(id, EcsDyingFlag.new())
 	acting.run_all(_world, TICK)
 
-## `state` is the brain's memory and the flags are its instructions, written in
-## one place so they cannot drift. Run the whole deciding pipeline over a
-## hungry grazer and a hungry carrier among berries, and check on every tick
-## that each creature's flags are exactly the ones its state implies — and that
-## the eat and take states were actually visited, or the check proved nothing.
+## Over a live run, every creature's flags match its state on every tick, and
+## EAT and TAKE are both visited.
 func _every_state_raises_exactly_its_flag() -> void:
 	var living := EcsScheduler.new()
 	living \
@@ -943,9 +839,8 @@ func _every_state_raises_exactly_its_flag() -> void:
 			_world.add(id, EcsDyingFlag.new())
 	living.run_all(_world, TICK)
 
-## A carried item is a record; when its carrier dies it goes back into the world,
-## where the carrier fell, as itself. Same uid, new id, its instance values
-## intact — and it is real again: a hungry grazer can walk up and eat it.
+## When a carrier dies, its records return to the world where it fell: same
+## uid, new id, instance values intact, and edible again.
 func _a_dead_carrier_puts_back_what_it_carried() -> void:
 	var living := EcsScheduler.new()
 	living \
@@ -962,8 +857,7 @@ func _a_dead_carrier_puts_back_what_it_carried() -> void:
 	var monkey := _manager.spawn(_world, _catalog, &"monkey", spot)
 	var bag := _world.get_component(monkey, EcsInventoryComponent) as EcsInventoryComponent
 	bag.capacity = 2
-	# Two berries, far away, put in the bag the way EcsPickupSystem would. One is
-	# given an instance value its blueprint does not have.
+	# Two berries put in the bag, one with an instance value.
 	var uids: Array[String] = []
 	for i in 2:
 		var berry := _manager.spawn(_world, _catalog, &"berry", spot + Vector2(0.0, 5000.0 + i * 100.0))
@@ -1030,9 +924,8 @@ func _ids_with_uids(uids: Array[String]) -> Array[int]:
 			found.append(id)
 	return found
 
-## Every animal born equally rested with the same drain falls asleep at the same
-## moment. The blueprint authors a spread, and the energy system rolls each
-## animal into it the first time it sees one — so a runtime spawn gets it too.
+## Animals start with different energy, rolled from the blueprint's range,
+## including runtime spawns.
 func _animals_of_one_kind_start_differently_rested() -> void:
 	var rolling := EcsScheduler.new()
 	rolling.add(EcsEnergySystem.new())
@@ -1061,13 +954,8 @@ func _animals_of_one_kind_start_differently_rested() -> void:
 		_world.add(id, EcsDyingFlag.new())
 	_scheduler.run_all(_world, TICK)
 
-## Running a stage a third as often must not make it simulate a third as much.
-## The scheduler banks delta per system, so hunger authored in points per second
-## climbs at that rate whether it is ticked at 60 Hz or 20 Hz — nothing is
-## scaled by hand, which is the whole reason a per-stage rate is safe here.
-##
-## Also checks `phase`, which is what keeps two slow stages off the same frame:
-## a stage at phase 1 must sit out tick 0 and run on tick 1.
+## A stage run every third tick still simulates the same amount (delta is
+## banked), and `phase` delays its first run.
 func _a_stage_on_a_slower_tick_still_simulates_the_same() -> void:
 	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-8000.0, 0.0))
 	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
@@ -1106,9 +994,7 @@ func _a_stage_on_a_slower_tick_still_simulates_the_same() -> void:
 	_check("and runs on tick 1, with both ticks of delta banked",
 		is_equal_approx(hunger.max_fullness - hunger.fullness, hunger.drain * 2.0 * TICK))
 
-## The other half of hunger's rule. Starving spends health; being well fed gives
-## it back, and the band between the two thresholds does neither — which is what
-## stops regeneration from simply undoing starvation.
+## Well fed heals, starving hurts, and the band between does neither.
 func _being_well_fed_mends_and_the_band_between_does_neither() -> void:
 	var living := EcsScheduler.new()
 	living.add(EcsHungerSystem.new())
@@ -1125,9 +1011,7 @@ func _being_well_fed_mends_and_the_band_between_does_neither() -> void:
 		living.run_all(_world, TICK)
 	_check("a well-fed creature mends", health.value > 50.0)
 
-	# Between the thresholds: neither mending nor starving. The band is empty
-	# (starving) to `heal_above` — eat_below is the brain's line, not this one,
-	# and a grazer's sits above heal_above.
+	# Between zero and `heal_above`: no change.
 	hunger.fullness = hunger.heal_above * 0.5
 	var held := health.value
 	for i in 30:
@@ -1148,8 +1032,8 @@ func _being_well_fed_mends_and_the_band_between_does_neither() -> void:
 		living.run_all(_world, TICK)
 	_check("while empty still costs health", health.value < health.max_health)
 
-## The ordinary cycle: awake costs, moving costs more, low energy puts it down,
-## and sleeping brings it back up to `wake_at` and no further.
+## Awake drains, moving drains more, low energy leads to sleep, sleep restores
+## up to `wake_at`.
 func _it_tires_sleeps_and_wakes_rested() -> void:
 	var living := EcsScheduler.new()
 	living.add(EcsEnergySystem.new()).add(EcsLowBrainSystem.new())
@@ -1171,8 +1055,7 @@ func _it_tires_sleeps_and_wakes_rested() -> void:
 	var idle_cost := energy.max_energy - energy.value
 	_check("being awake costs energy", idle_cost > 0.0)
 
-	# Walking costs more. Velocity is what movement leaves behind, so the test
-	# sets it the way movement would.
+	# Walking costs more; set velocity as movement would.
 	energy.value = energy.max_energy
 	for i in 60:
 		move.velocity = Vector2(80.0, 0.0)
@@ -1205,8 +1088,7 @@ func _it_tires_sleeps_and_wakes_rested() -> void:
 	living.run_all(_world, TICK)
 	_check("then wakes once rested", brain.state != EcsLowBrainComponent.State.SLEEP)
 
-	# Starving interrupts a voluntary sleep — the first thing in this module
-	# that preempts a standing state rather than filling an empty slot.
+	# Starving wakes a voluntary sleeper.
 	energy.value = energy.rest_at - 1.0
 	living.run_all(_world, TICK)
 	_check("it sleeps again when tired", brain.state == EcsLowBrainComponent.State.SLEEP)
@@ -1214,9 +1096,8 @@ func _it_tires_sleeps_and_wakes_rested() -> void:
 	living.run_all(_world, TICK)
 	_check("but starving wakes it", brain.state != EcsLowBrainComponent.State.SLEEP)
 
-## Running out entirely is not a decision. The tag is the lock, the damage is
-## paid once at the moment of crossing, and coming round leaves an ordinary
-## sleeper rather than a free creature.
+## Collapse at zero: damage once, locked down until `collapse_release`, then an
+## ordinary sleeper.
 func _running_out_of_energy_drops_it_once() -> void:
 	var living := EcsScheduler.new()
 	living.add(EcsEnergySystem.new()).add(EcsLowBrainSystem.new())
@@ -1259,8 +1140,7 @@ func _running_out_of_energy_drops_it_once() -> void:
 	_check("and starving can wake it now",
 		brain.state != EcsLowBrainComponent.State.SLEEP)
 
-	# Something with energy but no health collapses without complaint — the
-	# same way something with no health starves forever.
+	# No health: it collapses with no damage.
 	_world.remove(rabbit, EcsHealthComponent)
 	_world.remove(rabbit, EcsCollapsedFlag)
 	energy.value = 0.0
@@ -1268,19 +1148,15 @@ func _running_out_of_energy_drops_it_once() -> void:
 	_check("an entity with no health collapses without error",
 		_world.has(rabbit, EcsCollapsedFlag))
 
-## Nothing without an EcsEnergyComponent ever tires or sleeps, and no flag says
-## so — a berry is the proof.
+## Without EcsEnergyComponent nothing tires or sleeps.
 func _a_thing_with_no_energy_never_sleeps() -> void:
 	var berry := _manager.spawn(_world, _catalog, &"berry", Vector2(-9000.0, 4000.0))
 	await _tick(1)
 	_check("a berry carries no energy", not _world.has(berry, EcsEnergyComponent))
 	_check("and never collapses", not _world.has(berry, EcsCollapsedFlag))
 
-## The plan's rule that nothing else pins down: **food outranks rest.** A tired
-## creature that can see a berry goes for it, and the trip it commits to is not
-## cut short by getting tireder on the way. The consequence — that a creature
-## which keeps finding food can run itself into a collapse — is the price of
-## that ordering, not a bug.
+## Food outranks rest: a tired creature goes for food it sees, and only a
+## collapse cuts that trip short.
 func _food_outranks_rest_and_a_trip_is_not_cut_short() -> void:
 	var living := EcsScheduler.new()
 	living \
@@ -1322,10 +1198,7 @@ func _food_outranks_rest_and_a_trip_is_not_cut_short() -> void:
 		_world.has(rabbit, EcsCollapsedFlag)
 		and brain.state == EcsLowBrainComponent.State.SLEEP)
 
-## A sleeper still gets hungry, just slower. Both halves matter: slower is the
-## point, and *still* is what keeps the wake-on-starving rule reachable — a
-## sleeper that never emptied would have no reason to get up before it was
-## rested, and `asleep_drain_scale` at 0 would quietly remove that rule.
+## Sleepers and collapsed entities still get hungry, at `asleep_drain_scale`.
 func _sleeping_slows_hunger_without_stopping_it() -> void:
 	var living := EcsScheduler.new()
 	living.add(EcsHungerSystem.new())
@@ -1362,9 +1235,7 @@ func _sleeping_slows_hunger_without_stopping_it() -> void:
 		is_equal_approx(hunger.max_fullness - hunger.fullness, asleep_cost))
 	_world.remove(rabbit, EcsCollapsedFlag)
 
-## Raise an intent flag directly, for the tests that run an executor without
-## EcsLowBrainSystem to decide for them. The test plays the brain — and since
-## the executors read only the flag, that is all playing the brain takes.
+## Raises an intent flag, standing in for the brain.
 func _intend_take(id: int, target: int) -> void:
 	var take := EcsTakeIntentFlag.new()
 	take.target_id = target
@@ -1375,9 +1246,7 @@ func _intend_eat(id: int, target: int) -> void:
 	eat.target_id = target
 	_world.add(id, eat)
 
-## Does `bag` hold a record of entity `id`? Matched by uid, since a carried item
-## is no longer an entity. The uid is remembered the first time it is asked
-## while the entity is alive, so the question still has an answer after it dies.
+## Does `bag` hold a record of entity `id`? Matched by uid, remembered while alive.
 func _holds(bag: EcsInventoryComponent, id: int) -> bool:
 	if _world.is_alive(id):
 		_uids[id] = (_world.get_component(id, EcsNameComponent) as EcsNameComponent).uid
@@ -1394,9 +1263,7 @@ func _first_of(type_id: StringName) -> int:
 func _radius_of(id: int) -> float:
 	return (_world.get_component(id, EcsBodyComponent) as EcsBodyComponent).radius
 
-## A view is a cache, so the failure to fear is a stale one: an id that died
-## still walked, or a component replaced while the old reference is handed out.
-## Each structural change it can see must rebuild it, and nothing else may.
+## A view rebuilds after any structural change to a table it names, and only then.
 func _a_view_is_kept_until_a_table_it_names_changes() -> void:
 	var world := EcsWorld.new()
 	var a := world.create_entity()

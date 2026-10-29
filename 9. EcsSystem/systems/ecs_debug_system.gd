@@ -1,18 +1,8 @@
 class_name EcsDebugSystem
 extends EcsSystem
 
-## Reads the world and hands a snapshot to the debug overlay. It is a system
-## like any other — it holds the behaviour, the views hold none — and it is the
-## only one here that is purely a reader: it writes no component and creates no
-## entity, so pulling it out of the scheduler changes the simulation not at all.
-##
-## Run it last, after node_sync, so what it reports is the state just drawn.
-##
-## Note what it does NOT do: it never enumerates an entity's components. It asks
-## for the three types it wants to show, by type, exactly as every other system
-## does. A fourth component kind would need a column added here — that is the
-## honest cost of a hand-written read-out, and the price of not needing any
-## reflection machinery to pay it.
+## Sends a per-entity snapshot to the debug overlay. Read only. Bars are
+## ratios; -1 means the entity has no such reading.
 
 var _overlay: EcsDebugOverlay
 
@@ -45,14 +35,11 @@ func run(world: EcsWorld, _delta: float) -> void:
 			"hunger": -1.0,
 			"energy": -1.0,
 			"health": -1.0,
-			# 0 awake, 1 asleep by choice, 2 collapsed. Read off the two flags,
-			# which are public for exactly this — never off the brain's state.
+			# 0 awake, 1 asleep, 2 collapsed.
 			"sleep": 2 if world.has(id, EcsCollapsedFlag)
 				else (1 if world.has(id, EcsAsleepFlag) else 0),
 			"carried": bag.items.size() if bag != null else -1,
-			# How big its sprite is drawn against the nominal size, as a ratio —
-			# blueprints set their own scale_factor, and the shoulder markers
-			# must sit on the sprite actually drawn.
+			# Sprite scale relative to the default.
 			"sprite_scale": 1.0,
 		}
 		var sprite := world.get_component(id, EcsSpriteComponent) as EcsSpriteComponent
@@ -62,9 +49,6 @@ func run(world: EcsWorld, _delta: float) -> void:
 			row["velocity"] = move.velocity
 			row["has_destination"] = move.has_destination
 			row["destination"] = move.destination
-		# Bars go out as ratios, never as text or pixels. Formatting is the
-		# view's business and a fraction is the honest reading — the overlay
-		# decides how long a bar that makes, and -1 means "has no such bar".
 		var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
 		var energy := world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
 		var health := world.get_component(id, EcsHealthComponent) as EcsHealthComponent
