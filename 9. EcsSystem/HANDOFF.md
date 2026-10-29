@@ -95,17 +95,18 @@ break it for a good reason and write the reason down where it breaks.
 A wall that gains movement is no longer a wall — that is a kill and a spawn, not an `add()`.
 Nothing today adds or removes a component after spawn.
 
-**15 components** — `name`, `position` (both added by the manager from the placement, not the
+**20 components** — `name`, `position` (both added by the manager from the placement, not the
 blueprint), `sprite`, `body`, `movement`, `low_brain`, `sensor`, `action`, `hunger`, `health`,
-`energy`, `inventory`, `consumable`, `pickable`, `spawner`.
+`energy`, `inventory`, `consumable`, `pickable`, `spawner`, and for combat and corpses
+`damage`, `armor`, `crit_chance`, `lootable`, `rot`.
 
-**6 flags** — `EcsSelectedFlag` (selection owns it), `EcsCollapsedFlag` (energy), and three
-brain intents, `EcsEatIntentFlag{target_id | record_uid}`, `EcsTakeIntentFlag{target_id}` and
-`EcsAsleepFlag`, plus `EcsDyingFlag` (§3). A flag may carry data — an intent names its target
+**7 flags** — `EcsSelectedFlag` (selection owns it), `EcsCollapsedFlag` (energy), and four
+brain intents, `EcsEatIntentFlag{target_id | record_uid}`, `EcsTakeIntentFlag{target_id,
+record_uid}`, `EcsAttackIntentFlag{target_id}` and `EcsAsleepFlag`, plus `EcsDyingFlag` (§3). A flag may carry data — an intent names its target
 — but nothing about a flag is decided before the game starts.
 
-**2 singletons** — `EcsLifecycleSingleton` (spawn notes) and `EcsSelectionSingleton` (the
-pending click).
+**3 singletons** — `EcsLifecycleSingleton` (spawn notes), `EcsSelectionSingleton` (the
+pending click) and `EcsCombatSingleton` (this tick's hits, §17).
 
 **The one method a component may have is `describe()`**, for display only (§10). It reads the
 component's own fields and changes nothing. Anything that computes, decides or writes still
@@ -542,7 +543,8 @@ brain's food index. The ceiling went from 4,800–6,400 to over 9,600 entities (
 - **4, bars as systems** — done: fullness, health, energy.
 - **5, sensor and intents** — done, differently: physics areas rather than a distance query.
   The node-free query is the fallback if areas ever stop paying.
-- **6, the brain writes intents** — done on the stripped core, without combat (§7).
+- **6, the brain writes intents** — done on the stripped core, without combat (§7); combat
+  has since been rebuilt on it (§17).
   Measured before/after in one sitting at 2,400 entities: the executors dropped ~14 ms
   because they now query intent flags instead of every brain; the brain itself did not get
   dearer. The cost of raising a flag under load is unmeasured — the stress population never

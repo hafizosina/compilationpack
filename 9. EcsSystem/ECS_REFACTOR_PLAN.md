@@ -2,7 +2,8 @@
 
 > **Status (kept current in `HANDOFF.md` §13):** steps 0–6 are done; step 7 (GOAP) is not
 > started. Where the build diverged from this plan, on purpose: step 2's combat pipeline
-> landed clean and was then **cut** so the core reads end to end (git `928b9d1`); step 3's
+> landed clean, was **cut** so the core reads end to end (git `928b9d1`), and was later
+**rebuilt** on the current architecture without weapons (`HANDOFF.md` §17); step 3's
 > "items stay entities" was **reversed** — a carried item is a record; step 5 senses with
 > **physics areas**, not a distance query; step 6 was done **without combat**, with intent
 > *flags* rather than intent components, and no `MoveIntent` yet. This document is the plan
