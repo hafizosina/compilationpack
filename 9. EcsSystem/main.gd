@@ -81,6 +81,7 @@ func _build() -> void:
 		.add(EcsSensorSystem.new(_manager), SLOW, 0) \
 		.add(EcsLowBrainSystem.new(), SLOW, 1) \
 		.add(EcsConsumeSystem.new()) \
+		.add(EcsHarvestSystem.new()) \
 		.add(EcsAttackSystem.new()) \
 		.add(EcsCritSystem.new()) \
 		.add(EcsDamageSystem.new()) \

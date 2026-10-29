@@ -180,6 +180,72 @@ entity_name = &"berry_bush_1"
 type = &"berry_bush"
 position = Vector2(950, 350)
 
+[sub_resource type="Resource" id="b2"]
+script = ExtResource("place")
+entity_name = &"berry_bush_2"
+type = &"berry_bush"
+position = Vector2(-1250, 550)
+
+[sub_resource type="Resource" id="b3"]
+script = ExtResource("place")
+entity_name = &"berry_bush_3"
+type = &"berry_bush"
+position = Vector2(-1150, -150)
+
+[sub_resource type="Resource" id="b4"]
+script = ExtResource("place")
+entity_name = &"berry_bush_4"
+type = &"berry_bush"
+position = Vector2(-450, 150)
+
+[sub_resource type="Resource" id="b5"]
+script = ExtResource("place")
+entity_name = &"berry_bush_5"
+type = &"berry_bush"
+position = Vector2(-300, -350)
+
+[sub_resource type="Resource" id="b6"]
+script = ExtResource("place")
+entity_name = &"berry_bush_6"
+type = &"berry_bush"
+position = Vector2(-150, 650)
+
+[sub_resource type="Resource" id="b7"]
+script = ExtResource("place")
+entity_name = &"berry_bush_7"
+type = &"berry_bush"
+position = Vector2(300, 100)
+
+[sub_resource type="Resource" id="b8"]
+script = ExtResource("place")
+entity_name = &"berry_bush_8"
+type = &"berry_bush"
+position = Vector2(250, -600)
+
+[sub_resource type="Resource" id="b9"]
+script = ExtResource("place")
+entity_name = &"berry_bush_9"
+type = &"berry_bush"
+position = Vector2(850, -350)
+
+[sub_resource type="Resource" id="b10"]
+script = ExtResource("place")
+entity_name = &"berry_bush_10"
+type = &"berry_bush"
+position = Vector2(650, 650)
+
+[sub_resource type="Resource" id="b11"]
+script = ExtResource("place")
+entity_name = &"berry_bush_11"
+type = &"berry_bush"
+position = Vector2(1350, 100)
+
+[sub_resource type="Resource" id="b12"]
+script = ExtResource("place")
+entity_name = &"berry_bush_12"
+type = &"berry_bush"
+position = Vector2(1150, -650)
+
 [resource]
 script = ExtResource("world")
-entries = Array[ExtResource("place")]([SubResource("p0"), SubResource("p1"), SubResource("p2"), SubResource("p3"), SubResource("p4"), SubResource("p5"), SubResource("p6"), SubResource("p7"), SubResource("p8"), SubResource("p9"), SubResource("c0"), SubResource("b0"), SubResource("b1")])
+entries = Array[ExtResource("place")]([SubResource("p0"), SubResource("p1"), SubResource("p2"), SubResource("p3"), SubResource("p4"), SubResource("p5"), SubResource("p6"), SubResource("p7"), SubResource("p8"), SubResource("p9"), SubResource("c0"), SubResource("b0"), SubResource("b1"), SubResource("b2"), SubResource("b3"), SubResource("b4"), SubResource("b5"), SubResource("b6"), SubResource("b7"), SubResource("b8"), SubResource("b9"), SubResource("b10"), SubResource("b11"), SubResource("b12")])

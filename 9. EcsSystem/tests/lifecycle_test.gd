@@ -81,6 +81,8 @@ func _run() -> void:
 	await _death_by_health_leaves_a_corpse_to_loot_and_eat()
 	await _a_corpse_rots_and_spills_what_it_held()
 	await _a_hungry_hunter_kills_its_prey_and_eats_the_corpse()
+	await _a_bush_yields_only_when_harvested()
+	await _hungry_plant_eaters_harvest_then_eat_or_take()
 
 ## Nodes match the declared NODE_KINDs (a berry gets a sprite and a body, no
 ## sensor) and hang under the entity's own container.
@@ -228,8 +230,11 @@ func _flags_share_one_inspector_tab() -> void:
 
 ## A spawner's request is fulfilled next tick and it records the new id.
 func _a_spawner_note_is_fulfilled_next_tick() -> void:
+	# Bushes are harvested now, so the test gives one a spawner.
 	var bush := _manager.spawn(_world, _catalog, &"berry_bush", Vector2(-800.0, -400.0))
-	var spawner := _world.get_component(bush, EcsSpawnerComponent) as EcsSpawnerComponent
+	var spawner := EcsSpawnerComponent.new()
+	spawner.radius = 300.0
+	_world.add(bush, spawner)
 
 	await _tick(1)
 	_check("the spawner has a note in flight", spawner.pending.size() == 1)
@@ -1500,6 +1505,132 @@ func _corpse_pipeline(with_brain: bool) -> EcsScheduler:
 	living.add(EcsCorpseSystem.new())
 	living.add(EcsDropSystem.new())
 	return living
+
+## A bush makes nothing on its own. Harvesting takes one unit per `harvest_time`
+## and drops a berry in the harvester's reach; an empty bush yields nothing, and
+## stock regrows.
+func _a_bush_yields_only_when_harvested() -> void:
+	var living := EcsScheduler.new()
+	living \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsHarvestSystem.new()) \
+		.add(EcsCollisionSystem.new(_manager)) \
+		.add(EcsNodeSyncSystem.new(_manager))
+
+	var spot := Vector2(-12000.0, 6000.0)
+	var bush := _manager.spawn(_world, _catalog, &"berry_bush", spot)
+	var crop := _world.get_component(bush, EcsHarvestableComponent) as EcsHarvestableComponent
+	for i in 120:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+	_check("an unharvested bush makes no berry", _berries_near(spot, 300.0).is_empty())
+	_check("and starts full", crop.stock == crop.stock_max)
+
+	var monkey := _manager.spawn(_world, _catalog, &"monkey", spot + Vector2(85.0, 0.0))
+	_world.remove(monkey, EcsLowBrainComponent)
+	var harvest := EcsHarvestIntentFlag.new()
+	harvest.target_id = bush
+	_world.add(monkey, harvest)
+	var unit_ticks := ceili(crop.harvest_time / TICK)
+	for i in unit_ticks + 3:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+	var action := _world.get_component(monkey, EcsActionComponent) as EcsActionComponent
+	var first := _berries_near(spot, 300.0)
+	_check("one harvest takes one unit", crop.stock == crop.stock_max - 1)
+	_check("and drops one berry", first.size() == 1)
+	_check("in the harvester's reach", first.size() == 1 and action.reached.has(first[0]))
+
+	for i in unit_ticks * (crop.stock_max + 2):
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+	_check("an emptied bush has yielded exactly its stock",
+		crop.stock == 0 and _berries_near(spot, 300.0).size() == crop.stock_max)
+
+	_world.remove(monkey, EcsHarvestIntentFlag)
+	crop.regrow_left = 0.1
+	for i in 10:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+	_check("and it regrows", crop.stock == 1)
+
+	for id in [bush, monkey] + _berries_near(spot, 300.0):
+		_world.add(id, EcsDyingFlag.new())
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+
+## A hungry rabbit walks to a bush, harvests and eats the berry off the ground; a
+## hungry monkey harvests and pockets it. The harvest flag matches the state.
+func _hungry_plant_eaters_harvest_then_eat_or_take() -> void:
+	var living := EcsScheduler.new()
+	living \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsLowBrainSystem.new()) \
+		.add(EcsConsumeSystem.new()) \
+		.add(EcsHarvestSystem.new()) \
+		.add(EcsMovementSystem.new()) \
+		.add(EcsCollisionSystem.new(_manager)) \
+		.add(EcsPickupSystem.new()) \
+		.add(EcsNodeSyncSystem.new(_manager))
+
+	var rabbit_spot := Vector2(-12000.0, -6000.0)
+	var monkey_spot := Vector2(-12000.0, -9000.0)
+	var bushes: Array[int] = [
+		_manager.spawn(_world, _catalog, &"berry_bush", rabbit_spot),
+		_manager.spawn(_world, _catalog, &"berry_bush", monkey_spot),
+	]
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", rabbit_spot + Vector2(220.0, 0.0))
+	var monkey := _manager.spawn(_world, _catalog, &"monkey", monkey_spot + Vector2(220.0, 0.0))
+	var creatures: Array[int] = [rabbit, monkey]
+	for id in creatures:
+		var energy := _world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
+		energy.rolled = true  # the test sets energy by hand; no start roll
+		energy.value = energy.max_energy
+	var rabbit_hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
+	rabbit_hunger.fullness = rabbit_hunger.forage_below - 1.0
+	var rabbit_started := rabbit_hunger.fullness
+	var monkey_hunger := _world.get_component(monkey, EcsHungerComponent) as EcsHungerComponent
+	monkey_hunger.fullness = monkey_hunger.forage_below - 1.0
+	var bag := _world.get_component(monkey, EcsInventoryComponent) as EcsInventoryComponent
+
+	var harvested := {}
+	var monkey_ate := false
+	var flag_matches := true
+	for i in 600:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		for id in creatures:
+			var brain := _world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
+			var harvesting := brain.state == EcsLowBrainComponent.State.HARVEST
+			harvested[id] = harvested.get(id, false) or harvesting
+			flag_matches = flag_matches and _world.has(id, EcsHarvestIntentFlag) == harvesting
+		monkey_ate = monkey_ate or _world.has(monkey, EcsEatIntentFlag)
+		if rabbit_hunger.fullness > rabbit_started and not bag.items.is_empty():
+			break
+	_check("a hungry rabbit harvests a bush", harvested.get(rabbit, false))
+	_check("and eats what it harvested", rabbit_hunger.fullness > rabbit_started)
+	_check("a hungry monkey harvests a bush", harvested.get(monkey, false))
+	_check("and pockets what it harvested, without eating", not bag.items.is_empty()
+		and not monkey_ate)
+	_check("the harvest flag is raised exactly while it harvests", flag_matches)
+
+	for id in creatures + bushes + _berries_near(rabbit_spot, 400.0) \
+			+ _berries_near(monkey_spot, 400.0):
+		_world.add(id, EcsDyingFlag.new())
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+
+## Live berries within `radius` of `spot`.
+func _berries_near(spot: Vector2, radius: float) -> Array[int]:
+	var found: Array[int] = []
+	for id in _world.query([EcsNameComponent, EcsPositionComponent], [EcsDyingFlag]):
+		var named := _world.get_component(id, EcsNameComponent) as EcsNameComponent
+		var at := _world.get_component(id, EcsPositionComponent) as EcsPositionComponent
+		if named.type_id == &"berry" and at.position.distance_to(spot) <= radius:
+			found.append(id)
+	return found
 
 ## Raises an intent flag, standing in for the brain.
 func _intend_take(id: int, target: int) -> void:

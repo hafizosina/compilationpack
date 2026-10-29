@@ -12,11 +12,12 @@ enum State {
 	SLEEP,      ## Asleep, by choice or by collapse.
 	HUNT,       ## Chasing `target` to attack it.
 	ATTACK,     ## Attacking `target`, which is in reach.
+	HARVEST,    ## Harvesting `target`, which is in reach.
 }
 
 ## Display names for `state`, in enum order.
 const STATE_NAMES: Array[String] = ["idle", "wander", "seek food", "taking", "eating", "sleeping",
-	"hunting", "attacking"]
+	"hunting", "attacking", "harvesting"]
 
 ## How far away a wander destination may be.
 @export var radius: float = 260.0

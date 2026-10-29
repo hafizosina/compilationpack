@@ -2,14 +2,15 @@ class_name EcsLowBrainSystem
 extends EcsSystem
 
 ## The creature's brain: a state machine (IDLE, WANDER, SEEK_FOOD, TAKE, EAT, SLEEP,
-## HUNT, ATTACK).
+## HUNT, ATTACK, HARVEST).
 ## It decides and writes a destination; executors act on the intent flags it
 ## raises in `_set_state()`.
 ##
 ## Each tick: a collapse forces SLEEP; a commitment (SEEK_FOOD, HUNT, ATTACK) is
 ## checked and kept or dropped (food in sight ends a hunt); otherwise it picks the
-## highest rung that applies: eat > take (or loot) > seek food > hunt > sleep > wander. Food is filtered by
-## diet: a creature only eats and seeks what its hunger `eats`.
+## highest rung that applies: eat > take (or loot) > seek food > harvest > hunt > sleep >
+## wander. Food is filtered by diet: a creature only eats, seeks and harvests what its
+## hunger `eats`.
 
 ## The view `_food` was built from.
 var _food_view: EcsView
@@ -17,12 +18,19 @@ var _food_view: EcsView
 var _food: Dictionary = {}
 ## Current food: id -> its diet.
 var _diet: Dictionary = {}
+## The view `_bushes` was built from.
+var _bush_view: EcsView
+## Current harvestables: id -> EcsHarvestableComponent.
+var _bushes: Dictionary = {}
+## Current harvestables: id -> EcsPositionComponent.
+var _bush_at: Dictionary = {}
 
 func label() -> StringName:
 	return &"low_brain"
 
 func run(world: EcsWorld, delta: float) -> void:
 	_refresh_food(world)
+	_refresh_bushes(world)
 	# Hunger, energy, bag, reach and sensor are optional, so they are looked up.
 	var brains := world.view([EcsPositionComponent, EcsMovementComponent, EcsLowBrainComponent])
 	var minds := brains.column(EcsLowBrainComponent)
@@ -49,7 +57,7 @@ func run(world: EcsWorld, delta: float) -> void:
 
 		# Check the current commitment.
 		if brain.state == EcsLowBrainComponent.State.SEEK_FOOD:
-			if not _is_food(brain.target):
+			if not _is_food(brain.target) and not _has_stock(brain.target):
 				# Target gone: stop and choose again.
 				_abandon_trip(move)
 				_release(world, id, brain)
@@ -78,6 +86,8 @@ func run(world: EcsWorld, delta: float) -> void:
 		if _try_take(world, id, brain, move):
 			continue
 		if _try_seek_food(world, id, brain, move, place):
+			continue
+		if _try_harvest(world, id, brain, move, place):
 			continue
 		if _try_hunt(world, id, brain, move, place):
 			continue
@@ -175,15 +185,19 @@ func _is_takeable(world: EcsWorld, id: int) -> bool:
 	return world.has(id, EcsPickableComponent) and world.has(id, EcsPositionComponent) \
 		and not world.has(id, EcsDyingFlag)
 
-## Walk to the nearest food in sight, if hungry enough and the bag has room.
-func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
-		move: EcsMovementComponent, place: EcsPositionComponent) -> bool:
-	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+## Hungry enough to forage, and the bag (if any) has room.
+func _foraging(world: EcsWorld, id: int, hunger: EcsHungerComponent) -> bool:
 	if hunger != null and hunger.fullness > hunger.forage_below:
 		return false
 	# A full bag stops it; having no bag does not.
 	var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
-	if bag != null and bag.items.size() >= bag.capacity:
+	return bag == null or bag.items.size() < bag.capacity
+
+## Walk to the nearest food in sight, if foraging.
+func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
+		move: EcsMovementComponent, place: EcsPositionComponent) -> bool:
+	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+	if not _foraging(world, id, hunger):
 		return false
 	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
 	if sensor == null or sensor.perceived.is_empty():
@@ -207,6 +221,52 @@ func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	_set_state(world, id, brain, EcsLowBrainComponent.State.SEEK_FOOD, best)
 	_set_trip(move, (_food[best] as EcsPositionComponent).position)
 	return true
+
+## Harvest a plant in reach, or walk to the nearest one in sight, if foraging.
+func _try_harvest(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
+		move: EcsMovementComponent, place: EcsPositionComponent) -> bool:
+	if _bushes.is_empty():
+		return false
+	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+	if not _foraging(world, id, hunger):
+		return false
+	var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
+	if action != null:
+		for touched in action.reached:
+			if _harvestable(touched, hunger):
+				_abandon_trip(move)
+				_set_state(world, id, brain, EcsLowBrainComponent.State.HARVEST, touched)
+				return true
+	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
+	if sensor == null:
+		return false
+
+	var best := EcsWorld.NO_ENTITY
+	var best_distance := INF
+	for seen in sensor.perceived:
+		if not _harvestable(seen, hunger):
+			continue
+		var there := (_bush_at[seen] as EcsPositionComponent).position
+		var distance := place.position.distance_squared_to(there)
+		if distance < best_distance:
+			best_distance = distance
+			best = seen
+	if best == EcsWorld.NO_ENTITY:
+		return false
+
+	_set_state(world, id, brain, EcsLowBrainComponent.State.SEEK_FOOD, best)
+	_set_trip(move, (_bush_at[best] as EcsPositionComponent).position)
+	return true
+
+## Is `id` a plant with stock left?
+func _has_stock(id: int) -> bool:
+	var crop: EcsHarvestableComponent = _bushes.get(id)
+	return crop != null and crop.stock > 0
+
+## Is `id` a plant with stock whose yield this hunger eats? Without hunger, any.
+func _harvestable(id: int, hunger: EcsHungerComponent) -> bool:
+	return _has_stock(id) and (hunger == null
+		or (_bushes[id] as EcsHarvestableComponent).diet == hunger.eats)
 
 ## Chase the nearest prey in sight, if it can attack and is hungry enough.
 ## Prey is anything with health that is not dying and not its own kind.
@@ -345,6 +405,20 @@ func _refresh_food(world: EcsWorld) -> void:
 		_food[food.ids[k]] = places[k]
 		_diet[food.ids[k]] = (foods[k] as EcsConsumableComponent).diet
 
+## Rebuilds `_bushes` when the harvestable view changes.
+func _refresh_bushes(world: EcsWorld) -> void:
+	var plants := world.view([EcsHarvestableComponent, EcsPositionComponent], [EcsDyingFlag])
+	if plants == _bush_view:
+		return
+	_bush_view = plants
+	_bushes = {}
+	_bush_at = {}
+	var crops := plants.column(EcsHarvestableComponent)
+	var places := plants.column(EcsPositionComponent)
+	for k in plants.ids.size():
+		_bushes[plants.ids[k]] = crops[k]
+		_bush_at[plants.ids[k]] = places[k]
+
 ## Back to IDLE. Does not touch the trip.
 func _release(world: EcsWorld, id: int, brain: EcsLowBrainComponent) -> void:
 	_set_state(world, id, brain, EcsLowBrainComponent.State.IDLE)
@@ -385,6 +459,10 @@ func _set_state(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 			var attack := EcsAttackIntentFlag.new()
 			attack.target_id = target
 			world.add(id, attack)
+		EcsLowBrainComponent.State.HARVEST:
+			var harvest := EcsHarvestIntentFlag.new()
+			harvest.target_id = target
+			world.add(id, harvest)
 
 ## The flag a state raises, or null.
 static func _flag_for(state: EcsLowBrainComponent.State) -> Script:
@@ -397,6 +475,8 @@ static func _flag_for(state: EcsLowBrainComponent.State) -> Script:
 			return EcsAsleepFlag
 		EcsLowBrainComponent.State.ATTACK:
 			return EcsAttackIntentFlag
+		EcsLowBrainComponent.State.HARVEST:
+			return EcsHarvestIntentFlag
 	return null
 
 ## Sets a destination. Zeroes `time_left` so the trip gets a fresh time budget.
