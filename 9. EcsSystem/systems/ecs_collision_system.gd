@@ -6,16 +6,21 @@ extends EcsSystem
 ## from components. Non-solid bodies are skipped, immovable ones push but never move.
 
 var _manager: EcsEntityManager
-var _circles: Dictionary = {}  # entity id -> CircleShape2D, resolved once
 
-# This tick's bodies, gathered once by `_sync` and read by `_resolve`.
+# The working set, rebuilt only when one of these views changes.
+var _bodies_view: EcsView
+var _movers_view: EcsView
 var _ids: Array[int] = []
 var _places: Array[EcsPositionComponent] = []
-var _radii := PackedFloat32Array()
-var _movable: Array[bool] = []
-var _solid: Array[bool] = []
+var _shapes: Array[EcsBodyComponent] = []
+var _circles: Array[CircleShape2D] = []
 var _areas: Array[Area2D] = []
+var _movable: Array[bool] = []
 var _slots: Dictionary = {}  # entity id -> index into the arrays above
+
+# Refreshed every tick, since radius and is_solid can change at any time.
+var _radii := PackedFloat32Array()
+var _solid: Array[bool] = []
 
 func _init(manager: EcsEntityManager) -> void:
 	_manager = manager
@@ -26,48 +31,58 @@ func label() -> StringName:
 func run(world: EcsWorld, _delta: float) -> void:
 	if _manager == null:
 		return
-	_sync(world)
+	_refresh(world)
+	_sync()
 	_resolve()
 
-## Writes each body's radius and solidity to its area and gathers the working set.
-func _sync(world: EcsWorld) -> void:
-	_ids.clear()
-	_places.clear()
-	_radii.clear()
-	_movable.clear()
-	_solid.clear()
-	_areas.clear()
-	_slots.clear()
+## Rebuilds the working set if a body was born or died, or gained or lost movement.
+func _refresh(world: EcsWorld) -> void:
+	var bodies := world.view([EcsPositionComponent, EcsBodyComponent])
+	var movers := world.view([EcsBodyComponent, EcsMovementComponent])
+	if bodies == _bodies_view and movers == _movers_view:
+		return
+	clear()
+	_bodies_view = bodies
+	_movers_view = movers
 
-	for id in world.query([EcsPositionComponent, EcsBodyComponent]):
+	var places := bodies.column(EcsPositionComponent)
+	var shapes := bodies.column(EcsBodyComponent)
+	for k in bodies.ids.size():
+		var id := bodies.ids[k]
 		var body := _manager.node_for(id, EcsConst.NODE_BODY) as Area2D
 		if body == null:
-			_circles.erase(id)
 			continue
+		_slots[id] = _ids.size()
+		_ids.append(id)
+		_places.append(places[k])
+		_shapes.append(shapes[k])
+		_circles.append((body.get_node(^"Collider") as CollisionShape2D).shape as CircleShape2D)
+		_areas.append(body)
+		_movable.append(false)
+	for id in movers.ids:
+		var slot: int = _slots.get(id, -1)
+		if slot >= 0:
+			_movable[slot] = true
+	_radii.resize(_ids.size())
+	_solid.resize(_ids.size())
 
-		var shape := world.get_component(id, EcsBodyComponent) as EcsBodyComponent
-		var circle: CircleShape2D = _circles.get(id)
-		if circle == null:
-			circle = (body.get_node(^"Collider") as CollisionShape2D).shape as CircleShape2D
-			_circles[id] = circle
+## Writes each body's radius and solidity onto its area.
+func _sync() -> void:
+	for i in _ids.size():
+		var shape := _shapes[i]
+		var circle := _circles[i]
 		if not is_equal_approx(circle.radius, shape.radius):
 			circle.radius = shape.radius
+		_radii[i] = shape.radius
 
-		var place := world.get_component(id, EcsPositionComponent) as EcsPositionComponent
 		# Non-solid bodies stop monitoring but stay detectable.
+		var body := _areas[i]
 		var solid := shape.is_solid
 		if body.monitoring != solid:
 			body.monitoring = solid
 		if not body.monitorable:
 			body.monitorable = true
-
-		_slots[id] = _ids.size()
-		_ids.append(id)
-		_places.append(place)
-		_radii.append(shape.radius)
-		_movable.append(world.has(id, EcsMovementComponent))
-		_solid.append(solid)
-		_areas.append(body)
+		_solid[i] = solid
 
 ## Moves each movable solid body half the overlap away from each solid body it
 ## touches. Each pair is reported from both sides, so the push is symmetric.
@@ -92,13 +107,16 @@ func _resolve() -> void:
 			var push := apart / gap if gap > 0.01 else Vector2.RIGHT.rotated(randf() * TAU)
 			mine.position += push * (touching - gap) * 0.5
 
-## Clears the working set and cached shapes.
+## Clears the working set; the next run rebuilds it.
 func clear() -> void:
-	_circles.clear()
+	_bodies_view = null
+	_movers_view = null
 	_ids.clear()
 	_places.clear()
-	_radii.clear()
-	_movable.clear()
-	_solid.clear()
+	_shapes.clear()
+	_circles.clear()
 	_areas.clear()
+	_movable.clear()
 	_slots.clear()
+	_radii.clear()
+	_solid.clear()
