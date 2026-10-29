@@ -9,6 +9,7 @@ extends Node2D
 const SPRITE_HALF := 64.0 * EcsConst.SPRITE_SCALE
 
 const NAME_COLOR := Color(1.0, 0.98, 0.9, 0.95)
+const GOAL_COLOR := Color(0.95, 0.85, 0.55, 0.9)
 const BAG_COLOR := Color(0.65, 1.0, 0.55, 0.95)
 const BADGE_INK := Color(0.09, 0.07, 0.05, 0.95)
 const VELOCITY_COLOR := Color(0.35, 0.9, 1.0)
@@ -74,7 +75,12 @@ func _draw() -> void:
 	for row in _rows:
 		var pos: Vector2 = row["pos"]
 
-		_label(pos + Vector2(left, above), String(row["name"]), 13.0 * px, width, NAME_COLOR)
+		# The planner's goal sits under the name, just above the sprite.
+		var goal := String(row["goal"])
+		var name_at := above - (12.0 * px if goal != "" else 0.0)
+		_label(pos + Vector2(left, name_at), String(row["name"]), 13.0 * px, width, NAME_COLOR)
+		if goal != "":
+			_label(pos + Vector2(left, above), goal, 10.0 * px, width, GOAL_COLOR)
 
 		# Draw only the bars the entity has.
 		var stacked := bar_top

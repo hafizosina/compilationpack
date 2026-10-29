@@ -6,7 +6,7 @@ extends Node2D
 ## Left-click selects an entity for the inspector. F1 toggles the debug overlay,
 ## F5 rebuilds the world from data.
 
-## Ticks between runs for sensor, low_brain and health (3 = 20 Hz).
+## Ticks between runs for sensor, planning, low_brain and health (3 = 20 Hz).
 const SLOW: int = 3
 
 ## Ticks between runs for hunger and energy (6 = 10 Hz). Phases are chosen so no
@@ -79,6 +79,7 @@ func _build() -> void:
 		.add(EcsEnergySystem.new(), BARS, 5) \
 		.add(EcsHealthSystem.new(), SLOW, 2) \
 		.add(EcsSensorSystem.new(_manager), SLOW, 0) \
+		.add(EcsPlanningSystem.new(), SLOW, 0) \
 		.add(EcsLowBrainSystem.new(), SLOW, 1) \
 		.add(EcsConsumeSystem.new()) \
 		.add(EcsHarvestSystem.new()) \

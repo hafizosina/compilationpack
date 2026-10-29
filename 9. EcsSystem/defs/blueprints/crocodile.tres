@@ -14,6 +14,16 @@
 [ext_resource type="Script" uid="uid://dggyv3jo4spyn" path="res://9. EcsSystem/components/ecs_damage_component.gd" id="s_damage"]
 [ext_resource type="Script" uid="uid://bndwompu454gu" path="res://9. EcsSystem/components/ecs_crit_chance_component.gd" id="s_crit"]
 [ext_resource type="Texture2D" uid="uid://bsciji1o2m6r" path="res://Global/Asset/Animal/crocodile.png" id="tex_crocodile"]
+[ext_resource type="Script" uid="uid://bo6wqgowj8y6s" path="res://9. EcsSystem/components/ecs_planner_component.gd" id="s_planner"]
+[ext_resource type="Script" uid="uid://dvtyowamldw5k" path="res://9. EcsSystem/ai/ecs_action_def.gd" id="s_action_def"]
+[ext_resource type="Script" uid="uid://dhxn4v5fbnav2" path="res://9. EcsSystem/ai/ecs_goal_def.gd" id="s_goal_def"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/eat_ground.tres" id="a_eat_ground"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/seek_food.tres" id="a_seek_food"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/hunt.tres" id="a_hunt"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/attack.tres" id="a_attack"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/sleep.tres" id="a_sleep"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/goals/satisfy_hunger.tres" id="g_satisfy_hunger"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/goals/rest.tres" id="g_rest"]
 
 [sub_resource type="Resource" id="c_body"]
 script = ExtResource("s_body")
@@ -73,8 +83,13 @@ script = ExtResource("s_crit")
 chance = 0.15
 multiplier = 2.0
 
+[sub_resource type="Resource" id="c_planner"]
+script = ExtResource("s_planner")
+actions = Array[ExtResource("s_action_def")]([ExtResource("a_eat_ground"), ExtResource("a_seek_food"), ExtResource("a_hunt"), ExtResource("a_attack"), ExtResource("a_sleep")])
+goals = Array[ExtResource("s_goal_def")]([ExtResource("g_satisfy_hunger"), ExtResource("g_rest")])
+
 [resource]
 script = ExtResource("def")
 id = &"crocodile"
 display_name = "Crocodile"
-components = Array[ExtResource("base")]([SubResource("c_energy"), SubResource("c_health"), SubResource("c_hunger"), SubResource("c_body"), SubResource("c_sprite"), SubResource("c_movement"), SubResource("c_brain"), SubResource("c_sensor"), SubResource("c_action"), SubResource("c_damage"), SubResource("c_crit")])
+components = Array[ExtResource("base")]([SubResource("c_energy"), SubResource("c_health"), SubResource("c_hunger"), SubResource("c_body"), SubResource("c_sprite"), SubResource("c_movement"), SubResource("c_brain"), SubResource("c_sensor"), SubResource("c_action"), SubResource("c_damage"), SubResource("c_crit"), SubResource("c_planner")])

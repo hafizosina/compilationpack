@@ -13,6 +13,20 @@
 [ext_resource type="Script" uid="uid://b0cqwu7rlda2j" path="res://9. EcsSystem/components/ecs_health_component.gd" id="s_health"]
 [ext_resource type="Script" uid="uid://debbcabui1aj7" path="res://9. EcsSystem/components/ecs_energy_component.gd" id="s_energy"]
 [ext_resource type="Texture2D" uid="uid://dbllxupj5653t" path="res://Global/Asset/Animal/monkey.png" id="tex_monkey"]
+[ext_resource type="Script" uid="uid://bo6wqgowj8y6s" path="res://9. EcsSystem/components/ecs_planner_component.gd" id="s_planner"]
+[ext_resource type="Script" uid="uid://dvtyowamldw5k" path="res://9. EcsSystem/ai/ecs_action_def.gd" id="s_action_def"]
+[ext_resource type="Script" uid="uid://dhxn4v5fbnav2" path="res://9. EcsSystem/ai/ecs_goal_def.gd" id="s_goal_def"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/eat_carried.tres" id="a_eat_carried"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/eat_ground.tres" id="a_eat_ground"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/take.tres" id="a_take"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/loot.tres" id="a_loot"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/seek_food.tres" id="a_seek_food"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/seek_bush.tres" id="a_seek_bush"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/harvest.tres" id="a_harvest"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/sleep.tres" id="a_sleep"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/goals/satisfy_hunger.tres" id="g_satisfy_hunger"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/goals/provision.tres" id="g_provision"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/goals/rest.tres" id="g_rest"]
 
 [sub_resource type="Resource" id="c_body"]
 script = ExtResource("s_body")
@@ -60,8 +74,13 @@ script = ExtResource("s_energy")
 start_min = 0.5
 restore = 10.0
 
+[sub_resource type="Resource" id="c_planner"]
+script = ExtResource("s_planner")
+actions = Array[ExtResource("s_action_def")]([ExtResource("a_eat_carried"), ExtResource("a_eat_ground"), ExtResource("a_take"), ExtResource("a_loot"), ExtResource("a_seek_food"), ExtResource("a_seek_bush"), ExtResource("a_harvest"), ExtResource("a_sleep")])
+goals = Array[ExtResource("s_goal_def")]([ExtResource("g_satisfy_hunger"), ExtResource("g_provision"), ExtResource("g_rest")])
+
 [resource]
 script = ExtResource("def")
 id = &"monkey"
 display_name = "Monkey"
-components = Array[ExtResource("base")]([SubResource("c_energy"), SubResource("c_health"), SubResource("c_hunger"), SubResource("c_body"), SubResource("c_sprite"), SubResource("c_movement"), SubResource("c_brain"), SubResource("c_bag"), SubResource("c_sensor"), SubResource("c_action")])
+components = Array[ExtResource("base")]([SubResource("c_energy"), SubResource("c_health"), SubResource("c_hunger"), SubResource("c_body"), SubResource("c_sprite"), SubResource("c_movement"), SubResource("c_brain"), SubResource("c_bag"), SubResource("c_sensor"), SubResource("c_action"), SubResource("c_planner")])

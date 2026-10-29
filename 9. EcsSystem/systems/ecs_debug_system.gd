@@ -39,9 +39,14 @@ func run(world: EcsWorld, _delta: float) -> void:
 			"sleep": 2 if world.has(id, EcsCollapsedFlag)
 				else (1 if world.has(id, EcsAsleepFlag) else 0),
 			"carried": bag.items.size() if bag != null else -1,
+			# The planner's goal id, or &"" for none.
+			"goal": &"",
 			# Sprite scale relative to the default.
 			"sprite_scale": 1.0,
 		}
+		var planner := world.get_component(id, EcsPlannerComponent) as EcsPlannerComponent
+		if planner != null:
+			row["goal"] = planner.goal
 		var sprite := world.get_component(id, EcsSpriteComponent) as EcsSpriteComponent
 		if sprite != null:
 			row["sprite_scale"] = sprite.scale_factor / EcsConst.SPRITE_SCALE

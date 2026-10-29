@@ -10,6 +10,7 @@ preconditions = {
 &"has_room": true
 }
 effects = {
-&"food_in_bag": true
+&"food_in_bag": true,
+&"has_room": false
 }
 cost = 1.0

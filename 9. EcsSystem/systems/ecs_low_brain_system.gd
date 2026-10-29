@@ -7,10 +7,11 @@ extends EcsSystem
 ## raises in `_set_state()`.
 ##
 ## Each tick: a collapse forces SLEEP; a commitment (SEEK_FOOD, HUNT, ATTACK) is
-## checked and kept or dropped (food in sight ends a hunt); otherwise it picks the
-## highest rung that applies: eat > take (or loot) > seek food > harvest > hunt > sleep >
-## wander. Food is filtered by diet: a creature only eats, seeks and harvests what its
-## hunger `eats`.
+## checked and kept or dropped; then it chooses. With a plan from EcsPlanningSystem
+## it runs only the rung for the plan's first step, without the rung's need gate.
+## Without one it picks the highest rung that applies: eat > take (or loot) > seek
+## food > harvest > hunt > sleep > wander, and food in sight ends a hunt. Food is
+## filtered by diet: a creature only eats, seeks and harvests what its hunger `eats`.
 
 ## The view `_food` was built from.
 var _food_view: EcsView
@@ -41,6 +42,9 @@ func run(world: EcsWorld, delta: float) -> void:
 		var brain := minds[k] as EcsLowBrainComponent
 		var move := moves[k] as EcsMovementComponent
 		var place := places[k] as EcsPositionComponent
+		var planner := world.get_component(id, EcsPlannerComponent) as EcsPlannerComponent
+		var planned := planner != null and planner.planned
+		var step: StringName = planner.steps[0] if planned and not planner.steps.is_empty() else &""
 
 		# Collapsed: forced to sleep, even mid-trip.
 		if world.has(id, EcsCollapsedFlag):
@@ -53,6 +57,11 @@ func run(world: EcsWorld, delta: float) -> void:
 		if brain.state == EcsLowBrainComponent.State.SLEEP:
 			if not _worth_waking_for(world, id):
 				continue
+			_release(world, id, brain)
+
+		# The plan moved on: drop what no longer serves it.
+		if planned and not _serves(brain.state, step):
+			_abandon_trip(move)
 			_release(world, id, brain)
 
 		# Check the current commitment.
@@ -73,11 +82,17 @@ func run(world: EcsWorld, delta: float) -> void:
 
 		if brain.state == EcsLowBrainComponent.State.HUNT \
 				or brain.state == EcsLowBrainComponent.State.ATTACK:
-			if _keep_hunting(world, id, brain, move):
+			if _keep_hunting(world, id, brain, move, planned):
 				continue
 
 		# Keep walking unless it is only a wander, which may be interrupted.
 		if move.has_destination and brain.state != EcsLowBrainComponent.State.WANDER:
+			continue
+
+		if planned:
+			if _try_step(world, id, brain, move, place, step) or move.has_destination:
+				continue
+			_wander(world, id, brain, move, place, delta)
 			continue
 
 		# Choose, highest rung first.
@@ -98,11 +113,50 @@ func run(world: EcsWorld, delta: float) -> void:
 			continue
 		_wander(world, id, brain, move, place, delta)
 
+## Runs the rung for a plan step. False if it could not act on it.
+func _try_step(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
+		move: EcsMovementComponent, place: EcsPositionComponent, step: StringName) -> bool:
+	match step:
+		&"eat_carried", &"eat_ground":
+			return _try_eat(world, id, brain, move, false)
+		&"take", &"loot":
+			return _try_take(world, id, brain, move, false)
+		&"seek_food":
+			return _try_seek_food(world, id, brain, move, place, false)
+		&"seek_bush", &"harvest":
+			return _try_harvest(world, id, brain, move, place, false)
+		&"hunt", &"attack":
+			return _try_hunt(world, id, brain, move, place, false)
+		&"sleep":
+			return _try_sleep(world, id, brain, move, false)
+	return false
+
+## Does `state` carry out plan step `step`? IDLE has nothing to drop.
+static func _serves(state: EcsLowBrainComponent.State, step: StringName) -> bool:
+	match state:
+		EcsLowBrainComponent.State.IDLE:
+			return true
+		EcsLowBrainComponent.State.WANDER:
+			return step == &""
+		EcsLowBrainComponent.State.SEEK_FOOD:
+			return step == &"seek_food" or step == &"seek_bush"
+		EcsLowBrainComponent.State.TAKE:
+			return step == &"take" or step == &"loot"
+		EcsLowBrainComponent.State.EAT:
+			return step == &"eat_carried" or step == &"eat_ground"
+		EcsLowBrainComponent.State.SLEEP:
+			return step == &"sleep"
+		EcsLowBrainComponent.State.HUNT, EcsLowBrainComponent.State.ATTACK:
+			return step == &"hunt" or step == &"attack"
+		EcsLowBrainComponent.State.HARVEST:
+			return step == &"harvest"
+	return false
+
 ## Eat food from the bag or within reach, if hungry enough. Stops any trip.
 func _try_eat(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
-		move: EcsMovementComponent) -> bool:
+		move: EcsMovementComponent, gated: bool = true) -> bool:
 	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
-	if hunger == null or hunger.fullness > hunger.eat_below:
+	if hunger == null or (gated and hunger.fullness > hunger.eat_below):
 		return false
 	# Bag first, then the ground.
 	var carried := _meal_in_bag(world, id, hunger)
@@ -136,12 +190,12 @@ func _meal_on_ground(world: EcsWorld, id: int, hunger: EcsHungerComponent) -> in
 ## Pick up something in reach, or loot a record from a lootable entity in
 ## reach, if hungry enough to want food and the bag has room.
 func _try_take(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
-		move: EcsMovementComponent) -> bool:
+		move: EcsMovementComponent, gated: bool = true) -> bool:
 	var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
 	if bag == null or bag.items.size() >= bag.capacity:
 		return false
 	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
-	if hunger != null and hunger.fullness > hunger.forage_below:
+	if gated and hunger != null and hunger.fullness > hunger.forage_below:
 		return false
 	var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
 	if action == null:
@@ -185,9 +239,9 @@ func _is_takeable(world: EcsWorld, id: int) -> bool:
 	return world.has(id, EcsPickableComponent) and world.has(id, EcsPositionComponent) \
 		and not world.has(id, EcsDyingFlag)
 
-## Hungry enough to forage, and the bag (if any) has room.
-func _foraging(world: EcsWorld, id: int, hunger: EcsHungerComponent) -> bool:
-	if hunger != null and hunger.fullness > hunger.forage_below:
+## Hungry enough to forage (if `gated`), and the bag (if any) has room.
+func _foraging(world: EcsWorld, id: int, hunger: EcsHungerComponent, gated: bool) -> bool:
+	if gated and hunger != null and hunger.fullness > hunger.forage_below:
 		return false
 	# A full bag stops it; having no bag does not.
 	var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
@@ -195,9 +249,9 @@ func _foraging(world: EcsWorld, id: int, hunger: EcsHungerComponent) -> bool:
 
 ## Walk to the nearest food in sight, if foraging.
 func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
-		move: EcsMovementComponent, place: EcsPositionComponent) -> bool:
+		move: EcsMovementComponent, place: EcsPositionComponent, gated: bool = true) -> bool:
 	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
-	if not _foraging(world, id, hunger):
+	if not _foraging(world, id, hunger, gated):
 		return false
 	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
 	if sensor == null or sensor.perceived.is_empty():
@@ -224,11 +278,11 @@ func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 
 ## Harvest a plant in reach, or walk to the nearest one in sight, if foraging.
 func _try_harvest(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
-		move: EcsMovementComponent, place: EcsPositionComponent) -> bool:
+		move: EcsMovementComponent, place: EcsPositionComponent, gated: bool = true) -> bool:
 	if _bushes.is_empty():
 		return false
 	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
-	if not _foraging(world, id, hunger):
+	if not _foraging(world, id, hunger, gated):
 		return false
 	var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
 	if action != null:
@@ -271,11 +325,11 @@ func _harvestable(id: int, hunger: EcsHungerComponent) -> bool:
 ## Chase the nearest prey in sight, if it can attack and is hungry enough.
 ## Prey is whatever EcsHunting.can_hunt allows: weaker, alive, not dying.
 func _try_hunt(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
-		move: EcsMovementComponent, place: EcsPositionComponent) -> bool:
+		move: EcsMovementComponent, place: EcsPositionComponent, gated: bool = true) -> bool:
 	if not world.has(id, EcsDamageComponent):
 		return false
 	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
-	if hunger != null and hunger.fullness > hunger.forage_below:
+	if gated and hunger != null and hunger.fullness > hunger.forage_below:
 		return false
 	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
 	if sensor == null:
@@ -299,11 +353,13 @@ func _try_hunt(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	return true
 
 ## Follows a HUNT or ATTACK commitment. Returns false once it ends, so the
-## rungs can choose again this tick.
+## rungs can choose again this tick. Without a plan, food in sight ends it, or a
+## hunter that just killed picks new prey before the corpse appears; a planner
+## replans to eat when the corpse comes into sight instead.
 func _keep_hunting(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
-		move: EcsMovementComponent) -> bool:
+		move: EcsMovementComponent, planned: bool) -> bool:
 	var prey := brain.target
-	if not EcsHunting.can_hunt(world, id, prey) or _sees_food(world, id):
+	if not EcsHunting.can_hunt(world, id, prey) or (not planned and _sees_food(world, id)):
 		# Dead, dying or gone, or there is food to eat instead.
 		_abandon_trip(move)
 		_release(world, id, brain)
@@ -341,9 +397,9 @@ func _position_of(world: EcsWorld, id: int) -> Vector2:
 
 ## Sleep if tired, unless starving.
 func _try_sleep(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
-		move: EcsMovementComponent) -> bool:
+		move: EcsMovementComponent, gated: bool = true) -> bool:
 	var energy := world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
-	if energy == null or energy.value > energy.rest_at:
+	if energy == null or (gated and energy.value > energy.rest_at):
 		return false
 	if _starving(world, id):
 		return false

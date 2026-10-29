@@ -85,6 +85,10 @@ func _run() -> void:
 	await _hungry_plant_eaters_harvest_then_eat_or_take()
 	_the_planner_finds_the_cheapest_chain()
 	await _power_and_diet_decide_who_hunts_whom()
+	await _utility_picks_what_the_ladder_would()
+	await _a_planned_hunter_kills_once_and_eats_the_corpse()
+	await _planned_plant_eaters_harvest_then_eat_or_take()
+	await _replans_follow_events_not_the_clock()
 
 ## Nodes match the declared NODE_KINDs (a berry gets a sprite and a body, no
 ## sensor) and hang under the entity's own container.
@@ -1634,7 +1638,7 @@ func _the_planner_finds_the_cheapest_chain() -> void:
 		&"seek_bush", &"harvest", &"sleep"])
 	var croc := _actions([&"eat_ground", &"seek_food", &"hunt", &"attack", &"sleep"])
 	var fed := {&"fed": true}
-	var bagged := {&"food_in_bag": true}
+	var bagged := {&"has_room": false}
 	_check("food in the bag: eat it",
 		EcsPlanner.plan({&"food_in_bag": true, &"food_in_reach": true}, fed, all)
 			== [&"eat_carried"])
@@ -1682,6 +1686,214 @@ func _power_and_diet_decide_who_hunts_whom() -> void:
 	_world.add(rabbit, EcsDyingFlag.new())
 	_check("the dying are not prey", not EcsHunting.can_hunt(_world, croc, rabbit))
 	for id in [croc, big, monkey]:
+		_world.add(id, EcsDyingFlag.new())
+	await _tick(1)
+
+## With no danger, the top-scoring goal is the ladder's rung, over a grid of
+## fullness and energy for each kind.
+func _utility_picks_what_the_ladder_would() -> void:
+	var planning := EcsPlanningSystem.new()
+	for kind in [&"rabbit", &"monkey", &"crocodile"]:
+		var id := _manager.spawn(_world, _catalog, kind, Vector2(16000.0, -16000.0))
+		var hunger := _world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+		var energy := _world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
+		var planner := _world.get_component(id, EcsPlannerComponent) as EcsPlannerComponent
+		var carrier := _world.has(id, EcsInventoryComponent)
+		var mismatches := 0
+		for f in range(0, 101, 5):
+			for e in range(0, 101, 10):
+				hunger.fullness = f
+				energy.value = e
+				var expected := &""
+				if f <= minf(hunger.eat_below, hunger.forage_below):
+					expected = &"satisfy_hunger"
+				elif carrier and f <= hunger.forage_below:
+					expected = &"provision"
+				elif e <= energy.rest_at:
+					expected = &"rest"
+				var ranked := planning._rank(_world, id, planner)
+				var top: StringName = ranked[0].id if not ranked.is_empty() else &""
+				if top != expected:
+					mismatches += 1
+		_check("%s: utility picks the ladder's rung (%d mismatches)" % [kind, mismatches],
+			mismatches == 0)
+		_world.add(id, EcsDyingFlag.new())
+	await _tick(1)
+
+## The planned crocodile hunts, kills and eats the corpse, killing once per meal,
+## with no "food in sight ends a hunt" rule on its path.
+func _a_planned_hunter_kills_once_and_eats_the_corpse() -> void:
+	var living := EcsScheduler.new()
+	living \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsHealthSystem.new()) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsPlanningSystem.new()) \
+		.add(EcsLowBrainSystem.new()) \
+		.add(EcsConsumeSystem.new()) \
+		.add(EcsAttackSystem.new()) \
+		.add(EcsCritSystem.new()) \
+		.add(EcsDamageSystem.new()) \
+		.add(EcsMovementSystem.new()) \
+		.add(EcsCollisionSystem.new(_manager)) \
+		.add(EcsCorpseSystem.new()) \
+		.add(EcsDropSystem.new()) \
+		.add(EcsNodeSyncSystem.new(_manager))
+
+	var spot := Vector2(9000.0, 9000.0)
+	var hunter := _manager.spawn(_world, _catalog, &"crocodile", spot)
+	var prey: Array[int] = [
+		_manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(200.0, 0.0)),
+		_manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(-220.0, 60.0)),
+	]
+	for id in prey:
+		_world.remove(id, EcsLowBrainComponent)
+	var energy := _world.get_component(hunter, EcsEnergyComponent) as EcsEnergyComponent
+	energy.rolled = true  # the test sets energy by hand; no start roll
+	energy.value = energy.max_energy
+	var hunger := _world.get_component(hunter, EcsHungerComponent) as EcsHungerComponent
+	hunger.fullness = 30.0
+	var planner := _world.get_component(hunter, EcsPlannerComponent) as EcsPlannerComponent
+
+	var planned_kill := false
+	var ate := false
+	var flag_matches := true
+	for i in 900:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		var brain := _world.get_component(hunter, EcsLowBrainComponent) as EcsLowBrainComponent
+		planned_kill = planned_kill or (planner.steps.has(&"attack")
+			and planner.steps.has(&"eat_ground") and planner.goal == &"satisfy_hunger")
+		flag_matches = flag_matches and (_world.has(hunter, EcsAttackIntentFlag)
+			== (brain.state == EcsLowBrainComponent.State.ATTACK))
+		if hunger.fullness > 30.0:
+			ate = true
+			break
+	var alive := prey.filter(func(id: int) -> bool: return _world.is_alive(id)).size()
+	_check("the planner chose kill then eat", planned_kill)
+	_check("the hunter ate", ate)
+	_check("after one kill, not two (%d of 2 prey left)" % alive, alive == 1)
+	_check("the attack flag is raised exactly while it attacks", flag_matches)
+
+	for id in [hunter] + prey:
+		if _world.is_alive(id):
+			_world.add(id, EcsDyingFlag.new())
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+	var leftover := _first_of(&"corpse")
+	while leftover != EcsWorld.NO_ENTITY:
+		_world.add(leftover, EcsDyingFlag.new())
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		leftover = _first_of(&"corpse")
+
+## The harvest chain, planned: the rabbit's plan ends in eat_ground, the monkey's
+## in take, and both end fed or provisioned.
+func _planned_plant_eaters_harvest_then_eat_or_take() -> void:
+	var living := EcsScheduler.new()
+	living \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsPlanningSystem.new()) \
+		.add(EcsLowBrainSystem.new()) \
+		.add(EcsConsumeSystem.new()) \
+		.add(EcsHarvestSystem.new()) \
+		.add(EcsMovementSystem.new()) \
+		.add(EcsCollisionSystem.new(_manager)) \
+		.add(EcsPickupSystem.new()) \
+		.add(EcsNodeSyncSystem.new(_manager))
+
+	var rabbit_spot := Vector2(-15000.0, -6000.0)
+	var monkey_spot := Vector2(-15000.0, -9000.0)
+	var bushes: Array[int] = [
+		_manager.spawn(_world, _catalog, &"berry_bush", rabbit_spot),
+		_manager.spawn(_world, _catalog, &"berry_bush", monkey_spot),
+	]
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", rabbit_spot + Vector2(220.0, 0.0))
+	var monkey := _manager.spawn(_world, _catalog, &"monkey", monkey_spot + Vector2(220.0, 0.0))
+	var creatures: Array[int] = [rabbit, monkey]
+	for id in creatures:
+		var energy := _world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
+		energy.rolled = true  # the test sets energy by hand; no start roll
+		energy.value = energy.max_energy
+	var rabbit_hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
+	rabbit_hunger.fullness = rabbit_hunger.forage_below - 1.0
+	var rabbit_started := rabbit_hunger.fullness
+	var monkey_hunger := _world.get_component(monkey, EcsHungerComponent) as EcsHungerComponent
+	monkey_hunger.fullness = monkey_hunger.forage_below - 1.0
+	var bag := _world.get_component(monkey, EcsInventoryComponent) as EcsInventoryComponent
+	var rabbit_plan := _world.get_component(rabbit, EcsPlannerComponent) as EcsPlannerComponent
+	var monkey_plan := _world.get_component(monkey, EcsPlannerComponent) as EcsPlannerComponent
+
+	var plans := {}
+	var flag_matches := true
+	for i in 600:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		plans[" > ".join(rabbit_plan.steps)] = true
+		plans[" > ".join(monkey_plan.steps)] = true
+		for id in creatures:
+			var brain := _world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
+			flag_matches = flag_matches and _world.has(id, EcsHarvestIntentFlag) \
+				== (brain.state == EcsLowBrainComponent.State.HARVEST) \
+				and _world.has(id, EcsEatIntentFlag) == (brain.state == EcsLowBrainComponent.State.EAT) \
+				and _world.has(id, EcsTakeIntentFlag) == (brain.state == EcsLowBrainComponent.State.TAKE)
+		if rabbit_hunger.fullness > rabbit_started and not bag.items.is_empty():
+			break
+	_check("the rabbit planned walk, harvest, eat", plans.has("seek_bush > harvest > eat_ground"))
+	_check("and ate", rabbit_hunger.fullness > rabbit_started)
+	_check("the monkey planned walk, harvest, take", plans.has("seek_bush > harvest > take"))
+	_check("and pocketed it", not bag.items.is_empty())
+	_check("flags and state agreed on every tick", flag_matches)
+
+	for id in creatures + bushes + _berries_near(rabbit_spot, 400.0) \
+			+ _berries_near(monkey_spot, 400.0):
+		_world.add(id, EcsDyingFlag.new())
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+
+## A creature whose facts and needs hold still is not replanned; a change to
+## either replans it once; no run plans more than MAX_REPLANS.
+func _replans_follow_events_not_the_clock() -> void:
+	var planning := EcsPlanningSystem.new()
+	var spot := Vector2(-16000.0, 16000.0)
+	var croc := _manager.spawn(_world, _catalog, &"crocodile", spot)
+	var energy := _world.get_component(croc, EcsEnergyComponent) as EcsEnergyComponent
+	energy.value = energy.max_energy
+	var hunger := _world.get_component(croc, EcsHungerComponent) as EcsHungerComponent
+	hunger.fullness = hunger.max_fullness
+	var planner := _world.get_component(croc, EcsPlannerComponent) as EcsPlannerComponent
+	for i in 100:
+		planning.run(_world, TICK)
+	_check("a settled creature plans once (%d)" % planner.replans, planner.replans == 1)
+	hunger.fullness = 20.0
+	for i in 100:
+		planning.run(_world, TICK)
+	_check("a need crossing its gate replans it once (%d)" % planner.replans,
+		planner.replans == 2)
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(150.0, 0.0))
+	(_world.get_component(croc, EcsSensorComponent) as EcsSensorComponent).perceived.append(rabbit)
+	for i in 100:
+		planning.run(_world, TICK)
+	_check("prey coming into sight replans it once (%d)" % planner.replans,
+		planner.replans == 3)
+	_check("into a hunt", planner.steps.size() > 0 and planner.steps[0] == &"hunt")
+	_world.add(croc, EcsDyingFlag.new())
+	_world.add(rabbit, EcsDyingFlag.new())
+
+	var crowd: Array[int] = []
+	for i in EcsPlanningSystem.MAX_REPLANS + 10:
+		crowd.append(_manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(i * 60.0, 900.0)))
+	planning.run(_world, TICK)
+	var first := crowd.filter(func(id: int) -> bool:
+		return (_world.get_component(id, EcsPlannerComponent) as EcsPlannerComponent).planned).size()
+	planning.run(_world, TICK)
+	var second := crowd.filter(func(id: int) -> bool:
+		return (_world.get_component(id, EcsPlannerComponent) as EcsPlannerComponent).planned).size()
+	_check("one run plans at most MAX_REPLANS (%d)" % first,
+		first == EcsPlanningSystem.MAX_REPLANS)
+	_check("and the rest wait their turn (%d)" % second, second == crowd.size())
+	for id in crowd:
 		_world.add(id, EcsDyingFlag.new())
 	await _tick(1)
 
