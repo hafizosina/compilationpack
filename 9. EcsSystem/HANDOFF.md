@@ -13,7 +13,8 @@ a recorded design, not something you can run.
 ```bash
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 "$GODOT" --path . "res://9. EcsSystem/main.tscn"                          # run it (also the main scene)
-"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 361 checks, exit 0 = all pass
+"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 372 checks, exit 0 = all pass
+"$GODOT" --path . "res://9. EcsSystem/showcase/hunt_showcase.tscn"         # one dog, one bush, one rabbit
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"    # population ramp, minutes
 "$GODOT" --headless --editor --quit --path . 2>&1 | grep -iE "error|invalid|uid"  # after any .tscn/.tres edit
 ```
@@ -58,7 +59,7 @@ ones that run every third or sixth tick (§11); the rest run every tick.
 | `harvest` | regrows stock; carries out a harvest intent | `EcsHarvestable`, a note on `EcsLifecycleSingleton` |
 | `attack` | carries out an attack intent, on cooldown | `EcsDamage.cooldown`, hits on `EcsCombatSingleton` |
 | `crit` | rolls each hit against the attacker's crit chance | the hits |
-| `damage` | applies the hits less armour, clears them | `EcsHealth`, `EcsHurtFlag` |
+| `damage` | applies the hits less armour, clears them; counts stuns down | `EcsHealth`, `EcsHurtFlag`, `EcsStunnedFlag` |
 | `movement` | walks toward the destination, prices the trip; faster while dashing | `EcsPosition`, `EcsMovement` |
 | `collision` | pushes overlapping solid bodies apart | `EcsPosition` |
 | `pickup` | carries out a take intent: an item off the ground, or a record looted from a bag | the bags, `EcsDyingFlag` |
@@ -583,7 +584,7 @@ after its producer keeps its data one tick old, as at full rate.
 
 ## 12. Tests
 
-`tests/lifecycle_test.tscn` — **361 checks**, exit code 0 only if all pass. Run it after
+`tests/lifecycle_test.tscn` — **372 checks**, exit code 0 only if all pass. Run it after
 touching the manager, collision, pickup, spawner, sensor, node sync, the brain or any
 executor. It covers: declared nodes built and undeclared ones not; kill takes data and nodes;
 spawn notes fulfilled a tick later; soft collision, immovable and non-solid bodies; seeing is
@@ -626,7 +627,10 @@ pond feared where a threat was met, priced dearer until the fear fades and still
 none; a lure gaining traffic from prey seen there and winning though farther, a corpse counted
 once, and traffic halving; each animal keeping only what matters to it (a monkey no rabbit, a
 dog prey, threats and lures), an emptied bush forgotten, a remembered bush walked to when hungry,
-and a pond beside a remembered threat losing to a farther one.
+and a pond beside a remembered threat losing to a farther one; a bite while dashing stunning
+and a plain one not, a stunned animal dropping its trip and not biting, the stun wearing off; a
+rabbit hiding from a threat not after it but running from one chasing it; and, live, a dog
+pouncing, stunning and biting a rabbit until it dies.
 
 `tests/stress_test.tscn` — the population ramp and the per-stage bookkeeping split (§14). Knobs after a bare `--`:
 `--spacing=180` (grid px), `--n=4000` (one population), `--skip=hunger,health` (leave stages
@@ -674,8 +678,8 @@ brain's food index. The ceiling went from 4,800–6,400 to over 9,600 entities (
   kinds, the wild dog, staying safe (§8, §19) — **4** memory, first slice, and **5** places
   priced by fear and traffic (§20) are done. Then hiders went to the middle of their cover and
   bushes stopped being solid, and memory widened to whatever matters to the animal (water, food,
-  bushes, threats, prey, lures). **Queued next, in order:** a pounce that stuns, attacks until dead, a stun
-  indicator and a small showcase scene; births.
+  bushes, threats, prey, lures). Then the pounce
+  stuns, hunted prey can't hide, and a showcase scene (§19). **Next: births.**
 
 **Open and deferred, by decision:** combat planning (a kill is many attacks; the planner
 should choose skills from the enemy's skills and stats, §19); births — nothing is born, so
@@ -1112,10 +1116,33 @@ reach), SCAN (stand still, cast scan), ESCAPE.
 
 Both carry the same planner actions. A corpse's `nutrition` is 150.
 
-**A kill is not one action** (the author, 2026-10-31). It is attacks until the target is dead.
-One bite does not kill a rabbit, and a bitten rabbit outruns a crocodile. That is left for
-combat planning, where the planner should choose skills from the enemy's skills and stats —
-not patched with a one-shot kill or a guaranteed stun. Tests assert a pounce that bites.
+**A kill is not one action** (the author, 2026-10-31). It is attacks until the target is dead;
+choosing skills to kill from the enemy's skills and stats is left to combat planning. Don't
+patch it with a one-shot kill.
+
+**The pounce stuns** (2026-11-01, asked for directly). `EcsDashSkill.stun` (dog 1.5 s, crocodile
+2.0 s) rides on a hit landed while the attacker is dashing (`EcsHit.stun`, set by
+`EcsAttackSystem`). `EcsDamageSystem` raises `EcsStunnedFlag{left}` on the target and counts it
+down. A stunned animal has no say — the brain drops its trip and state, so its intents go, which
+ends a held hide — and a stunned attacker can't bite. Movement doesn't check the flag; the brain
+stops the trip on its next run, within two ticks. The overlay draws yellow stars circling a
+stunned head. So a pounce buys free bites, and the kill is still the bites that follow it.
+
+**Hunted prey can't hide.** A traced bug: a dog chasing a monkey, the monkey hid in a bush, the
+dog stopped noticing it and planned an ambush in the same bush — both stood still until hide's
+patience ran out. `hunted` is a planner fact — the threat danger found is chasing, attacking or
+pouncing on me — and `hide` needs it false, so a hunted animal flees or dashes. It is read only
+when `threat_near` holds, since only hiding needs it.
+
+**Showcase** (`showcase/hunt_showcase.tscn`, `showcase/hunt_world.tres`): `main.tscn` with one
+bush, a hungry dog in it and a hungry rabbit 300 px off, on a 1600×1000 arena. Traced: the rabbit
+walks to the bush at 1 s, the hidden dog pounces at 1.5 s, the rabbit is stunned and bitten, flees
+when it wears off, and is chased and bitten to death by about 9 s.
+
+**Measured** (probe, 5 runs of 300 s, against `ca0fad6`): kills rose from 5–8 a run to 7–10, the
+crocodiles' from 0–1 to 0–2; no deaths of thirst, 0–2 starved. Cost: +2% at 6,400 fed (324 / 323
+against 318 / 317 ms) once `hunted` was read only under `threat_near` and the brain looked stuns up
+from one query a run; the first version, asking every animal for both, cost +10%.
 
 ### Measured
 

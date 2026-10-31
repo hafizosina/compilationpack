@@ -111,6 +111,9 @@ func _run() -> void:
 	await _a_remembered_place_is_planned_and_walked_to()
 	await _fear_and_traffic_price_places()
 	await _memory_keeps_what_matters_to_it()
+	_a_stun_holds_still_and_wears_off()
+	_hunted_prey_cannot_hide()
+	await _a_pounce_stuns_and_bites_follow_until_dead()
 
 ## Nodes match the declared NODE_KINDs (a berry gets a sprite and a body, no
 ## sensor) and hang under the entity's own container.
@@ -3165,6 +3168,129 @@ func _memory_keeps_what_matters_to_it() -> void:
 		_world.add(id, EcsDyingFlag.new())
 	EcsLifecycleSystem.new(_manager, _catalog).run(_world, TICK)
 	await get_tree().physics_frame
+
+## A hit landed while dashing stuns; a plain one doesn't. A stunned animal drops its trip
+## and can't attack, and the stun wears off on time.
+func _a_stun_holds_still_and_wears_off() -> void:
+	var skills := EcsSkillSystem.new()
+	var attack := EcsAttackSystem.new()
+	var damage := EcsDamageSystem.new()
+	var brain := EcsLowBrainSystem.new()
+	var spot := Vector2(-40000.0, 27000.0)
+	var dog := _manager.spawn(_world, _catalog, &"wild_dog", spot)
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(30.0, 0.0))
+	skills.run(_world, TICK)
+	var reach := _world.get_component(dog, EcsActionComponent) as EcsActionComponent
+	reach.reached.append(rabbit)
+	var intent := EcsAttackIntentFlag.new()
+	intent.target_id = rabbit
+	_world.add(dog, intent)
+	attack.run(_world, TICK)
+	damage.run(_world, TICK)
+	_check("a plain bite doesn't stun", not _world.has(rabbit, EcsStunnedFlag))
+	(_world.get_component(dog, EcsDamageComponent) as EcsDamageComponent).cooldown = 0.0
+	_world.add(dog, EcsDashingFlag.new())
+	attack.run(_world, TICK)
+	damage.run(_world, TICK)
+	var stun := _world.get_component(rabbit, EcsStunnedFlag) as EcsStunnedFlag
+	_check("a bite while dashing stuns for the dash's stun (%.1fs)" % (stun.left if stun else 0.0),
+		stun != null and is_equal_approx(stun.left, 1.5))
+
+	var move := _world.get_component(rabbit, EcsMovementComponent) as EcsMovementComponent
+	move.destination = spot + Vector2(500.0, 0.0)
+	move.has_destination = true
+	brain.run(_world, TICK)
+	_check("stunned, it drops its trip",
+		not move.has_destination and (_world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent).state == EcsLowBrainComponent.State.IDLE)
+	_world.add(dog, EcsStunnedFlag.new())
+	(_world.get_component(dog, EcsStunnedFlag) as EcsStunnedFlag).left = 1.0
+	(_world.get_component(dog, EcsDamageComponent) as EcsDamageComponent).cooldown = 0.0
+	var before := (_world.get_component(rabbit, EcsHealthComponent) as EcsHealthComponent).value
+	_world.add(dog, intent)
+	attack.run(_world, TICK)
+	damage.run(_world, 0.5)
+	_check("a stunned attacker doesn't bite",
+		(_world.get_component(rabbit, EcsHealthComponent) as EcsHealthComponent).value == before)
+	damage.run(_world, 1.1)
+	_check("the stun wears off on time",
+		not _world.has(rabbit, EcsStunnedFlag) and not _world.has(dog, EcsStunnedFlag))
+	for id in [dog, rabbit]:
+		_world.add(id, EcsDyingFlag.new())
+	EcsLifecycleSystem.new(_manager, _catalog).run(_world, TICK)
+
+## A rabbit beside a bush hides from a threat that isn't after it, but not from one
+## chasing it: hunted, it runs.
+func _hunted_prey_cannot_hide() -> void:
+	var planning := EcsPlanningSystem.new()
+	var spot := Vector2(-40000.0, 30000.0)
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot)
+	var dog := _manager.spawn(_world, _catalog, &"wild_dog", spot + Vector2(200.0, 0.0))
+	var danger := _world.get_component(rabbit, EcsDangerComponent) as EcsDangerComponent
+	danger.threat = dog
+	danger.value = 1.0
+	var hunter := _world.get_component(dog, EcsLowBrainComponent) as EcsLowBrainComponent
+	planning.run(_world, TICK)
+	var facts := (_world.get_component(rabbit, EcsPlannerComponent) as EcsPlannerComponent).facts
+	_check("a threat not after it: not hunted", not facts.has(&"hunted"))
+	hunter.state = EcsLowBrainComponent.State.HUNT
+	hunter.target = rabbit
+	planning.run(_world, TICK)
+	facts = (_world.get_component(rabbit, EcsPlannerComponent) as EcsPlannerComponent).facts
+	_check("the threat chasing it: hunted", facts.has(&"hunted"))
+	var actions := (_world.get_component(rabbit, EcsPlannerComponent) as EcsPlannerComponent).actions
+	var calm := EcsPlanner.plan({&"threat_near": true, &"in_cover": true}, {&"safe": true}, actions)
+	var chased := EcsPlanner.plan({&"threat_near": true, &"in_cover": true, &"hunted": true},
+		{&"safe": true}, actions)
+	_check("in cover, a threat not after it: hide (%s)" % " > ".join(calm), calm == [&"hide"])
+	_check("in cover but hunted: run, not hide (%s)" % " > ".join(chased),
+		not chased.is_empty() and not chased.has(&"hide"))
+	hunter.state = EcsLowBrainComponent.State.IDLE
+	hunter.target = EcsWorld.NO_ENTITY
+	for id in [rabbit, dog]:
+		_world.add(id, EcsDyingFlag.new())
+	EcsLifecycleSystem.new(_manager, _catalog).run(_world, TICK)
+
+## Live: a hungry dog pounces on a rabbit standing near, the pounce stuns it, and the dog
+## keeps biting until it is dead.
+func _a_pounce_stuns_and_bites_follow_until_dead() -> void:
+	var living := _ambush_pipeline()
+	var spot := Vector2(33000.0, -36000.0)
+	var bounds := EcsConst.world_bounds
+	EcsConst.world_bounds = Rect2(spot - Vector2(3000.0, 3000.0), Vector2(6000.0, 6000.0))
+	var dog := _manager.spawn(_world, _catalog, &"wild_dog", spot)
+	var energy := _world.get_component(dog, EcsEnergyComponent) as EcsEnergyComponent
+	energy.rolled = true
+	energy.value = energy.max_energy
+	var hunger := _world.get_component(dog, EcsHungerComponent) as EcsHungerComponent
+	hunger.fullness = hunger.forage_below * 0.5
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(130.0, 0.0))
+	_world.remove(rabbit, EcsLowBrainComponent)
+	var health := _world.get_component(rabbit, EcsHealthComponent) as EcsHealthComponent
+	var brain := _world.get_component(dog, EcsLowBrainComponent) as EcsLowBrainComponent
+	var pounced := false
+	var stunned := false
+	var bites := 0
+	var last := health.value
+	for i in 900:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		pounced = pounced or brain.state == EcsLowBrainComponent.State.POUNCE
+		stunned = stunned or _world.has(rabbit, EcsStunnedFlag)
+		if not _world.is_alive(rabbit):
+			break
+		if health.value < last:
+			bites += 1
+		last = health.value
+	_check("the dog pounces and the pounce stuns", pounced and stunned)
+	_check("it keeps biting until the rabbit is dead (%d bites)" % bites,
+		not _world.is_alive(rabbit) and bites >= 2)
+	_world.add(dog, EcsDyingFlag.new())
+	for id in _world.query([EcsNameComponent, EcsPositionComponent], [EcsDyingFlag]):
+		if _position_of(id).distance_to(spot) < 2000.0:
+			_world.add(id, EcsDyingFlag.new())
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+	EcsConst.world_bounds = bounds
 
 func _ambush_pipeline() -> EcsScheduler:
 	var living := EcsScheduler.new()

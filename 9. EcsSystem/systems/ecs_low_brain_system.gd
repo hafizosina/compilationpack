@@ -44,6 +44,9 @@ func run(world: EcsWorld, delta: float) -> void:
 	_refresh_food(world)
 	_refresh_bushes(world)
 	# Hunger, energy, bag, reach and sensor are optional, so they are looked up.
+	var stunned := {}
+	for id in world.query([EcsStunnedFlag]):
+		stunned[id] = true
 	var brains := world.view([EcsPositionComponent, EcsMovementComponent, EcsLowBrainComponent])
 	var minds := brains.column(EcsLowBrainComponent)
 	var moves := brains.column(EcsMovementComponent)
@@ -56,6 +59,13 @@ func run(world: EcsWorld, delta: float) -> void:
 		var planner := world.get_component(id, EcsPlannerComponent) as EcsPlannerComponent
 		var planned := planner != null and planner.planned
 		var step: StringName = planner.steps[0] if planned and not planner.steps.is_empty() else &""
+
+		# Stunned: no say at all; whatever it was doing stops.
+		if not stunned.is_empty() and stunned.has(id):
+			_abandon_trip(move)
+			if brain.state != EcsLowBrainComponent.State.IDLE:
+				_release(world, id, brain)
+			continue
 
 		# Collapsed: forced to sleep, even mid-trip.
 		if world.has(id, EcsCollapsedFlag):

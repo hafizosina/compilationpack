@@ -2,7 +2,7 @@ class_name EcsDebugOverlay
 extends Node2D
 
 ## Debug drawing on each entity: name, velocity arrow, line to destination,
-## fullness/energy/health bars, a carried-count badge and a sleep icon.
+## fullness/energy/health bars, a carried-count badge, a sleep icon and stun stars.
 ## Draws only what EcsDebugSystem sends; never reads the world.
 
 ## Half the sprite's drawn height at the default scale.
@@ -27,6 +27,10 @@ const DANGER_COLOR := Color(0.85, 0.4, 0.85)
 ## Sleep icon tint: parchment when asleep, red when collapsed.
 const ASLEEP_COLOR := Color(0.906, 0.839, 0.675, 0.95)
 const COLLAPSED_COLOR := Color(0.85, 0.25, 0.2, 0.95)
+
+## Stars circling a stunned head.
+const STUN_COLOR := Color(1.0, 0.85, 0.2, 0.95)
+const STUN_STARS := 3
 
 ## The sleep icon. `_ready` makes a white copy so it can be tinted.
 const SLEEP_ICON := preload("res://Global/Asset/Icon/sleep.png")
@@ -55,6 +59,19 @@ func show_rows(rows: Array[Dictionary]) -> void:
 func clear() -> void:
 	_rows = []
 	queue_redraw()
+
+## Stars orbiting `center`, turning with time.
+func _stun_stars(center: Vector2, radius: float, px: float) -> void:
+	var turn := Time.get_ticks_msec() / 1000.0 * TAU * 0.6
+	draw_arc(center, radius, 0.0, TAU, 24, Color(STUN_COLOR, 0.35), 1.5 * px)
+	for i in STUN_STARS:
+		var at := center + Vector2(radius, 0.0).rotated(turn + TAU * i / STUN_STARS) * Vector2(1.0, 0.45)
+		var size := 6.0 * px
+		var star := PackedVector2Array()
+		for p in 8:
+			var r := size if p % 2 == 0 else size * 0.4
+			star.append(at + Vector2(r, 0.0).rotated(TAU * p / 8.0))
+		draw_colored_polygon(star, STUN_COLOR)
 
 func _draw() -> void:
 	# Divide sizes by the zoom so text and bars stay the same size on screen.
@@ -126,6 +143,9 @@ func _draw() -> void:
 			var icon_at := pos + Vector2(-shoulder * 1.25 - icon, -shoulder * 1.3)
 			draw_texture_rect(_sleep_icon, Rect2(icon_at, Vector2(icon, icon)), false,
 				COLLAPSED_COLOR if sleep == 2 else ASLEEP_COLOR)
+
+		if row["stunned"]:
+			_stun_stars(pos + Vector2(0.0, -shoulder * 1.15), shoulder * 0.55, px)
 
 		if not row["has_movement"]:
 			continue

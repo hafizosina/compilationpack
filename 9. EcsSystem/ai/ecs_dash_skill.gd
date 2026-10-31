@@ -7,6 +7,8 @@ extends EcsSkillDef
 @export var speed_scale: float = 3.0
 ## How close prey must be for a dash to be worth it.
 @export var reach: float = 180.0
+## Seconds a hit landed while dashing stuns its target.
+@export var stun: float = 0.0
 
 func make_effect() -> EcsFlag:
 	var dashing := EcsDashingFlag.new()

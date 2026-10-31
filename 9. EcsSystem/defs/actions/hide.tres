@@ -7,7 +7,8 @@ script = ExtResource("def")
 id = &"hide"
 preconditions = {
 &"threat_near": true,
-&"in_cover": true
+&"in_cover": true,
+&"hunted": false
 }
 effects = {
 &"safe": true

@@ -231,6 +231,9 @@ func _facts(world: EcsWorld, id: int, hunger: EcsHungerComponent, bag: EcsInvent
 				facts[&"bush_known"] = true
 	if danger != null and danger.value >= danger.flee_at:
 		facts[&"threat_near"] = true
+		# Only hiding reads it, and hiding needs a threat near.
+		if _hunted(world, id, danger):
+			facts[&"hunted"] = true
 	else:
 		facts[&"safe"] = true
 	var here := Vector2.ZERO
@@ -282,6 +285,14 @@ func _facts(world: EcsWorld, id: int, hunger: EcsHungerComponent, bag: EcsInvent
 			elif drinks and _water.has(seen):
 				facts[&"water_in_sight"] = true
 	return facts
+
+## Is the threat its danger found chasing or attacking it? Then it can't hide from it.
+static func _hunted(world: EcsWorld, id: int, danger: EcsDangerComponent) -> bool:
+	if not world.is_alive(danger.threat):
+		return false
+	var brain := world.get_component(danger.threat, EcsLowBrainComponent) as EcsLowBrainComponent
+	return brain != null and brain.target == id and (brain.state == EcsLowBrainComponent.State.HUNT
+		or brain.state == EcsLowBrainComponent.State.ATTACK or brain.state == EcsLowBrainComponent.State.POUNCE)
 
 static func _within(world: EcsWorld, id: int, here: Vector2, distance: float) -> bool:
 	var there := world.get_component(id, EcsPositionComponent) as EcsPositionComponent

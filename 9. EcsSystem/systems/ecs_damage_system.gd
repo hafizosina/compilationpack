@@ -2,13 +2,19 @@ class_name EcsDamageSystem
 extends EcsSystem
 
 ## Applies this tick's hits to their targets' health, less armour, raises
-## EcsHurtFlag on each target, then clears the inbox. Death at zero health is
-## EcsHealthSystem's.
+## EcsHurtFlag on each target and EcsStunnedFlag for a stunning hit, then clears the
+## inbox. Counts stuns down. Death at zero health is EcsHealthSystem's.
 
 func label() -> StringName:
 	return &"damage"
 
-func run(world: EcsWorld, _delta: float) -> void:
+func run(world: EcsWorld, delta: float) -> void:
+	for id in world.query([EcsStunnedFlag]):
+		var stunned := world.get_component(id, EcsStunnedFlag) as EcsStunnedFlag
+		stunned.left -= delta
+		if stunned.left <= 0.0:
+			world.remove(id, EcsStunnedFlag)
+
 	var combat := world.get_singleton(EcsCombatSingleton) as EcsCombatSingleton
 	if combat == null:
 		return
@@ -25,4 +31,9 @@ func run(world: EcsWorld, _delta: float) -> void:
 		if hurt == null:
 			hurt = world.add(hit.to, EcsHurtFlag.new()) as EcsHurtFlag
 		hurt.by = hit.from
+		if hit.stun > 0.0:
+			var stunned := world.get_component(hit.to, EcsStunnedFlag) as EcsStunnedFlag
+			if stunned == null:
+				stunned = world.add(hit.to, EcsStunnedFlag.new()) as EcsStunnedFlag
+			stunned.left = maxf(stunned.left, hit.stun)
 	combat.hits.clear()

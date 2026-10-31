@@ -1,0 +1,44 @@
+[gd_resource type="Resource" script_class="EcsWorldDef" format=3]
+
+[ext_resource type="Script" uid="uid://ds75i3pla1ms3" path="res://9. EcsSystem/defs/ecs_placement.gd" id="place"]
+[ext_resource type="Script" uid="uid://dbk6chycnfg7p" path="res://9. EcsSystem/defs/ecs_world_def.gd" id="world"]
+
+[sub_resource type="Resource" id="bush"]
+script = ExtResource("place")
+entity_name = &"bush"
+type = &"berry_bush"
+position = Vector2(0, 0)
+
+[sub_resource type="Resource" id="dog"]
+script = ExtResource("place")
+entity_name = &"dog"
+type = &"wild_dog"
+position = Vector2(0, 0)
+overrides = {
+"hunger": {
+"fullness": 40.0
+},
+"energy": {
+"value": 100.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="rabbit"]
+script = ExtResource("place")
+entity_name = &"rabbit"
+type = &"rabbit"
+position = Vector2(300, 0)
+overrides = {
+"hunger": {
+"fullness": 50.0
+},
+"energy": {
+"value": 100.0,
+"rolled": true
+}
+}
+
+[resource]
+script = ExtResource("world")
+entries = Array[ExtResource("place")]([SubResource("bush"), SubResource("dog"), SubResource("rabbit")])

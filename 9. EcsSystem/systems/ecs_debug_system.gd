@@ -40,6 +40,7 @@ func run(world: EcsWorld, _delta: float) -> void:
 			# 0 awake, 1 asleep, 2 collapsed.
 			"sleep": 2 if world.has(id, EcsCollapsedFlag)
 				else (1 if world.has(id, EcsAsleepFlag) else 0),
+			"stunned": world.has(id, EcsStunnedFlag),
 			"carried": bag.items.size() if bag != null else -1,
 			# The planner's goal id, or &"" for none.
 			"goal": &"",

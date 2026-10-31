@@ -10,7 +10,7 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 361 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 372 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments, the hunger/health/energy loop,
 # intent flags, items as records, the drop on death, views, combat, corpses,
 # looting, rot, diet, hunting, harvesting, the planner, utility, fleeing,
@@ -18,6 +18,9 @@ module 9's, in `9. EcsSystem/tests/`:
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
+
+# The hunt on its own: one dog in a bush, one rabbit — ambush, pounce, stun, bites.
+"$GODOT" --path . "res://9. EcsSystem/showcase/hunt_showcase.tscn"
 
 # Population ramp: where a tick crosses 250 ms. At the game's rates (--every=...)
 # with 40 hunters it stays under to 6,400 entities fed, 4,800 hungry (2026-10-31; pass
@@ -268,7 +271,9 @@ prey must visit (water or a bush), and `ambush` needs `prey_come_here`, so hunte
 one. `EcsActionDef.patience` fails a bet that never pays. Hunters only pick prey they
 `EcsHunting.notices`, so hiding protects prey too. **A kill is not one action** — it is attacks
 until dead; choosing skills to kill from the enemy's skills and stats is left to combat
-planning. Don't patch it with a one-shot kill.
+planning. Don't patch it with a one-shot kill. A pounce (a hit while dashing) **stuns**
+(`EcsStunnedFlag`, raised and counted down by `EcsDamageSystem`): no say, no bite. **Hunted
+prey can't hide** — `hide` needs the planner fact `hunted` false.
 
 **Skills say their own effect** (HANDOFF §19). An `EcsSkillDef` (`defs/skills/`) overrides
 `make_effect()` — the flag that *is* it being active — and `can_start(world, id)`, its
@@ -355,7 +360,7 @@ been crossed.
 berry dies and becomes a record, so freeing a node is kill and only kill, and every live
 entity has a position to draw.
 
-**It is deliberately kept to a small core**: 28 components, 14 flags, 3
+**It is deliberately kept to a small core**: 28 components, 15 flags, 3
 singletons, 29 systems
 (`lifecycle > spawner > hunger > energy > thirst > health > danger > sensor > memory > planning > low_brain > skill > consume > drink > harvest > attack > crit > damage > movement > collision > pickup > rot > corpse > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
 rank in the plan's decision ladder — the planner sits *above* it — and not for the
