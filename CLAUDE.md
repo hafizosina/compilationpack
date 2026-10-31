@@ -10,11 +10,11 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 330 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 344 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments, the hunger/health/energy loop,
 # intent flags, items as records, the drop on death, views, combat, corpses,
 # looting, rot, diet, hunting, harvesting, the planner, utility, fleeing,
-# skills, hiding, the ambush, thirst, costs from stats and staying safe.
+# skills, hiding, the ambush, thirst, costs from stats, staying safe and memory.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
@@ -220,7 +220,7 @@ diet** and `EcsHungerComponent.eats` says which: rabbits and monkeys eat plants,
 crocodile meat, and the brain's food index filters on it.
 
 **Deciding is one system with state, not a rung per behaviour.** `EcsLowBrainSystem` is a
-small FSM — `IDLE > WANDER > SEEK_FOOD > TAKE > EAT > SLEEP > HUNT > ATTACK > HARVEST > FLEE > HIDE > AMBUSH > POUNCE > SCAN > SEEK_WATER > DRINK > ESCAPE` — and `EcsLowBrainComponent` holds its `state` and
+small FSM — `IDLE > WANDER > SEEK_FOOD > TAKE > EAT > SLEEP > HUNT > ATTACK > HARVEST > FLEE > HIDE > AMBUSH > POUNCE > SCAN > SEEK_WATER > DRINK > ESCAPE > RECALL` — and `EcsLowBrainComponent` holds its `state` and
 its `target`. It replaced `EcsForageSystem`, which was a second decider whose priority was
 its line number in `main.gd`. That read well but was stateless: a creature's only memory
 between ticks was `has_destination`, so nothing could persist ("I am going to *that*
@@ -286,8 +286,15 @@ one curve in `ai/ecs_needs.gd` that the planner (`quench` weight 10 = eat) and t
 **A kill is not one action** — it is attacks until dead; choosing skills to kill from the
 enemy's skills and stats is left to combat planning. Don't patch it with a one-shot kill.
 
+**Memory is a component** (HANDOFF §20): `EcsMemoryComponent.facts` holds remembered water (any
+drinker) and lures (a hunter, in cover it hides in), each a copied position and a `strength` that
+fades over `remember_for`. `EcsMemorySystem` is its only writer, between sensor and planning; a fact
+whose spot is in sight without its thing is forgotten at once, so a wrong fact is gone before the
+replan. `recall_water` / `recall_lure` are priced by the walk, and RECALL walks to the copied
+position, never the live entity.
+
 **A stage may declare how often it runs.** `EcsScheduler.add(system, every, phase)` takes a
-rate in ticks — `main.gd` runs `sensor`, `danger`, `planning`, `low_brain` and `health` at `SLOW` (3 ticks, 20 Hz),
+rate in ticks — `main.gd` runs `sensor`, `memory`, `danger`, `planning`, `low_brain` and `health` at `SLOW` (3 ticks, 20 Hz),
 `hunger`, `energy` and `thirst` at `BARS` (6 ticks, 10 Hz), while
 `movement`, `collision` and `node_sync` stay at every tick. This is safe only because every
 system already takes `delta` and means it: **the scheduler banks delta per system**, so a
@@ -343,9 +350,9 @@ been crossed.
 berry dies and becomes a record, so freeing a node is kill and only kill, and every live
 entity has a position to draw.
 
-**It is deliberately kept to a small core**: 27 components, 14 flags, 3
-singletons, 28 systems
-(`lifecycle > spawner > hunger > energy > thirst > health > danger > sensor > planning > low_brain > skill > consume > drink > harvest > attack > crit > damage > movement > collision > pickup > rot > corpse > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
+**It is deliberately kept to a small core**: 28 components, 14 flags, 3
+singletons, 29 systems
+(`lifecycle > spawner > hunger > energy > thirst > health > danger > sensor > memory > planning > low_brain > skill > consume > drink > harvest > attack > crit > damage > movement > collision > pickup > rot > corpse > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
 rank in the plan's decision ladder — the planner sits *above* it — and not for the
 wandering it happens to do), and a world
 of 48 animals in 4 types (20 rabbits, 20 monkeys, 4 crocodiles and 4 wild dogs — a grazer,

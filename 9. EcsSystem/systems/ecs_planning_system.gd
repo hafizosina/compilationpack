@@ -15,8 +15,8 @@ const MAX_REPLANS: int = 64
 const FLOOR: float = EcsNeeds.FLOOR
 ## Added to the current goal's score, so near-ties don't flicker.
 const COMMIT_BONUS: float = 0.5
-## Seconds of chasing that cost one unit of a plan.
-const CHASE_SECONDS: float = 5.0
+## Seconds of travel that cost one unit of a plan.
+const TRAVEL_SECONDS: float = 5.0
 
 ## Ids waiting for a replan, oldest first.
 var _queue: Array[int] = []
@@ -139,24 +139,41 @@ func _replan(world: EcsWorld, id: int, planner: EcsPlannerComponent, facts: Dict
 			return
 
 ## Costs that come from this entity's stats, built only when it replans. A chase costs
-## its expected time, and is impossible against prey at least as fast.
+## its expected time, and is impossible against prey at least as fast; a walk to a
+## remembered place costs its travel time.
 func _costs(world: EcsWorld, id: int, facts: Dictionary) -> Dictionary:
-	if not facts.has(&"prey_in_sight"):
-		return {}
+	var costs := {}
+	var hunt := facts.has(&"prey_in_sight")
+	var water := facts.has(&"water_known")
+	var lure := facts.has(&"lure_known")
+	if not hunt and not water and not lure:
+		return costs
 	var move := world.get_component(id, EcsMovementComponent) as EcsMovementComponent
-	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
 	var here := (world.get_component(id, EcsPositionComponent) as EcsPositionComponent).position
-	var best := INF
-	for seen in sensor.perceived:
-		if not EcsHunting.can_hunt(world, id, seen) or not EcsHunting.notices(world, id, seen, here):
-			continue
-		var theirs := world.get_component(seen, EcsMovementComponent) as EcsMovementComponent
-		var closing := move.speed - (theirs.speed if theirs != null else 0.0)
-		if closing <= 0.0:
-			continue
-		var there := (world.get_component(seen, EcsPositionComponent) as EcsPositionComponent).position
-		best = minf(best, 1.0 + here.distance_to(there) / closing / CHASE_SECONDS)
-	return {&"hunt": best}
+	if hunt:
+		var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
+		var best := INF
+		for seen in sensor.perceived:
+			if not EcsHunting.can_hunt(world, id, seen) or not EcsHunting.notices(world, id, seen, here):
+				continue
+			var theirs := world.get_component(seen, EcsMovementComponent) as EcsMovementComponent
+			var closing := move.speed - (theirs.speed if theirs != null else 0.0)
+			if closing <= 0.0:
+				continue
+			var there := (world.get_component(seen, EcsPositionComponent) as EcsPositionComponent).position
+			best = minf(best, 1.0 + here.distance_to(there) / closing / TRAVEL_SECONDS)
+		costs[&"hunt"] = best
+	if water or lure:
+		var memory := world.get_component(id, EcsMemoryComponent) as EcsMemoryComponent
+		if water:
+			costs[&"recall_water"] = _travel_cost(memory, here, move.speed, true)
+		if lure:
+			costs[&"recall_lure"] = _travel_cost(memory, here, move.speed, false)
+	return costs
+
+static func _travel_cost(memory: EcsMemoryComponent, here: Vector2, speed: float, water: bool) -> float:
+	var fact := EcsMemoryFact.nearest(memory, here, water)
+	return INF if fact == null else 1.0 + here.distance_to(fact.position) / speed / TRAVEL_SECONDS
 
 static func _ids(goals: Array[EcsGoalDef]) -> Array[StringName]:
 	var ids: Array[StringName] = []
@@ -190,6 +207,14 @@ func _facts(world: EcsWorld, id: int, hunger: EcsHungerComponent, bag: EcsInvent
 		kinds = EcsHunting.kinds_in(known)
 	if EcsHunting.dash_ready_in(known):
 		facts[&"dash_ready"] = true
+	var memory := world.get_component(id, EcsMemoryComponent) as EcsMemoryComponent
+	if memory != null:
+		for about in memory.facts:
+			var fact := memory.facts[about] as EcsMemoryFact
+			if fact.water and drinks:
+				facts[&"water_known"] = true
+			if fact.lure and hunts:
+				facts[&"lure_known"] = true
 	if danger != null and danger.value >= danger.flee_at:
 		facts[&"threat_near"] = true
 	else:

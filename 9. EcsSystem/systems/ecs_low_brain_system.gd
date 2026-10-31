@@ -211,7 +211,26 @@ func _try_step(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 			return _try_drink(world, id, brain, move, delta, false)
 		&"go_to_water":
 			return _try_seek_water(world, id, brain, move, place, false)
+		&"recall_water":
+			return _try_recall(world, id, brain, move, place, true)
+		&"recall_lure":
+			return _try_recall(world, id, brain, move, place, false)
 	return false
+
+## Walk to the nearest place it remembers as water (or as a lure). Keeps a trip already
+## under way.
+func _try_recall(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
+		move: EcsMovementComponent, place: EcsPositionComponent, water: bool) -> bool:
+	var memory := world.get_component(id, EcsMemoryComponent) as EcsMemoryComponent
+	var fact := EcsMemoryFact.nearest(memory, place.position, water)
+	if fact == null:
+		return false
+	if brain.state == EcsLowBrainComponent.State.RECALL and brain.target == fact.about \
+			and move.has_destination:
+		return true
+	_set_state(world, id, brain, EcsLowBrainComponent.State.RECALL, fact.about)
+	_set_trip(move, fact.position)
+	return true
 
 ## Drink water in reach, or walk to the nearest in sight.
 func _try_water(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
@@ -450,6 +469,8 @@ static func _serves(state: EcsLowBrainComponent.State, step: StringName) -> bool
 			return step == &"drink"
 		EcsLowBrainComponent.State.SEEK_WATER:
 			return step == &"go_to_water"
+		EcsLowBrainComponent.State.RECALL:
+			return step == &"recall_water" or step == &"recall_lure"
 		EcsLowBrainComponent.State.DRINK:
 			return step == &"drink"
 	return false

@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="EcsActionDef" format=3]
+
+[ext_resource type="Script" uid="uid://dvtyowamldw5k" path="res://9. EcsSystem/ai/ecs_action_def.gd" id="def"]
+
+[resource]
+script = ExtResource("def")
+id = &"recall_lure"
+preconditions = {
+&"lure_known": true
+}
+effects = {
+&"lure_in_sight": true
+}
+cost = 2.0

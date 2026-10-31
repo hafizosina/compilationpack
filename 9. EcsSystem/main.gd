@@ -81,6 +81,7 @@ func _build() -> void:
 		.add(EcsHealthSystem.new(), SLOW, 2) \
 		.add(EcsDangerSystem.new(), SLOW, 1) \
 		.add(EcsSensorSystem.new(_manager), SLOW, 0) \
+		.add(EcsMemorySystem.new(), SLOW, 1) \
 		.add(EcsPlanningSystem.new(), SLOW, 2) \
 		.add(EcsLowBrainSystem.new(), SLOW, 1) \
 		.add(EcsSkillSystem.new()) \

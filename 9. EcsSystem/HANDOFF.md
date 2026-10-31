@@ -13,7 +13,7 @@ a recorded design, not something you can run.
 ```bash
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 "$GODOT" --path . "res://9. EcsSystem/main.tscn"                          # run it (also the main scene)
-"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 330 checks, exit 0 = all pass
+"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 344 checks, exit 0 = all pass
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"    # population ramp, minutes
 "$GODOT" --headless --editor --quit --path . 2>&1 | grep -iE "error|invalid|uid"  # after any .tscn/.tres edit
 ```
@@ -36,7 +36,7 @@ world1.tres ──► EcsEntityManager ──► EcsWorld                       
                 builds the nodes      World/Entities/entity_<id>/
 ```
 
-Every physics tick `EcsScheduler` runs twenty-eight stages. `[20 Hz]` and `[10 Hz]` mark the
+Every physics tick `EcsScheduler` runs twenty-nine stages. `[20 Hz]` and `[10 Hz]` mark the
 ones that run every third or sixth tick (§11); the rest run every tick.
 
 | stage | does | writes |
@@ -49,6 +49,7 @@ ones that run every third or sixth tick (§11); the rest run every tick.
 | `health` `[20 Hz]` | death at zero | `EcsDyingFlag` |
 | `danger` `[20 Hz]` | fills on a threat in sight, jumps on a hit, decays | `EcsDanger`, clears `EcsHurtFlag` |
 | `sensor` `[20 Hz]` | what each entity sees and can touch | `EcsSensor.perceived`, `EcsAction.reached` |
+| `memory` `[20 Hz]` | remembers water and lures seen; fades and falsifies (§20) | `EcsMemory` |
 | `planning` `[20 Hz]` | scores goals, replans on events, under a budget (§18) | `EcsPlanner` |
 | `low_brain` `[20 Hz]` | runs the plan's first step, or its own ladder | its own state, a destination, intent flags |
 | `skill` | carries out a cast intent; runs skill timers (§19) | `EcsSkills`, the effect flags |
@@ -220,10 +221,11 @@ nothing on its first tick, so its opening move is always a wander, preempted the
 Keep a solid entity's action radius above its body radius (rabbit 22 → 34, monkey 36 → 50),
 or soft collision stops it before its reach arrives.
 
-**Two distance checks sit on top of perception, both deliberate** (§19): a scanning watcher
-sees a hider within its scan radius, and the planner's `prey_close` is prey within dash reach.
-Both run only over `perceived` — the area still decides *whether* something is seen; the
-distance only decides how near it is.
+**Three distance checks sit on top of perception, all deliberate** (§19, §20): a scanning
+watcher sees a hider within its scan radius, the planner's `prey_close` is prey within dash
+reach, and memory forgets a fact whose spot is within sight radius but whose thing is not in
+`perceived`. The first two run only over `perceived` and the third only over the memory's own
+facts — the area still decides *whether* something is seen.
 
 ---
 
@@ -580,7 +582,7 @@ after its producer keeps its data one tick old, as at full rate.
 
 ## 12. Tests
 
-`tests/lifecycle_test.tscn` — **330 checks**, exit code 0 only if all pass. Run it after
+`tests/lifecycle_test.tscn` — **344 checks**, exit code 0 only if all pass. Run it after
 touching the manager, collision, pickup, spawner, sensor, node sync, the brain or any
 executor. It covers: declared nodes built and undeclared ones not; kill takes data and nodes;
 spawn notes fulfilled a tick later; soft collision, immovable and non-solid bodies; seeing is
@@ -662,6 +664,8 @@ brain's food index. The ceiling went from 4,800–6,400 to over 9,600 entities (
   of it by decision: killing belongs to combat planning. The
   roadmap (`FEATURES_ROADMAP.md`, kept outside the repo) goes on: 2 thirst, 3 uniform skills
   with costs from stats, pounce and stun, 4 memory, 5 traffic-based ambush.
+- **Features roadmap, step 4: memory, first slice** — done (2026-10-31, §20): remembered water
+  and lures, fading and falsified.
 - **7, GOAP** — done (2026-10-29, `cf53229` to `ae1ef52`): harvesting first, then a pure A*
   planner over a symbolic snapshot, utility goal choice, a budgeted replan queue that replans
   on events, and fleeing. Single-threaded; the planner is pure, so moving it to
@@ -1156,3 +1160,46 @@ are not in that number.
 
 **Open, to decide:** combat — choosing skills to kill from the enemy's skills and stats, and
 whether prey fight back.
+
+---
+
+## 20. Memory: remembered water and lures
+
+Roadmap step 4, first slice (2026-10-31). Without it, a thirsty animal with no water in sight
+had no plan and wandered. Now it walks to a pond it remembers.
+
+**Storage is a component**, by decision: `EcsMemoryComponent` holds `facts`, an id → `EcsMemoryFact`
+record (`about`, the `position` it was seen at, `water`, `lure`, `strength`), capped at
+`capacity` (32). Graph-shaped relations are a separate, later question. **`EcsMemorySystem`** is
+its only writer, at 20 Hz on the tick after the sensor and before planning:
+
+1. **Fade.** Strength drops by `delta / remember_for` (180 s); at 0 the fact is forgotten.
+2. **Learn.** From `perceived`: drinkable water, for an animal with thirst; a lure it hides in
+   (`EcsHunting.is_lure` and its hide kinds), for one that attacks. Seen means strength 1 and
+   the position copied. Prey don't remember cover — a far bush is no use to hide in.
+3. **Falsify.** A fact whose spot is within sight radius but whose thing isn't perceived is
+   forgotten at once (the third distance check in §4). It runs before planning in the same
+   tick, so an animal that arrives to find a pond gone has dropped it before it replans — no
+   retry loop.
+4. **Cap.** Past `capacity`, the weakest fact goes.
+
+**Planning.** Facts `water_known` and `lure_known`; actions `recall_water` (→ `water_in_sight`)
+and `recall_lure` (→ `lure_in_sight`), which feed the existing `go_to_water` and `go_to_lure`
+chains. Their cost is the walk: `1 + distance to the nearest fact / speed / TRAVEL_SECONDS` (5,
+the constant the chase cost used, renamed), so a pond in sight (2) beats one remembered, and a
+near remembered bush can beat a long chase. The brain's **RECALL** state walks to the fact's
+copied position — never the live entity's — and is dropped like any step once the plan moves on
+(the thing comes into sight and the plan becomes `go_to_water` or `go_to_lure`).
+
+**Measured** (probe, 5 runs of 300 s, 48 animals, against `dac563e`): drinkers spent
+1,466–1,672 s a run with `quench` on top and no plan; with memory 97–220 s. 70–119 recalls to
+water and 0–5 to a lure a run. No fact was falsified — nothing in this world moves or dies
+that memory holds — so the falsify path is pinned by tests only. Kills (6–8), thirst deaths
+(0) and starvation (1–4) stayed in step 3's range.
+
+**Cost**: the memory stage is 4 ms of a ~216 ms tick at 6,400 fed (40 hunters, game rates).
+Totals in one sitting were 217.7 / 216.2 ms against 190.7 / 233.6 for `dac563e`, which is this
+machine's noise. A first version cost 71 ms: every animal asked the world whether each thing it
+saw was drinkable. It now indexes water and lures from views, like planning, and skips the walk
+when there is nothing to learn. The stress grid has no water, so the per-sighting lookups the
+real world pays are not in that number.

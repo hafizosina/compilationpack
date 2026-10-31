@@ -107,6 +107,8 @@ func _run() -> void:
 	await _hidden_prey_is_passed_over()
 	await _prey_stay_safe_by_hiding_or_escaping()
 	await _prey_scan_before_drinking()
+	await _memory_learns_fades_and_is_proven_wrong()
+	await _a_remembered_place_is_planned_and_walked_to()
 
 ## Nodes match the declared NODE_KINDs (a berry gets a sprite and a body, no
 ## sensor) and hang under the entity's own container.
@@ -2853,6 +2855,137 @@ func _prey_scan_before_drinking() -> void:
 	_check("scanning beside a hidden crocodile, it runs (%s)" % watched,
 		watched["ran"] and not watched["drank"])
 	EcsConst.world_bounds = bounds
+
+## Memory keeps water for drinkers and lures for the hunter that hides in them. A
+## fact fades while unseen, a spot seen without its thing is forgotten at once, and
+## past capacity the weakest goes.
+func _memory_learns_fades_and_is_proven_wrong() -> void:
+	var memory := EcsMemorySystem.new()
+	var skills := EcsSkillSystem.new()
+	var spot := Vector2(-40000.0, 12000.0)
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot)
+	var dog := _manager.spawn(_world, _catalog, &"wild_dog", spot)
+	var croc := _manager.spawn(_world, _catalog, &"crocodile", spot)
+	var pond := _manager.spawn(_world, _catalog, &"water", spot + Vector2(0.0, 200.0))
+	var bush := _manager.spawn(_world, _catalog, &"berry_bush", spot + Vector2(0.0, -200.0))
+	var far_bush := _manager.spawn(_world, _catalog, &"berry_bush", spot + Vector2(0.0, -3000.0))
+	var sees := func(id: int, seen: Array) -> void:
+		var sensor := _world.get_component(id, EcsSensorComponent) as EcsSensorComponent
+		sensor.perceived.clear()
+		for other in seen:
+			sensor.perceived.append(other)
+	var facts_of := func(id: int) -> Dictionary:
+		return (_world.get_component(id, EcsMemoryComponent) as EcsMemoryComponent).facts
+	for id in [rabbit, dog, croc]:
+		sees.call(id, [pond, bush])
+	sees.call(dog, [pond, bush, far_bush])
+	skills.run(_world, TICK)
+	memory.run(_world, TICK)
+	var r: Dictionary = facts_of.call(rabbit)
+	var d: Dictionary = facts_of.call(dog)
+	var c: Dictionary = facts_of.call(croc)
+	_check("a rabbit remembers a pond as water, and no bush",
+		r.size() == 1 and r.has(pond) and r[pond].water and not r[pond].lure)
+	_check("the dog remembers a bush as a lure, and the pond only as water",
+		d.has(bush) and d[bush].lure and d.has(pond) and not d[pond].lure)
+	_check("the crocodile remembers the pond as a lure, and no bush",
+		c.has(pond) and c[pond].lure and c[pond].water and not c.has(bush))
+	_check("a fact holds where the thing was seen",
+		(r[pond] as EcsMemoryFact).position == _position_of(pond))
+
+	var rabbit_at := _world.get_component(rabbit, EcsPositionComponent) as EcsPositionComponent
+	var remember_for := (_world.get_component(rabbit, EcsMemoryComponent) as EcsMemoryComponent).remember_for
+	rabbit_at.position = spot + Vector2(5000.0, 0.0)
+	sees.call(rabbit, [])
+	memory.run(_world, remember_for * 0.5)
+	_check("out of sight, a fact fades but stays",
+		r.has(pond) and is_equal_approx((r[pond] as EcsMemoryFact).strength, 0.5))
+	sees.call(rabbit, [pond])
+	memory.run(_world, TICK)
+	_check("seen again, it is fresh", is_equal_approx((r[pond] as EcsMemoryFact).strength, 1.0))
+	sees.call(rabbit, [])
+	memory.run(_world, remember_for * 1.01)
+	_check("unseen for remember_for, it is forgotten", not r.has(pond))
+
+	sees.call(rabbit, [pond])
+	memory.run(_world, TICK)
+	rabbit_at.position = spot
+	sees.call(rabbit, [])
+	memory.run(_world, TICK)
+	_check("its spot in sight without it, it is forgotten at once", not r.has(pond))
+
+	(d[far_bush] as EcsMemoryFact).strength = 0.5
+	(_world.get_component(dog, EcsMemoryComponent) as EcsMemoryComponent).capacity = 2
+	sees.call(dog, [pond, bush])
+	memory.run(_world, TICK)
+	_check("past capacity, the weakest is forgotten (%d kept)" % d.size(),
+		d.size() == 2 and not d.has(far_bush))
+	for id in [rabbit, dog, croc, pond, bush, far_bush]:
+		_world.add(id, EcsDyingFlag.new())
+	EcsLifecycleSystem.new(_manager, _catalog).run(_world, TICK)
+	await get_tree().physics_frame
+
+## With no water in sight, a thirsty rabbit plans a walk to a pond it remembers and
+## walks to where it saw it; with the pond gone, the arrival forgets it before the
+## replan. A dog with no prey or lure in sight walks to a bush it remembers to wait.
+func _a_remembered_place_is_planned_and_walked_to() -> void:
+	var memory := EcsMemorySystem.new()
+	var skills := EcsSkillSystem.new()
+	var planning := EcsPlanningSystem.new()
+	var brain := EcsLowBrainSystem.new()
+	var spot := Vector2(-40000.0, 15000.0)
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot)
+	var forgetful := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(0.0, 1500.0))
+	var dog := _manager.spawn(_world, _catalog, &"wild_dog", spot + Vector2(0.0, -1500.0))
+	var pond := _manager.spawn(_world, _catalog, &"water", spot + Vector2(2000.0, 0.0))
+	var bush := _manager.spawn(_world, _catalog, &"berry_bush", spot + Vector2(2000.0, -1500.0))
+	for id in [rabbit, forgetful, dog]:
+		var energy := _world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
+		energy.rolled = true
+		energy.value = energy.max_energy
+	for id in [rabbit, forgetful]:
+		var thirst := _world.get_component(id, EcsThirstComponent) as EcsThirstComponent
+		thirst.hydration = thirst.seek_water_below * 0.5
+	var hunger := _world.get_component(dog, EcsHungerComponent) as EcsHungerComponent
+	hunger.fullness = hunger.forage_below * 0.5
+	var sensor := _world.get_component(rabbit, EcsSensorComponent) as EcsSensorComponent
+	sensor.perceived.append(pond)
+	(_world.get_component(dog, EcsSensorComponent) as EcsSensorComponent).perceived.append(bush)
+	skills.run(_world, TICK)
+	memory.run(_world, TICK)
+	sensor.perceived.clear()
+	(_world.get_component(dog, EcsSensorComponent) as EcsSensorComponent).perceived.clear()
+	memory.run(_world, TICK)
+	planning.run(_world, TICK)
+	var planner := _world.get_component(rabbit, EcsPlannerComponent) as EcsPlannerComponent
+	var other := _world.get_component(forgetful, EcsPlannerComponent) as EcsPlannerComponent
+	var hunter := _world.get_component(dog, EcsPlannerComponent) as EcsPlannerComponent
+	_check("no water in sight, it walks to a pond it remembers (%s)" % " > ".join(planner.steps),
+		planner.steps == [&"recall_water", &"go_to_water", &"drink"])
+	_check("remembering none, it has no way to quench (%s)" % other.goal, other.goal != &"quench")
+	_check("a dog with no prey or lure in sight walks to a bush it remembers (%s)" % " > ".join(hunter.steps),
+		not hunter.steps.is_empty() and hunter.steps[0] == &"recall_lure" and hunter.steps.has(&"ambush"))
+
+	brain.run(_world, TICK)
+	var mind := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
+	var move := _world.get_component(rabbit, EcsMovementComponent) as EcsMovementComponent
+	var fact := (_world.get_component(rabbit, EcsMemoryComponent) as EcsMemoryComponent).facts[pond] as EcsMemoryFact
+	_check("it walks to where it saw the pond",
+		mind.state == EcsLowBrainComponent.State.RECALL and mind.target == pond
+		and move.has_destination and move.destination == fact.position)
+
+	_world.add(pond, EcsDyingFlag.new())
+	EcsLifecycleSystem.new(_manager, _catalog).run(_world, TICK)
+	(_world.get_component(rabbit, EcsPositionComponent) as EcsPositionComponent).position = fact.position
+	memory.run(_world, TICK)
+	planning.run(_world, TICK)
+	_check("arriving to find it gone, it forgets it before the replan (%s)" % " > ".join(planner.steps),
+		not (_world.get_component(rabbit, EcsMemoryComponent) as EcsMemoryComponent).facts.has(pond)
+		and not planner.steps.has(&"recall_water"))
+	for id in [rabbit, forgetful, dog, bush]:
+		_world.add(id, EcsDyingFlag.new())
+	EcsLifecycleSystem.new(_manager, _catalog).run(_world, TICK)
+	await get_tree().physics_frame
 
 func _ambush_pipeline() -> EcsScheduler:
 	var living := EcsScheduler.new()
