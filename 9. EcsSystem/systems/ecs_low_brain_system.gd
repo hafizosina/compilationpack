@@ -2,7 +2,7 @@ class_name EcsLowBrainSystem
 extends EcsSystem
 
 ## The creature's brain: a state machine (IDLE, WANDER, SEEK_FOOD, TAKE, EAT, SLEEP,
-## HUNT, ATTACK, HARVEST, FLEE).
+## HUNT, ATTACK, HARVEST, FLEE, HIDE, AMBUSH, POUNCE, SCAN).
 ## It decides and writes a destination; executors act on the intent flags it
 ## raises in `_set_state()`.
 ##
@@ -12,6 +12,12 @@ extends EcsSystem
 ## Without one it picks the highest rung that applies: eat > take (or loot) > seek
 ## food > harvest > hunt > sleep > wander, and food in sight ends a hunt. Food is
 ## filtered by diet: a creature only eats, seeks and harvests what its hunger `eats`.
+## HIDE, AMBUSH, POUNCE and SCAN are plan steps only; skills are cast by intent.
+
+## Skill ids the brain casts.
+const HIDE_SKILL: StringName = &"hide"
+const DASH_SKILL: StringName = &"dash"
+const SCAN_SKILL: StringName = &"scan"
 
 ## The view `_food` was built from.
 var _food_view: EcsView
@@ -60,7 +66,7 @@ func run(world: EcsWorld, delta: float) -> void:
 			_release(world, id, brain)
 
 		# The plan moved on: drop what no longer serves it.
-		if planned and not _serves(brain.state, step):
+		if planned and not _serves(brain.state, step) and not _retreating(brain, move):
 			_abandon_trip(move)
 			_release(world, id, brain)
 
@@ -85,17 +91,28 @@ func run(world: EcsWorld, delta: float) -> void:
 			else:
 				continue
 
+		if brain.state == EcsLowBrainComponent.State.POUNCE and world.has(id, EcsDashingFlag):
+			# The dash started: its intent is spent, so it never fires twice.
+			_set_state(world, id, brain, EcsLowBrainComponent.State.HUNT, brain.target)
 		if brain.state == EcsLowBrainComponent.State.HUNT \
-				or brain.state == EcsLowBrainComponent.State.ATTACK:
+				or brain.state == EcsLowBrainComponent.State.ATTACK \
+				or brain.state == EcsLowBrainComponent.State.POUNCE:
 			if _keep_hunting(world, id, brain, move, planned):
 				continue
+
+		if brain.state == EcsLowBrainComponent.State.HIDE and move.has_destination:
+			# Stop at the edge, as soon as the cover is in reach.
+			if EcsHunting.cover_of(world, id) > 0.0:
+				_abandon_trip(move)
+			continue
 
 		# Keep walking unless it is only a wander, which may be interrupted.
 		if move.has_destination and brain.state != EcsLowBrainComponent.State.WANDER:
 			continue
 
 		if planned:
-			if _try_step(world, id, brain, move, place, step) or move.has_destination:
+			if _try_step(world, id, brain, move, place, step, planner, delta) \
+					or move.has_destination:
 				continue
 			_wander(world, id, brain, move, place, delta)
 			continue
@@ -120,7 +137,10 @@ func run(world: EcsWorld, delta: float) -> void:
 
 ## Runs the rung for a plan step. False if it could not act on it.
 func _try_step(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
-		move: EcsMovementComponent, place: EcsPositionComponent, step: StringName) -> bool:
+		move: EcsMovementComponent, place: EcsPositionComponent, step: StringName,
+		planner: EcsPlannerComponent, delta: float) -> bool:
+	if _retreating(brain, move):
+		return true
 	match step:
 		&"eat_carried", &"eat_ground":
 			return _try_eat(world, id, brain, move, false)
@@ -140,7 +160,131 @@ func _try_step(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 			_set_state(world, id, brain, EcsLowBrainComponent.State.FLEE)
 			_run_from(world, id, move, place)
 			return true
+		&"go_to_cover":
+			return _try_cover(world, id, brain, move, place)
+		&"ambush":
+			return _try_ambush(world, id, brain, move, place, planner, delta)
+		&"pounce":
+			return _try_pounce(world, id, brain, move, place)
+		&"scan":
+			return _try_scan(world, id, brain, move, delta)
 	return false
+
+## On a leg away from a failed ambush, which a plan to ambush must not cut short.
+static func _retreat_leg(brain: EcsLowBrainComponent) -> bool:
+	return brain.state == EcsLowBrainComponent.State.WANDER and brain.target != EcsWorld.NO_ENTITY
+
+static func _retreating(brain: EcsLowBrainComponent, move: EcsMovementComponent) -> bool:
+	return _retreat_leg(brain) and move.has_destination
+
+## Walk to the nearest cover in sight; once in it, stand at its edge.
+func _try_cover(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
+		move: EcsMovementComponent, place: EcsPositionComponent) -> bool:
+	if EcsHunting.cover_of(world, id) > 0.0:
+		_abandon_trip(move)
+		_set_state(world, id, brain, EcsLowBrainComponent.State.HIDE, _cover_in_reach(world, id))
+		return true
+	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
+	if sensor == null:
+		return false
+	var best := EcsWorld.NO_ENTITY
+	var best_distance := INF
+	for seen in sensor.perceived:
+		if not world.has(seen, EcsCoverComponent):
+			continue
+		var distance := place.position.distance_squared_to(_position_of(world, seen))
+		if distance < best_distance:
+			best_distance = distance
+			best = seen
+	if best == EcsWorld.NO_ENTITY:
+		return false
+	_set_state(world, id, brain, EcsLowBrainComponent.State.HIDE, best)
+	_set_trip(move, _position_of(world, best))
+	return true
+
+## Hide in the cover it is in and wait for prey, for the ambush's `patience`.
+## Out of patience, it walks a leg away from the cover, so the planner decides again.
+func _try_ambush(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
+		move: EcsMovementComponent, place: EcsPositionComponent,
+		planner: EcsPlannerComponent, delta: float) -> bool:
+	if brain.state == EcsLowBrainComponent.State.AMBUSH:
+		brain.pause_left -= delta
+		if brain.pause_left > 0.0:
+			return true
+		var pond := brain.target
+		var away := place.position - _position_of(world, pond) if world.is_alive(pond) else Vector2.ZERO
+		if away.is_zero_approx():
+			away = Vector2.RIGHT.rotated(randf() * TAU)
+		_set_state(world, id, brain, EcsLowBrainComponent.State.WANDER, pond)
+		_set_trip(move, EcsConst.inside(place.position + away.normalized() * brain.radius))
+		return true
+	var pond := _cover_in_reach(world, id)
+	if pond == EcsWorld.NO_ENTITY:
+		return false
+	_abandon_trip(move)
+	_set_state(world, id, brain, EcsLowBrainComponent.State.AMBUSH, pond)
+	var patience := _patience(planner, &"ambush")
+	brain.pause_left = patience if patience > 0.0 else INF
+	return true
+
+## Dash at the nearest prey within dash reach, if the dash is ready.
+func _try_pounce(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
+		move: EcsMovementComponent, place: EcsPositionComponent) -> bool:
+	var known := world.get_component(id, EcsSkillsComponent) as EcsSkillsComponent
+	var reach := EcsHunting.dash_reach(world, id)
+	if reach <= 0.0 or known.cooldown_left.has(DASH_SKILL) or known.active_left.has(DASH_SKILL):
+		return false
+	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
+	if sensor == null:
+		return false
+	var best := EcsWorld.NO_ENTITY
+	var best_distance := reach * reach
+	for seen in sensor.perceived:
+		if not EcsHunting.can_hunt(world, id, seen):
+			continue
+		var distance := place.position.distance_squared_to(_position_of(world, seen))
+		if distance <= best_distance:
+			best_distance = distance
+			best = seen
+	if best == EcsWorld.NO_ENTITY:
+		return false
+	_set_state(world, id, brain, EcsLowBrainComponent.State.POUNCE, best)
+	_set_trip(move, _position_of(world, best))
+	return true
+
+## Stand still and scan for the scan's duration.
+func _try_scan(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
+		move: EcsMovementComponent, delta: float) -> bool:
+	if brain.state == EcsLowBrainComponent.State.SCAN:
+		brain.pause_left -= delta
+		if brain.pause_left > 0.0:
+			return true
+		_release(world, id, brain)
+		return false
+	var known := world.get_component(id, EcsSkillsComponent) as EcsSkillsComponent
+	var scan := EcsSkillSystem._skill(known, SCAN_SKILL) if known != null else null
+	if scan == null or known.cooldown_left.has(SCAN_SKILL):
+		return false
+	_abandon_trip(move)
+	_set_state(world, id, brain, EcsLowBrainComponent.State.SCAN)
+	brain.pause_left = scan.duration
+	return true
+
+## A cover entity in reach, or NO_ENTITY.
+func _cover_in_reach(world: EcsWorld, id: int) -> int:
+	var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
+	if action != null:
+		for touched in action.reached:
+			if world.has(touched, EcsCoverComponent):
+				return touched
+	return EcsWorld.NO_ENTITY
+
+## The `patience` of the plan's action `action_id`, 0 if none.
+static func _patience(planner: EcsPlannerComponent, action_id: StringName) -> float:
+	for action in planner.actions:
+		if action.id == action_id:
+			return action.patience
+	return 0.0
 
 ## Sets a fresh trip `radius` away from the danger's last threat.
 func _run_from(world: EcsWorld, id: int, move: EcsMovementComponent,
@@ -167,12 +311,19 @@ static func _serves(state: EcsLowBrainComponent.State, step: StringName) -> bool
 			return step == &"eat_carried" or step == &"eat_ground"
 		EcsLowBrainComponent.State.SLEEP:
 			return step == &"sleep"
-		EcsLowBrainComponent.State.HUNT, EcsLowBrainComponent.State.ATTACK:
-			return step == &"hunt" or step == &"attack"
+		EcsLowBrainComponent.State.HUNT, EcsLowBrainComponent.State.ATTACK, \
+				EcsLowBrainComponent.State.POUNCE:
+			return step == &"hunt" or step == &"attack" or step == &"pounce"
 		EcsLowBrainComponent.State.HARVEST:
 			return step == &"harvest"
 		EcsLowBrainComponent.State.FLEE:
 			return step == &"flee"
+		EcsLowBrainComponent.State.HIDE:
+			return step == &"go_to_cover"
+		EcsLowBrainComponent.State.AMBUSH:
+			return step == &"ambush"
+		EcsLowBrainComponent.State.SCAN:
+			return step == &"scan"
 	return false
 
 ## Eat food from the bag or within reach, if hungry enough. Stops any trip.
@@ -533,6 +684,12 @@ func _set_state(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 			var harvest := EcsHarvestIntentFlag.new()
 			harvest.target_id = target
 			world.add(id, harvest)
+		EcsLowBrainComponent.State.AMBUSH:
+			_cast(world, id, HIDE_SKILL)
+		EcsLowBrainComponent.State.POUNCE:
+			_cast(world, id, DASH_SKILL)
+		EcsLowBrainComponent.State.SCAN:
+			_cast(world, id, SCAN_SKILL)
 
 ## The flag a state raises, or null.
 static func _flag_for(state: EcsLowBrainComponent.State) -> Script:
@@ -547,7 +704,15 @@ static func _flag_for(state: EcsLowBrainComponent.State) -> Script:
 			return EcsAttackIntentFlag
 		EcsLowBrainComponent.State.HARVEST:
 			return EcsHarvestIntentFlag
+		EcsLowBrainComponent.State.AMBUSH, EcsLowBrainComponent.State.POUNCE, \
+				EcsLowBrainComponent.State.SCAN:
+			return EcsCastIntentFlag
 	return null
+
+static func _cast(world: EcsWorld, id: int, skill: StringName) -> void:
+	var cast := EcsCastIntentFlag.new()
+	cast.skill = skill
+	world.add(id, cast)
 
 ## Sets a destination. Zeroes `time_left` so the trip gets a fresh time budget.
 ## The one other destination write is `_keep_hunting` following moving prey,

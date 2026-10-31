@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="EcsScanSkill" format=3]
+
+[ext_resource type="Script" path="res://9. EcsSystem/ai/ecs_scan_skill.gd" id="def"]
+
+[resource]
+script = ExtResource("def")
+id = &"scan"
+cooldown = 8.0
+duration = 1.5
+radius = 200.0

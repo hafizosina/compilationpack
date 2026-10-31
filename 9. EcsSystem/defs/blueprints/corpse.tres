@@ -20,7 +20,7 @@ is_solid = false
 
 [sub_resource type="Resource" id="c_food"]
 script = ExtResource("s_food")
-nutrition = 60.0
+nutrition = 150.0
 diet = &"meat"
 
 [sub_resource type="Resource" id="c_bag"]

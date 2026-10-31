@@ -5,7 +5,7 @@ extends RefCounted
 ## main thread later.
 
 ## Longest plan it searches for.
-const MAX_DEPTH: int = 6
+const MAX_DEPTH: int = 8
 
 ## The cheapest action ids that take `state` to one where every fact in `desired`
 ## holds. Empty if `desired` already holds or no plan fits in MAX_DEPTH.

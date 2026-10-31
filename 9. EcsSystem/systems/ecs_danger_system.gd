@@ -1,7 +1,9 @@
 class_name EcsDangerSystem
 extends EcsSystem
 
-## Fills danger while a threat (EcsHunting.threatens) is in sight, jumps it on an
+## Fills danger while a threat (EcsHunting.threatens) is in sight, at `fill` times
+## the most visible one's EcsHunting.visibility_of less `decay`, so something
+## barely visible is never noticed. Jumps it on an
 ## EcsHurtFlag, and decays it otherwise. Clears every EcsHurtFlag it has read, and
 ## those on entities with no danger to raise.
 
@@ -9,6 +11,8 @@ extends EcsSystem
 var _hunter_view: EcsView
 ## Ids that could hunt anything: they attack and eat meat.
 var _hunters: Dictionary = {}
+## Visibility of the most visible threat `_nearest_threat` saw.
+var _seen: float = 0.0
 
 func label() -> StringName:
 	return &"danger"
@@ -24,7 +28,7 @@ func run(world: EcsWorld, delta: float) -> void:
 		var here := (places[k] as EcsPositionComponent).position
 		var threat := _nearest_threat(world, id, here)
 		if threat != EcsWorld.NO_ENTITY:
-			danger.value += danger.fill * delta
+			danger.value += (danger.fill * _seen - danger.decay) * delta
 			_remember(world, danger, threat)
 		else:
 			danger.value -= danger.decay * delta
@@ -45,9 +49,11 @@ func _nearest_threat(world: EcsWorld, id: int, here: Vector2) -> int:
 		return EcsWorld.NO_ENTITY
 	var best := EcsWorld.NO_ENTITY
 	var best_distance := INF
+	_seen = 0.0
 	for seen in sensor.perceived:
 		if not _hunters.has(seen) or not EcsHunting.threatens(world, seen, id):
 			continue
+		_seen = maxf(_seen, EcsHunting.visibility_of(world, seen, id, here))
 		var there := (world.get_component(seen, EcsPositionComponent) as EcsPositionComponent).position
 		var distance := here.distance_squared_to(there)
 		if distance < best_distance:

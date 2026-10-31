@@ -13,7 +13,7 @@ a recorded design, not something you can run.
 ```bash
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 "$GODOT" --path . "res://9. EcsSystem/main.tscn"                          # run it (also the main scene)
-"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 261 checks, exit 0 = all pass
+"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 288 checks, exit 0 = all pass
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"    # population ramp, minutes
 "$GODOT" --headless --editor --quit --path . 2>&1 | grep -iE "error|invalid|uid"  # after any .tscn/.tres edit
 ```
@@ -36,7 +36,7 @@ world1.tres ──► EcsEntityManager ──► EcsWorld                       
                 builds the nodes      World/Entities/entity_<id>/
 ```
 
-Every physics tick `EcsScheduler` runs twenty-five stages. `[20 Hz]` and `[10 Hz]` mark the
+Every physics tick `EcsScheduler` runs twenty-six stages. `[20 Hz]` and `[10 Hz]` mark the
 ones that run every third or sixth tick (§11); the rest run every tick.
 
 | stage | does | writes |
@@ -50,12 +50,13 @@ ones that run every third or sixth tick (§11); the rest run every tick.
 | `sensor` `[20 Hz]` | what each entity sees and can touch | `EcsSensor.perceived`, `EcsAction.reached` |
 | `planning` `[20 Hz]` | scores goals, replans on events, under a budget (§18) | `EcsPlanner` |
 | `low_brain` `[20 Hz]` | runs the plan's first step, or its own ladder | its own state, a destination, intent flags |
+| `skill` | carries out a cast intent; runs skill timers (§19) | `EcsSkills`, the effect flags |
 | `consume` | carries out an eat intent | `EcsHunger`, the bag, `EcsDyingFlag` |
 | `harvest` | regrows stock; carries out a harvest intent | `EcsHarvestable`, a note on `EcsLifecycleSingleton` |
 | `attack` | carries out an attack intent, on cooldown | `EcsDamage.cooldown`, hits on `EcsCombatSingleton` |
 | `crit` | rolls each hit against the attacker's crit chance | the hits |
 | `damage` | applies the hits less armour, clears them | `EcsHealth`, `EcsHurtFlag` |
-| `movement` | walks toward the destination, prices the trip | `EcsPosition`, `EcsMovement` |
+| `movement` | walks toward the destination, prices the trip; faster while dashing | `EcsPosition`, `EcsMovement` |
 | `collision` | pushes overlapping solid bodies apart | `EcsPosition` |
 | `pickup` | carries out a take intent: an item off the ground, or a record looted from a bag | the bags, `EcsDyingFlag` |
 | `rot` | ages corpses; flags them dying when their time is up | `EcsRot`, `EcsDyingFlag` |
@@ -76,8 +77,9 @@ systems hold all behaviour and never call each other, and nothing outside a syst
 component data. Queries key on the script object — `world.query([EcsPositionComponent])` —
 so a typo is a parse error, not a silently empty result.
 
-The world today is 11 animals — 5 rabbits, 5 monkeys, 1 crocodile — and 13 bushes, 1.3 per
-plant-eater (`defs/world1.tres`), spread across a 3200×1680 arena. A berry exists only once
+The world today is 11 animals — 5 rabbits, 5 monkeys, 1 crocodile — 13 bushes, 1.3 per
+plant-eater, and 4 ponds (`defs/world1.tres`), spread across a 6400×3360 arena, doubled each way
+on 2026-10-31 to make room for more kinds. A berry exists only once
 something harvests one (§9).
 
 ---
@@ -212,6 +214,11 @@ nothing on its first tick, so its opening move is always a wander, preempted the
 
 Keep a solid entity's action radius above its body radius (rabbit 22 → 34, monkey 36 → 50),
 or soft collision stops it before its reach arrives.
+
+**Two distance checks sit on top of perception, both deliberate** (§19): a scanning watcher
+sees a hider within its scan radius, and the planner's `prey_close` is prey within dash reach.
+Both run only over `perceived` — the area still decides *whether* something is seen; the
+distance only decides how near it is.
 
 ---
 
@@ -540,7 +547,7 @@ after its producer keeps its data one tick old, as at full rate.
 
 ## 12. Tests
 
-`tests/lifecycle_test.tscn` — **261 checks**, exit code 0 only if all pass. Run it after
+`tests/lifecycle_test.tscn` — **288 checks**, exit code 0 only if all pass. Run it after
 touching the manager, collision, pickup, spawner, sensor, node sync, the brain or any
 executor. It covers: declared nodes built and undeclared ones not; kill takes data and nodes;
 spawn notes fulfilled a tick later; soft collision, immovable and non-solid bodies; seeing is
@@ -561,7 +568,12 @@ of fullness and energy for each kind; a planned crocodile killing once and eatin
 with no hand rule on its path; planned harvesting with flags matching state; replans only on
 a fact or ranking change, at most `MAX_REPLANS` a run; hunger against danger both ways; and a
 rabbit fleeing a crocodile it sees, calming once it is gone, waking to flee, and fleeing a bite
-from something unseen.
+from something unseen; skills starting on intent, ending on time, refused while cooling, hide
+holding only in water and while asked, dash speed, hiding restoring energy; a hidden
+crocodile noticed never, late or plainly by awareness and scan, and never past `perceived`;
+the ambush chains by cost; an ambush giving up after its patience and coming back; and a
+planned crocodile ambushing from water, letting a far monkey pass, pouncing once, killing and
+eating.
 
 `tests/stress_test.tscn` — the population ramp and the per-stage bookkeeping split (§14). Knobs after a bare `--`:
 `--spacing=180` (grid px), `--n=4000` (one population), `--skip=hunger,health` (leave stages
@@ -600,6 +612,9 @@ brain's food index. The ceiling went from 4,800–6,400 to over 9,600 entities (
   because they now query intent flags instead of every brain; the brain itself did not get
   dearer. The cost of raising a flag under load is unmeasured — the stress population never
   raises one.
+- **Features roadmap, step 1: skills, water and the ambush** — done (2026-10-31, §19). The
+  roadmap (`FEATURES_ROADMAP.md`, kept outside the repo) goes on: 2 thirst, 3 uniform skills
+  with costs from stats, pounce and stun, 4 memory, 5 traffic-based ambush.
 - **7, GOAP** — done (2026-10-29, `cf53229` to `ae1ef52`): harvesting first, then a pure A*
   planner over a symbolic snapshot, utility goal choice, a budgeted replan queue that replans
   on events, and fleeing. Single-threaded; the planner is pure, so moving it to
@@ -837,14 +852,15 @@ state, flag and destination.
 - **Actions** are data: `ai/ecs_action_def.gd`, one `.tres` per action in `defs/actions/`
   (`id`, `preconditions`, `effects`, `cost`). Each `id` names a brain rung, so one action is
   one existing executor: `eat_carried`, `eat_ground`, `take`, `loot`, `seek_food`,
-  `seek_bush`, `harvest`, `hunt`, `attack`, `sleep`, `flee`. `attack`'s effect is
+  `seek_bush`, `harvest`, `hunt`, `attack`, `sleep`, `flee`, and since §19 `go_to_cover`,
+  `ambush`, `pounce` and `scan`. `attack`'s effect is
   `food_in_sight` — a kill leaves a corpse — which is the predicted effect the meat chain
   reasons over. `take` sets `has_room` false, so Provision means "fill the bag".
 - **Goals** are data too: `ai/ecs_goal_def.gd`, in `defs/goals/` — `satisfy_hunger`
   {fed}, `provision` {bag full}, `rest` {rested}, `flee` {safe}. Each names a `need` and a
   `weight`.
 - **`EcsPlanner.plan(facts, desired, actions)`** is forward A* over a dictionary of true
-  facts, depth 6. It is pure — it reads only its arguments — so it can run on a worker
+  facts, depth 8 (6 until §19, whose ambush chain is 6 steps long). It is pure — it reads only its arguments — so it can run on a worker
   thread later without being rewritten.
 - **`EcsPlannerComponent`** carries a kind's `actions` and `goals`, and the runtime plan:
   `goal`, `steps`, the `facts` and goal `ranking` it was made from, and `replans`. Its
@@ -901,3 +917,100 @@ This one plans over need-level actions, at L2 scale, because those are the actio
 exist and the meat chain is real multi-step reasoning over a predicted effect. The planner
 is a pure function over plain facts, so promoting it to longer projects or a worker thread
 is a change around it, not to it. Cost and replan rates are in §14.
+
+---
+
+## 19. Skills, water and the ambush
+
+Step 1 of the features roadmap (2026-10-31). The crocodile hunts by ambush: it is slow, it
+hides in water, and when prey comes close it dashes. Prey can scan, which reveals what is
+hidden near them. All three are one mechanic, so another skill is data plus an effect.
+
+**A skill is a def that says its own effect.** `ai/ecs_skill_def.gd`, `EcsSkillDef`: `id`,
+`cooldown`, `duration` (0 = held: it lasts while asked for), and two overridable methods —
+`make_effect()`, the flag that *is* the skill being active, and `can_start(world, id)`, its
+requirement. Subclasses override only those: `EcsDashSkill` (`speed_scale`, `reach`),
+`EcsHideSkill` (`stealth`; `can_start` is "in cover"), `EcsScanSkill` (`radius`). Data in
+`defs/skills/`. This is `NODE_KIND`'s idea again: the def says what it does, so the system
+never switches on skill type.
+
+**Only `EcsSkillSystem` writes effect flags** (`EcsDashingFlag`, `EcsHiddenFlag`,
+`EcsScanningFlag`); everything else reads them. The brain asks with `EcsCastIntentFlag{skill}`,
+raised and cleared in `_set_state()` like every intent. Each tick the system ticks cooldowns,
+ends a timed skill when its time is up and a held one when its intent is gone or `can_start`
+stops holding — which is how hiding ends on leaving the water — and starts a cast that is
+known, ready, not active and allowed. A refused cast does nothing. The cooldown starts when a
+skill ends. `EcsSkillsComponent` holds the authored list and the timers, and its `describe()`
+shows each skill as ready, active or cooling.
+
+**A timed skill fires once.** POUNCE raises the dash intent; the tick the brain sees
+`EcsDashingFlag` it moves to HUNT, which raises nothing. The intent is gone, so the dash can't
+restart when its cooldown clears, and the flags still match the state.
+
+**Water is cover.** `EcsCoverComponent{conceal}`; `defs/blueprints/water.tres` is a gradient
+sprite under everything and a non-solid body of radius 140, so it is seen and walked through.
+**In water means the action area touches a cover body** — `EcsHunting.cover_of`, the best
+`conceal` in `reached`. So a hider stands at the edge nearest where it came from.
+
+**Visibility** (`EcsHunting.visibility_of`, read by `EcsDangerSystem`): 1 unless hidden;
+hidden, `1 − stealth × (1 − awareness)`. Danger rises at `fill × visibility − decay`, so
+something faint enough is never noticed: hide stealth 0.95 is 0.05 to an unaware monkey,
+below the floor; a rabbit with `awareness` 0.3 sees 0.34 and notices about four times
+later than a plain threat (62 ticks against 16). A scanning watcher sees a hider within its
+scan radius plainly. That check is a distance, on top of perception — the deliberate
+exception noted in §4: it runs only over `perceived`, so scanning never reaches past sight.
+
+**The crocodile**: speed 100 (rabbit 165), Dash (×3.5 for 0.6 s, cooldown 12 s, reach 180)
+and Hide; `EcsEnergyComponent.hide_restore` 2.0 makes waiting a slow rest. Its hunger was
+retuned in the same change: `max_fullness` 300, drain 0.3, gates 180/225/150, and a corpse's
+`nutrition` 150.
+
+**Planning.** Three facts for hunters — `cover_in_sight`, `in_cover`, `prey_close` (prey
+within dash reach) — and three actions:
+
+| action | needs | gives | cost |
+|---|---|---|---|
+| `go_to_cover` | cover_in_sight | in_cover | 2 |
+| `ambush` | in_cover | prey_close | 1, `patience` 60 s |
+| `pounce` | prey_close | prey_in_reach | 1 |
+
+The crocodile **keeps `hunt` (3)**; no action is taken away to force a route, the costs
+choose. On land with prey in sight, chasing (3) beats going to water and waiting (4); in the
+water, waiting and pouncing (2) beats leaving to chase (3); with nothing in sight only the
+ambush route exists; prey already close is a pounce. These are hand costs — roadmap step 3
+replaces them with costs from speed. The full chain is six steps
+(`go_to_cover > ambush > pounce > attack > seek_food > eat_ground`), which was exactly the
+old depth cap, so `MAX_DEPTH` is now 8.
+
+**`ambush` predicts its effect.** Water advertises no food. `prey_close` after `ambush` is a
+bet that prey will come, the same kind of predicted effect as `attack → food_in_sight`, but
+one that may never pay. **`EcsActionDef.patience`** is the general form: an action whose effect
+hasn't come true within it has failed. The brain counts it down in `pause_left`; out of
+patience it walks one leg straight away from the pond (WANDER with the pond as `target`, a
+leg a plan to ambush may not cut short), which changes its facts, and the planner sends it
+back to water.
+
+**The brain's new states**: HIDE (walk to the nearest cover, stop at the edge), AMBUSH (stand
+still, cast hide, wait out patience), POUNCE (aim at the nearest prey in reach, cast dash;
+HUNT once the dash starts), SCAN (stand still, cast scan, for its duration). Prey carry Scan
+(1.5 s, cooldown 8 s, radius 200) and a `scan` action, but **no goal wants `scanned` yet**, so
+nobody scans in play until what triggers it is decided.
+
+**Measured** (throwaway probe, the real scene, 5 runs of 300 s): the crocodile survived 5 of
+5, hid about half the time, timed out 2 ambushes a run, dashed 0–1 times a run and **killed
+nothing**. Each run it hid at one pond only — the one nearest it, returned to after every
+timeout. That is expected and is the next step's reason: nothing brings prey to water, so
+the bet does not pay, and the doubled arena makes passing prey rarer still. Thirst (roadmap
+step 2) makes it true; memory (step 4–5) would let a pond's traffic set its cost and spread
+the crocodile across ponds. Don't tune this before then — the stealth, awareness and dash
+numbers will move once scan has a trigger.
+
+**Cost**: level with its parent. Against `162c27a` in one sitting, 6,400 entities, game rates,
+40 hunters: 293.5 ms fed against 292.9. `MAX_DEPTH` 8 costs nothing measurable (planning
+63.7 ms on both). `skill` costs 6 ms there: it skips any entity with no timer running and starts
+casts from a view of `EcsCastIntentFlag`. A first version that fetched the cast flag for every
+entity with skills cost 18 ms. The machine read slower that day — the parent itself measured
+293 ms where §14's table, from 10-29, has 192 — so compare only within one sitting.
+
+**Open, to decide:** what triggers scan (a timer, scanning while eating near water, an alarm
+when a neighbour flees, a faint threat in sight); thirst against hunger on the ladder.

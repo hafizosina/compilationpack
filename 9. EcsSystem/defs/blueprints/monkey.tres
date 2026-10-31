@@ -31,6 +31,11 @@
 [ext_resource type="Resource" path="res://9. EcsSystem/defs/goals/flee.tres" id="g_flee"]
 [ext_resource type="Script" uid="uid://cs61nhjw8noqy" path="res://9. EcsSystem/components/ecs_danger_component.gd" id="s_danger"]
 
+[ext_resource type="Script" path="res://9. EcsSystem/components/ecs_skills_component.gd" id="s_skills"]
+[ext_resource type="Script" path="res://9. EcsSystem/ai/ecs_skill_def.gd" id="s_skill_def"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/skills/scan.tres" id="k_scan"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/scan.tres" id="a_scan"]
+
 [sub_resource type="Resource" id="c_body"]
 script = ExtResource("s_body")
 radius = 36.0
@@ -79,14 +84,18 @@ restore = 10.0
 
 [sub_resource type="Resource" id="c_planner"]
 script = ExtResource("s_planner")
-actions = Array[ExtResource("s_action_def")]([ExtResource("a_eat_carried"), ExtResource("a_eat_ground"), ExtResource("a_take"), ExtResource("a_loot"), ExtResource("a_seek_food"), ExtResource("a_seek_bush"), ExtResource("a_harvest"), ExtResource("a_sleep"), ExtResource("a_flee")])
+actions = Array[ExtResource("s_action_def")]([ExtResource("a_eat_carried"), ExtResource("a_eat_ground"), ExtResource("a_take"), ExtResource("a_loot"), ExtResource("a_seek_food"), ExtResource("a_seek_bush"), ExtResource("a_harvest"), ExtResource("a_sleep"), ExtResource("a_flee"), ExtResource("a_scan")])
 goals = Array[ExtResource("s_goal_def")]([ExtResource("g_satisfy_hunger"), ExtResource("g_provision"), ExtResource("g_rest"), ExtResource("g_flee")])
 
 [sub_resource type="Resource" id="c_danger"]
 script = ExtResource("s_danger")
 
+[sub_resource type="Resource" id="c_skills"]
+script = ExtResource("s_skills")
+skills = Array[ExtResource("s_skill_def")]([ExtResource("k_scan")])
+
 [resource]
 script = ExtResource("def")
 id = &"monkey"
 display_name = "Monkey"
-components = Array[ExtResource("base")]([SubResource("c_energy"), SubResource("c_health"), SubResource("c_hunger"), SubResource("c_body"), SubResource("c_sprite"), SubResource("c_movement"), SubResource("c_brain"), SubResource("c_bag"), SubResource("c_sensor"), SubResource("c_action"), SubResource("c_planner"), SubResource("c_danger")])
+components = Array[ExtResource("base")]([SubResource("c_energy"), SubResource("c_health"), SubResource("c_hunger"), SubResource("c_body"), SubResource("c_sprite"), SubResource("c_movement"), SubResource("c_brain"), SubResource("c_bag"), SubResource("c_sensor"), SubResource("c_action"), SubResource("c_planner"), SubResource("c_danger"), SubResource("c_skills")])

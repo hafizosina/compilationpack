@@ -7,7 +7,7 @@
 script = ExtResource("place")
 entity_name = &"rabbit_0"
 type = &"rabbit"
-position = Vector2(-1250, -550)
+position = Vector2(-2500, -1100)
 overrides = {
 "movement": {
 "speed": 176.0
@@ -22,7 +22,7 @@ overrides = {
 script = ExtResource("place")
 entity_name = &"rabbit_1"
 type = &"rabbit"
-position = Vector2(-350, -620)
+position = Vector2(-700, -1240)
 overrides = {
 "movement": {
 "speed": 158.0
@@ -37,7 +37,7 @@ overrides = {
 script = ExtResource("place")
 entity_name = &"rabbit_2"
 type = &"rabbit"
-position = Vector2(600, -500)
+position = Vector2(1200, -1000)
 overrides = {
 "movement": {
 "speed": 168.0
@@ -52,7 +52,7 @@ overrides = {
 script = ExtResource("place")
 entity_name = &"rabbit_3"
 type = &"rabbit"
-position = Vector2(-700, 450)
+position = Vector2(-1400, 900)
 overrides = {
 "movement": {
 "speed": 152.0
@@ -67,7 +67,7 @@ overrides = {
 script = ExtResource("place")
 entity_name = &"rabbit_4"
 type = &"rabbit"
-position = Vector2(1300, 600)
+position = Vector2(2600, 1200)
 overrides = {
 "movement": {
 "speed": 163.0
@@ -82,7 +82,7 @@ overrides = {
 script = ExtResource("place")
 entity_name = &"monkey_0"
 type = &"monkey"
-position = Vector2(-1300, 250)
+position = Vector2(-2600, 500)
 overrides = {
 "movement": {
 "speed": 124.0
@@ -97,7 +97,7 @@ overrides = {
 script = ExtResource("place")
 entity_name = &"monkey_1"
 type = &"monkey"
-position = Vector2(150, -150)
+position = Vector2(300, -300)
 overrides = {
 "movement": {
 "speed": 136.0
@@ -112,7 +112,7 @@ overrides = {
 script = ExtResource("place")
 entity_name = &"monkey_2"
 type = &"monkey"
-position = Vector2(1250, -250)
+position = Vector2(2500, -500)
 overrides = {
 "movement": {
 "speed": 128.0
@@ -127,7 +127,7 @@ overrides = {
 script = ExtResource("place")
 entity_name = &"monkey_3"
 type = &"monkey"
-position = Vector2(300, 580)
+position = Vector2(600, 1160)
 overrides = {
 "movement": {
 "speed": 133.0
@@ -142,7 +142,7 @@ overrides = {
 script = ExtResource("place")
 entity_name = &"monkey_4"
 type = &"monkey"
-position = Vector2(-600, -100)
+position = Vector2(-1200, -200)
 overrides = {
 "movement": {
 "speed": 121.0
@@ -157,10 +157,10 @@ overrides = {
 script = ExtResource("place")
 entity_name = &"crocodile_0"
 type = &"crocodile"
-position = Vector2(0, 450)
+position = Vector2(0, 900)
 overrides = {
 "hunger": {
-"fullness": 70.0
+"fullness": 210.0
 },
 "energy": {
 "value": 90.0,
@@ -172,80 +172,104 @@ overrides = {
 script = ExtResource("place")
 entity_name = &"berry_bush_0"
 type = &"berry_bush"
-position = Vector2(-900, -400)
+position = Vector2(-1800, -800)
 
 [sub_resource type="Resource" id="b1"]
 script = ExtResource("place")
 entity_name = &"berry_bush_1"
 type = &"berry_bush"
-position = Vector2(950, 350)
+position = Vector2(1900, 700)
 
 [sub_resource type="Resource" id="b2"]
 script = ExtResource("place")
 entity_name = &"berry_bush_2"
 type = &"berry_bush"
-position = Vector2(-1250, 550)
+position = Vector2(-2500, 1100)
 
 [sub_resource type="Resource" id="b3"]
 script = ExtResource("place")
 entity_name = &"berry_bush_3"
 type = &"berry_bush"
-position = Vector2(-1150, -150)
+position = Vector2(-2300, -300)
 
 [sub_resource type="Resource" id="b4"]
 script = ExtResource("place")
 entity_name = &"berry_bush_4"
 type = &"berry_bush"
-position = Vector2(-450, 150)
+position = Vector2(-900, 300)
 
 [sub_resource type="Resource" id="b5"]
 script = ExtResource("place")
 entity_name = &"berry_bush_5"
 type = &"berry_bush"
-position = Vector2(-300, -350)
+position = Vector2(-600, -700)
 
 [sub_resource type="Resource" id="b6"]
 script = ExtResource("place")
 entity_name = &"berry_bush_6"
 type = &"berry_bush"
-position = Vector2(-150, 650)
+position = Vector2(-300, 1300)
 
 [sub_resource type="Resource" id="b7"]
 script = ExtResource("place")
 entity_name = &"berry_bush_7"
 type = &"berry_bush"
-position = Vector2(300, 100)
+position = Vector2(600, 200)
 
 [sub_resource type="Resource" id="b8"]
 script = ExtResource("place")
 entity_name = &"berry_bush_8"
 type = &"berry_bush"
-position = Vector2(250, -600)
+position = Vector2(500, -1200)
 
 [sub_resource type="Resource" id="b9"]
 script = ExtResource("place")
 entity_name = &"berry_bush_9"
 type = &"berry_bush"
-position = Vector2(850, -350)
+position = Vector2(1700, -700)
 
 [sub_resource type="Resource" id="b10"]
 script = ExtResource("place")
 entity_name = &"berry_bush_10"
 type = &"berry_bush"
-position = Vector2(650, 650)
+position = Vector2(1300, 1300)
 
 [sub_resource type="Resource" id="b11"]
 script = ExtResource("place")
 entity_name = &"berry_bush_11"
 type = &"berry_bush"
-position = Vector2(1350, 100)
+position = Vector2(2700, 200)
 
 [sub_resource type="Resource" id="b12"]
 script = ExtResource("place")
 entity_name = &"berry_bush_12"
 type = &"berry_bush"
-position = Vector2(1150, -650)
+position = Vector2(2300, -1300)
+
+[sub_resource type="Resource" id="w0"]
+script = ExtResource("place")
+entity_name = &"water_0"
+type = &"water"
+position = Vector2(-1300, -700)
+
+[sub_resource type="Resource" id="w1"]
+script = ExtResource("place")
+entity_name = &"water_1"
+type = &"water"
+position = Vector2(1500, -200)
+
+[sub_resource type="Resource" id="w2"]
+script = ExtResource("place")
+entity_name = &"water_2"
+type = &"water"
+position = Vector2(-1600, 400)
+
+[sub_resource type="Resource" id="w3"]
+script = ExtResource("place")
+entity_name = &"water_3"
+type = &"water"
+position = Vector2(400, 800)
 
 [resource]
 script = ExtResource("world")
-entries = Array[ExtResource("place")]([SubResource("p0"), SubResource("p1"), SubResource("p2"), SubResource("p3"), SubResource("p4"), SubResource("p5"), SubResource("p6"), SubResource("p7"), SubResource("p8"), SubResource("p9"), SubResource("c0"), SubResource("b0"), SubResource("b1"), SubResource("b2"), SubResource("b3"), SubResource("b4"), SubResource("b5"), SubResource("b6"), SubResource("b7"), SubResource("b8"), SubResource("b9"), SubResource("b10"), SubResource("b11"), SubResource("b12")])
+entries = Array[ExtResource("place")]([SubResource("p0"), SubResource("p1"), SubResource("p2"), SubResource("p3"), SubResource("p4"), SubResource("p5"), SubResource("p6"), SubResource("p7"), SubResource("p8"), SubResource("p9"), SubResource("c0"), SubResource("b0"), SubResource("b1"), SubResource("b2"), SubResource("b3"), SubResource("b4"), SubResource("b5"), SubResource("b6"), SubResource("b7"), SubResource("b8"), SubResource("b9"), SubResource("b10"), SubResource("b11"), SubResource("b12"), SubResource("w0"), SubResource("w1"), SubResource("w2"), SubResource("w3")])

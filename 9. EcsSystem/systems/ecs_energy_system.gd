@@ -1,7 +1,8 @@
 class_name EcsEnergySystem
 extends EcsSystem
 
-## Drains energy while awake (more while moving) and restores it while asleep.
+## Drains energy while awake (more while moving) and restores it while asleep, or
+## at `hide_restore` while hidden.
 ## At zero it adds EcsCollapsedFlag and costs health once; the flag lifts at
 ## `collapse_release`.
 
@@ -24,6 +25,8 @@ func run(world: EcsWorld, delta: float) -> void:
 
 		if resting:
 			energy.value = minf(energy.value + energy.restore * delta, energy.max_energy)
+		elif energy.hide_restore > 0.0 and world.has(id, EcsHiddenFlag):
+			energy.value = minf(energy.value + energy.hide_restore * delta, energy.max_energy)
 		else:
 			var move := world.get_component(id, EcsMovementComponent) as EcsMovementComponent
 			var cost := energy.drain_idle

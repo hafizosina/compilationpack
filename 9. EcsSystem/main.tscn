@@ -16,7 +16,7 @@ world_def = ExtResource("3_world")
 [node name="Ground" type="Polygon2D" parent="." unique_id=547884703]
 z_index = -10
 color = Color(0.21, 0.25, 0.19, 1)
-polygon = PackedVector2Array(-1600, -840, 1600, -840, 1600, 840, -1600, 840)
+polygon = PackedVector2Array(-3200, -1680, 3200, -1680, 3200, 1680, -3200, 1680)
 
 [node name="World" type="Node2D" parent="." unique_id=164167084]
 
@@ -31,7 +31,7 @@ script = ExtResource("5_overlay")
 
 [node name="Camera2D" parent="." unique_id=1715917671 instance=ExtResource("4_camera")]
 zoom_value = 0.4
-min_zoom = 0.3
+min_zoom = 0.2
 pan_speed = 3.0
 
 [node name="UI" parent="." unique_id=1402887551 instance=ExtResource("7_ui")]

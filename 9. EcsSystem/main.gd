@@ -18,7 +18,7 @@ const BARS: int = 6
 ## Placement list describing what to spawn and where.
 @export var world_def: EcsWorldDef
 ## Playable area in global pixels; also the wander bounds.
-@export var arena: Rect2 = Rect2(-1600.0, -840.0, 3200.0, 1680.0)
+@export var arena: Rect2 = Rect2(-3200.0, -1680.0, 6400.0, 3360.0)
 
 @onready var _entities_root: Node2D = $World/Entities
 @onready var _debug_overlay: EcsDebugOverlay = $World/DebugOverlay
@@ -82,6 +82,7 @@ func _build() -> void:
 		.add(EcsSensorSystem.new(_manager), SLOW, 0) \
 		.add(EcsPlanningSystem.new(), SLOW, 2) \
 		.add(EcsLowBrainSystem.new(), SLOW, 1) \
+		.add(EcsSkillSystem.new()) \
 		.add(EcsConsumeSystem.new()) \
 		.add(EcsHarvestSystem.new()) \
 		.add(EcsAttackSystem.new()) \

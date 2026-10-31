@@ -12,3 +12,5 @@ extends Resource
 @export var effects: Dictionary = {}
 ## The planner picks the cheapest plan.
 @export var cost: float = 1.0
+## Seconds its effects may take to come true before it has failed. 0 never fails.
+@export var patience: float = 0.0

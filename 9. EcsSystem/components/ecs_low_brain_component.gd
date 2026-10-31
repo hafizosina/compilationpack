@@ -14,11 +14,16 @@ enum State {
 	ATTACK,     ## Attacking `target`, which is in reach.
 	HARVEST,    ## Harvesting `target`, which is in reach.
 	FLEE,       ## Running from the danger's last threat.
+	HIDE,       ## Walking to cover `target`, stopping once in it.
+	AMBUSH,     ## Hiding in cover `target`, waiting out `pause_left` for prey.
+	POUNCE,     ## Dashing at `target`; becomes HUNT once the dash starts.
+	SCAN,       ## Standing still, scanning for `pause_left`.
 }
 
 ## Display names for `state`, in enum order.
 const STATE_NAMES: Array[String] = ["idle", "wander", "seek food", "taking", "eating", "sleeping",
-	"hunting", "attacking", "harvesting", "fleeing"]
+	"hunting", "attacking", "harvesting", "fleeing", "to cover", "ambushing", "pouncing",
+	"scanning"]
 
 ## How far away a wander destination may be.
 @export var radius: float = 260.0
@@ -26,7 +31,7 @@ const STATE_NAMES: Array[String] = ["idle", "wander", "seek food", "taking", "ea
 @export var pause_min: float = 0.4
 @export var pause_max: float = 2.5
 
-## Seconds left of the current pause.
+## Seconds left of the current pause, ambush or scan.
 var pause_left: float = 0.0
 ## Current state.
 var state: State = State.IDLE

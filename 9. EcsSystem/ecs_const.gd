@@ -23,7 +23,7 @@ const LAYER_BODY: int = 1
 const EDGE_MARGIN: float = 48.0
 
 ## The playable area, in global pixels. Set by main.gd at startup.
-static var world_bounds: Rect2 = Rect2(-1600.0, -840.0, 3200.0, 1680.0)
+static var world_bounds: Rect2 = Rect2(-3200.0, -1680.0, 6400.0, 3360.0)
 
 ## A random point within `radius` of `origin`, inside the arena. `min_ratio`
 ## excludes an inner disc, as a fraction of `radius`.

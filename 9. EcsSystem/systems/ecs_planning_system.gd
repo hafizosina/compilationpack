@@ -153,6 +153,8 @@ func _facts(world: EcsWorld, id: int, hunger: EcsHungerComponent, bag: EcsInvent
 				facts[&"food_in_bag"] = true
 				break
 	var hunts := world.has(id, EcsDamageComponent)
+	if hunts and EcsHunting.cover_of(world, id) > 0.0:
+		facts[&"in_cover"] = true
 	if danger != null and danger.value >= danger.flee_at:
 		facts[&"threat_near"] = true
 	else:
@@ -177,6 +179,10 @@ func _facts(world: EcsWorld, id: int, hunger: EcsHungerComponent, bag: EcsInvent
 	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
 	# Nothing to look for: skip the scan.
 	if sensor != null and (hunts or not _diet.is_empty() or not _bushes.is_empty()):
+		var dash_reach := EcsHunting.dash_reach(world, id) if hunts else 0.0
+		var here := Vector2.ZERO
+		if dash_reach > 0.0:
+			here = (world.get_component(id, EcsPositionComponent) as EcsPositionComponent).position
 		for seen in sensor.perceived:
 			if _edible(seen, hunger):
 				facts[&"food_in_sight"] = true
@@ -184,7 +190,15 @@ func _facts(world: EcsWorld, id: int, hunger: EcsHungerComponent, bag: EcsInvent
 				facts[&"bush_in_sight"] = true
 			elif hunts and EcsHunting.can_hunt(world, id, seen):
 				facts[&"prey_in_sight"] = true
+				if dash_reach > 0.0 and _within(world, seen, here, dash_reach):
+					facts[&"prey_close"] = true
+			elif hunts and world.has(seen, EcsCoverComponent):
+				facts[&"cover_in_sight"] = true
 	return facts
+
+static func _within(world: EcsWorld, id: int, here: Vector2, distance: float) -> bool:
+	var there := world.get_component(id, EcsPositionComponent) as EcsPositionComponent
+	return there != null and here.distance_squared_to(there.position) <= distance * distance
 
 func _edible(id: int, hunger: EcsHungerComponent) -> bool:
 	return _diet.has(id) and (hunger == null or _diet[id] == hunger.eats)

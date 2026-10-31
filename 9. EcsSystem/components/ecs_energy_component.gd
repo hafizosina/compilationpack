@@ -11,6 +11,8 @@ extends EcsComponent
 @export var drain_moving: float = 1.0
 ## Energy regained per second while asleep or collapsed.
 @export var restore: float = 1.0
+## Energy regained per second while hidden. 0 hiding still drains.
+@export var hide_restore: float = 0.0
 ## At or below this the brain may choose to sleep.
 @export var rest_at: float = 30.0
 ## A chosen sleep ends here. Keep well above `rest_at`.

@@ -91,6 +91,11 @@ func _run() -> void:
 	await _replans_follow_events_not_the_clock()
 	await _hunger_and_danger_are_weighed_both_ways()
 	await _a_rabbit_flees_what_could_hunt_it()
+	await _skills_start_end_and_cool()
+	await _a_hidden_hunter_is_noticed_late()
+	_the_ambush_is_planned_by_cost()
+	await _an_ambush_gives_up_after_its_patience()
+	await _a_crocodile_ambushes_from_the_water()
 
 ## Nodes match the declared NODE_KINDs (a berry gets a sprite and a body, no
 ## sensor) and hang under the entity's own container.
@@ -1454,7 +1459,7 @@ func _a_hungry_hunter_kills_its_prey_and_eats_the_corpse() -> void:
 	var brain := _world.get_component(hunter, EcsLowBrainComponent) as EcsLowBrainComponent
 	var hunger := _world.get_component(hunter, EcsHungerComponent) as EcsHungerComponent
 
-	hunger.fullness = 90.0
+	hunger.fullness = hunger.max_fullness
 	var hunted := false
 	for i in 30:
 		living.run_all(_world, TICK)
@@ -1874,7 +1879,7 @@ func _replans_follow_events_not_the_clock() -> void:
 		planning.run(_world, TICK)
 	_check("a need crossing its gate replans it once (%d)" % planner.replans,
 		planner.replans == 2)
-	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(150.0, 0.0))
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(250.0, 0.0))
 	(_world.get_component(croc, EcsSensorComponent) as EcsSensorComponent).perceived.append(rabbit)
 	for i in 100:
 		planning.run(_world, TICK)
@@ -2019,6 +2024,299 @@ func _a_rabbit_flees_what_could_hunt_it() -> void:
 	await get_tree().physics_frame
 	EcsConst.world_bounds = bounds
 
+## A skill starts on its intent, ends on time, is refused while cooling and is
+## ready again after; hide holds only in cover and while asked for; dash scales
+## speed; hiding restores energy at `hide_restore`.
+func _skills_start_end_and_cool() -> void:
+	var casting := EcsScheduler.new()
+	casting \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsSkillSystem.new()) \
+		.add(EcsEnergySystem.new()) \
+		.add(EcsMovementSystem.new()) \
+		.add(EcsCollisionSystem.new(_manager)) \
+		.add(EcsNodeSyncSystem.new(_manager))
+	var run := func(ticks: int) -> void:
+		for i in ticks:
+			casting.run_all(_world, TICK)
+			await get_tree().physics_frame
+	var spot := Vector2(-30000.0, 30000.0)
+
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot)
+	_world.remove(rabbit, EcsLowBrainComponent)
+	_cast(rabbit, &"scan")
+	await run.call(1)
+	_check("a cast starts the skill", _world.has(rabbit, EcsScanningFlag))
+	await run.call(100)
+	_check("it ends after its duration", not _world.has(rabbit, EcsScanningFlag))
+	await run.call(60)
+	_check("still asked, it is refused while cooling", not _world.has(rabbit, EcsScanningFlag))
+	_world.remove(rabbit, EcsCastIntentFlag)
+	await run.call(480)
+	_cast(rabbit, &"scan")
+	await run.call(1)
+	_check("and ready again after its cooldown", _world.has(rabbit, EcsScanningFlag))
+
+	var croc := _manager.spawn(_world, _catalog, &"crocodile", spot + Vector2(0.0, 2000.0))
+	_world.remove(croc, EcsLowBrainComponent)
+	var energy := _world.get_component(croc, EcsEnergyComponent) as EcsEnergyComponent
+	energy.rolled = true
+	energy.value = 50.0
+	_cast(croc, &"hide")
+	await run.call(3)
+	_check("hide is refused on land", not _world.has(croc, EcsHiddenFlag))
+	var pond := _manager.spawn(_world, _catalog, &"water", _position_of(croc) + Vector2(150.0, 0.0))
+	await run.call(3)
+	_check("and holds in water", _world.has(croc, EcsHiddenFlag))
+	var before := energy.value
+	await run.call(60)
+	_check("hiding restores energy at hide_restore (%.2f)" % (energy.value - before),
+		absf(energy.value - before - energy.hide_restore) < 0.2)
+	_world.remove(croc, EcsCastIntentFlag)
+	await run.call(1)
+	_check("a held skill ends when its intent is lifted", not _world.has(croc, EcsHiddenFlag))
+	_cast(croc, &"hide")
+	await run.call(2)
+	(_world.get_component(croc, EcsPositionComponent) as EcsPositionComponent).position += Vector2(-800.0, 0.0)
+	await run.call(3)
+	_check("and when it leaves the water", not _world.has(croc, EcsHiddenFlag))
+	_world.remove(croc, EcsCastIntentFlag)
+
+	var move := _world.get_component(croc, EcsMovementComponent) as EcsMovementComponent
+	move.destination = _position_of(croc) + Vector2(0.0, 3000.0)
+	move.has_destination = true
+	move.time_left = 0.0
+	_cast(croc, &"dash")
+	await run.call(2)
+	var dashing := move.velocity.length()
+	await run.call(60)
+	var after := move.velocity.length()
+	var dash := EcsSkillSystem._skill(_world.get_component(croc, EcsSkillsComponent), &"dash") as EcsDashSkill
+	_check("a dash scales speed (%.0f), then ends (%.0f)" % [dashing, after],
+		is_equal_approx(dashing, move.speed * dash.speed_scale) and is_equal_approx(after, move.speed))
+
+	for id in [rabbit, croc, pond]:
+		_world.add(id, EcsDyingFlag.new())
+	await run.call(1)
+
+## A hidden crocodile goes unnoticed by an unaware watcher; an aware one notices
+## it later than a plain one; a scanning one within its radius notices it like a
+## plain one, and beyond it, or out of sight, scanning changes nothing.
+func _a_hidden_hunter_is_noticed_late() -> void:
+	var watching := EcsScheduler.new()
+	watching \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsDangerSystem.new()) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsNodeSyncSystem.new(_manager))
+	var spot := Vector2(30000.0, 0.0)
+
+	var noticed_after := func(stealth: float, awareness: float, scan: float, gap: float) -> int:
+		var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(gap, 0.0))
+		var croc := _manager.spawn(_world, _catalog, &"crocodile", spot)
+		_world.remove(rabbit, EcsLowBrainComponent)
+		_world.remove(croc, EcsLowBrainComponent)
+		if stealth > 0.0:
+			var hidden := EcsHiddenFlag.new()
+			hidden.stealth = stealth
+			_world.add(croc, hidden)
+		if scan > 0.0:
+			var scanning := EcsScanningFlag.new()
+			scanning.radius = scan
+			_world.add(rabbit, scanning)
+		(_world.get_component(rabbit, EcsSensorComponent) as EcsSensorComponent).awareness = awareness
+		var danger := _world.get_component(rabbit, EcsDangerComponent) as EcsDangerComponent
+		var ticks := 0
+		while ticks < 600 and danger.value < danger.flee_at:
+			watching.run_all(_world, TICK)
+			await get_tree().physics_frame
+			ticks += 1
+		for id in [rabbit, croc]:
+			_world.add(id, EcsDyingFlag.new())
+		watching.run_all(_world, TICK)
+		await get_tree().physics_frame
+		return ticks
+	var plain: int = await noticed_after.call(0.0, 0.0, 0.0, 200.0)
+	var unseen: int = await noticed_after.call(0.95, 0.0, 0.0, 200.0)
+	var aware: int = await noticed_after.call(0.95, 0.3, 0.0, 200.0)
+	var scanned: int = await noticed_after.call(0.95, 0.0, 300.0, 200.0)
+	var too_far: int = await noticed_after.call(0.95, 0.0, 100.0, 200.0)
+	var out_of_sight: int = await noticed_after.call(0.95, 0.0, 600.0, 400.0)
+	_check("an unaware watcher never notices a hidden crocodile (%d ticks)" % unseen, unseen >= 600)
+	_check("an aware one does, later than a plain one (%d vs %d)" % [aware, plain],
+		aware < 600 and aware >= plain * 2)
+	_check("a scanning one within its radius, like a plain one (%d)" % scanned,
+		absi(scanned - plain) <= 2)
+	_check("beyond its radius scanning changes nothing (%d)" % too_far, too_far >= 600)
+	_check("and it never reaches past what it perceives (%d)" % out_of_sight, out_of_sight >= 600)
+
+## The crocodile's chains, pure: from land with water in sight it ambushes in
+## six steps, under MAX_DEPTH; in the water it keeps ambushing though it sees
+## prey; on land with prey in sight it chases; with nothing in sight, no plan.
+func _the_ambush_is_planned_by_cost() -> void:
+	var croc := _actions([&"eat_ground", &"seek_food", &"hunt", &"attack", &"sleep", &"flee",
+		&"go_to_cover", &"ambush", &"pounce"])
+	var fed := {&"fed": true}
+	var ambush: Array[StringName] = [&"go_to_cover", &"ambush", &"pounce", &"attack",
+		&"seek_food", &"eat_ground"]
+	_check("water in sight: go to it and ambush", EcsPlanner.plan({&"cover_in_sight": true},
+		fed, croc) == ambush and ambush.size() < EcsPlanner.MAX_DEPTH)
+	_check("in the water, prey in sight: keep ambushing",
+		EcsPlanner.plan({&"in_cover": true, &"prey_in_sight": true}, fed, croc)
+			== ambush.slice(1))
+	_check("on land, prey in sight: chase",
+		EcsPlanner.plan({&"cover_in_sight": true, &"prey_in_sight": true}, fed, croc)
+			== [&"hunt", &"attack", &"seek_food", &"eat_ground"])
+	_check("prey close: pounce", EcsPlanner.plan({&"prey_close": true, &"prey_in_sight": true},
+		fed, croc)[0] == &"pounce")
+	_check("nothing in sight: no plan", EcsPlanner.plan({}, fed, croc).is_empty())
+
+## An ambush no prey ever passes fails after `patience`: the crocodile leaves the
+## water, then plans its way back.
+func _an_ambush_gives_up_after_its_patience() -> void:
+	var living := _ambush_pipeline()
+	var spot := Vector2(-30000.0, -30000.0)
+	var bounds := EcsConst.world_bounds
+	EcsConst.world_bounds = Rect2(spot - Vector2(3000.0, 3000.0), Vector2(6000.0, 6000.0))
+	var pond := _manager.spawn(_world, _catalog, &"water", spot)
+	var croc := _ambusher(spot + Vector2(320.0, 0.0))
+	var planner := _world.get_component(croc, EcsPlannerComponent) as EcsPlannerComponent
+	var brain := _world.get_component(croc, EcsLowBrainComponent) as EcsLowBrainComponent
+	var patience := 0.0
+	for action in planner.actions:
+		if action.id == &"ambush":
+			patience = action.patience
+			action.patience = 2.0
+
+	var ambushes := 0
+	var hidden := false
+	var left := false
+	var was := brain.state
+	for i in 900:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		if brain.state == EcsLowBrainComponent.State.AMBUSH and was != brain.state:
+			ambushes += 1
+		hidden = hidden or _world.has(croc, EcsHiddenFlag)
+		left = left or (ambushes > 0 and EcsHunting.cover_of(_world, croc) <= 0.0
+			and not _world.has(croc, EcsHiddenFlag))
+		was = brain.state
+		if ambushes >= 2:
+			break
+	_check("it ambushes hidden in the water", hidden)
+	_check("out of patience it leaves", left)
+	_check("and plans its way back (%d ambushes)" % ambushes, ambushes >= 2)
+
+	for action in planner.actions:
+		if action.id == &"ambush":
+			action.patience = patience
+	for id in [croc, pond]:
+		_world.add(id, EcsDyingFlag.new())
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+	EcsConst.world_bounds = bounds
+
+## A planned crocodile goes to water and ambushes. A monkey walking past is not
+## chased while far; in dash reach it pounces once, kills and eats the corpse.
+func _a_crocodile_ambushes_from_the_water() -> void:
+	var living := _ambush_pipeline()
+	var spot := Vector2(30000.0, -30000.0)
+	var bounds := EcsConst.world_bounds
+	EcsConst.world_bounds = Rect2(spot - Vector2(3000.0, 3000.0), Vector2(6000.0, 6000.0))
+	var pond := _manager.spawn(_world, _catalog, &"water", spot)
+	var croc := _ambusher(spot + Vector2(320.0, 0.0))
+	var brain := _world.get_component(croc, EcsLowBrainComponent) as EcsLowBrainComponent
+	var hunger := _world.get_component(croc, EcsHungerComponent) as EcsHungerComponent
+	var started := hunger.fullness
+
+	for i in 300:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		if brain.state == EcsLowBrainComponent.State.AMBUSH and _world.has(croc, EcsHiddenFlag):
+			break
+	_check("it goes to the water and ambushes, hidden",
+		brain.state == EcsLowBrainComponent.State.AMBUSH and _world.has(croc, EcsHiddenFlag))
+
+	var at := _position_of(croc)
+	var monkey := _manager.spawn(_world, _catalog, &"monkey", at + Vector2(120.0, -450.0))
+	_world.remove(monkey, EcsLowBrainComponent)
+	var walk := _world.get_component(monkey, EcsMovementComponent) as EcsMovementComponent
+	walk.destination = at + Vector2(120.0, 450.0)
+	walk.has_destination = true
+	walk.time_left = 0.0
+	var reach := EcsHunting.dash_reach(_world, croc)
+	var chased_far := false
+	var dashes := 0
+	var dashing := false
+	var ate := false
+	for i in 1200:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		if _world.is_alive(monkey) and _position_of(monkey).distance_to(_position_of(croc)) > reach + 30.0 \
+				and dashes == 0:
+			chased_far = chased_far or brain.state == EcsLowBrainComponent.State.HUNT \
+				or brain.state == EcsLowBrainComponent.State.POUNCE
+		var now := _world.has(croc, EcsDashingFlag)
+		if now and not dashing:
+			dashes += 1
+		dashing = now
+		if hunger.fullness > started:
+			ate = true
+			break
+	_check("it keeps ambushing while the monkey is far", not chased_far)
+	_check("in reach it pounces, once (%d)" % dashes, dashes == 1)
+	_check("and kills and eats", ate and not _world.is_alive(monkey))
+
+	for id in [croc, pond, monkey]:
+		if _world.is_alive(id):
+			_world.add(id, EcsDyingFlag.new())
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+	var leftover := _first_of(&"corpse")
+	while leftover != EcsWorld.NO_ENTITY:
+		_world.add(leftover, EcsDyingFlag.new())
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		leftover = _first_of(&"corpse")
+	EcsConst.world_bounds = bounds
+
+func _ambush_pipeline() -> EcsScheduler:
+	var living := EcsScheduler.new()
+	living \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsHealthSystem.new()) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsPlanningSystem.new()) \
+		.add(EcsLowBrainSystem.new()) \
+		.add(EcsSkillSystem.new()) \
+		.add(EcsConsumeSystem.new()) \
+		.add(EcsAttackSystem.new()) \
+		.add(EcsCritSystem.new()) \
+		.add(EcsDamageSystem.new()) \
+		.add(EcsMovementSystem.new()) \
+		.add(EcsCollisionSystem.new(_manager)) \
+		.add(EcsCorpseSystem.new()) \
+		.add(EcsDropSystem.new()) \
+		.add(EcsNodeSyncSystem.new(_manager))
+	return living
+
+## A hungry, rested crocodile.
+func _ambusher(at: Vector2) -> int:
+	var croc := _manager.spawn(_world, _catalog, &"crocodile", at)
+	var energy := _world.get_component(croc, EcsEnergyComponent) as EcsEnergyComponent
+	energy.rolled = true
+	energy.value = energy.max_energy
+	var hunger := _world.get_component(croc, EcsHungerComponent) as EcsHungerComponent
+	hunger.fullness = 100.0
+	return croc
+
+## Raises a cast intent, standing in for the brain.
+func _cast(id: int, skill: StringName) -> void:
+	var cast := EcsCastIntentFlag.new()
+	cast.skill = skill
+	_world.add(id, cast)
+
 func _actions(ids: Array[StringName]) -> Array[EcsActionDef]:
 	var found: Array[EcsActionDef] = []
 	for action_id in ids:
@@ -2059,6 +2357,9 @@ func _first_of(type_id: StringName) -> int:
 		if (_world.get_component(id, EcsNameComponent) as EcsNameComponent).type_id == type_id:
 			return id
 	return EcsWorld.NO_ENTITY
+
+func _position_of(id: int) -> Vector2:
+	return (_world.get_component(id, EcsPositionComponent) as EcsPositionComponent).position
 
 func _radius_of(id: int) -> float:
 	return (_world.get_component(id, EcsBodyComponent) as EcsBodyComponent).radius
