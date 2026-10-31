@@ -13,7 +13,7 @@ a recorded design, not something you can run.
 ```bash
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 "$GODOT" --path . "res://9. EcsSystem/main.tscn"                          # run it (also the main scene)
-"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 344 checks, exit 0 = all pass
+"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 354 checks, exit 0 = all pass
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"    # population ramp, minutes
 "$GODOT" --headless --editor --quit --path . 2>&1 | grep -iE "error|invalid|uid"  # after any .tscn/.tres edit
 ```
@@ -583,7 +583,7 @@ after its producer keeps its data one tick old, as at full rate.
 
 ## 12. Tests
 
-`tests/lifecycle_test.tscn` — **344 checks**, exit code 0 only if all pass. Run it after
+`tests/lifecycle_test.tscn` — **354 checks**, exit code 0 only if all pass. Run it after
 touching the manager, collision, pickup, spawner, sensor, node sync, the brain or any
 executor. It covers: declared nodes built and undeclared ones not; kill takes data and nodes;
 spawn notes fulfilled a tick later; soft collision, immovable and non-solid bodies; seeing is
@@ -621,7 +621,10 @@ over hidden prey and dropping a chase when it hides; a frightened rabbit hiding 
 escaping with a ready dash or fleeing with it cooling; a rabbit scanning before it drinks,
 running when the scan shows a crocodile; and memory learning water and lures by kind, fading,
 falsified on sight and capped, a thirsty rabbit planning and walking to a remembered pond and
-forgetting it on arrival when it is gone, and a dog walking to a remembered bush to wait.
+forgetting it on arrival when it is gone, and a dog walking to a remembered bush to wait; a
+pond feared where a threat was met, priced dearer until the fear fades and still better than
+none; a lure gaining traffic from prey seen there and winning though farther, a corpse counted
+once, and traffic halving.
 
 `tests/stress_test.tscn` — the population ramp and the per-stage bookkeeping split (§14). Knobs after a bare `--`:
 `--spacing=180` (grid px), `--n=4000` (one population), `--skip=hunger,health` (leave stages
@@ -666,10 +669,11 @@ brain's food index. The ceiling went from 4,800–6,400 to over 9,600 entities (
   `WorkerThreadPool` is a dispatch change, to make only when the profiler asks (§14, §18).
 - **Features roadmap** (`FEATURES_ROADMAP.md`, kept outside the repo), 2026-10-31: **1** skills,
   water and the ambush, **2** thirst, **3** every animal the same — costs from stats, cover
-  kinds, the wild dog, staying safe (§8, §19) — and **4** memory, first slice (§20) are done.
-  Pounce/stun left step 3 by decision: killing belongs to combat planning. **Next: 5**, a
-  traffic-based ambush cost (a lure where prey were seen or killed gets cheaper) and prey
-  avoiding where they saw a predator — both on memory.
+  kinds, the wild dog, staying safe (§8, §19) — **4** memory, first slice, and **5** places
+  priced by fear and traffic (§20) are done. **Queued next, in order:** hiders go to the middle
+  of their cover and bushes stop being solid; memory widened to whatever matters to the animal
+  (water, food, threats, prey, lures); a pounce that stuns, attacks until dead, a stun
+  indicator and a small showcase scene; births.
 
 **Open and deferred, by decision:** combat planning (a kill is many attacks; the planner
 should choose skills from the enemy's skills and stats, §19); births — nothing is born, so
@@ -1178,3 +1182,36 @@ machine's noise. A first version cost 71 ms: every animal asked the world whethe
 saw was drinkable. It now indexes water and lures from views, like planning, and skips the walk
 when there is nothing to learn. The stress grid has no water, so the per-sighting lookups the
 real world pays are not in that number.
+
+### Step 5: places are priced by fear and traffic (2026-10-31)
+
+**Price places, not actions.** A penalty belongs to a place, but the planner prices actions; with
+`recall_water → go_to_water` the second step would carry the penalty of whatever pond was in
+sight. So each go-to action binds its own set of places and is priced by its binding:
+`go_to_water` / `go_to_lure` the best place **in sight**, `recall_water` / `recall_lure` the best
+place **remembered**, and the recalls now give `water_in_reach` / `in_cover, prey_come_here`
+directly. One helper does both the pricing and the binding — `EcsMemoryFact.score` (`1 + walk /
+TRAVEL_SECONDS`, plus `fear_cost × fear` for water, or `wait_cost / (1 + traffic)` for a lure) and
+`EcsMemoryFact.best` — so the planner and the brain cannot disagree. RECALL ends in reach; on
+arrival it holds still until the replan names the next step.
+
+**Fear** (prey avoidance, graded by decision): when an animal's danger is at or over `flee_at`,
+every water fact within `radius + near` (200) of `danger.threat_at` gets fear 1, fading over
+`fear_for` (60 s). It reuses danger's notion of meeting a threat, so a hidden crocodile nobody
+noticed causes none and a scan or a bite does. A feared pond costs up to `fear_cost` (4, about
+20 s of walking) more: a near feared pond can still win, and one is better than none.
+
+**Traffic**: a hunter adds `delta` to each lure fact near noticed prey it sees, and
+`kill_traffic` (10) once for a corpse seen near one; traffic halves every 120 s. The expected
+wait at a lure is `wait_cost` (2) with no traffic and tends to 0 at a busy one.
+
+**Measured** (probe, 5 runs of 300 s, against `8ff4bc1`): prey marked a pond feared 119–217
+times a run and still drank at a feared pond 10–26 times; ambushes paid 15–25 a run (13–22
+before); kills 5–8, no deaths of thirst, 0–5 starved. **The crocodiles did not switch ponds** —
+each ambushed at exactly one, before and after. Not the costs: a crocodile only knows the pond it
+sits at. Its sight is 500 px on a 6,400 px map and a failed ambush walks it 360 px away, so no
+second pond is ever remembered to switch to. Switching needs a crocodile that has seen more
+ponds — exploration, or memory shared some other way — which is left open.
+
+**Cost**: the memory stage went from 3.9 to 8 ms at 6,400 fed (it now reads each animal's
+danger); totals level, 241.6 / 226.2 ms against 237.5 / 227.7 for `8ff4bc1`.

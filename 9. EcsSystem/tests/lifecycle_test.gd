@@ -109,6 +109,7 @@ func _run() -> void:
 	await _prey_scan_before_drinking()
 	await _memory_learns_fades_and_is_proven_wrong()
 	await _a_remembered_place_is_planned_and_walked_to()
+	await _fear_and_traffic_price_places()
 
 ## Nodes match the declared NODE_KINDs (a berry gets a sprite and a body, no
 ## sensor) and hang under the entity's own container.
@@ -2961,7 +2962,7 @@ func _a_remembered_place_is_planned_and_walked_to() -> void:
 	var other := _world.get_component(forgetful, EcsPlannerComponent) as EcsPlannerComponent
 	var hunter := _world.get_component(dog, EcsPlannerComponent) as EcsPlannerComponent
 	_check("no water in sight, it walks to a pond it remembers (%s)" % " > ".join(planner.steps),
-		planner.steps == [&"recall_water", &"go_to_water", &"drink"])
+		planner.steps == [&"recall_water", &"drink"])
 	_check("remembering none, it has no way to quench (%s)" % other.goal, other.goal != &"quench")
 	_check("a dog with no prey or lure in sight walks to a bush it remembers (%s)" % " > ".join(hunter.steps),
 		not hunter.steps.is_empty() and hunter.steps[0] == &"recall_lure" and hunter.steps.has(&"ambush"))
@@ -2973,6 +2974,12 @@ func _a_remembered_place_is_planned_and_walked_to() -> void:
 	_check("it walks to where it saw the pond",
 		mind.state == EcsLowBrainComponent.State.RECALL and mind.target == pond
 		and move.has_destination and move.destination == fact.position)
+	var reach := _world.get_component(rabbit, EcsActionComponent) as EcsActionComponent
+	reach.reached.append(pond)
+	brain.run(_world, TICK)
+	_check("in reach of it, the walk stops (%s)" % EcsLowBrainComponent.STATE_NAMES[mind.state],
+		mind.state != EcsLowBrainComponent.State.RECALL and not move.has_destination)
+	reach.reached.clear()
 
 	_world.add(pond, EcsDyingFlag.new())
 	EcsLifecycleSystem.new(_manager, _catalog).run(_world, TICK)
@@ -2983,6 +2990,100 @@ func _a_remembered_place_is_planned_and_walked_to() -> void:
 		not (_world.get_component(rabbit, EcsMemoryComponent) as EcsMemoryComponent).facts.has(pond)
 		and not planner.steps.has(&"recall_water"))
 	for id in [rabbit, forgetful, dog, bush]:
+		_world.add(id, EcsDyingFlag.new())
+	EcsLifecycleSystem.new(_manager, _catalog).run(_world, TICK)
+	await get_tree().physics_frame
+
+## A pond where a threat was met is feared and priced dearer, so a farther safe one wins
+## until the fear fades; a feared pond still beats none. A lure where prey was seen gains
+## traffic and wins though farther; a corpse there counts once; traffic halves.
+func _fear_and_traffic_price_places() -> void:
+	var memory := EcsMemorySystem.new()
+	var skills := EcsSkillSystem.new()
+	var planning := EcsPlanningSystem.new()
+	var brain := EcsLowBrainSystem.new()
+	var spot := Vector2(-40000.0, 18000.0)
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot)
+	var near_pond := _manager.spawn(_world, _catalog, &"water", spot + Vector2(300.0, 0.0))
+	var far_pond := _manager.spawn(_world, _catalog, &"water", spot + Vector2(-900.0, 0.0))
+	var energy := _world.get_component(rabbit, EcsEnergyComponent) as EcsEnergyComponent
+	energy.rolled = true
+	energy.value = energy.max_energy
+	var thirst := _world.get_component(rabbit, EcsThirstComponent) as EcsThirstComponent
+	thirst.hydration = thirst.seek_water_below * 0.5
+	var sensor := _world.get_component(rabbit, EcsSensorComponent) as EcsSensorComponent
+	sensor.perceived.append_array([near_pond, far_pond])
+	var mind := _world.get_component(rabbit, EcsMemoryComponent) as EcsMemoryComponent
+	var danger := _world.get_component(rabbit, EcsDangerComponent) as EcsDangerComponent
+	var speed := (_world.get_component(rabbit, EcsMovementComponent) as EcsMovementComponent).speed
+	memory.run(_world, TICK)
+	danger.value = danger.flee_at * 0.5
+	danger.threat_at = _position_of(far_pond)
+	memory.run(_world, TICK)
+	_check("a threat below fleeing frightens no pond",
+		(mind.facts[far_pond] as EcsMemoryFact).fear == 0.0)
+	danger.value = danger.flee_at + 0.1
+	danger.threat_at = _position_of(near_pond)
+	memory.run(_world, TICK)
+	danger.value = 0.0
+	_check("a threat met by a pond makes it feared, and not a far one",
+		(mind.facts[near_pond] as EcsMemoryFact).fear > 0.99
+		and (mind.facts[far_pond] as EcsMemoryFact).fear == 0.0)
+	planning.run(_world, TICK)
+	brain.run(_world, TICK)
+	var state := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
+	var planner := _world.get_component(rabbit, EcsPlannerComponent) as EcsPlannerComponent
+	_check("the nearer pond feared, it goes to the far one (%s)" % " > ".join(planner.steps),
+		planner.steps == [&"go_to_water", &"drink"] and state.target == far_pond)
+	memory.run(_world, mind.fear_for)
+	var here := _position_of(rabbit)
+	_check("once the fear fades, the near one is cheaper again",
+		EcsMemoryFact.best(mind, here, speed, true, true, sensor.perceived).about == near_pond)
+	(mind.facts[near_pond] as EcsMemoryFact).fear = 1.0
+	mind.facts.erase(far_pond)
+	_check("a feared pond still beats none",
+		EcsMemoryFact.best(mind, here, speed, true, true, sensor.perceived).about == near_pond)
+
+	var spot2 := spot + Vector2(0.0, 3000.0)
+	var dog := _manager.spawn(_world, _catalog, &"wild_dog", spot2)
+	var near_bush := _manager.spawn(_world, _catalog, &"berry_bush", spot2 + Vector2(300.0, 0.0))
+	var busy_bush := _manager.spawn(_world, _catalog, &"berry_bush", spot2 + Vector2(-700.0, 0.0))
+	var visitor := _manager.spawn(_world, _catalog, &"rabbit", spot2 + Vector2(-700.0, 120.0))
+	var dog_energy := _world.get_component(dog, EcsEnergyComponent) as EcsEnergyComponent
+	dog_energy.rolled = true
+	dog_energy.value = dog_energy.max_energy
+	var hunger := _world.get_component(dog, EcsHungerComponent) as EcsHungerComponent
+	hunger.fullness = hunger.forage_below * 0.5
+	var eyes := _world.get_component(dog, EcsSensorComponent) as EcsSensorComponent
+	eyes.perceived.append_array([near_bush, busy_bush, visitor])
+	var dog_mind := _world.get_component(dog, EcsMemoryComponent) as EcsMemoryComponent
+	var dog_speed := (_world.get_component(dog, EcsMovementComponent) as EcsMovementComponent).speed
+	skills.run(_world, TICK)
+	memory.run(_world, TICK)
+	memory.run(_world, 5.0)
+	var busy := dog_mind.facts[busy_bush] as EcsMemoryFact
+	var quiet := dog_mind.facts[near_bush] as EcsMemoryFact
+	_check("prey seen by a lure builds its traffic, not another's (%.1f, %.1f)" % [busy.traffic, quiet.traffic],
+		busy.traffic > 4.0 and quiet.traffic == 0.0)
+	eyes.perceived.erase(visitor)
+	planning.run(_world, TICK)
+	brain.run(_world, TICK)
+	var dog_state := _world.get_component(dog, EcsLowBrainComponent) as EcsLowBrainComponent
+	var dog_plan := _world.get_component(dog, EcsPlannerComponent) as EcsPlannerComponent
+	_check("the dog goes to the busier lure though it is farther (%s)" % " > ".join(dog_plan.steps),
+		not dog_plan.steps.is_empty() and dog_plan.steps[0] == &"go_to_lure" and dog_state.target == busy_bush)
+
+	var corpse := _manager.spawn(_world, _catalog, &"corpse", spot2 + Vector2(300.0, 100.0))
+	eyes.perceived.append(corpse)
+	memory.run(_world, TICK)
+	memory.run(_world, TICK)
+	_check("a corpse by a lure counts once (%.2f)" % quiet.traffic,
+		quiet.traffic > dog_mind.kill_traffic * 0.99 and quiet.traffic <= dog_mind.kill_traffic)
+	eyes.perceived.erase(corpse)
+	var before := busy.traffic
+	memory.run(_world, dog_mind.traffic_half_life)
+	_check("traffic halves over its half-life", is_equal_approx(busy.traffic, before * 0.5))
+	for id in [rabbit, near_pond, far_pond, dog, near_bush, busy_bush, visitor, corpse]:
 		_world.add(id, EcsDyingFlag.new())
 	EcsLifecycleSystem.new(_manager, _catalog).run(_world, TICK)
 	await get_tree().physics_frame

@@ -9,6 +9,7 @@ preconditions = {
 &"lure_known": true
 }
 effects = {
-&"lure_in_sight": true
+&"in_cover": true,
+&"prey_come_here": true
 }
 cost = 2.0

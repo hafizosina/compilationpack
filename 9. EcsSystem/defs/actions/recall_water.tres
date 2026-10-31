@@ -9,6 +9,6 @@ preconditions = {
 &"water_known": true
 }
 effects = {
-&"water_in_sight": true
+&"water_in_reach": true
 }
 cost = 2.0

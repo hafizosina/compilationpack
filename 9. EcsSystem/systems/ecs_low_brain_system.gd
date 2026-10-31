@@ -119,6 +119,15 @@ func run(world: EcsWorld, delta: float) -> void:
 			else:
 				continue
 
+		if brain.state == EcsLowBrainComponent.State.RECALL:
+			if not world.is_alive(brain.target) or _in_reach(world, id, brain.target) \
+					or not move.has_destination:
+				# Gone, arrived or out of time: stop so the next step can run.
+				_abandon_trip(move)
+				_release(world, id, brain)
+			else:
+				continue
+
 		if brain.state == EcsLowBrainComponent.State.POUNCE and world.has(id, EcsDashingFlag):
 			# The dash started: its intent is spent, so it never fires twice.
 			_set_state(world, id, brain, EcsLowBrainComponent.State.HUNT, brain.target)
@@ -217,14 +226,18 @@ func _try_step(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 			return _try_recall(world, id, brain, move, place, false)
 	return false
 
-## Walk to the nearest place it remembers as water (or as a lure). Keeps a trip already
+## Walk to the cheapest place it remembers as water (or as a lure). Keeps a trip already
 ## under way.
 func _try_recall(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		move: EcsMovementComponent, place: EcsPositionComponent, water: bool) -> bool:
 	var memory := world.get_component(id, EcsMemoryComponent) as EcsMemoryComponent
-	var fact := EcsMemoryFact.nearest(memory, place.position, water)
+	var fact := EcsMemoryFact.best(memory, place.position, move.speed, water)
 	if fact == null:
 		return false
+	if _in_reach(world, id, fact.about):
+		# Arrived; hold still until the replan names the next step.
+		_abandon_trip(move)
+		return true
 	if brain.state == EcsLowBrainComponent.State.RECALL and brain.target == fact.about \
 			and move.has_destination:
 		return true
@@ -255,7 +268,8 @@ func _try_drink(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	_set_state(world, id, brain, EcsLowBrainComponent.State.DRINK, water)
 	return true
 
-## Walk to the nearest water in sight, if thirsty enough (when `gated`).
+## Walk to the cheapest water in sight by memory, else the nearest, if thirsty enough
+## (when `gated`).
 func _try_seek_water(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		move: EcsMovementComponent, place: EcsPositionComponent, gated: bool = true) -> bool:
 	var thirst := world.get_component(id, EcsThirstComponent) as EcsThirstComponent
@@ -264,6 +278,12 @@ func _try_seek_water(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
 	if sensor == null:
 		return false
+	var memory := world.get_component(id, EcsMemoryComponent) as EcsMemoryComponent
+	var known := EcsMemoryFact.best(memory, place.position, move.speed, true, true, sensor.perceived)
+	if known != null and world.has(known.about, EcsDrinkableComponent):
+		_set_state(world, id, brain, EcsLowBrainComponent.State.SEEK_WATER, known.about)
+		_set_trip(move, _position_of(world, known.about))
+		return true
 	var best := EcsWorld.NO_ENTITY
 	var best_distance := INF
 	for seen in sensor.perceived:
@@ -313,6 +333,13 @@ func _try_cover(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
 	if sensor == null:
 		return false
+	if lure_only:
+		var memory := world.get_component(id, EcsMemoryComponent) as EcsMemoryComponent
+		var known := EcsMemoryFact.best(memory, place.position, move.speed, false, true, sensor.perceived)
+		if known != null and world.is_alive(known.about):
+			_set_state(world, id, brain, EcsLowBrainComponent.State.HIDE, known.about)
+			_set_trip(move, _position_of(world, known.about))
+			return true
 	var best := EcsWorld.NO_ENTITY
 	var best_distance := INF
 	for seen in sensor.perceived:

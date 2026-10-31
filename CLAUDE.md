@@ -10,7 +10,7 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 344 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 354 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments, the hunger/health/energy loop,
 # intent flags, items as records, the drop on death, views, combat, corpses,
 # looting, rot, diet, hunting, harvesting, the planner, utility, fleeing,
@@ -291,8 +291,10 @@ weight 10 = eat) and the ladder both read.
 drinker) and lures (a hunter, in cover it hides in), each a copied position and a `strength` that
 fades over `remember_for`. `EcsMemorySystem` is its only writer, between sensor and planning; a fact
 whose spot is in sight without its thing is forgotten at once, so a wrong fact is gone before the
-replan. `recall_water` / `recall_lure` are priced by the walk, and RECALL walks to the copied
-position, never the live entity.
+replan. RECALL walks to the copied position, never the live entity. **Places are priced, not
+actions** (step 5): each go-to action binds and is priced by `EcsMemoryFact.best`/`score` — the
+walk, plus fear for a pond where a threat was met, or the expected wait at a lure, which traffic
+(prey or a kill seen there) lowers. Planner and brain share that helper so they can't disagree.
 
 **A stage may declare how often it runs.** `EcsScheduler.add(system, every, phase)` takes a
 rate in ticks — `main.gd` runs `sensor`, `memory`, `danger`, `planning`, `low_brain` and `health` at `SLOW` (3 ticks, 20 Hz),
@@ -420,8 +422,7 @@ whether components should be `Resource` at all). `9. EcsSystem/HANDOFF.md` §15 
 positions; the author wants to argue it out. **Do not implement any option from §15**; raise it
 for a decision instead. Cached views (`EcsWorld.view()`, approved 2026-10-29) are an index over
 the existing store, not a storage change (§14). The node structure is settled: one container per
-entity (§3). The plan's steps 0–7 and the features roadmap's steps 1–4 are done; next is step 5,
-a traffic-based ambush cost (HANDOFF §13).
+entity (§3). The plan's steps 0–7 and the features roadmap's steps 1–5 are done; the queue that follows is in HANDOFF §13.
 
 Read `9. EcsSystem/HANDOFF.md` before touching that folder. Module 9 is the main scene,
 ahead of the plan, which held that switch until step 6, and now the only simulation in the
