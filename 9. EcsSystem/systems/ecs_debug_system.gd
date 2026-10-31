@@ -33,6 +33,7 @@ func run(world: EcsWorld, _delta: float) -> void:
 			"has_destination": false,
 			"destination": Vector2.ZERO,
 			"hunger": -1.0,
+			"thirst": -1.0,
 			"energy": -1.0,
 			"health": -1.0,
 			"danger": -1.0,
@@ -60,6 +61,9 @@ func run(world: EcsWorld, _delta: float) -> void:
 		var health := world.get_component(id, EcsHealthComponent) as EcsHealthComponent
 		if hunger != null:
 			row["hunger"] = clampf(hunger.fullness / maxf(hunger.max_fullness, 0.01), 0.0, 1.0)
+		var thirst := world.get_component(id, EcsThirstComponent) as EcsThirstComponent
+		if thirst != null:
+			row["thirst"] = clampf(thirst.hydration / maxf(thirst.max_hydration, 0.01), 0.0, 1.0)
 		if energy != null:
 			row["energy"] = clampf(energy.value / maxf(energy.max_energy, 0.01), 0.0, 1.0)
 		if health != null:

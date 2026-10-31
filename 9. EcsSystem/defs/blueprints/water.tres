@@ -5,6 +5,7 @@
 [ext_resource type="Script" uid="uid://occbigie8rhc" path="res://9. EcsSystem/components/ecs_body_component.gd" id="s_body"]
 [ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
 [ext_resource type="Script" path="res://9. EcsSystem/components/ecs_cover_component.gd" id="s_cover"]
+[ext_resource type="Script" path="res://9. EcsSystem/components/ecs_drinkable_component.gd" id="s_drink"]
 
 [sub_resource type="Gradient" id="g_water"]
 offsets = PackedFloat32Array(0.75, 1)
@@ -32,8 +33,11 @@ is_solid = false
 [sub_resource type="Resource" id="c_cover"]
 script = ExtResource("s_cover")
 
+[sub_resource type="Resource" id="c_drink"]
+script = ExtResource("s_drink")
+
 [resource]
 script = ExtResource("def")
 id = &"water"
 display_name = "Water"
-components = Array[ExtResource("base")]([SubResource("c_sprite"), SubResource("c_body"), SubResource("c_cover")])
+components = Array[ExtResource("base")]([SubResource("c_sprite"), SubResource("c_body"), SubResource("c_cover"), SubResource("c_drink")])

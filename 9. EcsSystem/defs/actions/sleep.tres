@@ -6,7 +6,8 @@
 script = ExtResource("def")
 id = &"sleep"
 preconditions = {
-&"starving": false
+&"starving": false,
+&"parched": false
 }
 effects = {
 &"rested": true

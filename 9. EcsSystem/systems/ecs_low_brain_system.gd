@@ -2,7 +2,7 @@ class_name EcsLowBrainSystem
 extends EcsSystem
 
 ## The creature's brain: a state machine (IDLE, WANDER, SEEK_FOOD, TAKE, EAT, SLEEP,
-## HUNT, ATTACK, HARVEST, FLEE, HIDE, AMBUSH, POUNCE, SCAN).
+## HUNT, ATTACK, HARVEST, FLEE, HIDE, AMBUSH, POUNCE, SCAN, SEEK_WATER, DRINK).
 ## It decides and writes a destination; executors act on the intent flags it
 ## raises in `_set_state()`.
 ##
@@ -10,7 +10,9 @@ extends EcsSystem
 ## checked and kept or dropped; then it chooses. With a plan from EcsPlanningSystem
 ## it runs only the rung for the plan's first step, without the rung's need gate.
 ## Without one it picks the highest rung that applies: eat > take (or loot) > seek
-## food > harvest > hunt > sleep > wander, and food in sight ends a hunt. Food is
+## food > harvest > hunt > sleep > wander, and food in sight ends a hunt. Water (drink >
+## seek water) goes above the food rungs when thirst is the more urgent need
+## (EcsNeeds), below them otherwise. Food is
 ## filtered by diet: a creature only eats, seeks and harvests what its hunger `eats`.
 ## HIDE, AMBUSH, POUNCE and SCAN are plan steps only; skills are cast by intent.
 
@@ -59,9 +61,15 @@ func run(world: EcsWorld, delta: float) -> void:
 				_set_state(world, id, brain, EcsLowBrainComponent.State.SLEEP)
 			continue
 
-		# Asleep: stay down until rested or starving, or the plan is to flee.
+		# Asleep: stay down until rested, starving or parched, or the plan is to flee.
 		if brain.state == EcsLowBrainComponent.State.SLEEP:
 			if not _worth_waking_for(world, id) and step != &"flee":
+				continue
+			_release(world, id, brain)
+
+		# Drinking: keep at it until full, unless the plan is to flee.
+		if brain.state == EcsLowBrainComponent.State.DRINK:
+			if step != &"flee" and _keep_drinking(world, id, brain.target):
 				continue
 			_release(world, id, brain)
 
@@ -87,6 +95,15 @@ func run(world: EcsWorld, delta: float) -> void:
 				_release(world, id, brain)
 			elif not move.has_destination:
 				# Trip ended without reaching it.
+				_release(world, id, brain)
+			else:
+				continue
+
+		if brain.state == EcsLowBrainComponent.State.SEEK_WATER:
+			if not world.is_alive(brain.target) or _in_reach(world, id, brain.target) \
+					or not move.has_destination:
+				# Gone, arrived or out of time: stop so the drink rung can choose.
+				_abandon_trip(move)
 				_release(world, id, brain)
 			else:
 				continue
@@ -117,7 +134,14 @@ func run(world: EcsWorld, delta: float) -> void:
 			_wander(world, id, brain, move, place, delta)
 			continue
 
-		# Choose, highest rung first.
+		# Choose, highest rung first; water before food only when it is more urgent.
+		var thirst := world.get_component(id, EcsThirstComponent) as EcsThirstComponent
+		var thirsty := thirst != null \
+			and thirst.hydration <= maxf(thirst.drink_below, thirst.seek_water_below)
+		var thirst_first := thirsty and EcsNeeds.thirst_urgency(thirst) \
+			> EcsNeeds.hunger_urgency(world.get_component(id, EcsHungerComponent))
+		if thirst_first and _try_water(world, id, brain, move, place):
+			continue
 		if _try_eat(world, id, brain, move):
 			continue
 		if _try_take(world, id, brain, move):
@@ -127,6 +151,8 @@ func run(world: EcsWorld, delta: float) -> void:
 		if _try_harvest(world, id, brain, move, place):
 			continue
 		if _try_hunt(world, id, brain, move, place):
+			continue
+		if thirsty and not thirst_first and _try_water(world, id, brain, move, place):
 			continue
 		if _try_sleep(world, id, brain, move):
 			continue
@@ -168,7 +194,69 @@ func _try_step(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 			return _try_pounce(world, id, brain, move, place)
 		&"scan":
 			return _try_scan(world, id, brain, move, delta)
+		&"drink":
+			return _try_drink(world, id, brain, move, false)
+		&"go_to_water":
+			return _try_seek_water(world, id, brain, move, place, false)
 	return false
+
+## Drink water in reach, or walk to the nearest in sight.
+func _try_water(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
+		move: EcsMovementComponent, place: EcsPositionComponent) -> bool:
+	return _try_drink(world, id, brain, move) or _try_seek_water(world, id, brain, move, place)
+
+## Drink from water in reach, if thirsty enough (when `gated`) and not full.
+func _try_drink(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
+		move: EcsMovementComponent, gated: bool = true) -> bool:
+	var thirst := world.get_component(id, EcsThirstComponent) as EcsThirstComponent
+	if thirst == null or thirst.hydration >= thirst.max_hydration \
+			or (gated and thirst.hydration > thirst.drink_below):
+		return false
+	var water := _water_in_reach(world, id)
+	if water == EcsWorld.NO_ENTITY:
+		return false
+	_abandon_trip(move)
+	_set_state(world, id, brain, EcsLowBrainComponent.State.DRINK, water)
+	return true
+
+## Walk to the nearest water in sight, if thirsty enough (when `gated`).
+func _try_seek_water(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
+		move: EcsMovementComponent, place: EcsPositionComponent, gated: bool = true) -> bool:
+	var thirst := world.get_component(id, EcsThirstComponent) as EcsThirstComponent
+	if thirst == null or (gated and thirst.hydration > thirst.seek_water_below):
+		return false
+	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
+	if sensor == null:
+		return false
+	var best := EcsWorld.NO_ENTITY
+	var best_distance := INF
+	for seen in sensor.perceived:
+		if not world.has(seen, EcsDrinkableComponent):
+			continue
+		var distance := place.position.distance_squared_to(_position_of(world, seen))
+		if distance < best_distance:
+			best_distance = distance
+			best = seen
+	if best == EcsWorld.NO_ENTITY:
+		return false
+	_set_state(world, id, brain, EcsLowBrainComponent.State.SEEK_WATER, best)
+	_set_trip(move, _position_of(world, best))
+	return true
+
+## Not yet full, and `water` still drinkable and in reach.
+func _keep_drinking(world: EcsWorld, id: int, water: int) -> bool:
+	var thirst := world.get_component(id, EcsThirstComponent) as EcsThirstComponent
+	return thirst != null and thirst.hydration < thirst.max_hydration \
+		and world.has(water, EcsDrinkableComponent) and _in_reach(world, id, water)
+
+## Drinkable water in reach, or NO_ENTITY.
+func _water_in_reach(world: EcsWorld, id: int) -> int:
+	var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
+	if action != null:
+		for touched in action.reached:
+			if world.has(touched, EcsDrinkableComponent):
+				return touched
+	return EcsWorld.NO_ENTITY
 
 ## On a leg away from a failed ambush, which a plan to ambush must not cut short.
 static func _retreat_leg(brain: EcsLowBrainComponent) -> bool:
@@ -262,7 +350,7 @@ func _try_scan(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		_release(world, id, brain)
 		return false
 	var known := world.get_component(id, EcsSkillsComponent) as EcsSkillsComponent
-	var scan := EcsSkillSystem._skill(known, SCAN_SKILL) if known != null else null
+	var scan := EcsSkillDef.find(known.skills, SCAN_SKILL) if known != null else null
 	if scan == null or known.cooldown_left.has(SCAN_SKILL):
 		return false
 	_abandon_trip(move)
@@ -324,6 +412,10 @@ static func _serves(state: EcsLowBrainComponent.State, step: StringName) -> bool
 			return step == &"ambush"
 		EcsLowBrainComponent.State.SCAN:
 			return step == &"scan"
+		EcsLowBrainComponent.State.SEEK_WATER:
+			return step == &"go_to_water"
+		EcsLowBrainComponent.State.DRINK:
+			return step == &"drink"
 	return false
 
 ## Eat food from the bag or within reach, if hungry enough. Stops any trip.
@@ -569,24 +661,24 @@ func _sees_food(world: EcsWorld, id: int) -> bool:
 func _position_of(world: EcsWorld, id: int) -> Vector2:
 	return (world.get_component(id, EcsPositionComponent) as EcsPositionComponent).position
 
-## Sleep if tired, unless starving.
+## Sleep if tired, unless starving or parched.
 func _try_sleep(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		move: EcsMovementComponent, gated: bool = true) -> bool:
 	var energy := world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
 	if energy == null or (gated and energy.value > energy.rest_at):
 		return false
-	if _starving(world, id):
+	if _starving(world, id) or EcsNeeds.parched(world.get_component(id, EcsThirstComponent)):
 		return false
 	_abandon_trip(move)
 	_set_state(world, id, brain, EcsLowBrainComponent.State.SLEEP)
 	return true
 
-## Wake when rested or starving.
+## Wake when rested, starving or parched.
 func _worth_waking_for(world: EcsWorld, id: int) -> bool:
 	var energy := world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
 	if energy == null or energy.value >= energy.wake_at:
 		return true
-	return _starving(world, id)
+	return _starving(world, id) or EcsNeeds.parched(world.get_component(id, EcsThirstComponent))
 
 ## Fullness at zero.
 func _starving(world: EcsWorld, id: int) -> bool:
@@ -690,6 +782,10 @@ func _set_state(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 			_cast(world, id, DASH_SKILL)
 		EcsLowBrainComponent.State.SCAN:
 			_cast(world, id, SCAN_SKILL)
+		EcsLowBrainComponent.State.DRINK:
+			var drink := EcsDrinkIntentFlag.new()
+			drink.target_id = target
+			world.add(id, drink)
 
 ## The flag a state raises, or null.
 static func _flag_for(state: EcsLowBrainComponent.State) -> Script:
@@ -707,6 +803,8 @@ static func _flag_for(state: EcsLowBrainComponent.State) -> Script:
 		EcsLowBrainComponent.State.AMBUSH, EcsLowBrainComponent.State.POUNCE, \
 				EcsLowBrainComponent.State.SCAN:
 			return EcsCastIntentFlag
+		EcsLowBrainComponent.State.DRINK:
+			return EcsDrinkIntentFlag
 	return null
 
 static func _cast(world: EcsWorld, id: int, skill: StringName) -> void:

@@ -45,17 +45,10 @@ func run(world: EcsWorld, delta: float) -> void:
 		var asked := (casts[k] as EcsCastIntentFlag).skill
 		if known.active_left.has(asked) or known.cooldown_left.has(asked):
 			continue
-		var wanted := _skill(known, asked)
+		var wanted := EcsSkillDef.find(known.skills, asked)
 		if wanted != null and wanted.can_start(world, id):
 			known.active_left[asked] = wanted.duration
 			world.add(id, wanted.make_effect())
-
-## The skill `known` has under `skill_id`, or null.
-static func _skill(known: EcsSkillsComponent, skill_id: StringName) -> EcsSkillDef:
-	for skill in known.skills:
-		if skill.id == skill_id:
-			return skill
-	return null
 
 func _end(world: EcsWorld, id: int, known: EcsSkillsComponent, skill: EcsSkillDef) -> void:
 	known.active_left.erase(skill.id)

@@ -19,6 +19,7 @@ const DESTINATION_COLOR := Color(1.0, 0.45, 0.85)
 const BAR_BACK := Color(0.165, 0.125, 0.086, 0.7)
 const BAR_EDGE := Color(0.0, 0.0, 0.0, 0.5)
 const HUNGER_COLOR := Color(0.725, 0.541, 0.196)
+const THIRST_COLOR := Color(0.184, 0.369, 0.576)
 const ENERGY_COLOR := Color(0.369, 0.541, 0.18)
 const HEALTH_COLOR := Color(0.62, 0.169, 0.145)
 const DANGER_COLOR := Color(0.85, 0.4, 0.85)
@@ -89,6 +90,11 @@ func _draw() -> void:
 		if hunger >= 0.0:
 			_bar(pos + Vector2(bar_left, stacked), hunger, bar_width, bar_height,
 				HUNGER_COLOR, px)
+			stacked += bar_height + 2.0 * px
+		var thirst: float = row["thirst"]
+		if thirst >= 0.0:
+			_bar(pos + Vector2(bar_left, stacked), thirst, bar_width, bar_height,
+				THIRST_COLOR, px)
 			stacked += bar_height + 2.0 * px
 		var energy: float = row["energy"]
 		if energy >= 0.0:

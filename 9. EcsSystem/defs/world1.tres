@@ -270,6 +270,807 @@ entity_name = &"water_3"
 type = &"water"
 position = Vector2(400, 800)
 
+[sub_resource type="Resource" id="w4"]
+script = ExtResource("place")
+entity_name = &"water_4"
+type = &"water"
+position = Vector2(1290, 460)
+
+[sub_resource type="Resource" id="w5"]
+script = ExtResource("place")
+entity_name = &"water_5"
+type = &"water"
+position = Vector2(2940, -510)
+
+[sub_resource type="Resource" id="w6"]
+script = ExtResource("place")
+entity_name = &"water_6"
+type = &"water"
+position = Vector2(-2710, 220)
+
+[sub_resource type="Resource" id="w7"]
+script = ExtResource("place")
+entity_name = &"water_7"
+type = &"water"
+position = Vector2(990, -740)
+
+[sub_resource type="Resource" id="w8"]
+script = ExtResource("place")
+entity_name = &"water_8"
+type = &"water"
+position = Vector2(2190, -200)
+
+[sub_resource type="Resource" id="w9"]
+script = ExtResource("place")
+entity_name = &"water_9"
+type = &"water"
+position = Vector2(-3020, -900)
+
+[sub_resource type="Resource" id="w10"]
+script = ExtResource("place")
+entity_name = &"water_10"
+type = &"water"
+position = Vector2(1640, -1310)
+
+[sub_resource type="Resource" id="w11"]
+script = ExtResource("place")
+entity_name = &"water_11"
+type = &"water"
+position = Vector2(-1400, 1480)
+
+[sub_resource type="Resource" id="w12"]
+script = ExtResource("place")
+entity_name = &"water_12"
+type = &"water"
+position = Vector2(2630, 840)
+
+[sub_resource type="Resource" id="w13"]
+script = ExtResource("place")
+entity_name = &"water_13"
+type = &"water"
+position = Vector2(-2090, -1450)
+
+[sub_resource type="Resource" id="w14"]
+script = ExtResource("place")
+entity_name = &"water_14"
+type = &"water"
+position = Vector2(-1240, -1310)
+
+[sub_resource type="Resource" id="w15"]
+script = ExtResource("place")
+entity_name = &"water_15"
+type = &"water"
+position = Vector2(-90, -250)
+
+[sub_resource type="Resource" id="b13"]
+script = ExtResource("place")
+entity_name = &"berry_bush_13"
+type = &"berry_bush"
+position = Vector2(-910, 980)
+
+[sub_resource type="Resource" id="b14"]
+script = ExtResource("place")
+entity_name = &"berry_bush_14"
+type = &"berry_bush"
+position = Vector2(630, -780)
+
+[sub_resource type="Resource" id="b15"]
+script = ExtResource("place")
+entity_name = &"berry_bush_15"
+type = &"berry_bush"
+position = Vector2(-380, -10)
+
+[sub_resource type="Resource" id="b16"]
+script = ExtResource("place")
+entity_name = &"berry_bush_16"
+type = &"berry_bush"
+position = Vector2(-220, -1350)
+
+[sub_resource type="Resource" id="b17"]
+script = ExtResource("place")
+entity_name = &"berry_bush_17"
+type = &"berry_bush"
+position = Vector2(0, 300)
+
+[sub_resource type="Resource" id="b18"]
+script = ExtResource("place")
+entity_name = &"berry_bush_18"
+type = &"berry_bush"
+position = Vector2(-2840, -390)
+
+[sub_resource type="Resource" id="b19"]
+script = ExtResource("place")
+entity_name = &"berry_bush_19"
+type = &"berry_bush"
+position = Vector2(930, -1430)
+
+[sub_resource type="Resource" id="b20"]
+script = ExtResource("place")
+entity_name = &"berry_bush_20"
+type = &"berry_bush"
+position = Vector2(-1620, -430)
+
+[sub_resource type="Resource" id="b21"]
+script = ExtResource("place")
+entity_name = &"berry_bush_21"
+type = &"berry_bush"
+position = Vector2(-2630, -820)
+
+[sub_resource type="Resource" id="b22"]
+script = ExtResource("place")
+entity_name = &"berry_bush_22"
+type = &"berry_bush"
+position = Vector2(2870, -850)
+
+[sub_resource type="Resource" id="b23"]
+script = ExtResource("place")
+entity_name = &"berry_bush_23"
+type = &"berry_bush"
+position = Vector2(1970, -1360)
+
+[sub_resource type="Resource" id="b24"]
+script = ExtResource("place")
+entity_name = &"berry_bush_24"
+type = &"berry_bush"
+position = Vector2(-2380, 1470)
+
+[sub_resource type="Resource" id="b25"]
+script = ExtResource("place")
+entity_name = &"berry_bush_25"
+type = &"berry_bush"
+position = Vector2(-1210, 420)
+
+[sub_resource type="Resource" id="b26"]
+script = ExtResource("place")
+entity_name = &"berry_bush_26"
+type = &"berry_bush"
+position = Vector2(70, -990)
+
+[sub_resource type="Resource" id="b27"]
+script = ExtResource("place")
+entity_name = &"berry_bush_27"
+type = &"berry_bush"
+position = Vector2(880, -130)
+
+[sub_resource type="Resource" id="b28"]
+script = ExtResource("place")
+entity_name = &"berry_bush_28"
+type = &"berry_bush"
+position = Vector2(2060, 1380)
+
+[sub_resource type="Resource" id="b29"]
+script = ExtResource("place")
+entity_name = &"berry_bush_29"
+type = &"berry_bush"
+position = Vector2(400, 470)
+
+[sub_resource type="Resource" id="b30"]
+script = ExtResource("place")
+entity_name = &"berry_bush_30"
+type = &"berry_bush"
+position = Vector2(2620, 1420)
+
+[sub_resource type="Resource" id="b31"]
+script = ExtResource("place")
+entity_name = &"berry_bush_31"
+type = &"berry_bush"
+position = Vector2(-1850, 710)
+
+[sub_resource type="Resource" id="b32"]
+script = ExtResource("place")
+entity_name = &"berry_bush_32"
+type = &"berry_bush"
+position = Vector2(3040, 740)
+
+[sub_resource type="Resource" id="b33"]
+script = ExtResource("place")
+entity_name = &"berry_bush_33"
+type = &"berry_bush"
+position = Vector2(1310, -1500)
+
+[sub_resource type="Resource" id="b34"]
+script = ExtResource("place")
+entity_name = &"berry_bush_34"
+type = &"berry_bush"
+position = Vector2(-1970, 110)
+
+[sub_resource type="Resource" id="b35"]
+script = ExtResource("place")
+entity_name = &"berry_bush_35"
+type = &"berry_bush"
+position = Vector2(-950, 1520)
+
+[sub_resource type="Resource" id="b36"]
+script = ExtResource("place")
+entity_name = &"berry_bush_36"
+type = &"berry_bush"
+position = Vector2(360, -60)
+
+[sub_resource type="Resource" id="b37"]
+script = ExtResource("place")
+entity_name = &"berry_bush_37"
+type = &"berry_bush"
+position = Vector2(2720, -1190)
+
+[sub_resource type="Resource" id="b38"]
+script = ExtResource("place")
+entity_name = &"berry_bush_38"
+type = &"berry_bush"
+position = Vector2(980, -1100)
+
+[sub_resource type="Resource" id="b39"]
+script = ExtResource("place")
+entity_name = &"berry_bush_39"
+type = &"berry_bush"
+position = Vector2(910, 380)
+
+[sub_resource type="Resource" id="b40"]
+script = ExtResource("place")
+entity_name = &"berry_bush_40"
+type = &"berry_bush"
+position = Vector2(-530, 670)
+
+[sub_resource type="Resource" id="b41"]
+script = ExtResource("place")
+entity_name = &"berry_bush_41"
+type = &"berry_bush"
+position = Vector2(-2900, 740)
+
+[sub_resource type="Resource" id="b42"]
+script = ExtResource("place")
+entity_name = &"berry_bush_42"
+type = &"berry_bush"
+position = Vector2(860, 770)
+
+[sub_resource type="Resource" id="b43"]
+script = ExtResource("place")
+entity_name = &"berry_bush_43"
+type = &"berry_bush"
+position = Vector2(200, 1220)
+
+[sub_resource type="Resource" id="b44"]
+script = ExtResource("place")
+entity_name = &"berry_bush_44"
+type = &"berry_bush"
+position = Vector2(-400, 320)
+
+[sub_resource type="Resource" id="b45"]
+script = ExtResource("place")
+entity_name = &"berry_bush_45"
+type = &"berry_bush"
+position = Vector2(-2960, 1320)
+
+[sub_resource type="Resource" id="b46"]
+script = ExtResource("place")
+entity_name = &"berry_bush_46"
+type = &"berry_bush"
+position = Vector2(1980, 160)
+
+[sub_resource type="Resource" id="b47"]
+script = ExtResource("place")
+entity_name = &"berry_bush_47"
+type = &"berry_bush"
+position = Vector2(-1000, -960)
+
+[sub_resource type="Resource" id="b48"]
+script = ExtResource("place")
+entity_name = &"berry_bush_48"
+type = &"berry_bush"
+position = Vector2(1250, 810)
+
+[sub_resource type="Resource" id="b49"]
+script = ExtResource("place")
+entity_name = &"berry_bush_49"
+type = &"berry_bush"
+position = Vector2(-540, -1110)
+
+[sub_resource type="Resource" id="b50"]
+script = ExtResource("place")
+entity_name = &"berry_bush_50"
+type = &"berry_bush"
+position = Vector2(-2290, -740)
+
+[sub_resource type="Resource" id="b51"]
+script = ExtResource("place")
+entity_name = &"berry_bush_51"
+type = &"berry_bush"
+position = Vector2(-870, -480)
+
+[sub_resource type="Resource" id="p10"]
+script = ExtResource("place")
+entity_name = &"rabbit_5"
+type = &"rabbit"
+position = Vector2(-2660, -1470)
+overrides = {
+"movement": {
+"speed": 175.0
+},
+"energy": {
+"value": 55.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p11"]
+script = ExtResource("place")
+entity_name = &"rabbit_6"
+type = &"rabbit"
+position = Vector2(-690, -820)
+overrides = {
+"movement": {
+"speed": 164.0
+},
+"energy": {
+"value": 45.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p12"]
+script = ExtResource("place")
+entity_name = &"rabbit_7"
+type = &"rabbit"
+position = Vector2(2760, -10)
+overrides = {
+"movement": {
+"speed": 167.0
+},
+"energy": {
+"value": 46.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p13"]
+script = ExtResource("place")
+entity_name = &"rabbit_8"
+type = &"rabbit"
+position = Vector2(-2600, -490)
+overrides = {
+"movement": {
+"speed": 162.0
+},
+"energy": {
+"value": 86.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p14"]
+script = ExtResource("place")
+entity_name = &"rabbit_9"
+type = &"rabbit"
+position = Vector2(-2500, -1500)
+overrides = {
+"movement": {
+"speed": 157.0
+},
+"energy": {
+"value": 65.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p15"]
+script = ExtResource("place")
+entity_name = &"rabbit_10"
+type = &"rabbit"
+position = Vector2(-30, 1030)
+overrides = {
+"movement": {
+"speed": 167.0
+},
+"energy": {
+"value": 50.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p16"]
+script = ExtResource("place")
+entity_name = &"rabbit_11"
+type = &"rabbit"
+position = Vector2(-3030, 820)
+overrides = {
+"movement": {
+"speed": 169.0
+},
+"energy": {
+"value": 66.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p17"]
+script = ExtResource("place")
+entity_name = &"rabbit_12"
+type = &"rabbit"
+position = Vector2(2330, -500)
+overrides = {
+"movement": {
+"speed": 165.0
+},
+"energy": {
+"value": 66.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p18"]
+script = ExtResource("place")
+entity_name = &"rabbit_13"
+type = &"rabbit"
+position = Vector2(280, -970)
+overrides = {
+"movement": {
+"speed": 170.0
+},
+"energy": {
+"value": 80.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p19"]
+script = ExtResource("place")
+entity_name = &"rabbit_14"
+type = &"rabbit"
+position = Vector2(1130, 500)
+overrides = {
+"movement": {
+"speed": 165.0
+},
+"energy": {
+"value": 58.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p20"]
+script = ExtResource("place")
+entity_name = &"rabbit_15"
+type = &"rabbit"
+position = Vector2(2050, -1010)
+overrides = {
+"movement": {
+"speed": 159.0
+},
+"energy": {
+"value": 40.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p21"]
+script = ExtResource("place")
+entity_name = &"rabbit_16"
+type = &"rabbit"
+position = Vector2(1170, 1350)
+overrides = {
+"movement": {
+"speed": 153.0
+},
+"energy": {
+"value": 77.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p22"]
+script = ExtResource("place")
+entity_name = &"rabbit_17"
+type = &"rabbit"
+position = Vector2(-3050, 330)
+overrides = {
+"movement": {
+"speed": 175.0
+},
+"energy": {
+"value": 45.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p23"]
+script = ExtResource("place")
+entity_name = &"rabbit_18"
+type = &"rabbit"
+position = Vector2(-250, 1070)
+overrides = {
+"movement": {
+"speed": 162.0
+},
+"energy": {
+"value": 50.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p24"]
+script = ExtResource("place")
+entity_name = &"rabbit_19"
+type = &"rabbit"
+position = Vector2(2040, -560)
+overrides = {
+"movement": {
+"speed": 176.0
+},
+"energy": {
+"value": 56.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p25"]
+script = ExtResource("place")
+entity_name = &"monkey_5"
+type = &"monkey"
+position = Vector2(1980, 280)
+overrides = {
+"movement": {
+"speed": 129.0
+},
+"energy": {
+"value": 72.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p26"]
+script = ExtResource("place")
+entity_name = &"monkey_6"
+type = &"monkey"
+position = Vector2(-1520, 1500)
+overrides = {
+"movement": {
+"speed": 130.0
+},
+"energy": {
+"value": 89.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p27"]
+script = ExtResource("place")
+entity_name = &"monkey_7"
+type = &"monkey"
+position = Vector2(-280, -540)
+overrides = {
+"movement": {
+"speed": 131.0
+},
+"energy": {
+"value": 40.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p28"]
+script = ExtResource("place")
+entity_name = &"monkey_8"
+type = &"monkey"
+position = Vector2(1880, -170)
+overrides = {
+"movement": {
+"speed": 126.0
+},
+"energy": {
+"value": 95.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p29"]
+script = ExtResource("place")
+entity_name = &"monkey_9"
+type = &"monkey"
+position = Vector2(1010, -1240)
+overrides = {
+"movement": {
+"speed": 135.0
+},
+"energy": {
+"value": 93.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p30"]
+script = ExtResource("place")
+entity_name = &"monkey_10"
+type = &"monkey"
+position = Vector2(2030, 860)
+overrides = {
+"movement": {
+"speed": 133.0
+},
+"energy": {
+"value": 88.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p31"]
+script = ExtResource("place")
+entity_name = &"monkey_11"
+type = &"monkey"
+position = Vector2(-30, 540)
+overrides = {
+"movement": {
+"speed": 122.0
+},
+"energy": {
+"value": 40.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p32"]
+script = ExtResource("place")
+entity_name = &"monkey_12"
+type = &"monkey"
+position = Vector2(-1410, -510)
+overrides = {
+"movement": {
+"speed": 128.0
+},
+"energy": {
+"value": 67.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p33"]
+script = ExtResource("place")
+entity_name = &"monkey_13"
+type = &"monkey"
+position = Vector2(-2850, -1240)
+overrides = {
+"movement": {
+"speed": 132.0
+},
+"energy": {
+"value": 45.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p34"]
+script = ExtResource("place")
+entity_name = &"monkey_14"
+type = &"monkey"
+position = Vector2(790, 260)
+overrides = {
+"movement": {
+"speed": 123.0
+},
+"energy": {
+"value": 53.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p35"]
+script = ExtResource("place")
+entity_name = &"monkey_15"
+type = &"monkey"
+position = Vector2(-10, -470)
+overrides = {
+"movement": {
+"speed": 129.0
+},
+"energy": {
+"value": 40.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p36"]
+script = ExtResource("place")
+entity_name = &"monkey_16"
+type = &"monkey"
+position = Vector2(-1060, 1380)
+overrides = {
+"movement": {
+"speed": 123.0
+},
+"energy": {
+"value": 83.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p37"]
+script = ExtResource("place")
+entity_name = &"monkey_17"
+type = &"monkey"
+position = Vector2(2170, 1060)
+overrides = {
+"movement": {
+"speed": 129.0
+},
+"energy": {
+"value": 65.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p38"]
+script = ExtResource("place")
+entity_name = &"monkey_18"
+type = &"monkey"
+position = Vector2(-2130, 740)
+overrides = {
+"movement": {
+"speed": 126.0
+},
+"energy": {
+"value": 57.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="p39"]
+script = ExtResource("place")
+entity_name = &"monkey_19"
+type = &"monkey"
+position = Vector2(-290, 90)
+overrides = {
+"movement": {
+"speed": 125.0
+},
+"energy": {
+"value": 57.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="c1"]
+script = ExtResource("place")
+entity_name = &"crocodile_1"
+type = &"crocodile"
+position = Vector2(-2950, 190)
+overrides = {
+"hunger": {
+"fullness": 210.0
+},
+"energy": {
+"value": 70.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="c2"]
+script = ExtResource("place")
+entity_name = &"crocodile_2"
+type = &"crocodile"
+position = Vector2(2710, -1470)
+overrides = {
+"hunger": {
+"fullness": 210.0
+},
+"energy": {
+"value": 62.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="c3"]
+script = ExtResource("place")
+entity_name = &"crocodile_3"
+type = &"crocodile"
+position = Vector2(3030, 1280)
+overrides = {
+"hunger": {
+"fullness": 210.0
+},
+"energy": {
+"value": 66.0,
+"rolled": true
+}
+}
+
 [resource]
 script = ExtResource("world")
-entries = Array[ExtResource("place")]([SubResource("p0"), SubResource("p1"), SubResource("p2"), SubResource("p3"), SubResource("p4"), SubResource("p5"), SubResource("p6"), SubResource("p7"), SubResource("p8"), SubResource("p9"), SubResource("c0"), SubResource("b0"), SubResource("b1"), SubResource("b2"), SubResource("b3"), SubResource("b4"), SubResource("b5"), SubResource("b6"), SubResource("b7"), SubResource("b8"), SubResource("b9"), SubResource("b10"), SubResource("b11"), SubResource("b12"), SubResource("w0"), SubResource("w1"), SubResource("w2"), SubResource("w3")])
+entries = Array[ExtResource("place")]([SubResource("p0"), SubResource("p1"), SubResource("p2"), SubResource("p3"), SubResource("p4"), SubResource("p5"), SubResource("p6"), SubResource("p7"), SubResource("p8"), SubResource("p9"), SubResource("c0"), SubResource("b0"), SubResource("b1"), SubResource("b2"), SubResource("b3"), SubResource("b4"), SubResource("b5"), SubResource("b6"), SubResource("b7"), SubResource("b8"), SubResource("b9"), SubResource("b10"), SubResource("b11"), SubResource("b12"), SubResource("w0"), SubResource("w1"), SubResource("w2"), SubResource("w3"), SubResource("w4"), SubResource("w5"), SubResource("w6"), SubResource("w7"), SubResource("w8"), SubResource("w9"), SubResource("w10"), SubResource("w11"), SubResource("w12"), SubResource("w13"), SubResource("w14"), SubResource("w15"), SubResource("b13"), SubResource("b14"), SubResource("b15"), SubResource("b16"), SubResource("b17"), SubResource("b18"), SubResource("b19"), SubResource("b20"), SubResource("b21"), SubResource("b22"), SubResource("b23"), SubResource("b24"), SubResource("b25"), SubResource("b26"), SubResource("b27"), SubResource("b28"), SubResource("b29"), SubResource("b30"), SubResource("b31"), SubResource("b32"), SubResource("b33"), SubResource("b34"), SubResource("b35"), SubResource("b36"), SubResource("b37"), SubResource("b38"), SubResource("b39"), SubResource("b40"), SubResource("b41"), SubResource("b42"), SubResource("b43"), SubResource("b44"), SubResource("b45"), SubResource("b46"), SubResource("b47"), SubResource("b48"), SubResource("b49"), SubResource("b50"), SubResource("b51"), SubResource("p10"), SubResource("p11"), SubResource("p12"), SubResource("p13"), SubResource("p14"), SubResource("p15"), SubResource("p16"), SubResource("p17"), SubResource("p18"), SubResource("p19"), SubResource("p20"), SubResource("p21"), SubResource("p22"), SubResource("p23"), SubResource("p24"), SubResource("p25"), SubResource("p26"), SubResource("p27"), SubResource("p28"), SubResource("p29"), SubResource("p30"), SubResource("p31"), SubResource("p32"), SubResource("p33"), SubResource("p34"), SubResource("p35"), SubResource("p36"), SubResource("p37"), SubResource("p38"), SubResource("p39"), SubResource("c1"), SubResource("c2"), SubResource("c3")])

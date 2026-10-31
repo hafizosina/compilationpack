@@ -12,6 +12,13 @@ extends Resource
 ## Seconds it lasts. 0 is held: it lasts while asked for and `can_start` holds.
 @export var duration: float = 0.0
 
+## The skill in `skills` with `skill_id`, or null.
+static func find(skills: Array[EcsSkillDef], skill_id: StringName) -> EcsSkillDef:
+	for skill in skills:
+		if skill.id == skill_id:
+			return skill
+	return null
+
 ## The flag that is this skill being active. Added and removed only by EcsSkillSystem.
 func make_effect() -> EcsFlag:
 	return null

@@ -6,7 +6,8 @@
 script = ExtResource("def")
 id = &"ambush"
 preconditions = {
-&"in_cover": true
+&"in_cover": true,
+&"water_in_reach": true
 }
 effects = {
 &"prey_close": true

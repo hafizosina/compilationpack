@@ -36,6 +36,10 @@
 [ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/ambush.tres" id="a_ambush"]
 [ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/pounce.tres" id="a_pounce"]
 
+[ext_resource type="Script" path="res://9. EcsSystem/components/ecs_thirst_component.gd" id="s_thirst"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/go_to_water.tres" id="a_go_to_water"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/drink.tres" id="a_drink"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/goals/quench.tres" id="g_quench"]
 [sub_resource type="Resource" id="c_body"]
 script = ExtResource("s_body")
 radius = 32.0
@@ -98,8 +102,8 @@ multiplier = 2.0
 
 [sub_resource type="Resource" id="c_planner"]
 script = ExtResource("s_planner")
-actions = Array[ExtResource("s_action_def")]([ExtResource("a_eat_ground"), ExtResource("a_seek_food"), ExtResource("a_hunt"), ExtResource("a_attack"), ExtResource("a_sleep"), ExtResource("a_flee"), ExtResource("a_go_to_cover"), ExtResource("a_ambush"), ExtResource("a_pounce")])
-goals = Array[ExtResource("s_goal_def")]([ExtResource("g_satisfy_hunger"), ExtResource("g_rest"), ExtResource("g_flee")])
+actions = Array[ExtResource("s_action_def")]([ExtResource("a_eat_ground"), ExtResource("a_seek_food"), ExtResource("a_hunt"), ExtResource("a_attack"), ExtResource("a_sleep"), ExtResource("a_flee"), ExtResource("a_go_to_cover"), ExtResource("a_ambush"), ExtResource("a_pounce"), ExtResource("a_go_to_water"), ExtResource("a_drink")])
+goals = Array[ExtResource("s_goal_def")]([ExtResource("g_satisfy_hunger"), ExtResource("g_rest"), ExtResource("g_flee"), ExtResource("g_quench")])
 
 [sub_resource type="Resource" id="c_danger"]
 script = ExtResource("s_danger")
@@ -108,8 +112,12 @@ script = ExtResource("s_danger")
 script = ExtResource("s_skills")
 skills = Array[ExtResource("s_skill_def")]([ExtResource("k_dash"), ExtResource("k_hide")])
 
+[sub_resource type="Resource" id="c_thirst"]
+script = ExtResource("s_thirst")
+drain = 0.25
+
 [resource]
 script = ExtResource("def")
 id = &"crocodile"
 display_name = "Crocodile"
-components = Array[ExtResource("base")]([SubResource("c_energy"), SubResource("c_health"), SubResource("c_hunger"), SubResource("c_body"), SubResource("c_sprite"), SubResource("c_movement"), SubResource("c_brain"), SubResource("c_sensor"), SubResource("c_action"), SubResource("c_damage"), SubResource("c_crit"), SubResource("c_planner"), SubResource("c_danger"), SubResource("c_skills")])
+components = Array[ExtResource("base")]([SubResource("c_energy"), SubResource("c_health"), SubResource("c_hunger"), SubResource("c_body"), SubResource("c_sprite"), SubResource("c_movement"), SubResource("c_brain"), SubResource("c_sensor"), SubResource("c_action"), SubResource("c_damage"), SubResource("c_crit"), SubResource("c_planner"), SubResource("c_danger"), SubResource("c_skills"), SubResource("c_thirst")])

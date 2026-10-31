@@ -12,7 +12,7 @@ extends EcsSystem
 ## Replans per run.
 const MAX_REPLANS: int = 64
 ## Below its gate a need scores at least this fraction of its weight.
-const FLOOR: float = 0.6
+const FLOOR: float = EcsNeeds.FLOOR
 ## Added to the current goal's score, so near-ties don't flicker.
 const COMMIT_BONUS: float = 0.5
 
@@ -24,6 +24,9 @@ var _diet: Dictionary = {}
 var _bush_view: EcsView
 ## Current harvestables: id -> EcsHarvestableComponent.
 var _bushes: Dictionary = {}
+var _water_view: EcsView
+## Current drinkable water: id -> true.
+var _water: Dictionary = {}
 
 func label() -> StringName:
 	return &"planning"
@@ -42,8 +45,9 @@ func run(world: EcsWorld, _delta: float) -> void:
 		var energy := world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
 		var danger := world.get_component(id, EcsDangerComponent) as EcsDangerComponent
 		var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
-		var facts := _facts(world, id, hunger, bag, danger)
-		var ranked := _rank(planner, hunger, energy, danger, bag)
+		var thirst := world.get_component(id, EcsThirstComponent) as EcsThirstComponent
+		var facts := _facts(world, id, hunger, bag, danger, thirst)
+		var ranked := _rank(planner, hunger, energy, danger, bag, thirst)
 		facts_of[id] = facts
 		ranked_of[id] = ranked
 		if planner.dirty:
@@ -67,42 +71,39 @@ func rank(world: EcsWorld, id: int) -> Array[EcsGoalDef]:
 		world.get_component(id, EcsHungerComponent) as EcsHungerComponent,
 		world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent,
 		world.get_component(id, EcsDangerComponent) as EcsDangerComponent,
-		world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent)
+		world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent,
+		world.get_component(id, EcsThirstComponent) as EcsThirstComponent)
 
 ## How much `goal` is wanted: 0 above the need's gate, else `weight` times an
 ## urgency from FLOOR at the gate to 1 at empty. Any reading may be null.
 static func score(goal: EcsGoalDef, hunger: EcsHungerComponent, energy: EcsEnergyComponent,
-		danger: EcsDangerComponent, bag: EcsInventoryComponent) -> float:
+		danger: EcsDangerComponent, bag: EcsInventoryComponent,
+		thirst: EcsThirstComponent = null) -> float:
 	match goal.need:
 		&"eat":
-			if hunger != null:
-				return goal.weight * _urgency(hunger.fullness,
-					minf(hunger.forage_below, hunger.eat_below))
+			return goal.weight * EcsNeeds.hunger_urgency(hunger)
+		&"drink":
+			return goal.weight * EcsNeeds.thirst_urgency(thirst)
 		&"provision":
 			if hunger != null and bag != null:
-				return goal.weight * _urgency(hunger.fullness, hunger.forage_below)
+				return goal.weight * EcsNeeds.urgency(hunger.fullness, hunger.forage_below)
 		&"rest":
 			if energy != null:
-				return goal.weight * _urgency(energy.value, energy.rest_at)
+				return goal.weight * EcsNeeds.urgency(energy.value, energy.rest_at)
 		&"flee":
 			if danger != null and danger.value >= danger.flee_at:
 				return goal.weight * (FLOOR + (1.0 - FLOOR)
 					* (danger.value - danger.flee_at) / maxf(1.0 - danger.flee_at, 0.01))
 	return 0.0
 
-static func _urgency(value: float, gate: float) -> float:
-	if value > gate:
-		return 0.0
-	return FLOOR + (1.0 - FLOOR) * (gate - value) / maxf(gate, 0.01)
-
 ## The goals that score above 0, best first, with the bonus on the current one.
 static func _rank(planner: EcsPlannerComponent, hunger: EcsHungerComponent,
 		energy: EcsEnergyComponent, danger: EcsDangerComponent,
-		bag: EcsInventoryComponent) -> Array[EcsGoalDef]:
+		bag: EcsInventoryComponent, thirst: EcsThirstComponent) -> Array[EcsGoalDef]:
 	var ranked: Array[EcsGoalDef] = []
 	var values := PackedFloat32Array()
 	for goal in planner.goals:
-		var value := score(goal, hunger, energy, danger, bag)
+		var value := score(goal, hunger, energy, danger, bag, thirst)
 		if value <= 0.0:
 			continue
 		if goal.id == planner.goal:
@@ -140,10 +141,13 @@ static func _ids(goals: Array[EcsGoalDef]) -> Array[StringName]:
 ## What is true for `id` now, as the planner's facts. Only true facts are kept,
 ## so two snapshots compare equal when nothing changed.
 func _facts(world: EcsWorld, id: int, hunger: EcsHungerComponent, bag: EcsInventoryComponent,
-		danger: EcsDangerComponent) -> Dictionary:
+		danger: EcsDangerComponent, thirst: EcsThirstComponent) -> Dictionary:
 	var facts := {}
 	if hunger != null and hunger.fullness <= 0.0:
 		facts[&"starving"] = true
+	if EcsNeeds.parched(thirst):
+		facts[&"parched"] = true
+	var drinks := thirst != null and not _water.is_empty()
 	if bag != null:
 		if bag.items.size() < bag.capacity:
 			facts[&"has_room"] = true
@@ -175,10 +179,12 @@ func _facts(world: EcsWorld, id: int, hunger: EcsHungerComponent, bag: EcsInvent
 					facts[&"loot_in_reach"] = true
 			if hunts and EcsHunting.can_hunt(world, id, touched):
 				facts[&"prey_in_reach"] = true
+			if drinks and _water.has(touched):
+				facts[&"water_in_reach"] = true
 
 	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
 	# Nothing to look for: skip the scan.
-	if sensor != null and (hunts or not _diet.is_empty() or not _bushes.is_empty()):
+	if sensor != null and (hunts or drinks or not _diet.is_empty() or not _bushes.is_empty()):
 		var dash_reach := EcsHunting.dash_reach(world, id) if hunts else 0.0
 		var here := Vector2.ZERO
 		if dash_reach > 0.0:
@@ -192,8 +198,11 @@ func _facts(world: EcsWorld, id: int, hunger: EcsHungerComponent, bag: EcsInvent
 				facts[&"prey_in_sight"] = true
 				if dash_reach > 0.0 and _within(world, seen, here, dash_reach):
 					facts[&"prey_close"] = true
-			elif hunts and world.has(seen, EcsCoverComponent):
-				facts[&"cover_in_sight"] = true
+			else:
+				if drinks and _water.has(seen):
+					facts[&"water_in_sight"] = true
+				if hunts and world.has(seen, EcsCoverComponent):
+					facts[&"cover_in_sight"] = true
 	return facts
 
 static func _within(world: EcsWorld, id: int, here: Vector2, distance: float) -> bool:
@@ -222,3 +231,9 @@ func _refresh(world: EcsWorld) -> void:
 		var crops := plants.column(EcsHarvestableComponent)
 		for k in plants.ids.size():
 			_bushes[plants.ids[k]] = crops[k]
+	var water := world.view([EcsDrinkableComponent], [EcsDyingFlag])
+	if water != _water_view:
+		_water_view = water
+		_water = {}
+		for id in water.ids:
+			_water[id] = true

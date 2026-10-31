@@ -9,7 +9,7 @@ extends Node2D
 ## Ticks between runs for sensor, planning, low_brain, danger and health (3 = 20 Hz).
 const SLOW: int = 3
 
-## Ticks between runs for hunger and energy (6 = 10 Hz). Phases are chosen so no
+## Ticks between runs for hunger, energy and thirst (6 = 10 Hz). Phases are chosen so no
 ## slow stages share a tick.
 const BARS: int = 6
 
@@ -77,6 +77,7 @@ func _build() -> void:
 		.add(EcsSpawnerSystem.new()) \
 		.add(EcsHungerSystem.new(), BARS, 2) \
 		.add(EcsEnergySystem.new(), BARS, 5) \
+		.add(EcsThirstSystem.new(), BARS, 3) \
 		.add(EcsHealthSystem.new(), SLOW, 2) \
 		.add(EcsDangerSystem.new(), SLOW, 1) \
 		.add(EcsSensorSystem.new(_manager), SLOW, 0) \
@@ -84,6 +85,7 @@ func _build() -> void:
 		.add(EcsLowBrainSystem.new(), SLOW, 1) \
 		.add(EcsSkillSystem.new()) \
 		.add(EcsConsumeSystem.new()) \
+		.add(EcsDrinkSystem.new()) \
 		.add(EcsHarvestSystem.new()) \
 		.add(EcsAttackSystem.new()) \
 		.add(EcsCritSystem.new()) \

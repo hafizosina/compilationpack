@@ -96,6 +96,11 @@ func _run() -> void:
 	_the_ambush_is_planned_by_cost()
 	await _an_ambush_gives_up_after_its_patience()
 	await _a_crocodile_ambushes_from_the_water()
+	await _thirst_drains_and_dehydration_kills()
+	await _drinking_needs_drinkable_water_in_reach()
+	await _a_thirsty_animal_drinks_and_thirst_is_weighed_against_hunger()
+	_thirst_is_planned_and_weighed()
+	await _thirsty_prey_walk_into_an_ambush()
 
 ## Nodes match the declared NODE_KINDs (a berry gets a sprite and a body, no
 ## sensor) and hang under the entity's own container.
@@ -2092,7 +2097,7 @@ func _skills_start_end_and_cool() -> void:
 	var dashing := move.velocity.length()
 	await run.call(60)
 	var after := move.velocity.length()
-	var dash := EcsSkillSystem._skill(_world.get_component(croc, EcsSkillsComponent), &"dash") as EcsDashSkill
+	var dash := EcsSkillDef.find((_world.get_component(croc, EcsSkillsComponent) as EcsSkillsComponent).skills, &"dash") as EcsDashSkill
 	_check("a dash scales speed (%.0f), then ends (%.0f)" % [dashing, after],
 		is_equal_approx(dashing, move.speed * dash.speed_scale) and is_equal_approx(after, move.speed))
 
@@ -2156,17 +2161,22 @@ func _a_hidden_hunter_is_noticed_late() -> void:
 ## prey; on land with prey in sight it chases; with nothing in sight, no plan.
 func _the_ambush_is_planned_by_cost() -> void:
 	var croc := _actions([&"eat_ground", &"seek_food", &"hunt", &"attack", &"sleep", &"flee",
-		&"go_to_cover", &"ambush", &"pounce"])
+		&"go_to_cover", &"ambush", &"pounce", &"go_to_water", &"drink"])
 	var fed := {&"fed": true}
-	var ambush: Array[StringName] = [&"go_to_cover", &"ambush", &"pounce", &"attack",
-		&"seek_food", &"eat_ground"]
-	_check("water in sight: go to it and ambush", EcsPlanner.plan({&"cover_in_sight": true},
-		fed, croc) == ambush and ambush.size() < EcsPlanner.MAX_DEPTH)
+	var tail: Array[StringName] = [&"ambush", &"pounce", &"attack", &"seek_food", &"eat_ground"]
+	var from_land := EcsPlanner.plan({&"cover_in_sight": true, &"water_in_sight": true}, fed, croc)
+	_check("water in sight: go to it and ambush (%s)" % " > ".join(from_land),
+		from_land.size() == 7 and from_land.size() <= EcsPlanner.MAX_DEPTH
+		and from_land.slice(2) == tail
+		and from_land.has(&"go_to_cover") and from_land.has(&"go_to_water"))
 	_check("in the water, prey in sight: keep ambushing",
-		EcsPlanner.plan({&"in_cover": true, &"prey_in_sight": true}, fed, croc)
-			== ambush.slice(1))
+		EcsPlanner.plan({&"in_cover": true, &"water_in_reach": true, &"prey_in_sight": true},
+			fed, croc) == tail)
+	_check("in cover that isn't water, prey in sight: chase",
+		EcsPlanner.plan({&"in_cover": true, &"prey_in_sight": true}, fed, croc)[0] == &"hunt")
 	_check("on land, prey in sight: chase",
-		EcsPlanner.plan({&"cover_in_sight": true, &"prey_in_sight": true}, fed, croc)
+		EcsPlanner.plan({&"cover_in_sight": true, &"water_in_sight": true,
+			&"prey_in_sight": true}, fed, croc)
 			== [&"hunt", &"attack", &"seek_food", &"eat_ground"])
 	_check("prey close: pounce", EcsPlanner.plan({&"prey_close": true, &"prey_in_sight": true},
 		fed, croc)[0] == &"pounce")
@@ -2280,6 +2290,282 @@ func _a_crocodile_ambushes_from_the_water() -> void:
 		await get_tree().physics_frame
 		leftover = _first_of(&"corpse")
 	EcsConst.world_bounds = bounds
+
+## Thirst drains, slower asleep; at zero it costs health, and a parched death
+## leaves a corpse like any death by health.
+func _thirst_drains_and_dehydration_kills() -> void:
+	var living := EcsScheduler.new()
+	living \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsThirstSystem.new()) \
+		.add(EcsHealthSystem.new()) \
+		.add(EcsCorpseSystem.new()) \
+		.add(EcsNodeSyncSystem.new(_manager))
+	var spot := Vector2(-30000.0, 9000.0)
+	var awake := _manager.spawn(_world, _catalog, &"rabbit", spot)
+	var asleep := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(300.0, 0.0))
+	_world.add(asleep, EcsAsleepFlag.new())
+	var awake_thirst := _world.get_component(awake, EcsThirstComponent) as EcsThirstComponent
+	var asleep_thirst := _world.get_component(asleep, EcsThirstComponent) as EcsThirstComponent
+	for i in 60:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+	var lost := awake_thirst.max_hydration - awake_thirst.hydration
+	_check("thirst drains at `drain` (%.2f)" % lost, absf(lost - awake_thirst.drain) < 0.05)
+	_check("and slower asleep", asleep_thirst.max_hydration - asleep_thirst.hydration
+		< lost * (asleep_thirst.asleep_drain_scale + 0.05))
+
+	awake_thirst.hydration = 0.0
+	var health := _world.get_component(awake, EcsHealthComponent) as EcsHealthComponent
+	var before := health.value
+	for i in 60:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+	_check("dehydration costs health (%.1f)" % (before - health.value),
+		absf(before - health.value - awake_thirst.dehydrate_damage) < 0.2)
+	health.value = 1.0
+	var corpse := EcsWorld.NO_ENTITY
+	for i in 60:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		corpse = _first_of(&"corpse")
+		if corpse != EcsWorld.NO_ENTITY:
+			break
+	_check("a parched death leaves a corpse", not _world.is_alive(awake) and corpse != EcsWorld.NO_ENTITY)
+
+	for id in [asleep, corpse]:
+		if _world.is_alive(id):
+			_world.add(id, EcsDyingFlag.new())
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+
+## A drink intent, with no brain, restores hydration only while drinkable water
+## is in reach: not on land, not at cover that isn't drinkable.
+func _drinking_needs_drinkable_water_in_reach() -> void:
+	var living := EcsScheduler.new()
+	living \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsDrinkSystem.new()) \
+		.add(EcsCollisionSystem.new(_manager)) \
+		.add(EcsNodeSyncSystem.new(_manager))
+	var run := func(ticks: int) -> void:
+		for i in ticks:
+			living.run_all(_world, TICK)
+			await get_tree().physics_frame
+	var spot := Vector2(30000.0, 9000.0)
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot)
+	_world.remove(rabbit, EcsLowBrainComponent)
+	var thirst := _world.get_component(rabbit, EcsThirstComponent) as EcsThirstComponent
+	var pond := _manager.spawn(_world, _catalog, &"water", spot + Vector2(1000.0, 0.0))
+	var dry := _manager.spawn(_world, _catalog, &"water", spot + Vector2(-1000.0, 0.0))
+	_world.remove(dry, EcsDrinkableComponent)
+	var drink := func(water: int) -> float:
+		thirst.hydration = 20.0
+		var intent := EcsDrinkIntentFlag.new()
+		intent.target_id = water
+		_world.add(rabbit, intent)
+		await run.call(30)
+		_world.remove(rabbit, EcsDrinkIntentFlag)
+		return thirst.hydration - 20.0
+	var place := _world.get_component(rabbit, EcsPositionComponent) as EcsPositionComponent
+	var on_land: float = await drink.call(pond)
+	place.position = _position_of(dry) + Vector2(160.0, 0.0)
+	await run.call(3)
+	var at_dry: float = await drink.call(dry)
+	place.position = _position_of(pond) + Vector2(160.0, 0.0)
+	await run.call(3)
+	var at_pond: float = await drink.call(pond)
+	_check("a drink is refused on land (%.1f)" % on_land, is_zero_approx(on_land))
+	_check("and at cover that isn't drinkable (%.1f)" % at_dry, is_zero_approx(at_dry))
+	_check("and restores hydration at water in reach, with no brain (%.1f)" % at_pond, at_pond > 5.0)
+
+	for id in [rabbit, pond, dry]:
+		_world.add(id, EcsDyingFlag.new())
+	await run.call(1)
+
+## On the ladder: a thirsty rabbit seeks water and drinks until full, with the
+## flag up exactly while it drinks; the more urgent of thirst and hunger goes
+## first; and being parched wakes a sleeper and keeps it up.
+func _a_thirsty_animal_drinks_and_thirst_is_weighed_against_hunger() -> void:
+	var living := EcsScheduler.new()
+	living \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsLowBrainSystem.new()) \
+		.add(EcsConsumeSystem.new()) \
+		.add(EcsDrinkSystem.new()) \
+		.add(EcsMovementSystem.new()) \
+		.add(EcsCollisionSystem.new(_manager)) \
+		.add(EcsNodeSyncSystem.new(_manager))
+	var spot := Vector2(9000.0, 30000.0)
+	var bounds := EcsConst.world_bounds
+	EcsConst.world_bounds = Rect2(spot - Vector2(3000.0, 3000.0), Vector2(6000.0, 6000.0))
+	var pond := _manager.spawn(_world, _catalog, &"water", spot)
+	var rabbit := _ladder_rabbit(spot + Vector2(350.0, 0.0))
+	var thirst := _world.get_component(rabbit, EcsThirstComponent) as EcsThirstComponent
+	var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
+	thirst.hydration = 30.0
+	var sought := false
+	var drank := false
+	var flag_matches := true
+	for i in 600:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		sought = sought or brain.state == EcsLowBrainComponent.State.SEEK_WATER
+		drank = drank or brain.state == EcsLowBrainComponent.State.DRINK
+		flag_matches = flag_matches and _world.has(rabbit, EcsDrinkIntentFlag) \
+			== (brain.state == EcsLowBrainComponent.State.DRINK)
+		if thirst.hydration >= thirst.max_hydration:
+			break
+	_check("a thirsty animal seeks water", sought)
+	_check("and drinks until full (%.0f)" % thirst.hydration,
+		drank and thirst.hydration >= thirst.max_hydration)
+	_check("the drink flag is raised exactly while it drinks", flag_matches)
+
+	var berry := _manager.spawn(_world, _catalog, &"berry", _position_of(rabbit))
+	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
+	var first := func(fullness: float, hydration: float) -> int:
+		hunger.fullness = fullness
+		thirst.hydration = hydration
+		_set_brain_idle(rabbit)
+		for i in 1:
+			living.run_all(_world, TICK)
+			await get_tree().physics_frame
+		return brain.state
+	var thirstier: int = await first.call(50.0, 20.0)
+	var hungrier: int = await first.call(10.0, 50.0)
+	_check("thirstier than hungry, it drinks first",
+		thirstier == EcsLowBrainComponent.State.DRINK)
+	_check("hungrier than thirsty, it eats first", hungrier == EcsLowBrainComponent.State.EAT)
+
+	var tired := _ladder_rabbit(spot + Vector2(0.0, 1500.0))
+	var energy := _world.get_component(tired, EcsEnergyComponent) as EcsEnergyComponent
+	energy.value = 5.0
+	var mind := _world.get_component(tired, EcsLowBrainComponent) as EcsLowBrainComponent
+	for i in 6:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+	var slept := mind.state == EcsLowBrainComponent.State.SLEEP
+	(_world.get_component(tired, EcsThirstComponent) as EcsThirstComponent).hydration = 5.0
+	var stayed_up := true
+	for i in 6:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+	for i in 60:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		stayed_up = stayed_up and mind.state != EcsLowBrainComponent.State.SLEEP
+	_check("being parched wakes a sleeper and keeps it up", slept and stayed_up)
+
+	for id in [rabbit, tired, pond, berry]:
+		if _world.is_alive(id):
+			_world.add(id, EcsDyingFlag.new())
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+	EcsConst.world_bounds = bounds
+
+## The planner: thirsty prey plan to walk to water and drink, or nothing with no
+## water in sight; and utility weighs drink against eat by urgency.
+func _thirst_is_planned_and_weighed() -> void:
+	var rabbit := _actions([&"eat_ground", &"seek_food", &"seek_bush", &"harvest", &"sleep",
+		&"flee", &"go_to_water", &"drink"])
+	var hydrated := {&"hydrated": true}
+	_check("water in sight: walk to it and drink",
+		EcsPlanner.plan({&"water_in_sight": true}, hydrated, rabbit) == [&"go_to_water", &"drink"])
+	_check("no water in sight: no plan", EcsPlanner.plan({}, hydrated, rabbit).is_empty())
+	_check("parched, it won't plan to sleep",
+		EcsPlanner.plan({&"parched": true}, {&"rested": true}, rabbit).is_empty())
+
+	var eat := load("res://9. EcsSystem/defs/goals/satisfy_hunger.tres") as EcsGoalDef
+	var quench := load("res://9. EcsSystem/defs/goals/quench.tres") as EcsGoalDef
+	var hunger := EcsHungerComponent.new()
+	var thirst := EcsThirstComponent.new()
+	hunger.fullness = 50.0
+	thirst.hydration = 20.0
+	_check("thirstier, drink scores higher",
+		EcsPlanningSystem.score(quench, hunger, null, null, null, thirst)
+			> EcsPlanningSystem.score(eat, hunger, null, null, null, thirst))
+	hunger.fullness = 10.0
+	thirst.hydration = 50.0
+	_check("hungrier, eat scores higher",
+		EcsPlanningSystem.score(eat, hunger, null, null, null, thirst)
+			> EcsPlanningSystem.score(quench, hunger, null, null, null, thirst))
+
+## A thirsty, planned rabbit walks to a pond where a crocodile lies hidden; the
+## crocodile pounces and bites. A kill is many attacks, left to combat planning.
+func _thirsty_prey_walk_into_an_ambush() -> void:
+	var living := _ambush_pipeline()
+	living.add(EcsDrinkSystem.new()).add(EcsDangerSystem.new())
+	var spot := Vector2(-9000.0, 30000.0)
+	var bounds := EcsConst.world_bounds
+	EcsConst.world_bounds = Rect2(spot - Vector2(3000.0, 3000.0), Vector2(6000.0, 6000.0))
+	var pond := _manager.spawn(_world, _catalog, &"water", spot)
+	var croc := _ambusher(spot + Vector2(320.0, 0.0))
+	var brain := _world.get_component(croc, EcsLowBrainComponent) as EcsLowBrainComponent
+	for i in 300:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		if brain.state == EcsLowBrainComponent.State.AMBUSH and _world.has(croc, EcsHiddenFlag):
+			break
+	var hidden := _world.has(croc, EcsHiddenFlag)
+
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(400.0, 60.0))
+	var energy := _world.get_component(rabbit, EcsEnergyComponent) as EcsEnergyComponent
+	energy.rolled = true
+	energy.value = energy.max_energy
+	(_world.get_component(rabbit, EcsThirstComponent) as EcsThirstComponent).hydration = 30.0
+	var mind := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
+	var health := _world.get_component(rabbit, EcsHealthComponent) as EcsHealthComponent
+	var whole := health.value
+	var went := false
+	var dashed := false
+	for i in 900:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		if _world.is_alive(rabbit):
+			went = went or mind.state == EcsLowBrainComponent.State.SEEK_WATER \
+				or mind.state == EcsLowBrainComponent.State.DRINK
+		dashed = dashed or _world.has(croc, EcsDashingFlag)
+		if dashed and (not _world.is_alive(rabbit) or health.value < whole):
+			break
+	_check("a hidden crocodile waits at the pond", hidden)
+	_check("a thirsty rabbit goes to drink there", went)
+	_check("and the crocodile pounces and bites it", dashed
+		and (not _world.is_alive(rabbit) or health.value < whole))
+
+	for id in [croc, pond, rabbit]:
+		if _world.is_alive(id):
+			_world.add(id, EcsDyingFlag.new())
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+	var leftover := _first_of(&"corpse")
+	while leftover != EcsWorld.NO_ENTITY:
+		_world.add(leftover, EcsDyingFlag.new())
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		leftover = _first_of(&"corpse")
+	EcsConst.world_bounds = bounds
+
+## A fed, rested rabbit on the ladder: no planner, energy set by hand.
+func _ladder_rabbit(at: Vector2) -> int:
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", at)
+	_world.remove(rabbit, EcsPlannerComponent)
+	var energy := _world.get_component(rabbit, EcsEnergyComponent) as EcsEnergyComponent
+	energy.rolled = true
+	energy.value = energy.max_energy
+	return rabbit
+
+## Drops whatever `id`'s brain is doing, as if it had just woken. Test-only.
+func _set_brain_idle(id: int) -> void:
+	var brain := _world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
+	var flag: Script = EcsLowBrainSystem._flag_for(brain.state)
+	if flag != null:
+		_world.remove(id, flag)
+	brain.state = EcsLowBrainComponent.State.IDLE
+	brain.target = EcsWorld.NO_ENTITY
+	var move := _world.get_component(id, EcsMovementComponent) as EcsMovementComponent
+	move.has_destination = false
 
 func _ambush_pipeline() -> EcsScheduler:
 	var living := EcsScheduler.new()

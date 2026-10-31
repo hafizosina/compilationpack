@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="EcsGoalDef" format=3]
+
+[ext_resource type="Script" uid="uid://dhxn4v5fbnav2" path="res://9. EcsSystem/ai/ecs_goal_def.gd" id="def"]
+
+[resource]
+script = ExtResource("def")
+id = &"quench"
+desired = {
+&"hydrated": true
+}
+need = &"drink"
+weight = 10.0

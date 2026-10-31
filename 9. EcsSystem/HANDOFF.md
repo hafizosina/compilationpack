@@ -13,7 +13,7 @@ a recorded design, not something you can run.
 ```bash
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 "$GODOT" --path . "res://9. EcsSystem/main.tscn"                          # run it (also the main scene)
-"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 288 checks, exit 0 = all pass
+"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 310 checks, exit 0 = all pass
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"    # population ramp, minutes
 "$GODOT" --headless --editor --quit --path . 2>&1 | grep -iE "error|invalid|uid"  # after any .tscn/.tres edit
 ```
@@ -36,7 +36,7 @@ world1.tres ──► EcsEntityManager ──► EcsWorld                       
                 builds the nodes      World/Entities/entity_<id>/
 ```
 
-Every physics tick `EcsScheduler` runs twenty-six stages. `[20 Hz]` and `[10 Hz]` mark the
+Every physics tick `EcsScheduler` runs twenty-eight stages. `[20 Hz]` and `[10 Hz]` mark the
 ones that run every third or sixth tick (§11); the rest run every tick.
 
 | stage | does | writes |
@@ -45,6 +45,7 @@ ones that run every third or sixth tick (§11); the rest run every tick.
 | `spawner` | a spawner asks for what it spawns (no blueprint has one now; tests do) | a note on `EcsLifecycleSingleton` |
 | `hunger` `[10 Hz]` | fullness drains; starving costs health, fed mends it | `EcsHunger`, `EcsHealth` |
 | `energy` `[10 Hz]` | drains awake, restores asleep; collapse at zero | `EcsEnergy`, `EcsCollapsedFlag`, `EcsHealth` |
+| `thirst` `[10 Hz]` | hydration drains; at zero it costs health | `EcsThirst`, `EcsHealth` |
 | `health` `[20 Hz]` | death at zero | `EcsDyingFlag` |
 | `danger` `[20 Hz]` | fills on a threat in sight, jumps on a hit, decays | `EcsDanger`, clears `EcsHurtFlag` |
 | `sensor` `[20 Hz]` | what each entity sees and can touch | `EcsSensor.perceived`, `EcsAction.reached` |
@@ -52,6 +53,7 @@ ones that run every third or sixth tick (§11); the rest run every tick.
 | `low_brain` `[20 Hz]` | runs the plan's first step, or its own ladder | its own state, a destination, intent flags |
 | `skill` | carries out a cast intent; runs skill timers (§19) | `EcsSkills`, the effect flags |
 | `consume` | carries out an eat intent | `EcsHunger`, the bag, `EcsDyingFlag` |
+| `drink` | carries out a drink intent while the water is in reach | `EcsThirst` |
 | `harvest` | regrows stock; carries out a harvest intent | `EcsHarvestable`, a note on `EcsLifecycleSingleton` |
 | `attack` | carries out an attack intent, on cooldown | `EcsDamage.cooldown`, hits on `EcsCombatSingleton` |
 | `crit` | rolls each hit against the attacker's crit chance | the hits |
@@ -77,9 +79,12 @@ systems hold all behaviour and never call each other, and nothing outside a syst
 component data. Queries key on the script object — `world.query([EcsPositionComponent])` —
 so a typo is a parse error, not a silently empty result.
 
-The world today is 11 animals — 5 rabbits, 5 monkeys, 1 crocodile — 13 bushes, 1.3 per
-plant-eater, and 4 ponds (`defs/world1.tres`), spread across a 6400×3360 arena, doubled each way
-on 2026-10-31 to make room for more kinds. A berry exists only once
+The world today is 44 animals — 20 rabbits, 20 monkeys, 4 crocodiles — 52 bushes, 1.3 per
+plant-eater, and 16 ponds (`defs/world1.tres`), on a 6400×3360 arena. The arena was doubled each
+way on 2026-10-31 to make room for more kinds; doubling it alone left food 4× sparser and 2–5
+of 10 plant-eaters starved per 300 s run (≈0 before), so every count was then multiplied by 4
+to restore the old density. The 28 original placements kept their (doubled) spots; the rest
+were spread by a seeded script with minimum spacings. A berry exists only once
 something harvests one (§9).
 
 ---
@@ -365,9 +370,9 @@ only its own state, its intent flags and a destination.
 
 ---
 
-## 8. Needs: fullness, energy and health
+## 8. Needs: fullness, hydration, energy and health
 
-All three bars are **reserves**: full is good, and a short bar is bad news on every one.
+All four bars are **reserves**: full is good, and a short bar is bad news on every one.
 
 **Hunger is the motive, health is the consequence.** The number is
 `EcsHungerComponent.fullness`, not hunger — it drains from `max_fullness` to zero. The class
@@ -414,6 +419,34 @@ branch in any system:
 rabbit that reached a berry and then had to wait to get hungrier would wander off. With
 `restore` at 10/s a nap from `rest_at` 30 to `wake_at` 100 takes 7 s and a collapse lifts in
 5 s, so waking-on-starving rarely gets a chance to fire.
+
+**Thirst** (2026-10-31, roadmap step 2) is hunger's twin. `EcsThirstComponent.hydration`
+drains from `max_hydration` (100) at `drain`, slower asleep at `asleep_drain_scale`, and at
+zero `EcsThirstSystem` spends health at `dehydrate_damage` — so a death of thirst leaves a
+corpse like any death by health. Its gates are `seek_water_below` (65, go looking) and
+`drink_below` (70, drink what is in reach — a grazer's order, since nobody carries water), and
+**`parched_below` (15) mirrors starving**: a parched creature won't sleep, a parched sleeper
+wakes, and the planner's `sleep` needs `parched` false. Thirst does not mend health; mending
+stays the reward for having eaten. Drain: rabbit 0.6, monkey 0.5, crocodile 0.25 per second.
+
+**Water is drinkable as well as cover**, and the two are separate components:
+`EcsDrinkableComponent{rate}` (hydration per second while drinking, 25) sits beside
+`EcsCoverComponent` on `water.tres`. A bush could be cover and not drinkable; a well the other
+way round. "In reach of water" is the same physics test as cover — the action area touches the
+body. The brain raises `EcsDrinkIntentFlag{target_id}`, and `EcsDrinkSystem` fills hydration
+while that water is drinkable and in reach. It never reads the brain, so a creature with no
+brain drinks when the flag is raised (tested). **Drinking is a commitment**: DRINK holds until
+full, unless the plan is to flee — not until the need drops under its gate, or a creature
+would leave at 66 and be back a minute later.
+
+**Thirst against hunger: the more urgent need wins** (the author's decision, 2026-10-31).
+Starving and parched each outrank sleep; below that, both are scored by one curve,
+`EcsNeeds.urgency` (`ai/ecs_needs.gd`) — 0 above the need's gate, 0.6 at it, 1 at empty — and
+the higher wins. The planner gets it for free: `quench` {hydrated} has weight 10, the same as
+eating, so its scores compare directly. The ladder makes the same comparison by hand: the
+water rungs (drink, then seek water) go above the food rungs when thirst is the more urgent,
+below them otherwise, and on a tie food goes first. Both read `EcsNeeds`, so they cannot
+disagree, and neither system calls the other.
 
 ---
 
@@ -547,7 +580,7 @@ after its producer keeps its data one tick old, as at full rate.
 
 ## 12. Tests
 
-`tests/lifecycle_test.tscn` — **288 checks**, exit code 0 only if all pass. Run it after
+`tests/lifecycle_test.tscn` — **310 checks**, exit code 0 only if all pass. Run it after
 touching the manager, collision, pickup, spawner, sensor, node sync, the brain or any
 executor. It covers: declared nodes built and undeclared ones not; kill takes data and nodes;
 spawn notes fulfilled a tick later; soft collision, immovable and non-solid bodies; seeing is
@@ -573,7 +606,11 @@ holding only in water and while asked, dash speed, hiding restoring energy; a hi
 crocodile noticed never, late or plainly by awareness and scan, and never past `perceived`;
 the ambush chains by cost; an ambush giving up after its patience and coming back; and a
 planned crocodile ambushing from water, letting a far monkey pass, pouncing once, killing and
-eating.
+eating; thirst draining, slower asleep, and a death of thirst leaving a corpse; a drink refused
+on land and at cover that isn't drinkable, and working with no brain; a thirsty rabbit seeking
+water and drinking until full with the flag up exactly while it drinks; the more urgent of
+thirst and hunger going first, on the ladder and in utility; being parched waking a sleeper; the
+water chains; and a thirsty rabbit walking to a pond where a hidden crocodile pounces and bites.
 
 `tests/stress_test.tscn` — the population ramp and the per-stage bookkeeping split (§14). Knobs after a bare `--`:
 `--spacing=180` (grid px), `--n=4000` (one population), `--skip=hunger,health` (leave stages
@@ -612,7 +649,8 @@ brain's food index. The ceiling went from 4,800–6,400 to over 9,600 entities (
   because they now query intent flags instead of every brain; the brain itself did not get
   dearer. The cost of raising a flag under load is unmeasured — the stress population never
   raises one.
-- **Features roadmap, step 1: skills, water and the ambush** — done (2026-10-31, §19). The
+- **Features roadmap, step 1: skills, water and the ambush** — done (2026-10-31, §19).
+- **Features roadmap, step 2: thirst** — done (2026-10-31, §8 and §19). The
   roadmap (`FEATURES_ROADMAP.md`, kept outside the repo) goes on: 2 thirst, 3 uniform skills
   with costs from stats, pounce and stun, 4 memory, 5 traffic-based ambush.
 - **7, GOAP** — done (2026-10-29, `cf53229` to `ae1ef52`): harvesting first, then a pure A*
@@ -1012,5 +1050,32 @@ casts from a view of `EcsCastIntentFlag`. A first version that fetched the cast 
 entity with skills cost 18 ms. The machine read slower that day — the parent itself measured
 293 ms where §14's table, from 10-29, has 192 — so compare only within one sitting.
 
+**Grounded by thirst** (roadmap step 2). `ambush` now needs `in_cover` *and*
+`water_in_reach`: the crocodile only bets where the world sends prey, because prey must come
+to drink. The prediction is still authored — the planner plans only the crocodile's own
+actions — but it is now made at a place that backs it. From land the chain is seven steps
+(`go_to_cover` and `go_to_water`, then the five above), inside `MAX_DEPTH` 8; in cover that
+isn't water, prey in sight, it chases. Tested end to end: a thirsty rabbit walks to the pond,
+the hidden crocodile pounces and bites.
+
+**A kill is not one action** (the author, 2026-10-31). It is attacks until the target is
+dead. One bite (20) does not kill a rabbit, and a bitten rabbit flees faster than the
+crocodile walks, so a pounce that lands rarely ends in a meal. That is left for real combat,
+where the planner should choose which skills to use from the enemy's skills and stats — not
+patched with a one-shot kill or a guaranteed stun. Tests assert a pounce that bites, not a
+kill.
+
+**Measured with thirst** (probe, the filled world, 5 runs of 300 s): all 40 plant-eaters
+drank, on average every 74–79 s, and each pond saw about 1.5 visits a minute, all 16 used.
+None died of thirst; 0–4 of 40 starved. All 4 crocodiles survived every run, hidden about a
+third of the time; 5–7 of 12–14 ambushes a run ended in a pounce and 1–4 timed out — against
+none paying before thirst. Kills stayed at 1–2 a run, because one bite does not kill (above).
+
+**Cost of thirst**: +5.7% against `6622924` in one sitting (6,400 entities fed, 40 hunters,
+game rates with `thirst:6:3`): 269.6 ms against 255.0. `thirst` itself is 3 ms; planning gains
+10 ms reading every planner's thirst for its facts and scores. A first version cost +11%: the
+ladder read both thirst and hunger every run to order its rungs, and now reads hunger only
+when the creature is actually thirsty.
+
 **Open, to decide:** what triggers scan (a timer, scanning while eating near water, an alarm
-when a neighbour flees, a faint threat in sight); thirst against hunger on the ladder.
+when a neighbour flees, a faint threat in sight).

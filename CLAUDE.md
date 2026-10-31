@@ -10,11 +10,11 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 288 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 310 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments, the hunger/health/energy loop,
 # intent flags, items as records, the drop on death, views, combat, corpses,
 # looting, rot, diet, hunting, harvesting, the planner, utility, fleeing,
-# skills, hiding and the ambush.
+# skills, hiding, the ambush and thirst.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
@@ -220,7 +220,7 @@ diet** and `EcsHungerComponent.eats` says which: rabbits and monkeys eat plants,
 crocodile meat, and the brain's food index filters on it.
 
 **Deciding is one system with state, not a rung per behaviour.** `EcsLowBrainSystem` is a
-small FSM — `IDLE > WANDER > SEEK_FOOD > TAKE > EAT > SLEEP > HUNT > ATTACK > HARVEST > FLEE > HIDE > AMBUSH > POUNCE > SCAN` — and `EcsLowBrainComponent` holds its `state` and
+small FSM — `IDLE > WANDER > SEEK_FOOD > TAKE > EAT > SLEEP > HUNT > ATTACK > HARVEST > FLEE > HIDE > AMBUSH > POUNCE > SCAN > SEEK_WATER > DRINK` — and `EcsLowBrainComponent` holds its `state` and
 its `target`. It replaced `EcsForageSystem`, which was a second decider whose priority was
 its line number in `main.gd`. That read well but was stateless: a creature's only memory
 between ticks was `has_destination`, so nothing could persist ("I am going to *that*
@@ -269,9 +269,19 @@ route**. `EcsActionDef.patience` fails a bet like `ambush` that never pays. Prey
 nothing triggers it yet. Scan's radius and the planner's `prey_close` are distance checks run
 only over `perceived` — the one deliberate addition to "perception is physics".
 
+**Thirst is hunger's twin** (HANDOFF §8). `EcsThirstComponent.hydration` drains, and at zero
+`EcsThirstSystem` spends health, so a death of thirst leaves a corpse. Water carries
+`EcsDrinkableComponent` beside `EcsCoverComponent` — separate capabilities. The brain raises
+`EcsDrinkIntentFlag`; `EcsDrinkSystem` is the executor; DRINK holds until full. **Parched mirrors
+starving** (no sleep, wakes a sleeper). **The more urgent need wins**, thirst or hunger, scored by
+one curve in `ai/ecs_needs.gd` that the planner (`quench` weight 10 = eat) and the ladder both read.
+`ambush` now needs `water_in_reach`: the crocodile bets only where prey must come to drink.
+**A kill is not one action** — it is attacks until dead; choosing skills to kill from the
+enemy's skills and stats is left to combat planning. Don't patch it with a one-shot kill.
+
 **A stage may declare how often it runs.** `EcsScheduler.add(system, every, phase)` takes a
 rate in ticks — `main.gd` runs `sensor`, `danger`, `planning`, `low_brain` and `health` at `SLOW` (3 ticks, 20 Hz),
-`hunger` and `energy` at `BARS` (6 ticks, 10 Hz), while
+`hunger`, `energy` and `thirst` at `BARS` (6 ticks, 10 Hz), while
 `movement`, `collision` and `node_sync` stay at every tick. This is safe only because every
 system already takes `delta` and means it: **the scheduler banks delta per system**, so a
 stage ticked a third as often is handed three ticks' worth and hunger still climbs at its
@@ -326,14 +336,14 @@ been crossed.
 berry dies and becomes a record, so freeing a node is kill and only kill, and every live
 entity has a position to draw.
 
-**It is deliberately kept to a small core**: 25 components, 13 flags, 3
-singletons, 26 systems
-(`lifecycle > spawner > hunger > energy > health > danger > sensor > planning > low_brain > skill > consume > harvest > attack > crit > damage > movement > collision > pickup > rot > corpse > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
+**It is deliberately kept to a small core**: 27 components, 14 flags, 3
+singletons, 28 systems
+(`lifecycle > spawner > hunger > energy > thirst > health > danger > sensor > planning > low_brain > skill > consume > drink > harvest > attack > crit > damage > movement > collision > pickup > rot > corpse > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
 rank in the plan's decision ladder — the planner sits *above* it — and not for the
 wandering it happens to do), and a world
-of 11 entities in 3 animal types (5 rabbits, 5 monkeys and a crocodile — a grazer, a carrier
-and a hunter, differing by a component or two and some authored values) plus 13 berry
-bushes and 4 ponds, on a 6400×3360 arena. `EcsDebugSystem` is a pure
+of 44 animals in 3 types (20 rabbits, 20 monkeys and 4 crocodiles — a grazer, a carrier
+and a hunter, differing by a component or two and some authored values) plus 52 berry
+bushes and 16 ponds, on a 6400×3360 arena — the old density at 4× the area. `EcsDebugSystem` is a pure
 reader feeding one dumb view, `EcsDebugOverlay`, which annotates each entity in world
 space: name, a velocity arrow, a dashed line to its destination, **fullness, energy and
 health as bars** (plus a **danger** bar while there is any, and the **planner's goal** under
