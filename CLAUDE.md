@@ -20,8 +20,8 @@ module 9's, in `9. EcsSystem/tests/`:
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
 
 # Population ramp: where a tick crosses 250 ms. At the game's rates (--every=...)
-# with 40 hunters it stays under to 8,000 entities fed, 6,400 hungry (the planner
-# took it down from 9,600+). Simulation only; takes a few minutes. See HANDOFF.md §14.
+# with 40 hunters it stays under to 6,400 entities fed, 4,800 hungry (2026-10-31; pass
+# memory:3:1 and thirst:6:3 too). Simulation only; takes a few minutes. See HANDOFF.md §14.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"
 ```
 
@@ -259,32 +259,33 @@ by score, and collapse is still the only forced override.
 inside the harvester's reach so the existing eat and take rungs finish the job. Keep bushes at
 1.3 per plant-eater in `world1.tres`.
 
-**Every animal is the same** (HANDOFF §19, step 3): one default skill set
-(`defs/skills/default_set.tres` — dash, hide, scan) that a kind changes only through
-`EcsSkillsComponent.swaps`; cover has a kind and a hide skill lists the kinds it uses; **action
-costs come from stats** (`EcsPlanner.plan(..., costs)`, built at replan: a chase is impossible
-against prey as fast), so the slow crocodile ambushes and the fast wild dog chases, from the same
-actions. **Never remove an action from one kind to force a route** — change a stat or a cost.
-Hunters only pick prey they `EcsHunting.notices`, so hiding protects prey too.
+**Every animal is the same** (HANDOFF §19): same skills, planner and actions; behaviour differs
+only through stats, diet and goals. **Never remove an action from one kind to force a route** —
+change a stat or a cost. **Action costs come from stats** (`EcsPlanner.plan(..., costs)`, built at
+replan): a chase is impossible against prey as fast, so the slow crocodile ambushes and the fast
+wild dog chases. Cover has a kind and a hide skill lists the kinds it uses; a **lure** is cover
+prey must visit (water or a bush), and `ambush` needs `prey_come_here`, so hunters bet only at
+one. `EcsActionDef.patience` fails a bet that never pays. Hunters only pick prey they
+`EcsHunting.notices`, so hiding protects prey too. **A kill is not one action** — it is attacks
+until dead; choosing skills to kill from the enemy's skills and stats is left to combat
+planning. Don't patch it with a one-shot kill.
 
-**Skills say their own effect** (`9. EcsSystem/HANDOFF.md` §19). An `EcsSkillDef` (`defs/skills/`)
-overrides `make_effect()` — the flag that *is* it being active — and `can_start(world, id)`, its
+**Skills say their own effect** (HANDOFF §19). An `EcsSkillDef` (`defs/skills/`) overrides
+`make_effect()` — the flag that *is* it being active — and `can_start(world, id)`, its
 requirement; the brain asks with `EcsCastIntentFlag`, and **only `EcsSkillSystem` adds or removes
 an effect flag** (`EcsDashingFlag`, `EcsHiddenFlag`, `EcsScanningFlag`). It never switches on skill
-type. The crocodile is slow (100), hides in water (`EcsCoverComponent`, `water.tres`) and dashes;
-`go_to_lure > ambush > pounce` compete with `hunt` on cost — **no action is removed to force a
-route**. `EcsActionDef.patience` fails a bet like `ambush` that never pays. Prey scan before they drink. Scan's radius and the planner's `prey_close` are distance checks run
-only over `perceived` — the one deliberate addition to "perception is physics".
+type. Every animal gets `defs/skills/default_set.tres` (dash, hide, scan), changed only through
+`EcsSkillsComponent.swaps`. **Three distance checks sit on top of perception, all deliberate**:
+scan's radius and the planner's `prey_close` (both only over `perceived`), and memory's
+falsification (only over its own facts). Don't add a fourth without writing it into HANDOFF §4.
 
 **Thirst is hunger's twin** (HANDOFF §8). `EcsThirstComponent.hydration` drains, and at zero
 `EcsThirstSystem` spends health, so a death of thirst leaves a corpse. Water carries
 `EcsDrinkableComponent` beside `EcsCoverComponent` — separate capabilities. The brain raises
-`EcsDrinkIntentFlag`; `EcsDrinkSystem` is the executor; DRINK holds until full. **Parched mirrors
-starving** (no sleep, wakes a sleeper). **The more urgent need wins**, thirst or hunger, scored by
-one curve in `ai/ecs_needs.gd` that the planner (`quench` weight 10 = eat) and the ladder both read.
-`ambush` needs `prey_come_here`: hunters bet only at a lure — water or a bush prey must visit.
-**A kill is not one action** — it is attacks until dead; choosing skills to kill from the
-enemy's skills and stats is left to combat planning. Don't patch it with a one-shot kill.
+`EcsDrinkIntentFlag`; `EcsDrinkSystem` is the executor; DRINK holds until full, and prey scan
+before they drink. **Parched mirrors starving** (no sleep, wakes a sleeper). **The more urgent
+need wins**, thirst or hunger, scored by one curve in `ai/ecs_needs.gd` that the planner (`quench`
+weight 10 = eat) and the ladder both read.
 
 **Memory is a component** (HANDOFF §20): `EcsMemoryComponent.facts` holds remembered water (any
 drinker) and lures (a hunter, in cover it hides in), each a copied position and a `strength` that
@@ -413,14 +414,14 @@ on deciding what a carried record may *do*. The old pipeline is still in git at 
 (`9. EcsSystem/HANDOFF.md` §16). **Do not re-add breadth to module 9 without being asked**;
 the small size is the point.
 
-**Two architecture questions in module 9 are open arguments, not settled plans** —
-how the Godot nodes are structured (a pool per concern, one view node per entity, or
-server RIDs) and how component data is stored (dictionary-of-dictionaries, archetypes,
-whether a node handle may live inside a component). `9. EcsSystem/HANDOFF.md` §15 records
-the positions. Cached views (`EcsWorld.view()`, approved 2026-10-29) are an index over the
-existing store, not a storage change; see §14. The author has said explicitly he still wants to argue both out. **Do not
-implement any option from §8**; raise it for a decision instead. Steps 3–7 are done and combat
-is back without weapons (`9. EcsSystem/HANDOFF.md` §7, §13, §18).
+**How component data is stored in module 9 is an open argument, not a settled plan**
+(dictionary-of-dictionaries or archetypes, whether a node handle may live inside a component,
+whether components should be `Resource` at all). `9. EcsSystem/HANDOFF.md` §15 records the
+positions; the author wants to argue it out. **Do not implement any option from §15**; raise it
+for a decision instead. Cached views (`EcsWorld.view()`, approved 2026-10-29) are an index over
+the existing store, not a storage change (§14). The node structure is settled: one container per
+entity (§3). The plan's steps 0–7 and the features roadmap's steps 1–4 are done; next is step 5,
+a traffic-based ambush cost (HANDOFF §13).
 
 Read `9. EcsSystem/HANDOFF.md` before touching that folder. Module 9 is the main scene,
 ahead of the plan, which held that switch until step 6, and now the only simulation in the

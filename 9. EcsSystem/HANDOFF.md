@@ -429,7 +429,8 @@ corpse like any death by health. Its gates are `seek_water_below` (65, go lookin
 `drink_below` (70, drink what is in reach — a grazer's order, since nobody carries water), and
 **`parched_below` (15) mirrors starving**: a parched creature won't sleep, a parched sleeper
 wakes, and the planner's `sleep` needs `parched` false. Thirst does not mend health; mending
-stays the reward for having eaten. Drain: rabbit 0.6, monkey 0.5, crocodile 0.25 per second.
+stays the reward for having eaten. Drain: rabbit 0.6, monkey 0.5, crocodile 0.25, wild dog 0.4
+per second.
 
 **Water is drinkable as well as cover**, and the two are separate components:
 `EcsDrinkableComponent{rate}` (hydration per second while drinking, 25) sits beside
@@ -617,8 +618,10 @@ every animal resolving the default skills and the crocodile's swaps; a chase pri
 speeds (the crocodile can't, the dog can), the same actions making one ambush and the other
 chase, and a dog ambushing at a bush; each kind hiding only in its own cover; hunters passing
 over hidden prey and dropping a chase when it hides; a frightened rabbit hiding beside a bush,
-escaping with a ready dash or fleeing with it cooling; and a rabbit scanning before it drinks,
-running when the scan shows a crocodile.
+escaping with a ready dash or fleeing with it cooling; a rabbit scanning before it drinks,
+running when the scan shows a crocodile; and memory learning water and lures by kind, fading,
+falsified on sight and capped, a thirsty rabbit planning and walking to a remembered pond and
+forgetting it on arrival when it is gone, and a dog walking to a remembered bush to wait.
 
 `tests/stress_test.tscn` — the population ramp and the per-stage bookkeeping split (§14). Knobs after a bare `--`:
 `--spacing=180` (grid px), `--n=4000` (one population), `--skip=hunger,health` (leave stages
@@ -657,24 +660,23 @@ brain's food index. The ceiling went from 4,800–6,400 to over 9,600 entities (
   because they now query intent flags instead of every brain; the brain itself did not get
   dearer. The cost of raising a flag under load is unmeasured — the stress population never
   raises one.
-- **Features roadmap, step 1: skills, water and the ambush** — done (2026-10-31, §19).
-- **Features roadmap, step 2: thirst** — done (2026-10-31, §8 and §19).
-- **Features roadmap, step 3: uniform skills, costs from stats, cover kinds, the wild dog,
-  staying safe, scanning before drinking** — done (2026-10-31, §19). Pounce/stun was taken out
-  of it by decision: killing belongs to combat planning. The
-  roadmap (`FEATURES_ROADMAP.md`, kept outside the repo) goes on: 2 thirst, 3 uniform skills
-  with costs from stats, pounce and stun, 4 memory, 5 traffic-based ambush.
-- **Features roadmap, step 4: memory, first slice** — done (2026-10-31, §20): remembered water
-  and lures, fading and falsified.
 - **7, GOAP** — done (2026-10-29, `cf53229` to `ae1ef52`): harvesting first, then a pure A*
   planner over a symbolic snapshot, utility goal choice, a budgeted replan queue that replans
   on events, and fleeing. Single-threaded; the planner is pure, so moving it to
   `WorkerThreadPool` is a dispatch change, to make only when the profiler asks (§14, §18).
+- **Features roadmap** (`FEATURES_ROADMAP.md`, kept outside the repo), 2026-10-31: **1** skills,
+  water and the ambush, **2** thirst, **3** every animal the same — costs from stats, cover
+  kinds, the wild dog, staying safe (§8, §19) — and **4** memory, first slice (§20) are done.
+  Pounce/stun left step 3 by decision: killing belongs to combat planning. **Next: 5**, a
+  traffic-based ambush cost (a lure where prey were seen or killed gets cheaper) and prey
+  avoiding where they saw a predator — both on memory.
 
-**Open and deferred, by decision:** `MoveIntent`; weapons, durability and broken (they wait on
+**Open and deferred, by decision:** combat planning (a kill is many attacks; the planner
+should choose skills from the enemy's skills and stats, §19); births — nothing is born, so
+hunters empty the world given time; `MoveIntent`; weapons, durability and broken (they wait on
 what a carried record may *do*); prey fighting back; bag capacity and stacking; **power as a
-derived, tweakable value** (the author's stated next step — today it is authored). **Do not re-add breadth without being asked** — the small
-size is the point.
+derived, tweakable value** (today it is authored). **Do not re-add breadth without being
+asked** — the small size is the point.
 
 Smaller, not done: `EcsEntityManager.node_for()` allocates a throwaway dictionary on every
 call (`_nodes.get(id, {})`); speed variance is per placement, so a runtime
@@ -693,7 +695,27 @@ game's rates), `--fullness=50` (every animal hungry), `--hunters=N`, `--n=`, `--
 `--spacing=`. Each ramp row also prints replans per second.
 `tests/fetch_bench.tscn` prices the store calls on their own.
 
-**Latest ramp: the planner** (2026-10-29, `ae1ef52` against `86d6028` in one sitting, from a
+**Latest ramp** (2026-10-31, `2876967`: skills, thirst, the dog, memory), game rates
+(`sensor:3:0,memory:3:1,danger:3:1,planning:3:2,low_brain:3:1,health:3:2,hunger:6:2,energy:6:5,thirst:6:3`),
+40 hunters. Average tick in ms, heaviest in brackets:
+
+| entities | fed | hungry |
+|---|---|---|
+| 800 | 40.3 (65) | 40.8 (66) |
+| 1,600 | 61.9 (95) | 69.1 (114) |
+| 3,200 | 138.0 (188) | 144.4 (197) |
+| 4,000 | 170.8 (251) | 176.7 (220) |
+| 4,800 | 195.9 (255) | 212.8 (275) |
+| 6,400 | 243.4 (299) | 268.7 (333) ✗ |
+| 8,000 | 316.0 (400) ✗ | — |
+
+**The ceiling is 6,400 fed and 4,800 hungry** (6,400 hungry misses by 7%). Down from the
+10-29 table below, but not measured in one sitting with it, and this machine read slower that
+day: `dac563e` alone ran 190–234 ms at 6,400 fed in one hour. Each feature step measured
+within 6% of its parent in one sitting (§19, §20), so no single step is the drop. The grid has no water
+or bushes, so it never loads thirst's or memory's real lookups.
+
+**The planner's ramp** (2026-10-29, `ae1ef52` against `86d6028` in one sitting, from a
 worktree). Game rates, with `danger:3:1,planning:3:2` added on the new build and 40
 crocodiles mixed into the grid (`--hunters=40`). Average tick in ms, heaviest in brackets:
 
@@ -971,195 +993,148 @@ is a change around it, not to it. Cost and replan rates are in §14.
 
 ---
 
-## 19. Skills, water and the ambush
+## 19. Skills, cover and the ambush; every animal the same
 
-Step 1 of the features roadmap (2026-10-31). The crocodile hunts by ambush: it is slow, it
-hides in water, and when prey comes close it dashes. Prey can scan, which reveals what is
-hidden near them. All three are one mechanic, so another skill is data plus an effect.
+Features roadmap steps 1–3 (2026-10-31; `6622924`, `a8fe73e`, `dac563e`). **Every animal is the
+same**: the same skills, planner and actions, and behaviour differs only through stats, diet
+and goals. Removing an action from one kind to force a route is a script in disguise — change a
+stat or a cost instead.
+
+### Skills
 
 **A skill is a def that says its own effect.** `ai/ecs_skill_def.gd`, `EcsSkillDef`: `id`,
 `cooldown`, `duration` (0 = held: it lasts while asked for), and two overridable methods —
 `make_effect()`, the flag that *is* the skill being active, and `can_start(world, id)`, its
-requirement. Subclasses override only those: `EcsDashSkill` (`speed_scale`, `reach`),
-`EcsHideSkill` (`stealth`; `can_start` is "in cover"), `EcsScanSkill` (`radius`). Data in
-`defs/skills/`. This is `NODE_KIND`'s idea again: the def says what it does, so the system
-never switches on skill type.
+requirement. `EcsDashSkill` (`speed_scale`, `reach`), `EcsHideSkill` (`stealth`, `kinds`;
+`can_start` is "in cover it hides in"), `EcsScanSkill` (`radius`). Data in `defs/skills/`. The
+system never switches on skill type — `NODE_KIND`'s idea again.
 
 **Only `EcsSkillSystem` writes effect flags** (`EcsDashingFlag`, `EcsHiddenFlag`,
-`EcsScanningFlag`); everything else reads them. The brain asks with `EcsCastIntentFlag{skill}`,
-raised and cleared in `_set_state()` like every intent. Each tick the system ticks cooldowns,
-ends a timed skill when its time is up and a held one when its intent is gone or `can_start`
-stops holding — which is how hiding ends on leaving the water — and starts a cast that is
-known, ready, not active and allowed. A refused cast does nothing. The cooldown starts when a
-skill ends. `EcsSkillsComponent` holds the authored list and the timers, and its `describe()`
-shows each skill as ready, active or cooling.
+`EcsScanningFlag`). The brain asks with `EcsCastIntentFlag{skill}`, raised and cleared in
+`_set_state()` like every intent. Each tick the system ticks cooldowns, ends a timed skill when
+its time is up and a held one when its intent is gone or `can_start` stops holding (that is how
+hiding ends on leaving cover), and starts a cast that is known, ready, not active and allowed.
+The cooldown starts when a skill ends. It skips any entity with no timer running and starts
+casts from a view of `EcsCastIntentFlag`.
 
-**A timed skill fires once.** POUNCE raises the dash intent; the tick the brain sees
-`EcsDashingFlag` it moves to HUNT, which raises nothing. The intent is gone, so the dash can't
-restart when its cooldown clears, and the flags still match the state.
+**A timed skill fires once.** POUNCE and ESCAPE raise the dash intent; the tick the brain sees
+`EcsDashingFlag` it moves to HUNT or FLEE, which raise nothing, so the dash can't restart when
+its cooldown clears.
 
-**Water is cover.** `EcsCoverComponent{conceal}`; `defs/blueprints/water.tres` is a gradient
-sprite under everything and a non-solid body of radius 140, so it is seen and walked through.
-**In water means the action area touches a cover body** — `EcsHunting.cover_of`, the best
-`conceal` in `reached`. So a hider stands at the edge nearest where it came from.
+**One default set, swapped per kind.** `defs/skills/default_set.tres` (`EcsSkillSet`): dash (×2
+for 0.5 s, cooldown 10 s, reach 150), hide (0.9, in `bush`) and scan (1.5 s, cooldown 8 s,
+radius 200). `EcsSkillsComponent.swaps` replaces a default with the same id, or adds one;
+`EcsSkillSystem` resolves the set the first time it sees an animal, as energy rolls its start,
+so a runtime spawn gets it too. Only the crocodile swaps: `dash_crocodile.tres` (×3.5 for
+0.6 s, cooldown 12 s, reach 180) and `hide_water.tres` (0.95, in `water`). Attack stays
+`EcsDamageComponent`.
 
-**Visibility** (`EcsHunting.visibility_of`, read by `EcsDangerSystem`): 1 unless hidden;
-hidden, `1 − stealth × (1 − awareness)`. Danger rises at `fill × visibility − decay`, so
-something faint enough is never noticed: hide stealth 0.95 is 0.05 to an unaware monkey,
-below the floor; a rabbit with `awareness` 0.3 sees 0.34 and notices about four times
-later than a plain threat (62 ticks against 16). A scanning watcher sees a hider within its
-scan radius plainly. That check is a distance, on top of perception — the deliberate
-exception noted in §4: it runs only over `perceived`, so scanning never reaches past sight.
+### Cover, lures and being seen
 
-**The crocodile**: speed 100 (rabbit 165), Dash (×3.5 for 0.6 s, cooldown 12 s, reach 180)
-and Hide; `EcsEnergyComponent.hide_restore` 2.0 makes waiting a slow rest. Its hunger was
-retuned in the same change: `max_fullness` 300, drain 0.3, gates 180/225/150, and a corpse's
-`nutrition` 150.
+**Cover has a kind.** `EcsCoverComponent{kind, conceal}`: water (`water.tres`, a gradient sprite
+and a non-solid body of radius 140, also `EcsDrinkableComponent` — §8) is `water`, a berry bush
+is `bush`. **In cover means the action area touches a cover body** of a kind the hide skill
+lists (`EcsHunting.cover_of`, `hides_in`), so a hider stands at the edge nearest where it came
+from. The crocodile refuses bushes and the dog water; nobody branches on species.
 
-**Planning.** Three facts for hunters — `cover_in_sight`, `in_cover`, `prey_close` (prey
-within dash reach) — and three actions:
+**A lure is cover prey must visit** — drinkable or harvestable (`EcsHunting.is_lure`). Hunters
+bet only at a lure: `prey_come_here` is true in usable cover that is a lure.
+
+**Visibility** (`EcsHunting.visibility_of`): 1 unless hidden; hidden,
+`1 − stealth × (1 − awareness)`. Danger rises at `fill × visibility − decay`, so something faint
+enough is never noticed: the crocodile's 0.95 is 0.05 to an unaware monkey, below the floor;
+a rabbit (`awareness` 0.3) sees 0.34 and notices about four times later than a plain threat. A
+scanning watcher sees a hider within its scan radius plainly — a distance on top of perception,
+run only over `perceived` (§4). **Hunters notice**: `EcsHunting.notices` (visibility ≥ 0.5)
+gates every choice of prey — the brain's hunt and pounce, a running chase, the planner's prey
+facts and chase cost — so hiding protects prey exactly as it hides a crocodile.
+
+### Planning: costs come from the entity
 
 | action | needs | gives | cost |
 |---|---|---|---|
-| `go_to_cover` | cover_in_sight | in_cover | 2 |
-| `ambush` | in_cover | prey_close | 1, `patience` 60 s |
+| `hunt` | prey_in_sight | prey_in_reach | from speeds, below |
+| `go_to_lure` (hunters) | lure_in_sight | in_cover, prey_come_here | 2 |
+| `ambush` | in_cover, prey_come_here | prey_close | 1, `patience` 60 s |
 | `pounce` | prey_close | prey_in_reach | 1 |
+| `go_to_cover` (prey) | cover_in_sight | in_cover | 2 |
+| `hide` | threat_near, in_cover | safe | 1.0, `patience` 8 s |
+| `escape` | threat_near, dash_ready | safe | 1.2 |
+| `flee` | threat_near | safe | 1.5 |
 
-The crocodile **keeps `hunt` (3)**; no action is taken away to force a route, the costs
-choose. On land with prey in sight, chasing (3) beats going to water and waiting (4); in the
-water, waiting and pouncing (2) beats leaving to chase (3); with nothing in sight only the
-ambush route exists; prey already close is a pounce. These are hand costs — roadmap step 3
-replaces them with costs from speed. The full chain is six steps
-(`go_to_cover > ambush > pounce > attack > seek_food > eat_ground`), which was exactly the
-old depth cap, so `MAX_DEPTH` is now 8.
+`EcsPlanner.plan` takes a `costs` override, `INF` ruling an action out, and stays pure.
+`EcsPlanningSystem._costs` builds it only when it replans, so moving prey never cause a replan:
+**`hunt` costs `1 + gap / closing speed / TRAVEL_SECONDS` (5 s)** against the cheapest noticed
+prey, and is impossible against prey at least as fast. So the crocodile (100) never chases a
+rabbit (165) or a monkey (130) and ambushes; the wild dog (200) chases, and ambushes at a bush
+when no prey is in sight. The full ambush chain is `go_to_lure > ambush > pounce > attack >
+seek_food > eat_ground`; `MAX_DEPTH` is 8. Every action costs at least 1, which keeps the A*
+estimate admissible.
 
-**`ambush` predicts its effect.** Water advertises no food. `prey_close` after `ambush` is a
-bet that prey will come, the same kind of predicted effect as `attack → food_in_sight`, but
-one that may never pay. **`EcsActionDef.patience`** is the general form: an action whose effect
-hasn't come true within it has failed. The brain counts it down in `pause_left`; out of
-patience it walks one leg straight away from the pond (WANDER with the pond as `target`, a
-leg a plan to ambush may not cut short), which changes its facts, and the planner sends it
-back to water.
+**`ambush` predicts its effect.** A lure advertises no food; `prey_close` after `ambush` is a bet
+that prey will come — grounded because prey must come to drink or harvest, but still a bet.
+**`EcsActionDef.patience`** is the general form: an action whose effect hasn't come true within
+it has failed. The brain counts it down in `pause_left`; out of patience it walks one leg
+straight away from the cover (WANDER with the cover as `target`, a leg a plan may not cut
+short), which changes its facts, and the planner decides again. `hide` has 8 s of it: without,
+a rabbit hiding where a dog lay in ambush could see the dog faintly forever while the dog could
+not see it, and plant-eaters died of thirst holding still.
 
-**The brain's new states**: HIDE (walk to the nearest cover, stop at the edge), AMBUSH (stand
-still, cast hide, wait out patience), POUNCE (aim at the nearest prey in reach, cast dash;
-HUNT once the dash starts), SCAN (stand still, cast scan, for its duration). Prey carry Scan
-(1.5 s, cooldown 8 s, radius 200) and a `scan` action, but **no goal wants `scanned` yet**, so
-nobody scans in play until what triggers it is decided.
-
-**Measured** (throwaway probe, the real scene, 5 runs of 300 s): the crocodile survived 5 of
-5, hid about half the time, timed out 2 ambushes a run, dashed 0–1 times a run and **killed
-nothing**. Each run it hid at one pond only — the one nearest it, returned to after every
-timeout. That is expected and is the next step's reason: nothing brings prey to water, so
-the bet does not pay, and the doubled arena makes passing prey rarer still. Thirst (roadmap
-step 2) makes it true; memory (step 4–5) would let a pond's traffic set its cost and spread
-the crocodile across ponds. Don't tune this before then — the stealth, awareness and dash
-numbers will move once scan has a trigger.
-
-**Cost**: level with its parent. Against `162c27a` in one sitting, 6,400 entities, game rates,
-40 hunters: 293.5 ms fed against 292.9. `MAX_DEPTH` 8 costs nothing measurable (planning
-63.7 ms on both). `skill` costs 6 ms there: it skips any entity with no timer running and starts
-casts from a view of `EcsCastIntentFlag`. A first version that fetched the cast flag for every
-entity with skills cost 18 ms. The machine read slower that day — the parent itself measured
-293 ms where §14's table, from 10-29, has 192 — so compare only within one sitting.
-
-**Grounded by thirst** (roadmap step 2). `ambush` now needs `in_cover` *and*
-`water_in_reach`: the crocodile only bets where the world sends prey, because prey must come
-to drink. The prediction is still authored — the planner plans only the crocodile's own
-actions — but it is now made at a place that backs it. From land the chain is seven steps
-(`go_to_cover` and `go_to_water`, then the five above), inside `MAX_DEPTH` 8; in cover that
-isn't water, prey in sight, it chases. Tested end to end: a thirsty rabbit walks to the pond,
-the hidden crocodile pounces and bites.
-
-**A kill is not one action** (the author, 2026-10-31). It is attacks until the target is
-dead. One bite (20) does not kill a rabbit, and a bitten rabbit flees faster than the
-crocodile walks, so a pounce that lands rarely ends in a meal. That is left for real combat,
-where the planner should choose which skills to use from the enemy's skills and stats — not
-patched with a one-shot kill or a guaranteed stun. Tests assert a pounce that bites, not a
-kill.
-
-**Measured with thirst** (probe, the filled world, 5 runs of 300 s): all 40 plant-eaters
-drank, on average every 74–79 s, and each pond saw about 1.5 visits a minute, all 16 used.
-None died of thirst; 0–4 of 40 starved. All 4 crocodiles survived every run, hidden about a
-third of the time; 5–7 of 12–14 ambushes a run ended in a pounce and 1–4 timed out — against
-none paying before thirst. Kills stayed at 1–2 a run, because one bite does not kill (above).
-
-**Cost of thirst**: +5.7% against `6622924` in one sitting (6,400 entities fed, 40 hunters,
-game rates with `thirst:6:3`): 269.6 ms against 255.0. `thirst` itself is 3 ms; planning gains
-10 ms reading every planner's thirst for its facts and scores. A first version cost +11%: the
-ladder read both thirst and hunger every run to order its rungs, and now reads hunger only
-when the creature is actually thirsty.
-
-### Step 3: the same skills for everyone, and stats decide (2026-10-31)
-
-**Every animal is the same.** The roadmap's rule: behaviour differs only because stats, diet
-and goals differ, and removing an action from one kind to force a route is a script in
-disguise. Step 3 makes that true.
-
-- **One default skill set.** `defs/skills/default_set.tres` (`EcsSkillSet`) holds dash (×2 for
-  0.5 s, cooldown 10 s, reach 150), hide (0.9, in `bush`) and scan. `EcsSkillsComponent.swaps`
-  replaces a default with the same id, or adds one. `EcsSkillSystem` fills the runtime `skills`
-  the first time it sees an animal, as energy rolls its start, so a runtime spawn gets them too.
-  The crocodile swaps in `dash_crocodile.tres` (today's ×3.5 dash) and `hide_water.tres`;
-  nothing else swaps. Attack stays `EcsDamageComponent` — prey fighting back is combat.
-- **Cover has a kind** (`EcsCoverComponent.kind`, `water` or `bush`; berry bushes are cover
-  now), and a hide skill lists the kinds it uses (`EcsHideSkill.kinds`). `EcsHunting.cover_of`
-  and `hides_in` count only those. The crocodile refuses bushes and the dog refuses water;
-  nobody branches on species.
-- **A lure is cover that prey must visit** — drinkable or harvestable. Hunters get
-  `lure_in_sight` and `prey_come_here`; the new `go_to_lure` (→ `in_cover`, `prey_come_here`)
-  replaces their `go_to_cover`, and `ambush` needs `{in_cover, prey_come_here}`. That
-  generalizes step 2's `water_in_reach`: a pond backs the bet with drinkers, a bush with
-  foragers. The crocodile's chain is six steps again.
-- **Costs come from the entity.** `EcsPlanner.plan` takes a `costs` override, `INF` ruling an
-  action out, and stays pure. `EcsPlanningSystem` builds them only when it replans (moving prey
-  never cause a replan): `hunt` costs `1 + gap / closing speed / 5 s`, against the cheapest
-  noticed prey, and is impossible against prey at least as fast. So the crocodile (100) never
-  chases a rabbit (165) or a monkey (130) and ambushes instead; the wild dog (200) chases, and
-  ambushes at a bush when no prey is in sight. The step-1 hand cost (`hunt` 3 beating ambush) is
-  only the default now.
-- **Hunters notice.** `EcsHunting.notices` (visibility ≥ 0.5) gates every choice of prey — the
-  brain's hunt and pounce, a running chase, the planner's prey facts and chase cost. Hiding
-  protects prey exactly as it hides a crocodile.
-
-**The wild dog** (`wild_dog.tres`, `dog.png`): speed 200, sight 420, reach 46, body 26, health
-100, power 35 (it hunts rabbits and monkeys; a crocodile can hunt it), bite 15 every 0.9 s,
-meat, `max_fullness` 150 at 0.5 drain, thirst 0.4. Same planner actions as the crocodile. Four
-are placed, spread away from the crocodiles.
-
-**Staying safe.** The `flee` goal ({safe}) has three routes, priced so the A* estimate stays
-admissible (every action ≥ 1): **`hide`** (`threat_near`, `in_cover` → safe, 1.0, with
-`go_to_cover`), **`escape`** (`threat_near`, `dash_ready` → safe, 1.2) and `flee` (1.5). A
-rabbit beside a bush hides; one in the open dashes; one whose dash is cooling runs. ESCAPE is a
-new state: a trip away plus a dash, becoming FLEE once dashing, so the dash fires once; a plain
-flee gives way to it when the dash comes ready. Hiding is AMBUSH again, serving `ambush` or
-`hide`. **`hide` has a patience of 8 s**: without it, a rabbit hiding at a bush where a dog lay
-in ambush could see the dog faintly forever while the dog could not see it, and 2–8 plant-eaters
-a run died of thirst holding still. Now a hide that hasn't made it safe fails like an ambush —
-a leg away, then a replan.
+**Staying safe.** The `flee` goal ({safe}) has three routes: a rabbit beside a bush hides, one in
+the open dashes (ESCAPE: a trip away plus a dash, then FLEE), one whose dash is cooling runs. A
+plain flee gives way to an escape when the dash comes ready.
 
 **Scan before drinking.** `_try_drink` scans first when the scan is ready, then drinks once it
-is cooling. A scanning watcher sees a hider within 200 px plainly, so a rabbit scanning beside a
-hidden crocodile fills danger fast and — unless thirst outranks it — runs. The placeholder
-`scan` action is gone.
+is cooling. A rabbit scanning beside a hidden crocodile fills danger fast and — unless thirst
+outranks it — runs.
 
-**Measured** (probe, 5 runs of 300 s, 48 animals): 7–9 kills a run, almost all by dogs, about
-half by chase and half from a bush; the crocodiles take about one, from water. Crocodiles
-ambushed 20–37 times a run and dogs about 10; prey escaped about 150 times, hid 60–100 and
-scanned about 100, 8–17 of those scans ending in a run. No plant-eater died of thirst; 0–4
-starved; 29–32 of 40 were alive at the end. Nothing is born, so the dogs still empty the world
-given time.
+**The brain's states for this**: HIDE (walk to cover, stop at the edge), AMBUSH (stand still,
+cast hide, wait out patience; serves `ambush` and `hide`), POUNCE (dash at the nearest prey in
+reach), SCAN (stand still, cast scan), ESCAPE.
 
-**Cost**: level with step 2. Against `a8fe73e` in one sitting (6,400 fed, 40 hunters, game
-rates): 190.9 ms against 194.4; planning 51.9 against 48.9. A first version cost +45%: once every
-animal had a hide skill, every planner walked its whole perceived list for cover, even on the
-stress grid, which has none. Planning now skips cover when the world has none and reads the
-skills component once for both hide kinds and dash readiness. The grid has no cover, so the
-cover lookups the real world pays — dictionary hits inside a walk it already makes for food —
-are not in that number.
+### The hunters
+
+| | crocodile — ambusher | wild dog — chaser |
+|---|---|---|
+| speed / sight / reach / body | 100 / 500 / 50 / 32 | 200 / 420 / 46 / 26 |
+| health, power | 150, 60 | 100, 35 (a crocodile can hunt it) |
+| bite | 20 every 1.2 s | 15 every 0.9 s |
+| hunger | meat, `max_fullness` 300, drain 0.3, gates 180/225/150 | meat, 150, drain 0.5, gates 90/110/75 |
+| thirst drain | 0.25 | 0.4 |
+| skills | swaps: strong dash, hides in water; `hide_restore` 2.0 | the defaults: hides in bushes |
+
+Both carry the same planner actions. A corpse's `nutrition` is 150.
+
+**A kill is not one action** (the author, 2026-10-31). It is attacks until the target is dead.
+One bite does not kill a rabbit, and a bitten rabbit outruns a crocodile. That is left for
+combat planning, where the planner should choose skills from the enemy's skills and stats —
+not patched with a one-shot kill or a guaranteed stun. Tests assert a pounce that bites.
+
+### Measured
+
+**Behaviour** (probe, the real scene, 5 runs of 300 s, 48 animals, at `dac563e`): 7–9 kills a
+run, almost all by dogs, about half by chase and half from a bush; the crocodiles about one, from
+water. Crocodiles ambushed 20–37 times a run and dogs about 10; prey escaped about 150 times, hid
+60–100 and scanned about 100, 8–17 of those scans ending in a run. All 40 plant-eaters drank,
+about every 75 s, all 16 ponds used. No plant-eater died of thirst; 0–4 starved; 29–32 of 40 were
+alive at the end. Nothing is born, so the dogs empty the world given time. Memory's numbers are
+in §20.
+
+**Cost** — each step measured against its parent in one sitting (6,400 fed, 40 hunters, game
+rates). Each landed level after one fix, and the fixes are the lesson:
+
+- `skill` 18 → 6 ms: it fetched the cast flag for every entity with skills; now it skips
+  idle ones and starts casts from a view.
+- thirst +11% → +5.7%: the ladder read hunger every run to order its rungs; now only when
+  thirsty.
+- step 3 +45% → level (190.9 vs 194.4 ms): every planner walked its perceived list for cover;
+  now planning skips it when the world has none, and reads the skills component once.
+
+The stress grid has no water or bushes, so the cover and lure lookups the real world pays are
+not in those numbers.
 
 **Open, to decide:** combat — choosing skills to kill from the enemy's skills and stats, and
-whether prey fight back.
+whether prey fight back. Births.
 
 ---
 
