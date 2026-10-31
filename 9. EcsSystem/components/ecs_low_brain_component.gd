@@ -22,12 +22,15 @@ enum State {
 	DRINK,      ## Drinking from `target`, which is in reach, until full.
 	ESCAPE,     ## Dashing away from the danger's last threat; becomes FLEE once dashing.
 	RECALL,     ## Walking to where it remembers `target`.
+	SEEK_MATE,  ## Following `target`, a ready one of its kind.
+	MATE,       ## Mating with `target`, which is in reach.
 }
 
 ## Display names for `state`, in enum order.
 const STATE_NAMES: Array[String] = ["idle", "wander", "seek food", "taking", "eating", "sleeping",
 	"hunting", "attacking", "harvesting", "fleeing", "to cover", "ambushing", "pouncing",
-	"scanning", "seek water", "drinking", "escaping", "recalling"]
+	"scanning", "seek water", "drinking", "escaping", "recalling",
+	"seek mate", "mating"]
 
 ## How far away a wander destination may be.
 @export var radius: float = 260.0

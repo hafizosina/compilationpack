@@ -10,7 +10,7 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 372 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 388 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments, the hunger/health/energy loop,
 # intent flags, items as records, the drop on death, views, combat, corpses,
 # looting, rot, diet, hunting, harvesting, the planner, utility, fleeing,
@@ -223,7 +223,7 @@ diet** and `EcsHungerComponent.eats` says which: rabbits and monkeys eat plants,
 crocodile meat, and the brain's food index filters on it.
 
 **Deciding is one system with state, not a rung per behaviour.** `EcsLowBrainSystem` is a
-small FSM — `IDLE > WANDER > SEEK_FOOD > TAKE > EAT > SLEEP > HUNT > ATTACK > HARVEST > FLEE > HIDE > AMBUSH > POUNCE > SCAN > SEEK_WATER > DRINK > ESCAPE > RECALL` — and `EcsLowBrainComponent` holds its `state` and
+small FSM — `IDLE > WANDER > SEEK_FOOD > TAKE > EAT > SLEEP > HUNT > ATTACK > HARVEST > FLEE > HIDE > AMBUSH > POUNCE > SCAN > SEEK_WATER > DRINK > ESCAPE > RECALL > SEEK_MATE > MATE` — and `EcsLowBrainComponent` holds its `state` and
 its `target`. It replaced `EcsForageSystem`, which was a second decider whose priority was
 its line number in `main.gd`. That read well but was stateless: a creature's only memory
 between ticks was `has_destination`, so nothing could persist ("I am going to *that*
@@ -303,8 +303,14 @@ actions** (step 5): each go-to action binds and is priced by `EcsMemoryFact.best
 walk, plus fear for a pond where a threat was met, or the expected wait at a lure, which traffic
 (prey or a kill seen there) lowers. Planner and brain share that helper so they can't disagree.
 
+**Births** (HANDOFF §21): a pair of one kind breeds, newborns are born adult, and cost plus scarcity
+sets the count. Only `EcsBreedingSystem` decides readiness (`EcsReadyFlag`: fed and watered above
+`ready_above`, off cooldown, kind under a safety cap) and carries out `EcsMateIntentFlag` — one birth
+per pair, both parents pay. The `breed` goal sits below real needs and danger. **Starving and parched
+are critical** (`EcsNeeds.CRITICAL`): either outranks every other need and every commitment.
+
 **A stage may declare how often it runs.** `EcsScheduler.add(system, every, phase)` takes a
-rate in ticks — `main.gd` runs `sensor`, `memory`, `danger`, `planning`, `low_brain` and `health` at `SLOW` (3 ticks, 20 Hz),
+rate in ticks — `main.gd` runs `sensor`, `breeding`, `memory`, `danger`, `planning`, `low_brain` and `health` at `SLOW` (3 ticks, 20 Hz),
 `hunger`, `energy` and `thirst` at `BARS` (6 ticks, 10 Hz), while
 `movement`, `collision` and `node_sync` stay at every tick. This is safe only because every
 system already takes `delta` and means it: **the scheduler banks delta per system**, so a
@@ -360,9 +366,9 @@ been crossed.
 berry dies and becomes a record, so freeing a node is kill and only kill, and every live
 entity has a position to draw.
 
-**It is deliberately kept to a small core**: 28 components, 15 flags, 3
-singletons, 29 systems
-(`lifecycle > spawner > hunger > energy > thirst > health > danger > sensor > memory > planning > low_brain > skill > consume > drink > harvest > attack > crit > damage > movement > collision > pickup > rot > corpse > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
+**It is deliberately kept to a small core**: 29 components, 17 flags, 3
+singletons, 30 systems
+(`lifecycle > spawner > hunger > energy > thirst > health > danger > sensor > breeding > memory > planning > low_brain > skill > consume > drink > harvest > attack > crit > damage > movement > collision > pickup > rot > corpse > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
 rank in the plan's decision ladder — the planner sits *above* it — and not for the
 wandering it happens to do), and a world
 of 48 animals in 4 types (20 rabbits, 20 monkeys, 4 crocodiles and 4 wild dogs — a grazer,

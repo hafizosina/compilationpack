@@ -26,6 +26,9 @@ var _diets: Dictionary = {}
 var _body_view: EcsView
 ## Current living animals: id -> EcsHealthComponent, for power.
 var _bodies: Dictionary = {}
+var _ready_view: EcsView
+## Current animals ready to breed: id -> their kind.
+var _ready: Dictionary = {}
 var _eater_view: EcsView
 ## Current eaters: id -> what they eat.
 var _eats: Dictionary = {}
@@ -77,8 +80,11 @@ func run(world: EcsWorld, delta: float) -> void:
 		if hunts and not _lures.is_empty():
 			kinds = EcsHunting.kinds_in(world.get_component(id, EcsSkillsComponent) as EcsSkillsComponent)
 		# Nothing it could learn by looking around: skip the walk.
-		if drinks or eats != &"" or hunts:
-			_learn(world, id, here, sensor, memory, lures, drinks, eats, hunts, kinds, delta)
+		var kind := &""
+		if not _ready.is_empty():
+			kind = (world.get_component(id, EcsNameComponent) as EcsNameComponent).type_id
+		if drinks or eats != &"" or hunts or kind != &"":
+			_learn(world, id, here, sensor, memory, lures, drinks, eats, hunts, kinds, kind, delta)
 		# A threat is the one danger already found, not another walk over what it sees.
 		if danger != null and danger.threat != EcsWorld.NO_ENTITY and sensor.perceived.has(danger.threat) \
 				and EcsHunting.notices(world, id, danger.threat, here):
@@ -90,7 +96,7 @@ func run(world: EcsWorld, delta: float) -> void:
 ## Walks what `id` sees and remembers what matters to it.
 func _learn(world: EcsWorld, id: int, here: Vector2, sensor: EcsSensorComponent,
 		memory: EcsMemoryComponent, lures: Array[EcsMemoryFact], drinks: bool, eats: StringName,
-		hunts: bool, kinds: Array[StringName], delta: float) -> void:
+		hunts: bool, kinds: Array[StringName], kind: StringName, delta: float) -> void:
 	for seen in sensor.perceived:
 		if not lures.is_empty():
 			_count_traffic(world, id, here, seen, lures, memory, delta)
@@ -107,6 +113,8 @@ func _learn(world: EcsWorld, id: int, here: Vector2, sensor: EcsSensorComponent,
 				bits |= EcsMemoryFact.BUSH
 		if hunts and _is_prey(world, id, seen, here):
 			bits |= EcsMemoryFact.PREY
+		if kind != &"" and seen != id and _ready.get(seen, &"") == kind:
+			bits |= EcsMemoryFact.MATE
 		# Threats are danger's to judge; the walk keeps the bit.
 		var old := memory.facts.get(seen) as EcsMemoryFact
 		if old != null:
@@ -127,12 +135,17 @@ func _is_prey(world: EcsWorld, id: int, seen: int, here: Vector2) -> bool:
 
 ## Remembers `seen` as `bits`, seen now: replacing its kinds, or adding to them.
 func _write(world: EcsWorld, memory: EcsMemoryComponent, seen: int, bits: int, add: bool) -> void:
+	# Seen by the sensor, gone since: nothing to remember.
+	var at := world.get_component(seen, EcsPositionComponent) as EcsPositionComponent
+	if at == null:
+		memory.facts.erase(seen)
+		return
 	var fact := memory.facts.get(seen) as EcsMemoryFact
 	if fact == null:
 		fact = EcsMemoryFact.new()
 		fact.about = seen
 		memory.facts[seen] = fact
-	fact.position = (world.get_component(seen, EcsPositionComponent) as EcsPositionComponent).position
+	fact.position = at.position
 	var body := world.get_component(seen, EcsBodyComponent) as EcsBodyComponent
 	fact.radius = body.radius if body != null else 0.0
 	fact.kinds = (fact.kinds | bits) if add else bits
@@ -152,7 +165,10 @@ func _count_traffic(world: EcsWorld, id: int, here: Vector2, seen: int, lures: A
 	var corpse := world.has(seen, EcsRotComponent)
 	if not corpse and not (EcsHunting.can_hunt(world, id, seen) and EcsHunting.notices(world, id, seen, here)):
 		return
-	var there := (world.get_component(seen, EcsPositionComponent) as EcsPositionComponent).position
+	var at := world.get_component(seen, EcsPositionComponent) as EcsPositionComponent
+	if at == null:
+		return
+	var there := at.position
 	for fact in lures:
 		if not _near(fact, there, memory.near):
 			continue
@@ -177,6 +193,13 @@ func _refresh(world: EcsWorld) -> void:
 		var healths := bodies.column(EcsHealthComponent)
 		for k in bodies.ids.size():
 			_bodies[bodies.ids[k]] = healths[k]
+	var ready := world.view([EcsReadyFlag, EcsNameComponent], [EcsDyingFlag])
+	if ready != _ready_view:
+		_ready_view = ready
+		_ready = {}
+		var names := ready.column(EcsNameComponent)
+		for k in ready.ids.size():
+			_ready[ready.ids[k]] = (names[k] as EcsNameComponent).type_id
 	var eaters := world.view([EcsHungerComponent])
 	if eaters != _eater_view:
 		_eater_view = eaters

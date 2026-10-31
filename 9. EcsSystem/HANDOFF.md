@@ -13,7 +13,7 @@ a recorded design, not something you can run.
 ```bash
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 "$GODOT" --path . "res://9. EcsSystem/main.tscn"                          # run it (also the main scene)
-"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 372 checks, exit 0 = all pass
+"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 388 checks, exit 0 = all pass
 "$GODOT" --path . "res://9. EcsSystem/showcase/hunt_showcase.tscn"         # one dog, one bush, one rabbit
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"    # population ramp, minutes
 "$GODOT" --headless --editor --quit --path . 2>&1 | grep -iE "error|invalid|uid"  # after any .tscn/.tres edit
@@ -37,7 +37,7 @@ world1.tres ──► EcsEntityManager ──► EcsWorld                       
                 builds the nodes      World/Entities/entity_<id>/
 ```
 
-Every physics tick `EcsScheduler` runs twenty-nine stages. `[20 Hz]` and `[10 Hz]` mark the
+Every physics tick `EcsScheduler` runs thirty stages. `[20 Hz]` and `[10 Hz]` mark the
 ones that run every third or sixth tick (§11); the rest run every tick.
 
 | stage | does | writes |
@@ -50,6 +50,7 @@ ones that run every third or sixth tick (§11); the rest run every tick.
 | `health` `[20 Hz]` | death at zero | `EcsDyingFlag` |
 | `danger` `[20 Hz]` | fills on a threat in sight, jumps on a hit, decays | `EcsDanger`, clears `EcsHurtFlag` |
 | `sensor` `[20 Hz]` | what each entity sees and can touch | `EcsSensor.perceived`, `EcsAction.reached` |
+| `breeding` `[20 Hz]` | who is ready to breed; carries out a mate intent | `EcsReadyFlag`, `EcsBreeding`, the bars, a note on `EcsLifecycleSingleton` |
 | `memory` `[20 Hz]` | remembers water and lures seen; fades and falsifies (§20) | `EcsMemory` |
 | `planning` `[20 Hz]` | scores goals, replans on events, under a budget (§18) | `EcsPlanner` |
 | `low_brain` `[20 Hz]` | runs the plan's first step, or its own ladder | its own state, a destination, intent flags |
@@ -450,7 +451,10 @@ the higher wins. The planner gets it for free: `quench` {hydrated} has weight 10
 eating, so its scores compare directly. The ladder makes the same comparison by hand: the
 water rungs (drink, then seek water) go above the food rungs when thirst is the more urgent,
 below them otherwise, and on a tie food goes first. Both read `EcsNeeds`, so they cannot
-disagree, and neither system calls the other.
+disagree, and neither system calls the other. **Starving and parched are critical**: each adds
+`EcsNeeds.CRITICAL` (1) to its urgency, so either outranks every other need and no commit bonus
+holds against it. Found by trace: a crocodile ambushing *in* water, committed to its hunt, died of
+thirst — hunger and thirst urgency fell together and the +0.5 commit bonus kept the hunt on top.
 
 ---
 
@@ -584,7 +588,7 @@ after its producer keeps its data one tick old, as at full rate.
 
 ## 12. Tests
 
-`tests/lifecycle_test.tscn` — **372 checks**, exit code 0 only if all pass. Run it after
+`tests/lifecycle_test.tscn` — **388 checks**, exit code 0 only if all pass. Run it after
 touching the manager, collision, pickup, spawner, sensor, node sync, the brain or any
 executor. It covers: declared nodes built and undeclared ones not; kill takes data and nodes;
 spawn notes fulfilled a tick later; soft collision, immovable and non-solid bodies; seeing is
@@ -625,7 +629,10 @@ falsified on sight and capped, a thirsty rabbit planning and walking to a rememb
 forgetting it on arrival when it is gone, and a dog walking to a remembered bush to wait; a
 pond feared where a threat was met, priced dearer until the fear fades and still better than
 none; a lure gaining traffic from prey seen there and winning though farther, a corpse counted
-once, and traffic halving; each animal keeping only what matters to it (a monkey no rabbit, a
+once, and traffic halving; readiness to breed (fed, watered, off cooldown, under the cap), one
+birth per pair even when both ask, both parents paying, a rabbit and a monkey making nothing, a
+mate sought in sight or walked back to from memory, a hungry rabbit not breeding, and, live, a
+ready pair meeting and a third rabbit born; parched outranking a committed hunt; each animal keeping only what matters to it (a monkey no rabbit, a
 dog prey, threats and lures), an emptied bush forgotten, a remembered bush walked to when hungry,
 and a pond beside a remembered threat losing to a farther one; a bite while dashing stunning
 and a plain one not, a stunned animal dropping its trip and not biting, the stun wearing off; a
@@ -679,11 +686,11 @@ brain's food index. The ceiling went from 4,800–6,400 to over 9,600 entities (
   priced by fear and traffic (§20) are done. Then hiders went to the middle of their cover and
   bushes stopped being solid, and memory widened to whatever matters to the animal (water, food,
   bushes, threats, prey, lures). Then the pounce
-  stuns, hunted prey can't hide, and a showcase scene (§19). **Next: births.**
+  stuns, hunted prey can't hide, and a showcase scene (§19); then births (§21).
 
 **Open and deferred, by decision:** combat planning (a kill is many attacks; the planner
-should choose skills from the enemy's skills and stats, §19); births — nothing is born, so
-hunters empty the world given time; `MoveIntent`; weapons, durability and broken (they wait on
+should choose skills from the enemy's skills and stats, §19); crocodiles exploring for other
+ponds (§20); `MoveIntent`; weapons, durability and broken (they wait on
 what a carried record may *do*); prey fighting back; bag capacity and stacking; **power as a
 derived, tweakable value** (today it is authored). **Do not re-add breadth without being
 asked** — the small size is the point.
@@ -992,8 +999,8 @@ sight 380, drain 1.5) starved to death in 3 of 3 headless runs of 300 s: rabbits
 and monkeys saw it first. Retuned on the crocodile alone to speed 160, sight 500 and drain
 0.8, it survived 5 of 5 runs, never starving, at full health, killing about 4 in 300 s and
 leaving 6 of the 10 plant-eaters. Sight alone saved it in 1 of 2 runs; speed or drain alone
-in none or 1 of 2. Nothing is born yet, so any hunter that lives long enough empties the
-world in the end.
+in none or 1 of 2. Nothing was born then (births are §21), so any hunter that lived long
+enough emptied the world in the end.
 
 **Layer, and why at this scale.** The design doc puts GOAP at L3, for day-scale projects.
 This one plans over need-level actions, at L2 scale, because those are the actions that
@@ -1151,7 +1158,7 @@ run, almost all by dogs, about half by chase and half from a bush; the crocodile
 water. Crocodiles ambushed 20–37 times a run and dogs about 10; prey escaped about 150 times, hid
 60–100 and scanned about 100, 8–17 of those scans ending in a run. All 40 plant-eaters drank,
 about every 75 s, all 16 ponds used. No plant-eater died of thirst; 0–4 starved; 29–32 of 40 were
-alive at the end. Nothing is born, so the dogs empty the world given time. Memory's numbers are
+alive at the end. Nothing was born then, so the dogs emptied the world given time (births, §21). Memory's numbers are
 in §20.
 
 **Cost** — each step measured against its parent in one sitting (6,400 fed, 40 hunters, game
@@ -1286,3 +1293,43 @@ hunters see a handful of prey, not 54.
 30–34 of 40 were alive at the end (29–31 before). No deaths of thirst; kills 6–9, as before. Facts
 forgotten while still strong rose to 1,300–1,500 a run — emptied bushes and animals that moved, the
 rewrite-on-sighting rule doing its job.
+
+---
+
+## 21. Births
+
+2026-11-01. Without births the hunters emptied the world given time. Decided: **a pair of one kind
+breeds; newborns are born adult; cost plus scarcity sets the count**, with a safety cap only as a
+guard.
+
+**Readiness is one system's call.** `EcsBreedingComponent` (`ready_above` 0.75, `cooldown` 240 s,
+`cost` 40, `litter` 1; runtime `cooldown_left`, rolled in `[0, cooldown]` the first time it is seen,
+as energy rolls its start). `EcsBreedingSystem` (20 Hz, after the sensor) raises `EcsReadyFlag` when
+fullness and hydration are both at or above `ready_above` of their max, the cooldown is spent and the
+kind is under `SAFETY_CAP` (100), and clears it otherwise. The planner, memory and the executor all
+read the flag; none recomputes readiness.
+
+**Mating.** The `breed` goal (`{bred}`, weight 3) scores while ready; ready needs the bars above the
+eat and drink gates, so a real need, or danger, outranks it. Facts `ready_to_breed`, `mate_in_sight`,
+`mate_in_reach`, `mate_known` (memory's new `MATE` bit: a ready one of my kind, rewritten every
+sighting). Actions `seek_mate` (in sight → in reach, priced by place like `go_to_water`), `recall_mate`
+and `mate`. The brain's SEEK_MATE follows the partner as it moves, like HUNT; MATE stands in reach and
+raises `EcsMateIntentFlag`. The executor checks both are ready, alive, of one kind and in reach, asks
+for `litter` newborns of that kind at the midpoint, and both parents pay `cost` from fullness and
+hydration and take the cooldown. One intent at a time, so a pair that asks together breeds once.
+
+**Tuning.** At cooldown 120 s and cost 30, rabbits — slow to get hungry, so above 75% most of the
+time — went from 20 to 84–100 in 900 s and reached for the cap, while monkeys held at 12–21. At
+240 s and 40 they held.
+
+**Measured** (3 runs of 900 s, 48 animals at the start; without births, `52ba7b9`, the same run
+ends at 12 rabbits and 8 monkeys and falling): with births, rabbits 26–45 and monkeys 8–23 at 900 s,
+22–33 rabbit and 4–10 monkey births a run, the odd dog or crocodile born. **No death of thirst.**
+**Not balanced yet**: in one run all 4 crocodiles starved and in another 4 dogs did; monkeys, quick
+to get hungry and so rarely above 75%, breed far less than rabbits. Population is now set by the
+world, and the world's numbers (breeding gates per kind, food per bush, hunter hunger) are the next
+tuning, not a mechanism.
+
+**Cost**: +5% at 6,400 fed (233.5 / 232.5 against 213.8 / 224.7 ms for `52ba7b9`). `breeding` is
+3.5 ms; planning gained 3–6 ms. The grid's 3,000+ rabbits are over the cap, so nobody there breeds —
+that number is readiness, not mating.

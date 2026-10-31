@@ -131,6 +131,22 @@ func run(world: EcsWorld, delta: float) -> void:
 			else:
 				continue
 
+		if brain.state == EcsLowBrainComponent.State.SEEK_MATE:
+			if not _is_mate(world, id, brain.target) or _in_reach(world, id, brain.target):
+				# Gone, no longer ready, or arrived: stop so the mate step can run.
+				_abandon_trip(move)
+				_release(world, id, brain)
+			elif move.has_destination:
+				# Follow it; the trip keeps its budget.
+				move.destination = _position_of(world, brain.target)
+				continue
+			else:
+				_release(world, id, brain)
+
+		if brain.state == EcsLowBrainComponent.State.MATE \
+				and (not _is_mate(world, id, brain.target) or not _in_reach(world, id, brain.target)):
+			_release(world, id, brain)
+
 		if brain.state == EcsLowBrainComponent.State.RECALL:
 			if not world.is_alive(brain.target) or _in_reach(world, id, brain.target) \
 					or not move.has_destination:
@@ -238,7 +254,55 @@ func _try_step(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 			return _try_recall(world, id, brain, move, place, EcsMemoryFact.FOOD)
 		&"recall_bush":
 			return _try_recall(world, id, brain, move, place, EcsMemoryFact.BUSH)
+		&"recall_mate":
+			return _try_recall(world, id, brain, move, place, EcsMemoryFact.MATE)
+		&"seek_mate":
+			return _try_seek_mate(world, id, brain, move, place)
+		&"mate":
+			return _try_mate(world, id, brain, move)
 	return false
+
+## Walk to the nearest ready one of its kind in sight.
+func _try_seek_mate(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
+		move: EcsMovementComponent, place: EcsPositionComponent) -> bool:
+	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
+	if sensor == null:
+		return false
+	var best := EcsWorld.NO_ENTITY
+	var best_distance := INF
+	for seen in sensor.perceived:
+		if not _is_mate(world, id, seen):
+			continue
+		var distance := place.position.distance_squared_to(_position_of(world, seen))
+		if distance < best_distance:
+			best_distance = distance
+			best = seen
+	if best == EcsWorld.NO_ENTITY:
+		return false
+	_set_state(world, id, brain, EcsLowBrainComponent.State.SEEK_MATE, best)
+	_set_trip(move, _position_of(world, best))
+	return true
+
+## Mate with a ready one of its kind in reach.
+func _try_mate(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
+		move: EcsMovementComponent) -> bool:
+	var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
+	if action == null:
+		return false
+	for touched in action.reached:
+		if _is_mate(world, id, touched):
+			_abandon_trip(move)
+			_set_state(world, id, brain, EcsLowBrainComponent.State.MATE, touched)
+			return true
+	return false
+
+## Is `other` a ready one of `id`'s kind?
+static func _is_mate(world: EcsWorld, id: int, other: int) -> bool:
+	if other == id or not world.has(other, EcsReadyFlag) or world.has(other, EcsDyingFlag):
+		return false
+	var mine := world.get_component(id, EcsNameComponent) as EcsNameComponent
+	var theirs := world.get_component(other, EcsNameComponent) as EcsNameComponent
+	return mine != null and theirs != null and mine.type_id == theirs.type_id
 
 ## Walk to the cheapest place it remembers of `kind`. Keeps a trip already under way.
 func _try_recall(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
@@ -536,6 +600,10 @@ static func _serves(state: EcsLowBrainComponent.State, step: StringName) -> bool
 			return step == &"go_to_water"
 		EcsLowBrainComponent.State.RECALL:
 			return String(step).begins_with("recall_")
+		EcsLowBrainComponent.State.SEEK_MATE:
+			return step == &"seek_mate"
+		EcsLowBrainComponent.State.MATE:
+			return step == &"mate"
 		EcsLowBrainComponent.State.DRINK:
 			return step == &"drink"
 	return false
@@ -912,6 +980,10 @@ func _set_state(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 			var drink := EcsDrinkIntentFlag.new()
 			drink.target_id = target
 			world.add(id, drink)
+		EcsLowBrainComponent.State.MATE:
+			var mate := EcsMateIntentFlag.new()
+			mate.target_id = target
+			world.add(id, mate)
 
 ## The flag a state raises, or null.
 static func _flag_for(state: EcsLowBrainComponent.State) -> Script:
@@ -931,6 +1003,8 @@ static func _flag_for(state: EcsLowBrainComponent.State) -> Script:
 			return EcsCastIntentFlag
 		EcsLowBrainComponent.State.DRINK:
 			return EcsDrinkIntentFlag
+		EcsLowBrainComponent.State.MATE:
+			return EcsMateIntentFlag
 	return null
 
 static func _cast(world: EcsWorld, id: int, skill: StringName) -> void:

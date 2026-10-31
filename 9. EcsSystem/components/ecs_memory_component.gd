@@ -4,7 +4,8 @@ extends EcsComponent
 ## What it has seen that matters to it, and where. Only EcsMemorySystem writes it.
 
 ## Kind bit -> its name, for describe().
-const KIND_NAMES: Dictionary = {1: "water", 2: "lure", 4: "food", 8: "bush", 16: "threat", 32: "prey"}
+const KIND_NAMES: Dictionary = {1: "water", 2: "lure", 4: "food", 8: "bush", 16: "threat", 32: "prey",
+	64: "mate"}
 
 ## Most facts kept; past this the weakest is forgotten.
 @export var capacity: int = 32

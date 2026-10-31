@@ -5,6 +5,9 @@ extends RefCounted
 
 ## Below its gate a need scores at least this fraction of its weight.
 const FLOOR: float = 0.6
+## Added when starving or parched, so either outranks every other need and no
+## commitment holds against it.
+const CRITICAL: float = 1.0
 
 ## 0 above `gate`, else from FLOOR at the gate to 1 at empty.
 static func urgency(value: float, gate: float) -> float:
@@ -16,13 +19,15 @@ static func urgency(value: float, gate: float) -> float:
 static func hunger_urgency(hunger: EcsHungerComponent) -> float:
 	if hunger == null:
 		return 0.0
-	return urgency(hunger.fullness, minf(hunger.forage_below, hunger.eat_below))
+	var value := urgency(hunger.fullness, minf(hunger.forage_below, hunger.eat_below))
+	return value + CRITICAL if hunger.fullness <= 0.0 else value
 
 ## How pressing water is, against the lower of thirst's two gates. 0 without thirst.
 static func thirst_urgency(thirst: EcsThirstComponent) -> float:
 	if thirst == null:
 		return 0.0
-	return urgency(thirst.hydration, minf(thirst.seek_water_below, thirst.drink_below))
+	var value := urgency(thirst.hydration, minf(thirst.seek_water_below, thirst.drink_below))
+	return value + CRITICAL if parched(thirst) else value
 
 ## At or below `parched_below`: won't sleep, wakes to drink.
 static func parched(thirst: EcsThirstComponent) -> bool:

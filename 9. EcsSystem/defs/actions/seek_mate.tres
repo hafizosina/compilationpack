@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="EcsActionDef" format=3]
+
+[ext_resource type="Script" uid="uid://dvtyowamldw5k" path="res://9. EcsSystem/ai/ecs_action_def.gd" id="def"]
+
+[resource]
+script = ExtResource("def")
+id = &"seek_mate"
+preconditions = {
+&"mate_in_sight": true
+}
+effects = {
+&"mate_in_reach": true
+}
+cost = 2.0

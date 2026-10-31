@@ -46,6 +46,12 @@
 [ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/recall_bush.tres" id="a_recall_bush"]
 [ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/recall_lure.tres" id="a_recall_lure"]
 
+[ext_resource type="Script" path="res://9. EcsSystem/components/ecs_breeding_component.gd" id="s_breeding"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/seek_mate.tres" id="a_seek_mate"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/recall_mate.tres" id="a_recall_mate"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/mate.tres" id="a_mate"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/goals/breed.tres" id="g_breed"]
+
 [sub_resource type="Resource" id="c_body"]
 script = ExtResource("s_body")
 radius = 32.0
@@ -108,8 +114,8 @@ multiplier = 2.0
 
 [sub_resource type="Resource" id="c_planner"]
 script = ExtResource("s_planner")
-actions = Array[ExtResource("s_action_def")]([ExtResource("a_eat_ground"), ExtResource("a_seek_food"), ExtResource("a_hunt"), ExtResource("a_attack"), ExtResource("a_sleep"), ExtResource("a_flee"), ExtResource("a_go_to_lure"), ExtResource("a_ambush"), ExtResource("a_pounce"), ExtResource("a_go_to_water"), ExtResource("a_drink"), ExtResource("a_recall_water"), ExtResource("a_recall_food"), ExtResource("a_recall_bush"), ExtResource("a_recall_lure")])
-goals = Array[ExtResource("s_goal_def")]([ExtResource("g_satisfy_hunger"), ExtResource("g_rest"), ExtResource("g_flee"), ExtResource("g_quench")])
+actions = Array[ExtResource("s_action_def")]([ExtResource("a_eat_ground"), ExtResource("a_seek_food"), ExtResource("a_hunt"), ExtResource("a_attack"), ExtResource("a_sleep"), ExtResource("a_flee"), ExtResource("a_go_to_lure"), ExtResource("a_ambush"), ExtResource("a_pounce"), ExtResource("a_go_to_water"), ExtResource("a_drink"), ExtResource("a_recall_water"), ExtResource("a_recall_food"), ExtResource("a_recall_bush"), ExtResource("a_recall_lure"), ExtResource("a_seek_mate"), ExtResource("a_recall_mate"), ExtResource("a_mate")])
+goals = Array[ExtResource("s_goal_def")]([ExtResource("g_satisfy_hunger"), ExtResource("g_rest"), ExtResource("g_flee"), ExtResource("g_quench"), ExtResource("g_breed")])
 
 [sub_resource type="Resource" id="c_danger"]
 script = ExtResource("s_danger")
@@ -125,8 +131,11 @@ drain = 0.25
 [sub_resource type="Resource" id="c_memory"]
 script = ExtResource("s_memory")
 
+[sub_resource type="Resource" id="c_breeding"]
+script = ExtResource("s_breeding")
+
 [resource]
 script = ExtResource("def")
 id = &"crocodile"
 display_name = "Crocodile"
-components = Array[ExtResource("base")]([SubResource("c_energy"), SubResource("c_health"), SubResource("c_hunger"), SubResource("c_body"), SubResource("c_sprite"), SubResource("c_movement"), SubResource("c_brain"), SubResource("c_sensor"), SubResource("c_action"), SubResource("c_damage"), SubResource("c_crit"), SubResource("c_planner"), SubResource("c_danger"), SubResource("c_skills"), SubResource("c_thirst"), SubResource("c_memory")])
+components = Array[ExtResource("base")]([SubResource("c_energy"), SubResource("c_health"), SubResource("c_hunger"), SubResource("c_body"), SubResource("c_sprite"), SubResource("c_movement"), SubResource("c_brain"), SubResource("c_sensor"), SubResource("c_action"), SubResource("c_damage"), SubResource("c_crit"), SubResource("c_planner"), SubResource("c_danger"), SubResource("c_skills"), SubResource("c_thirst"), SubResource("c_memory"), SubResource("c_breeding")])

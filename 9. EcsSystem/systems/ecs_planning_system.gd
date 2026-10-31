@@ -24,6 +24,7 @@ const RECALLS: Dictionary = {
 	EcsMemoryFact.LURE: [&"lure_known", &"recall_lure", &"go_to_lure"],
 	EcsMemoryFact.FOOD: [&"food_known", &"recall_food", &""],
 	EcsMemoryFact.BUSH: [&"bush_known", &"recall_bush", &""],
+	EcsMemoryFact.MATE: [&"mate_known", &"recall_mate", &"seek_mate"],
 }
 
 ## Ids waiting for a replan, oldest first.
@@ -40,6 +41,9 @@ var _water: Dictionary = {}
 var _cover_view: EcsView
 ## Current cover: id -> its kind.
 var _covers: Dictionary = {}
+var _ready_view: EcsView
+## Current animals ready to breed: id -> their kind.
+var _ready: Dictionary = {}
 
 func label() -> StringName:
 	return &"planning"
@@ -60,7 +64,7 @@ func run(world: EcsWorld, _delta: float) -> void:
 		var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
 		var thirst := world.get_component(id, EcsThirstComponent) as EcsThirstComponent
 		var facts := _facts(world, id, hunger, bag, danger, thirst)
-		var ranked := _rank(planner, hunger, energy, danger, bag, thirst)
+		var ranked := _rank(planner, hunger, energy, danger, bag, thirst, _ready.has(id))
 		facts_of[id] = facts
 		ranked_of[id] = ranked
 		if planner.dirty:
@@ -85,14 +89,17 @@ func rank(world: EcsWorld, id: int) -> Array[EcsGoalDef]:
 		world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent,
 		world.get_component(id, EcsDangerComponent) as EcsDangerComponent,
 		world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent,
-		world.get_component(id, EcsThirstComponent) as EcsThirstComponent)
+		world.get_component(id, EcsThirstComponent) as EcsThirstComponent,
+		world.has(id, EcsReadyFlag))
 
 ## How much `goal` is wanted: 0 above the need's gate, else `weight` times an
 ## urgency from FLOOR at the gate to 1 at empty. Any reading may be null.
 static func score(goal: EcsGoalDef, hunger: EcsHungerComponent, energy: EcsEnergyComponent,
 		danger: EcsDangerComponent, bag: EcsInventoryComponent,
-		thirst: EcsThirstComponent = null) -> float:
+		thirst: EcsThirstComponent = null, ready: bool = false) -> float:
 	match goal.need:
+		&"breed":
+			return goal.weight if ready else 0.0
 		&"eat":
 			return goal.weight * EcsNeeds.hunger_urgency(hunger)
 		&"drink":
@@ -112,11 +119,11 @@ static func score(goal: EcsGoalDef, hunger: EcsHungerComponent, energy: EcsEnerg
 ## The goals that score above 0, best first, with the bonus on the current one.
 static func _rank(planner: EcsPlannerComponent, hunger: EcsHungerComponent,
 		energy: EcsEnergyComponent, danger: EcsDangerComponent,
-		bag: EcsInventoryComponent, thirst: EcsThirstComponent) -> Array[EcsGoalDef]:
+		bag: EcsInventoryComponent, thirst: EcsThirstComponent, ready: bool) -> Array[EcsGoalDef]:
 	var ranked: Array[EcsGoalDef] = []
 	var values := PackedFloat32Array()
 	for goal in planner.goals:
-		var value := score(goal, hunger, energy, danger, bag, thirst)
+		var value := score(goal, hunger, energy, danger, bag, thirst, ready)
 		if value <= 0.0:
 			continue
 		if goal.id == planner.goal:
@@ -154,7 +161,7 @@ func _costs(world: EcsWorld, id: int, facts: Dictionary) -> Dictionary:
 	var hunt := facts.has(&"prey_in_sight")
 	var memory := world.get_component(id, EcsMemoryComponent) as EcsMemoryComponent
 	var places := memory != null and (facts.has(&"water_known") or facts.has(&"lure_known") \
-		or facts.has(&"food_known") or facts.has(&"bush_known"))
+		or facts.has(&"food_known") or facts.has(&"bush_known") or facts.has(&"mate_known"))
 	if not hunt and not places:
 		return costs
 	var move := world.get_component(id, EcsMovementComponent) as EcsMovementComponent
@@ -217,6 +224,12 @@ func _facts(world: EcsWorld, id: int, hunger: EcsHungerComponent, bag: EcsInvent
 		kinds = EcsHunting.kinds_in(known)
 	if EcsHunting.dash_ready_in(known):
 		facts[&"dash_ready"] = true
+	# Ready to breed: look for a ready one of its kind.
+	var kind := &""
+	if _ready.has(id):
+		facts[&"ready_to_breed"] = true
+		kind = _ready[id]
+	var breeds := kind != &""
 	var memory := world.get_component(id, EcsMemoryComponent) as EcsMemoryComponent
 	if memory != null:
 		for about in memory.facts:
@@ -229,6 +242,8 @@ func _facts(world: EcsWorld, id: int, hunger: EcsHungerComponent, bag: EcsInvent
 				facts[&"food_known"] = true
 			if fact.is_a(EcsMemoryFact.BUSH):
 				facts[&"bush_known"] = true
+			if breeds and fact.is_a(EcsMemoryFact.MATE):
+				facts[&"mate_known"] = true
 	if danger != null and danger.value >= danger.flee_at:
 		facts[&"threat_near"] = true
 		# Only hiding reads it, and hiding needs a threat near.
@@ -243,6 +258,8 @@ func _facts(world: EcsWorld, id: int, hunger: EcsHungerComponent, bag: EcsInvent
 	var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
 	if action != null:
 		for touched in action.reached:
+			if breeds and touched != id and _ready.get(touched, &"") == kind:
+				facts[&"mate_in_reach"] = true
 			if _edible(touched, hunger):
 				facts[&"food_in_reach"] = true
 				if world.has(touched, EcsPickableComponent):
@@ -265,10 +282,12 @@ func _facts(world: EcsWorld, id: int, hunger: EcsHungerComponent, bag: EcsInvent
 
 	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
 	# Nothing to look for: skip the scan.
-	if sensor != null and (hunts or drinks or not kinds.is_empty() or not _diet.is_empty() \
+	if sensor != null and (hunts or drinks or breeds or not kinds.is_empty() or not _diet.is_empty() \
 			or not _bushes.is_empty()):
 		var dash_reach := EcsHunting.dash_reach(world, id) if hunts else 0.0
 		for seen in sensor.perceived:
+			if breeds and seen != id and _ready.get(seen, &"") == kind:
+				facts[&"mate_in_sight"] = true
 			if _covers.has(seen) and kinds.has(_covers[seen]):
 				facts[&"cover_in_sight"] = true
 				if hunts and _is_lure(seen):
@@ -310,6 +329,13 @@ func _harvestable(id: int, hunger: EcsHungerComponent) -> bool:
 	return crop != null and crop.stock > 0 and (hunger == null or crop.diet == hunger.eats)
 
 func _refresh(world: EcsWorld) -> void:
+	var ready := world.view([EcsReadyFlag, EcsNameComponent], [EcsDyingFlag])
+	if ready != _ready_view:
+		_ready_view = ready
+		_ready = {}
+		var names := ready.column(EcsNameComponent)
+		for k in ready.ids.size():
+			_ready[ready.ids[k]] = (names[k] as EcsNameComponent).type_id
 	var food := world.view([EcsConsumableComponent, EcsPositionComponent], [EcsDyingFlag])
 	if food != _food_view:
 		_food_view = food

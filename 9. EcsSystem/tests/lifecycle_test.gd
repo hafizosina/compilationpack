@@ -114,6 +114,10 @@ func _run() -> void:
 	_a_stun_holds_still_and_wears_off()
 	_hunted_prey_cannot_hide()
 	await _a_pounce_stuns_and_bites_follow_until_dead()
+	await _readiness_and_one_birth_per_pair()
+	await _breeding_is_planned()
+	await _a_ready_pair_meets_and_a_third_is_born()
+	_parched_outranks_a_committed_hunt()
 
 ## Nodes match the declared NODE_KINDs (a berry gets a sprite and a body, no
 ## sensor) and hang under the entity's own container.
@@ -3291,6 +3295,196 @@ func _a_pounce_stuns_and_bites_follow_until_dead() -> void:
 	living.run_all(_world, TICK)
 	await get_tree().physics_frame
 	EcsConst.world_bounds = bounds
+
+## Ready means fed, watered, off cooldown and the kind under the cap. A ready pair in
+## reach makes one newborn between them, even when both ask at once, and both pay.
+## Mixed kinds, a partner out of reach, or one not ready make none.
+func _readiness_and_one_birth_per_pair() -> void:
+	var breeding := EcsBreedingSystem.new()
+	var inbox := _world.get_singleton(EcsLifecycleSingleton) as EcsLifecycleSingleton
+	var spot := Vector2(-40000.0, 33000.0)
+	var a := _manager.spawn(_world, _catalog, &"rabbit", spot)
+	var b := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(30.0, 0.0))
+	var monkey := _manager.spawn(_world, _catalog, &"monkey", spot + Vector2(0.0, 30.0))
+	var far := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(900.0, 0.0))
+	var all := [a, b, monkey, far]
+	breeding.run(_world, TICK)
+	var rolled := true
+	for id in all:
+		var it := _world.get_component(id, EcsBreedingComponent) as EcsBreedingComponent
+		rolled = rolled and it.rolled and it.cooldown_left <= it.cooldown
+		it.cooldown_left = 0.0
+	_check("the start cooldown is rolled once, within the cooldown", rolled)
+	breeding.run(_world, TICK)
+	_check("fed, watered and off cooldown: ready",
+		all.all(func(id: int) -> bool: return _world.has(id, EcsReadyFlag)))
+	var hunger := _world.get_component(monkey, EcsHungerComponent) as EcsHungerComponent
+	var full := hunger.fullness
+	hunger.fullness = hunger.max_fullness * 0.5
+	breeding.run(_world, TICK)
+	_check("hungry: not ready", not _world.has(monkey, EcsReadyFlag))
+	hunger.fullness = full
+
+	var crowd: Array[int] = []
+	for i in EcsBreedingSystem.SAFETY_CAP:
+		crowd.append(_manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(0.0, 3000.0 + i * 10.0)))
+	breeding.run(_world, TICK)
+	_check("its kind at the cap: not ready", not _world.has(a, EcsReadyFlag)
+		and _world.has(monkey, EcsReadyFlag))
+	for id in crowd:
+		_world.add(id, EcsDyingFlag.new())
+	EcsLifecycleSystem.new(_manager, _catalog).run(_world, TICK)
+	breeding.run(_world, TICK)
+
+	var births := func() -> int:
+		var n := 0
+		for note in inbox.spawn_requests:
+			if not note.fulfilled:
+				n += 1
+		return n
+	var ask := func(id: int, partner: int) -> void:
+		var intent := EcsMateIntentFlag.new()
+		intent.target_id = partner
+		_world.add(id, intent)
+	var reach := func(id: int, other: int) -> void:
+		(_world.get_component(id, EcsActionComponent) as EcsActionComponent).reached.append(other)
+	reach.call(a, b)
+	reach.call(b, a)
+	reach.call(a, monkey)
+	ask.call(a, monkey)
+	breeding.run(_world, TICK)
+	_check("a rabbit and a monkey make nothing", births.call() == 0)
+	ask.call(a, far)
+	breeding.run(_world, TICK)
+	_check("a partner out of reach makes nothing", births.call() == 0)
+	ask.call(a, b)
+	ask.call(b, a)
+	var fed := (_world.get_component(a, EcsHungerComponent) as EcsHungerComponent).fullness
+	breeding.run(_world, TICK)
+	var note: EcsSpawnRequest = inbox.spawn_requests.back() if not inbox.spawn_requests.is_empty() else null
+	var mine := _world.get_component(a, EcsBreedingComponent) as EcsBreedingComponent
+	_check("both asking at once: one birth, a rabbit between them (%d)" % births.call(),
+		births.call() == 1 and note.type_id == &"rabbit"
+		and note.position.is_equal_approx(spot + Vector2(15.0, 0.0)))
+	_check("both pay and wait, and neither is ready",
+		is_equal_approx((_world.get_component(a, EcsHungerComponent) as EcsHungerComponent).fullness, fed - mine.cost)
+		and is_equal_approx((_world.get_component(b, EcsBreedingComponent) as EcsBreedingComponent).cooldown_left, mine.cooldown)
+		and not _world.has(a, EcsReadyFlag) and not _world.has(b, EcsReadyFlag))
+	ask.call(a, b)
+	breeding.run(_world, TICK)
+	_check("not ready, no second birth", births.call() == 1)
+	inbox.spawn_requests.clear()
+	for id in all:
+		_world.add(id, EcsDyingFlag.new())
+	EcsLifecycleSystem.new(_manager, _catalog).run(_world, TICK)
+	await get_tree().physics_frame
+
+## A ready rabbit seeks a ready rabbit it sees, or walks to one it remembers, and mates;
+## a hungry one eats first.
+func _breeding_is_planned() -> void:
+	var breeding := EcsBreedingSystem.new()
+	var memory := EcsMemorySystem.new()
+	var planning := EcsPlanningSystem.new()
+	var spot := Vector2(-40000.0, 37000.0)
+	var a := _manager.spawn(_world, _catalog, &"rabbit", spot)
+	var b := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(200.0, 0.0))
+	var monkey := _manager.spawn(_world, _catalog, &"monkey", spot + Vector2(0.0, 200.0))
+	for id in [a, b, monkey]:
+		var it := _world.get_component(id, EcsBreedingComponent) as EcsBreedingComponent
+		it.rolled = true
+		it.cooldown_left = 0.0
+		var energy := _world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
+		energy.rolled = true
+		energy.value = energy.max_energy
+	breeding.run(_world, TICK)
+	var eyes := _world.get_component(a, EcsSensorComponent) as EcsSensorComponent
+	eyes.perceived.append_array([b, monkey])
+	(_world.get_component(monkey, EcsSensorComponent) as EcsSensorComponent).perceived.append_array([a, b])
+	memory.run(_world, TICK)
+	planning.run(_world, TICK)
+	var steps := (_world.get_component(a, EcsPlannerComponent) as EcsPlannerComponent).steps
+	_check("ready, a ready rabbit in sight: seek it and mate (%s)" % " > ".join(steps),
+		steps == [&"seek_mate", &"mate"])
+	var m := (_world.get_component(monkey, EcsMemoryComponent) as EcsMemoryComponent).facts
+	var r := (_world.get_component(a, EcsMemoryComponent) as EcsMemoryComponent).facts
+	_check("a ready rabbit is a mate to a rabbit, nothing to a monkey",
+		r.has(b) and (r[b] as EcsMemoryFact).is_a(EcsMemoryFact.MATE) and not m.has(b))
+	(_world.get_component(a, EcsPositionComponent) as EcsPositionComponent).position = spot + Vector2(0.0, 5000.0)
+	eyes.perceived.clear()
+	memory.run(_world, TICK)
+	planning.run(_world, TICK)
+	steps = (_world.get_component(a, EcsPlannerComponent) as EcsPlannerComponent).steps
+	_check("only remembered: walk back to it and mate (%s)" % " > ".join(steps),
+		steps == [&"recall_mate", &"mate"])
+	var hunger := _world.get_component(a, EcsHungerComponent) as EcsHungerComponent
+	hunger.fullness = hunger.forage_below * 0.5
+	breeding.run(_world, TICK)
+	planning.run(_world, TICK)
+	_check("hungry, it isn't ready and doesn't plan to breed (%s)" % (_world.get_component(a, EcsPlannerComponent) as EcsPlannerComponent).goal,
+		(_world.get_component(a, EcsPlannerComponent) as EcsPlannerComponent).goal != &"breed")
+	for id in [a, b, monkey]:
+		_world.add(id, EcsDyingFlag.new())
+	EcsLifecycleSystem.new(_manager, _catalog).run(_world, TICK)
+	await get_tree().physics_frame
+
+## Live: two ready rabbits a short way apart meet, and a third is born.
+func _a_ready_pair_meets_and_a_third_is_born() -> void:
+	var living := _ambush_pipeline()
+	living.add(EcsBreedingSystem.new())
+	var spot := Vector2(36000.0, -40000.0)
+	var bounds := EcsConst.world_bounds
+	EcsConst.world_bounds = Rect2(spot - Vector2(3000.0, 3000.0), Vector2(6000.0, 6000.0))
+	var pair: Array[int] = []
+	for at in [spot, spot + Vector2(180.0, 60.0)]:
+		var id := _manager.spawn(_world, _catalog, &"rabbit", at)
+		var it := _world.get_component(id, EcsBreedingComponent) as EcsBreedingComponent
+		it.rolled = true
+		it.cooldown_left = 0.0
+		var energy := _world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
+		energy.rolled = true
+		energy.value = energy.max_energy
+		pair.append(id)
+	var rabbits := func() -> int:
+		var n := 0
+		for id in _world.query([EcsNameComponent, EcsPositionComponent], [EcsDyingFlag]):
+			if (_world.get_component(id, EcsNameComponent) as EcsNameComponent).type_id == &"rabbit" \
+					and _position_of(id).distance_to(spot) < 1500.0:
+				n += 1
+		return n
+	var count := 2
+	for i in 600:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		count = rabbits.call()
+		if count > 2:
+			break
+	_check("a ready pair meets and a third rabbit is born (%d)" % count, count == 3)
+	for id in _world.query([EcsNameComponent, EcsPositionComponent], [EcsDyingFlag]):
+		if _position_of(id).distance_to(spot) < 1500.0:
+			_world.add(id, EcsDyingFlag.new())
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+	EcsConst.world_bounds = bounds
+
+## Starving and parched outrank every other need, and no commitment holds against them: a
+## crocodile committed to its hunt, parched and only hungry, ranks drinking first.
+func _parched_outranks_a_committed_hunt() -> void:
+	var planning := EcsPlanningSystem.new()
+	var croc := _manager.spawn(_world, _catalog, &"crocodile", Vector2(-40000.0, 41000.0))
+	var thirst := _world.get_component(croc, EcsThirstComponent) as EcsThirstComponent
+	var hunger := _world.get_component(croc, EcsHungerComponent) as EcsHungerComponent
+	var planner := _world.get_component(croc, EcsPlannerComponent) as EcsPlannerComponent
+	planner.goal = &"satisfy_hunger"
+	thirst.hydration = thirst.parched_below + 10.0
+	hunger.fullness = 31.0
+	var before := planning.rank(_world, croc)
+	thirst.hydration = thirst.parched_below * 0.6
+	var after := planning.rank(_world, croc)
+	_check("just above parched, the committed hunt still leads (%s)" % before[0].id,
+		before[0].id == &"satisfy_hunger")
+	_check("parched, drinking outranks the committed hunt (%s)" % after[0].id, after[0].id == &"quench")
+	_world.add(croc, EcsDyingFlag.new())
+	EcsLifecycleSystem.new(_manager, _catalog).run(_world, TICK)
 
 func _ambush_pipeline() -> EcsScheduler:
 	var living := EcsScheduler.new()

@@ -14,6 +14,7 @@ const FOOD: int = 4    ## Food of its diet.
 const BUSH: int = 8    ## A bush whose yield is its diet, not empty.
 const THREAT: int = 16 ## Something that can hunt it.
 const PREY: int = 32   ## Something it can hunt.
+const MATE: int = 64   ## One of its kind, ready to breed.
 
 ## The entity remembered.
 var about: int = EcsWorld.NO_ENTITY
