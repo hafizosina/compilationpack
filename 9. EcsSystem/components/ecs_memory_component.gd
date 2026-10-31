@@ -1,7 +1,10 @@
 class_name EcsMemoryComponent
 extends EcsComponent
 
-## Places it has seen and may walk back to. Only EcsMemorySystem writes it.
+## What it has seen that matters to it, and where. Only EcsMemorySystem writes it.
+
+## Kind bit -> its name, for describe().
+const KIND_NAMES: Dictionary = {1: "water", 2: "lure", 4: "food", 8: "bush", 16: "threat", 32: "prey"}
 
 ## Most facts kept; past this the weakest is forgotten.
 @export var capacity: int = 32
@@ -30,9 +33,11 @@ func describe() -> Dictionary:
 	var lines := {}
 	for about in facts:
 		var fact := facts[about] as EcsMemoryFact
-		var kind := "water" if fact.water else ""
-		if fact.lure:
-			kind = "lure" if kind.is_empty() else kind + ", lure"
+		var names: PackedStringArray = []
+		for bit in KIND_NAMES:
+			if fact.kinds & bit != 0:
+				names.append(KIND_NAMES[bit])
+		var kind := ", ".join(names)
 		var text := "%d%% at (%d, %d)" % [roundi(fact.strength * 100.0),
 			roundi(fact.position.x), roundi(fact.position.y)]
 		if fact.fear > 0.0:

@@ -10,7 +10,7 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 354 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 361 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments, the hunger/health/energy loop,
 # intent flags, items as records, the drop on death, views, combat, corpses,
 # looting, rot, diet, hunting, harvesting, the planner, utility, fleeing,
@@ -287,9 +287,11 @@ before they drink. **Parched mirrors starving** (no sleep, wakes a sleeper). **T
 need wins**, thirst or hunger, scored by one curve in `ai/ecs_needs.gd` that the planner (`quench`
 weight 10 = eat) and the ladder both read.
 
-**Memory is a component** (HANDOFF §20): `EcsMemoryComponent.facts` holds remembered water (any
-drinker) and lures (a hunter, in cover it hides in), each a copied position and a `strength` that
-fades over `remember_for`. `EcsMemorySystem` is its only writer, between sensor and planning; a fact
+**Memory is a component** (HANDOFF §20): `EcsMemoryComponent.facts` holds what matters to the
+animal, decided by its own needs and power and never by species — water it drinks, food and bushes
+of its diet, lures it hides in, the threat its danger found, prey it can hunt — each a copied
+position, a `kinds` bitmask rewritten on every sighting, and a `strength` that fades over
+`remember_for`. `EcsMemorySystem` is its only writer, between sensor and planning; a fact
 whose spot is in sight without its thing is forgotten at once, so a wrong fact is gone before the
 replan. RECALL walks to the copied position, never the live entity. **Places are priced, not
 actions** (step 5): each go-to action binds and is priced by `EcsMemoryFact.best`/`score` — the

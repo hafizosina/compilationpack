@@ -13,7 +13,7 @@ a recorded design, not something you can run.
 ```bash
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 "$GODOT" --path . "res://9. EcsSystem/main.tscn"                          # run it (also the main scene)
-"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 354 checks, exit 0 = all pass
+"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 361 checks, exit 0 = all pass
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"    # population ramp, minutes
 "$GODOT" --headless --editor --quit --path . 2>&1 | grep -iE "error|invalid|uid"  # after any .tscn/.tres edit
 ```
@@ -583,7 +583,7 @@ after its producer keeps its data one tick old, as at full rate.
 
 ## 12. Tests
 
-`tests/lifecycle_test.tscn` — **354 checks**, exit code 0 only if all pass. Run it after
+`tests/lifecycle_test.tscn` — **361 checks**, exit code 0 only if all pass. Run it after
 touching the manager, collision, pickup, spawner, sensor, node sync, the brain or any
 executor. It covers: declared nodes built and undeclared ones not; kill takes data and nodes;
 spawn notes fulfilled a tick later; soft collision, immovable and non-solid bodies; seeing is
@@ -624,7 +624,9 @@ falsified on sight and capped, a thirsty rabbit planning and walking to a rememb
 forgetting it on arrival when it is gone, and a dog walking to a remembered bush to wait; a
 pond feared where a threat was met, priced dearer until the fear fades and still better than
 none; a lure gaining traffic from prey seen there and winning though farther, a corpse counted
-once, and traffic halving.
+once, and traffic halving; each animal keeping only what matters to it (a monkey no rabbit, a
+dog prey, threats and lures), an emptied bush forgotten, a remembered bush walked to when hungry,
+and a pond beside a remembered threat losing to a farther one.
 
 `tests/stress_test.tscn` — the population ramp and the per-stage bookkeeping split (§14). Knobs after a bare `--`:
 `--spacing=180` (grid px), `--n=4000` (one population), `--skip=hunger,health` (leave stages
@@ -671,8 +673,8 @@ brain's food index. The ceiling went from 4,800–6,400 to over 9,600 entities (
   water and the ambush, **2** thirst, **3** every animal the same — costs from stats, cover
   kinds, the wild dog, staying safe (§8, §19) — **4** memory, first slice, and **5** places
   priced by fear and traffic (§20) are done. Then hiders went to the middle of their cover and
-  bushes stopped being solid. **Queued next, in order:** memory widened to whatever matters to the animal
-  (water, food, threats, prey, lures); a pounce that stuns, attacks until dead, a stun
+  bushes stopped being solid, and memory widened to whatever matters to the animal (water, food,
+  bushes, threats, prey, lures). **Queued next, in order:** a pounce that stuns, attacks until dead, a stun
   indicator and a small showcase scene; births.
 
 **Open and deferred, by decision:** combat planning (a kill is many attacks; the planner
@@ -1216,3 +1218,44 @@ ponds — exploration, or memory shared some other way — which is left open.
 
 **Cost**: the memory stage went from 3.9 to 8 ms at 6,400 fed (it now reads each animal's
 danger); totals level, 241.6 / 226.2 ms against 237.5 / 227.7 for `8ff4bc1`.
+
+### What matters to each animal (2026-10-31)
+
+Memory keeps whatever matters to the animal, decided by its own needs and power, never by a list of
+species. A fact's **`kinds`** is a bitmask (`EcsMemoryFact.WATER`, `LURE`, `FOOD`, `BUSH`, `THREAT`,
+`PREY`), rewritten on every sighting, so a bush seen emptied stops being food and something seen as
+nothing that matters is forgotten:
+
+| kind | when | a monkey | a dog |
+|---|---|---|---|
+| water | drinkable, and it has thirst | ponds | ponds |
+| food | food of its diet | berries | corpses |
+| bush | a harvestable yielding its diet, not empty | stocked bushes | — |
+| lure | cover it hides in that prey must visit | — | bushes |
+| threat | what its danger found: the nearest hunter it notices | dog, crocodile | crocodile |
+| prey | weaker, alive, noticed, and it hunts | — | rabbits, monkeys |
+
+A rabbit is none of these to a monkey, so it isn't remembered.
+
+**Readers.** `recall_food` (`food_known` → `food_in_reach`) and `recall_bush` (`bush_known` →
+`bush_in_reach`) join the recalls, on every animal, priced and bound by the same place score. A
+remembered threat makes every place near it dearer: `score` adds `fear_cost × max(fear, the
+strongest threat remembered within near of it)`, so a pond beside a remembered crocodile loses to a
+farther one. Prey facts have no reader yet; traffic already counts prey seen at lures.
+
+**Cost, and what it took.** Threats come from `EcsDangerComponent.threat`, which danger already
+found, not from a second walk over what the animal sees. The walk runs only for an animal that
+drinks, eats a diet the world currently holds, or hunts, so on the stress grid only the hunters walk.
+Power and diet come from indexes built from views, and visibility is checked only for a hidden
+animal. Over capacity, the weakest facts go in one sorted pass. A first version cost 79 ms at
+6,400 fed (every animal walking its sight for hunters); the second 40 ms (corpses made every
+plant-eater walk for meat it doesn't eat); the third 34 ms; the fourth 21 ms — the old one-at-a-time
+eviction was quadratic once a hunter on the dense grid saw 54 prey against a cap of 32. Against
+`fea9942`, memory is 21 ms to 10 and totals are level, 290–300 against 286–297 ms; the real world's
+hunters see a handful of prey, not 54.
+
+**Measured** (probe, 5 runs of 300 s, against `fea9942`): plant-eaters walked to a remembered bush
+524–618 times a run and to remembered food 61–265; **starvation fell from 1–5 a run to 0–1**, and
+30–34 of 40 were alive at the end (29–31 before). No deaths of thirst; kills 6–9, as before. Facts
+forgotten while still strong rose to 1,300–1,500 a run — emptied bushes and animals that moved, the
+rewrite-on-sighting rule doing its job.

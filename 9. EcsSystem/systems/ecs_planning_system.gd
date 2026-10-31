@@ -18,6 +18,14 @@ const COMMIT_BONUS: float = 0.5
 ## Seconds of travel that cost one unit of a plan.
 const TRAVEL_SECONDS: float = EcsMemoryFact.TRAVEL_SECONDS
 
+## Memory kind -> [its known fact, its recall action, its in-sight action priced by place].
+const RECALLS: Dictionary = {
+	EcsMemoryFact.WATER: [&"water_known", &"recall_water", &"go_to_water"],
+	EcsMemoryFact.LURE: [&"lure_known", &"recall_lure", &"go_to_lure"],
+	EcsMemoryFact.FOOD: [&"food_known", &"recall_food", &""],
+	EcsMemoryFact.BUSH: [&"bush_known", &"recall_bush", &""],
+}
+
 ## Ids waiting for a replan, oldest first.
 var _queue: Array[int] = []
 var _food_view: EcsView
@@ -145,7 +153,8 @@ func _costs(world: EcsWorld, id: int, facts: Dictionary) -> Dictionary:
 	var costs := {}
 	var hunt := facts.has(&"prey_in_sight")
 	var memory := world.get_component(id, EcsMemoryComponent) as EcsMemoryComponent
-	var places := memory != null and (facts.has(&"water_known") or facts.has(&"lure_known"))
+	var places := memory != null and (facts.has(&"water_known") or facts.has(&"lure_known") \
+		or facts.has(&"food_known") or facts.has(&"bush_known"))
 	if not hunt and not places:
 		return costs
 	var move := world.get_component(id, EcsMovementComponent) as EcsMovementComponent
@@ -164,16 +173,16 @@ func _costs(world: EcsWorld, id: int, facts: Dictionary) -> Dictionary:
 			best = minf(best, 1.0 + here.distance_to(there) / closing / TRAVEL_SECONDS)
 		costs[&"hunt"] = best
 	if places:
-		for water in [true, false]:
-			if not facts.has(&"water_known" if water else &"lure_known"):
+		for kind in RECALLS:
+			var spec: Array = RECALLS[kind]
+			if not facts.has(spec[0]):
 				continue
-			var near := EcsMemoryFact.best(memory, here, move.speed, water, true, sensor.perceived)
-			if near != null:
-				costs[&"go_to_water" if water else &"go_to_lure"] = \
-					EcsMemoryFact.score(near, memory, here, move.speed, water)
-			var known := EcsMemoryFact.best(memory, here, move.speed, water)
-			costs[&"recall_water" if water else &"recall_lure"] = \
-				INF if known == null else EcsMemoryFact.score(known, memory, here, move.speed, water)
+			if spec[2] != &"":
+				var near := EcsMemoryFact.best(memory, here, move.speed, kind, true, sensor.perceived)
+				if near != null:
+					costs[spec[2]] = EcsMemoryFact.score(near, memory, here, move.speed, kind)
+			var known := EcsMemoryFact.best(memory, here, move.speed, kind)
+			costs[spec[1]] = INF if known == null else EcsMemoryFact.score(known, memory, here, move.speed, kind)
 	return costs
 
 static func _ids(goals: Array[EcsGoalDef]) -> Array[StringName]:
@@ -212,10 +221,14 @@ func _facts(world: EcsWorld, id: int, hunger: EcsHungerComponent, bag: EcsInvent
 	if memory != null:
 		for about in memory.facts:
 			var fact := memory.facts[about] as EcsMemoryFact
-			if fact.water and drinks:
+			if fact.is_a(EcsMemoryFact.WATER) and drinks:
 				facts[&"water_known"] = true
-			if fact.lure and hunts:
+			if fact.is_a(EcsMemoryFact.LURE) and hunts:
 				facts[&"lure_known"] = true
+			if fact.is_a(EcsMemoryFact.FOOD):
+				facts[&"food_known"] = true
+			if fact.is_a(EcsMemoryFact.BUSH):
+				facts[&"bush_known"] = true
 	if danger != null and danger.value >= danger.flee_at:
 		facts[&"threat_near"] = true
 	else:

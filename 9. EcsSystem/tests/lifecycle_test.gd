@@ -110,6 +110,7 @@ func _run() -> void:
 	await _memory_learns_fades_and_is_proven_wrong()
 	await _a_remembered_place_is_planned_and_walked_to()
 	await _fear_and_traffic_price_places()
+	await _memory_keeps_what_matters_to_it()
 
 ## Nodes match the declared NODE_KINDs (a berry gets a sprite and a body, no
 ## sensor) and hang under the entity's own container.
@@ -2892,11 +2893,11 @@ func _memory_learns_fades_and_is_proven_wrong() -> void:
 	var d: Dictionary = facts_of.call(dog)
 	var c: Dictionary = facts_of.call(croc)
 	_check("a rabbit remembers a pond as water, and no bush",
-		r.size() == 1 and r.has(pond) and r[pond].water and not r[pond].lure)
+		r.size() == 1 and r.has(pond) and r[pond].is_a(EcsMemoryFact.WATER) and not r[pond].is_a(EcsMemoryFact.LURE))
 	_check("the dog remembers a bush as a lure, and the pond only as water",
-		d.has(bush) and d[bush].lure and d.has(pond) and not d[pond].lure)
+		d.has(bush) and d[bush].is_a(EcsMemoryFact.LURE) and d.has(pond) and not d[pond].is_a(EcsMemoryFact.LURE))
 	_check("the crocodile remembers the pond as a lure, and no bush",
-		c.has(pond) and c[pond].lure and c[pond].water and not c.has(bush))
+		c.has(pond) and c[pond].is_a(EcsMemoryFact.LURE) and c[pond].is_a(EcsMemoryFact.WATER) and not c.has(bush))
 	_check("a fact holds where the thing was seen",
 		(r[pond] as EcsMemoryFact).position == _position_of(pond))
 
@@ -3044,11 +3045,11 @@ func _fear_and_traffic_price_places() -> void:
 	memory.run(_world, mind.fear_for)
 	var here := _position_of(rabbit)
 	_check("once the fear fades, the near one is cheaper again",
-		EcsMemoryFact.best(mind, here, speed, true, true, sensor.perceived).about == near_pond)
+		EcsMemoryFact.best(mind, here, speed, EcsMemoryFact.WATER, true, sensor.perceived).about == near_pond)
 	(mind.facts[near_pond] as EcsMemoryFact).fear = 1.0
 	mind.facts.erase(far_pond)
 	_check("a feared pond still beats none",
-		EcsMemoryFact.best(mind, here, speed, true, true, sensor.perceived).about == near_pond)
+		EcsMemoryFact.best(mind, here, speed, EcsMemoryFact.WATER, true, sensor.perceived).about == near_pond)
 
 	var spot2 := spot + Vector2(0.0, 3000.0)
 	var dog := _manager.spawn(_world, _catalog, &"wild_dog", spot2)
@@ -3090,6 +3091,77 @@ func _fear_and_traffic_price_places() -> void:
 	memory.run(_world, dog_mind.traffic_half_life)
 	_check("traffic halves over its half-life", is_equal_approx(busy.traffic, before * 0.5))
 	for id in [rabbit, near_pond, far_pond, dog, near_bush, busy_bush, visitor, corpse]:
+		_world.add(id, EcsDyingFlag.new())
+	EcsLifecycleSystem.new(_manager, _catalog).run(_world, TICK)
+	await get_tree().physics_frame
+
+## Each animal remembers what matters to it, by its own needs and power: a monkey keeps
+## ponds, stocked bushes and the threat its danger found, and no rabbit; a dog keeps prey,
+## the crocodile as a threat and bushes as lures. An emptied bush is forgotten; a remembered
+## bush is walked to when hungry; a remembered threat makes the pond beside it dearer.
+func _memory_keeps_what_matters_to_it() -> void:
+	var memory := EcsMemorySystem.new()
+	var skills := EcsSkillSystem.new()
+	var planning := EcsPlanningSystem.new()
+	var spot := Vector2(-40000.0, 24000.0)
+	var monkey := _manager.spawn(_world, _catalog, &"monkey", spot)
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(0.0, -150.0))
+	var dog := _manager.spawn(_world, _catalog, &"wild_dog", spot + Vector2(0.0, 250.0))
+	var pond := _manager.spawn(_world, _catalog, &"water", spot + Vector2(250.0, 0.0))
+	var croc := _manager.spawn(_world, _catalog, &"crocodile", spot + Vector2(200.0, 0.0))
+	var far_pond := _manager.spawn(_world, _catalog, &"water", spot + Vector2(-700.0, 0.0))
+	var bush := _manager.spawn(_world, _catalog, &"berry_bush", spot + Vector2(-200.0, -200.0))
+	var crop := _world.get_component(bush, EcsHarvestableComponent) as EcsHarvestableComponent
+	crop.stocked = true
+	crop.stock = crop.stock_max
+	var sees := func(id: int, seen: Array) -> void:
+		var sensor := _world.get_component(id, EcsSensorComponent) as EcsSensorComponent
+		sensor.perceived.clear()
+		for other in seen:
+			sensor.perceived.append(other)
+	sees.call(monkey, [rabbit, dog, croc, bush, pond, far_pond])
+	sees.call(dog, [rabbit, monkey, croc, bush])
+	skills.run(_world, TICK)
+	EcsDangerSystem.new().run(_world, TICK)
+	memory.run(_world, TICK)
+	var m := (_world.get_component(monkey, EcsMemoryComponent) as EcsMemoryComponent).facts
+	var d := (_world.get_component(dog, EcsMemoryComponent) as EcsMemoryComponent).facts
+	var is_a := func(facts: Dictionary, id: int, kind: int) -> bool:
+		return facts.has(id) and (facts[id] as EcsMemoryFact).is_a(kind)
+	_check("a monkey keeps the pond, the stocked bush and the crocodile as a threat",
+		is_a.call(m, pond, EcsMemoryFact.WATER) and is_a.call(m, bush, EcsMemoryFact.BUSH)
+		and is_a.call(m, croc, EcsMemoryFact.THREAT))
+	_check("and no rabbit, which is nothing to it", not m.has(rabbit))
+	_check("a dog keeps rabbit and monkey as prey, the crocodile as a threat, the bush as a lure",
+		is_a.call(d, rabbit, EcsMemoryFact.PREY) and is_a.call(d, monkey, EcsMemoryFact.PREY)
+		and is_a.call(d, croc, EcsMemoryFact.THREAT) and is_a.call(d, bush, EcsMemoryFact.LURE)
+		and not is_a.call(d, bush, EcsMemoryFact.BUSH))
+
+	var mind := _world.get_component(monkey, EcsMemoryComponent) as EcsMemoryComponent
+	var speed := (_world.get_component(monkey, EcsMovementComponent) as EcsMovementComponent).speed
+	var sight := (_world.get_component(monkey, EcsSensorComponent) as EcsSensorComponent).perceived
+	_check("a pond beside a remembered crocodile is dearer than a far one",
+		EcsMemoryFact.best(mind, spot, speed, EcsMemoryFact.WATER, true, sight).about == far_pond)
+
+	crop.stock = 0
+	memory.run(_world, TICK)
+	_check("a bush seen emptied is forgotten", not m.has(bush))
+
+	crop.stock = crop.stock_max
+	memory.run(_world, TICK)
+	var energy := _world.get_component(monkey, EcsEnergyComponent) as EcsEnergyComponent
+	energy.rolled = true
+	energy.value = energy.max_energy
+	var hunger := _world.get_component(monkey, EcsHungerComponent) as EcsHungerComponent
+	hunger.fullness = hunger.forage_below * 0.5
+	(_world.get_component(monkey, EcsPositionComponent) as EcsPositionComponent).position = spot + Vector2(0.0, 5000.0)
+	sees.call(monkey, [])
+	memory.run(_world, TICK)
+	planning.run(_world, TICK)
+	var steps := (_world.get_component(monkey, EcsPlannerComponent) as EcsPlannerComponent).steps
+	_check("hungry, no bush in sight, it walks to one it remembers (%s)" % " > ".join(steps),
+		not steps.is_empty() and steps[0] == &"recall_bush" and steps.has(&"harvest"))
+	for id in [monkey, rabbit, dog, pond, croc, far_pond, bush]:
 		_world.add(id, EcsDyingFlag.new())
 	EcsLifecycleSystem.new(_manager, _catalog).run(_world, TICK)
 	await get_tree().physics_frame

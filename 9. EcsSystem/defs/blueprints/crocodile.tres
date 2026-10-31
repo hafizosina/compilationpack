@@ -42,6 +42,8 @@
 [ext_resource type="Resource" path="res://9. EcsSystem/defs/goals/quench.tres" id="g_quench"]
 [ext_resource type="Script" path="res://9. EcsSystem/components/ecs_memory_component.gd" id="s_memory"]
 [ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/recall_water.tres" id="a_recall_water"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/recall_food.tres" id="a_recall_food"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/recall_bush.tres" id="a_recall_bush"]
 [ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/recall_lure.tres" id="a_recall_lure"]
 
 [sub_resource type="Resource" id="c_body"]
@@ -106,7 +108,7 @@ multiplier = 2.0
 
 [sub_resource type="Resource" id="c_planner"]
 script = ExtResource("s_planner")
-actions = Array[ExtResource("s_action_def")]([ExtResource("a_eat_ground"), ExtResource("a_seek_food"), ExtResource("a_hunt"), ExtResource("a_attack"), ExtResource("a_sleep"), ExtResource("a_flee"), ExtResource("a_go_to_lure"), ExtResource("a_ambush"), ExtResource("a_pounce"), ExtResource("a_go_to_water"), ExtResource("a_drink"), ExtResource("a_recall_water"), ExtResource("a_recall_lure")])
+actions = Array[ExtResource("s_action_def")]([ExtResource("a_eat_ground"), ExtResource("a_seek_food"), ExtResource("a_hunt"), ExtResource("a_attack"), ExtResource("a_sleep"), ExtResource("a_flee"), ExtResource("a_go_to_lure"), ExtResource("a_ambush"), ExtResource("a_pounce"), ExtResource("a_go_to_water"), ExtResource("a_drink"), ExtResource("a_recall_water"), ExtResource("a_recall_food"), ExtResource("a_recall_bush"), ExtResource("a_recall_lure")])
 goals = Array[ExtResource("s_goal_def")]([ExtResource("g_satisfy_hunger"), ExtResource("g_rest"), ExtResource("g_flee"), ExtResource("g_quench")])
 
 [sub_resource type="Resource" id="c_danger"]
