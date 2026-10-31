@@ -21,6 +21,8 @@ extends EcsSystem
 const HIDE_SKILL: StringName = &"hide"
 const DASH_SKILL: StringName = &"dash"
 const SCAN_SKILL: StringName = &"scan"
+## How near a cover's middle, as a share of its radius, a hider settles.
+const MIDDLE_SHARE: float = 0.5
 
 ## The view `_food` was built from.
 var _food_view: EcsView
@@ -137,10 +139,8 @@ func run(world: EcsWorld, delta: float) -> void:
 			if _keep_hunting(world, id, brain, move, planned):
 				continue
 
+		# Walking into cover: keep on to its middle.
 		if brain.state == EcsLowBrainComponent.State.HIDE and move.has_destination:
-			# Stop at the edge, as soon as the cover is in reach.
-			if EcsHunting.cover_of(world, id) > 0.0:
-				_abandon_trip(move)
 			continue
 
 		# Keep walking unless it is only a wander, which may be interrupted.
@@ -321,14 +321,16 @@ static func _retreat_leg(brain: EcsLowBrainComponent) -> bool:
 static func _retreating(brain: EcsLowBrainComponent, move: EcsMovementComponent) -> bool:
 	return _retreat_leg(brain) and move.has_destination
 
-## Walk to the nearest cover in sight it can hide in (only a lure, if `lure_only`); once
-## in it, stand at its edge.
+## Walk to the middle of the cheapest lure in sight (with `lure_only`), else of the
+## nearest cover in sight it can hide in.
 func _try_cover(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		move: EcsMovementComponent, place: EcsPositionComponent, lure_only: bool) -> bool:
 	var here := _cover_in_reach(world, id, lure_only)
 	if here != EcsWorld.NO_ENTITY:
-		_abandon_trip(move)
+		if brain.state == EcsLowBrainComponent.State.HIDE and brain.target == here:
+			return true
 		_set_state(world, id, brain, EcsLowBrainComponent.State.HIDE, here)
+		_into_middle(world, here, move, place)
 		return true
 	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
 	if sensor == null:
@@ -376,6 +378,12 @@ func _try_ambush(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	var pond := _cover_in_reach(world, id, false)
 	if pond == EcsWorld.NO_ENTITY:
 		return false
+	# Hide in the middle; a walk there that ended short (crowded) is close enough.
+	if not _in_middle(world, pond, place) \
+			and not (brain.state == EcsLowBrainComponent.State.HIDE and brain.target == pond):
+		_set_state(world, id, brain, EcsLowBrainComponent.State.HIDE, pond)
+		_into_middle(world, pond, move, place)
+		return true
 	_abandon_trip(move)
 	_set_state(world, id, brain, EcsLowBrainComponent.State.AMBUSH, pond)
 	var patience := _patience(planner, step)
@@ -436,6 +444,20 @@ func _cover_in_reach(world: EcsWorld, id: int, lure_only: bool) -> int:
 				return touched
 	return EcsWorld.NO_ENTITY
 
+## Within half of `cover`'s radius of its middle.
+func _in_middle(world: EcsWorld, cover: int, place: EcsPositionComponent) -> bool:
+	var body := world.get_component(cover, EcsBodyComponent) as EcsBodyComponent
+	var slack := body.radius * MIDDLE_SHARE if body != null else 0.0
+	return place.position.distance_squared_to(_position_of(world, cover)) <= slack * slack
+
+## Sets a trip to `cover`'s middle, or ends the trip if already there.
+func _into_middle(world: EcsWorld, cover: int, move: EcsMovementComponent,
+		place: EcsPositionComponent) -> void:
+	if _in_middle(world, cover, place):
+		_abandon_trip(move)
+	else:
+		_set_trip(move, _position_of(world, cover))
+
 ## Dash away from the danger's last threat, if the dash is ready.
 func _try_escape(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		move: EcsMovementComponent, place: EcsPositionComponent) -> bool:
@@ -489,7 +511,8 @@ static func _serves(state: EcsLowBrainComponent.State, step: StringName) -> bool
 		EcsLowBrainComponent.State.FLEE, EcsLowBrainComponent.State.ESCAPE:
 			return step == &"flee" or step == &"escape"
 		EcsLowBrainComponent.State.HIDE:
-			return step == &"go_to_cover" or step == &"go_to_lure"
+			return step == &"go_to_cover" or step == &"go_to_lure" or step == &"ambush" \
+				or step == &"hide"
 		EcsLowBrainComponent.State.AMBUSH:
 			return step == &"ambush" or step == &"hide"
 		EcsLowBrainComponent.State.SCAN:

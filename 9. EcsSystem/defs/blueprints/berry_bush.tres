@@ -17,6 +17,7 @@ tint = Color(0.2, 0.5, 0.22, 1)
 [sub_resource type="Resource" id="c_body"]
 script = ExtResource("s_body")
 radius = 45.0
+is_solid = false
 
 [sub_resource type="Resource" id="c_crop"]
 script = ExtResource("s_crop")

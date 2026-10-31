@@ -238,7 +238,7 @@ reached. Its `is_solid` decides whether that body takes part in soft collision.
 
 | | body | solid | movable |
 |---|---|---|---|
-| bush | 45 | yes | no — walked into, never budged |
+| bush, water | 45, 140 | **no** — cover, walked into | no |
 | rabbit, monkey | 22, 36 | yes | yes |
 | berry | 14 | **no** — walked over | no |
 
@@ -670,8 +670,8 @@ brain's food index. The ceiling went from 4,800–6,400 to over 9,600 entities (
 - **Features roadmap** (`FEATURES_ROADMAP.md`, kept outside the repo), 2026-10-31: **1** skills,
   water and the ambush, **2** thirst, **3** every animal the same — costs from stats, cover
   kinds, the wild dog, staying safe (§8, §19) — **4** memory, first slice, and **5** places
-  priced by fear and traffic (§20) are done. **Queued next, in order:** hiders go to the middle
-  of their cover and bushes stop being solid; memory widened to whatever matters to the animal
+  priced by fear and traffic (§20) are done. Then hiders went to the middle of their cover and
+  bushes stopped being solid. **Queued next, in order:** memory widened to whatever matters to the animal
   (water, food, threats, prey, lures); a pounce that stuns, attacks until dead, a stun
   indicator and a small showcase scene; births.
 
@@ -1038,8 +1038,9 @@ so a runtime spawn gets it too. Only the crocodile swaps: `dash_crocodile.tres` 
 **Cover has a kind.** `EcsCoverComponent{kind, conceal}`: water (`water.tres`, a gradient sprite
 and a non-solid body of radius 140, also `EcsDrinkableComponent` — §8) is `water`, a berry bush
 is `bush`. **In cover means the action area touches a cover body** of a kind the hide skill
-lists (`EcsHunting.cover_of`, `hides_in`), so a hider stands at the edge nearest where it came
-from. The crocodile refuses bushes and the dog water; nobody branches on species.
+lists (`EcsHunting.cover_of`, `hides_in`). **A hider goes to the middle**: HIDE walks to the
+cover's centre, and AMBUSH starts within `MIDDLE_SHARE` (half) of its radius — or where a walk
+there ended short, so two hiders crowding one bush don't loop. The crocodile refuses bushes and the dog water; nobody branches on species.
 
 **A lure is cover prey must visit** — drinkable or harvestable (`EcsHunting.is_lure`). Hunters
 bet only at a lure: `prey_come_here` is true in usable cover that is a lure.

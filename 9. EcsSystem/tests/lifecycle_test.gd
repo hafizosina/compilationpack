@@ -322,10 +322,12 @@ func _it_sees_before_it_takes() -> void:
 	_check("the one it never saw is untouched",
 		_world.has(far, EcsPositionComponent) and not _holds(bag, far))
 
-## A walker is pushed out of a solid immovable bush, and the bush doesn't move.
+## A walker is pushed out of a solid immovable body (a bush made solid), and the body
+## doesn't move.
 func _an_immovable_body_is_not_shoved_around() -> void:
 	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-2000.0, -2000.0))
 	var bush := _manager.spawn(_world, _catalog, &"berry_bush", Vector2(-1990.0, -2000.0))
+	(_world.get_component(bush, EcsBodyComponent) as EcsBodyComponent).is_solid = true
 	var bush_at := _world.get_component(bush, EcsPositionComponent) as EcsPositionComponent
 	var rabbit_at := _world.get_component(rabbit, EcsPositionComponent) as EcsPositionComponent
 	var bush_started := bush_at.position
@@ -430,7 +432,8 @@ func _a_trip_it_cannot_finish_is_given_up_on() -> void:
 
 	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(2000.0, 2000.0))
 	var bush_at := Vector2(2160.0, 2000.0)
-	_manager.spawn(_world, _catalog, &"berry_bush", bush_at)
+	var wall := _manager.spawn(_world, _catalog, &"berry_bush", bush_at)
+	(_world.get_component(wall, EcsBodyComponent) as EcsBodyComponent).is_solid = true
 	var at := _world.get_component(rabbit, EcsPositionComponent) as EcsPositionComponent
 	var move := _world.get_component(rabbit, EcsMovementComponent) as EcsMovementComponent
 	var started := at.position
@@ -2255,6 +2258,9 @@ func _a_crocodile_ambushes_from_the_water() -> void:
 			break
 	_check("it goes to the water and ambushes, hidden",
 		brain.state == EcsLowBrainComponent.State.AMBUSH and _world.has(croc, EcsHiddenFlag))
+	var off := _position_of(croc).distance_to(spot)
+	_check("in the middle of the pond (%d px off)" % roundi(off),
+		off <= _radius_of(pond) * EcsLowBrainSystem.MIDDLE_SHARE)
 
 	var at := _position_of(croc)
 	var monkey := _manager.spawn(_world, _catalog, &"monkey", at + Vector2(120.0, -450.0))

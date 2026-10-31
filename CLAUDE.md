@@ -117,8 +117,8 @@ before its reach arrives.
 `EcsBodyComponent` is the body — a radius, and an area on the body layer, so the entity
 can be perceived and reached. Its **`is_solid`** decides whether that body takes part in
 soft collision at either end. `EcsMovementComponent` is what lets the resolve move it
-rather than only push others out of it. A bush is a solid body and no movement: seen,
-walked into, never budged. A rabbit is solid and movable. **A berry is a body with
+rather than only push others out of it. Bushes and water are bodies that are not solid —
+cover you walk into and hide in the middle of. A rabbit is solid and movable. **A berry is a body with
 `is_solid = false`** — it has one for a single reason, to be seen and picked up, and
 everything walks straight over it; ground items, corpses and dropped tools set the same
 flag. Solidity is the module's one authored boolean of this kind, chosen over a tag
