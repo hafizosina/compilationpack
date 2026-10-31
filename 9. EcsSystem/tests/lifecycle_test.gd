@@ -101,6 +101,12 @@ func _run() -> void:
 	await _a_thirsty_animal_drinks_and_thirst_is_weighed_against_hunger()
 	_thirst_is_planned_and_weighed()
 	await _thirsty_prey_walk_into_an_ambush()
+	await _skills_come_from_one_default_set()
+	await _what_a_hunter_does_comes_from_its_stats()
+	await _each_kind_hides_in_its_own_cover()
+	await _hidden_prey_is_passed_over()
+	await _prey_stay_safe_by_hiding_or_escaping()
+	await _prey_scan_before_drinking()
 
 ## Nodes match the declared NODE_KINDs (a berry gets a sprite and a body, no
 ## sensor) and hang under the entity's own container.
@@ -1733,7 +1739,7 @@ func _utility_picks_what_the_ladder_would() -> void:
 		_world.add(id, EcsDyingFlag.new())
 	await _tick(1)
 
-## The planned crocodile hunts, kills and eats the corpse, killing once per meal,
+## A planned wild dog hunts, kills and eats the corpse, killing once per meal,
 ## with no "food in sight ends a hunt" rule on its path.
 func _a_planned_hunter_kills_once_and_eats_the_corpse() -> void:
 	var living := EcsScheduler.new()
@@ -1754,7 +1760,7 @@ func _a_planned_hunter_kills_once_and_eats_the_corpse() -> void:
 		.add(EcsNodeSyncSystem.new(_manager))
 
 	var spot := Vector2(9000.0, 9000.0)
-	var hunter := _manager.spawn(_world, _catalog, &"crocodile", spot)
+	var hunter := _manager.spawn(_world, _catalog, &"wild_dog", spot)
 	var prey: Array[int] = [
 		_manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(200.0, 0.0)),
 		_manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(-220.0, 60.0)),
@@ -1870,7 +1876,7 @@ func _planned_plant_eaters_harvest_then_eat_or_take() -> void:
 func _replans_follow_events_not_the_clock() -> void:
 	var planning := EcsPlanningSystem.new()
 	var spot := Vector2(-16000.0, 16000.0)
-	var croc := _manager.spawn(_world, _catalog, &"crocodile", spot)
+	var croc := _manager.spawn(_world, _catalog, &"wild_dog", spot)
 	var energy := _world.get_component(croc, EcsEnergyComponent) as EcsEnergyComponent
 	energy.value = energy.max_energy
 	var hunger := _world.get_component(croc, EcsHungerComponent) as EcsHungerComponent
@@ -2160,27 +2166,28 @@ func _a_hidden_hunter_is_noticed_late() -> void:
 ## six steps, under MAX_DEPTH; in the water it keeps ambushing though it sees
 ## prey; on land with prey in sight it chases; with nothing in sight, no plan.
 func _the_ambush_is_planned_by_cost() -> void:
-	var croc := _actions([&"eat_ground", &"seek_food", &"hunt", &"attack", &"sleep", &"flee",
-		&"go_to_cover", &"ambush", &"pounce", &"go_to_water", &"drink"])
+	var hunter := _actions([&"eat_ground", &"seek_food", &"hunt", &"attack", &"sleep", &"flee",
+		&"go_to_lure", &"ambush", &"pounce", &"go_to_water", &"drink"])
 	var fed := {&"fed": true}
-	var tail: Array[StringName] = [&"ambush", &"pounce", &"attack", &"seek_food", &"eat_ground"]
-	var from_land := EcsPlanner.plan({&"cover_in_sight": true, &"water_in_sight": true}, fed, croc)
-	_check("water in sight: go to it and ambush (%s)" % " > ".join(from_land),
-		from_land.size() == 7 and from_land.size() <= EcsPlanner.MAX_DEPTH
-		and from_land.slice(2) == tail
-		and from_land.has(&"go_to_cover") and from_land.has(&"go_to_water"))
-	_check("in the water, prey in sight: keep ambushing",
-		EcsPlanner.plan({&"in_cover": true, &"water_in_reach": true, &"prey_in_sight": true},
-			fed, croc) == tail)
-	_check("in cover that isn't water, prey in sight: chase",
-		EcsPlanner.plan({&"in_cover": true, &"prey_in_sight": true}, fed, croc)[0] == &"hunt")
-	_check("on land, prey in sight: chase",
-		EcsPlanner.plan({&"cover_in_sight": true, &"water_in_sight": true,
-			&"prey_in_sight": true}, fed, croc)
-			== [&"hunt", &"attack", &"seek_food", &"eat_ground"])
+	var slow := {&"hunt": INF}
+	var ambush: Array[StringName] = [&"go_to_lure", &"ambush", &"pounce", &"attack",
+		&"seek_food", &"eat_ground"]
+	_check("a lure in sight: go to it and ambush",
+		EcsPlanner.plan({&"lure_in_sight": true}, fed, hunter) == ambush)
+	_check("at a lure, prey in sight, too slow to chase: keep ambushing",
+		EcsPlanner.plan({&"in_cover": true, &"prey_come_here": true, &"prey_in_sight": true},
+			fed, hunter, slow) == ambush.slice(1))
+	_check("in cover that is no lure, prey in sight: chase",
+		EcsPlanner.plan({&"in_cover": true, &"prey_in_sight": true}, fed, hunter)[0] == &"hunt")
+	_check("fast enough, a lure and prey in sight: chase",
+		EcsPlanner.plan({&"lure_in_sight": true, &"prey_in_sight": true}, fed, hunter,
+			{&"hunt": 2.0}) == [&"hunt", &"attack", &"seek_food", &"eat_ground"])
+	_check("too slow, a lure and prey in sight: ambush",
+		EcsPlanner.plan({&"lure_in_sight": true, &"prey_in_sight": true}, fed, hunter, slow)
+			== ambush)
 	_check("prey close: pounce", EcsPlanner.plan({&"prey_close": true, &"prey_in_sight": true},
-		fed, croc)[0] == &"pounce")
-	_check("nothing in sight: no plan", EcsPlanner.plan({}, fed, croc).is_empty())
+		fed, hunter)[0] == &"pounce")
+	_check("nothing in sight: no plan", EcsPlanner.plan({}, fed, hunter).is_empty())
 
 ## An ambush no prey ever passes fails after `patience`: the crocodile leaves the
 ## water, then plans its way back.
@@ -2228,7 +2235,7 @@ func _an_ambush_gives_up_after_its_patience() -> void:
 	EcsConst.world_bounds = bounds
 
 ## A planned crocodile goes to water and ambushes. A monkey walking past is not
-## chased while far; in dash reach it pounces once, kills and eats the corpse.
+## chased while far; in dash reach it pounces once and bites. A kill is many attacks.
 func _a_crocodile_ambushes_from_the_water() -> void:
 	var living := _ambush_pipeline()
 	var spot := Vector2(30000.0, -30000.0)
@@ -2237,8 +2244,6 @@ func _a_crocodile_ambushes_from_the_water() -> void:
 	var pond := _manager.spawn(_world, _catalog, &"water", spot)
 	var croc := _ambusher(spot + Vector2(320.0, 0.0))
 	var brain := _world.get_component(croc, EcsLowBrainComponent) as EcsLowBrainComponent
-	var hunger := _world.get_component(croc, EcsHungerComponent) as EcsHungerComponent
-	var started := hunger.fullness
 
 	for i in 300:
 		living.run_all(_world, TICK)
@@ -2256,10 +2261,11 @@ func _a_crocodile_ambushes_from_the_water() -> void:
 	walk.has_destination = true
 	walk.time_left = 0.0
 	var reach := EcsHunting.dash_reach(_world, croc)
+	var health := _world.get_component(monkey, EcsHealthComponent) as EcsHealthComponent
+	var whole := health.value
 	var chased_far := false
 	var dashes := 0
 	var dashing := false
-	var ate := false
 	for i in 1200:
 		living.run_all(_world, TICK)
 		await get_tree().physics_frame
@@ -2271,12 +2277,9 @@ func _a_crocodile_ambushes_from_the_water() -> void:
 		if now and not dashing:
 			dashes += 1
 		dashing = now
-		if hunger.fullness > started:
-			ate = true
-			break
 	_check("it keeps ambushing while the monkey is far", not chased_far)
 	_check("in reach it pounces, once (%d)" % dashes, dashes == 1)
-	_check("and kills and eats", ate and not _world.is_alive(monkey))
+	_check("and bites it", not _world.is_alive(monkey) or health.value < whole)
 
 	for id in [croc, pond, monkey]:
 		if _world.is_alive(id):
@@ -2566,6 +2569,290 @@ func _set_brain_idle(id: int) -> void:
 	brain.target = EcsWorld.NO_ENTITY
 	var move := _world.get_component(id, EcsMovementComponent) as EcsMovementComponent
 	move.has_destination = false
+
+## Every animal fills the default skills on first sight; a kind's swaps replace
+## defaults with the same id. The crocodile dashes harder and hides only in water,
+## the dog hides only in bushes.
+func _skills_come_from_one_default_set() -> void:
+	var resolving := EcsScheduler.new()
+	resolving \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsSkillSystem.new()) \
+		.add(EcsNodeSyncSystem.new(_manager))
+	var spot := Vector2(-40000.0, 0.0)
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot)
+	var croc := _manager.spawn(_world, _catalog, &"crocodile", spot + Vector2(800.0, 0.0))
+	var dog := _manager.spawn(_world, _catalog, &"wild_dog", spot + Vector2(1600.0, 0.0))
+	resolving.run_all(_world, TICK)
+	await get_tree().physics_frame
+	var ids := func(id: int) -> Array:
+		return (_world.get_component(id, EcsSkillsComponent) as EcsSkillsComponent).skills.map(
+			func(skill: EcsSkillDef) -> StringName: return skill.id)
+	var skill := func(id: int, skill_id: StringName) -> EcsSkillDef:
+		return EcsSkillDef.find((_world.get_component(id, EcsSkillsComponent) as EcsSkillsComponent).skills, skill_id)
+	_check("every animal gets dash, hide and scan",
+		ids.call(rabbit) == [&"dash", &"hide", &"scan"] and ids.call(croc) == ids.call(rabbit)
+		and ids.call(dog) == ids.call(rabbit))
+	_check("the crocodile's swaps replace dash and hide",
+		is_equal_approx((skill.call(croc, &"dash") as EcsDashSkill).speed_scale, 3.5)
+		and (skill.call(croc, &"hide") as EcsHideSkill).kinds == [&"water"])
+	_check("the dog keeps the defaults: a bush hider",
+		is_equal_approx((skill.call(dog, &"dash") as EcsDashSkill).speed_scale, 2.0)
+		and (skill.call(dog, &"hide") as EcsHideSkill).kinds == [&"bush"])
+	for id in [rabbit, croc, dog]:
+		_world.add(id, EcsDyingFlag.new())
+	resolving.run_all(_world, TICK)
+	await get_tree().physics_frame
+
+## From real snapshots: a chase is priced from the two speeds, so the crocodile
+## can't chase a rabbit and the dog can. With a lure and prey in sight the same
+## actions make the crocodile ambush and the dog chase; with only a bush in sight
+## the dog ambushes there; a crocodile sees no lure in a bush.
+func _what_a_hunter_does_comes_from_its_stats() -> void:
+	var planning := EcsPlanningSystem.new()
+	var skills := EcsSkillSystem.new()
+	var spot := Vector2(-40000.0, 9000.0)
+	var plan_of := func(kind: StringName, offset: Vector2, seen: Array) -> Array[StringName]:
+		var hunter := _manager.spawn(_world, _catalog, kind, spot + offset)
+		var hunger := _world.get_component(hunter, EcsHungerComponent) as EcsHungerComponent
+		hunger.fullness = hunger.forage_below * 0.5
+		var energy := _world.get_component(hunter, EcsEnergyComponent) as EcsEnergyComponent
+		energy.rolled = true
+		energy.value = energy.max_energy
+		var sensor := _world.get_component(hunter, EcsSensorComponent) as EcsSensorComponent
+		for other in seen:
+			sensor.perceived.append(other)
+		skills.run(_world, TICK)
+		planning.run(_world, TICK)
+		var steps := (_world.get_component(hunter, EcsPlannerComponent) as EcsPlannerComponent).steps
+		_world.add(hunter, EcsDyingFlag.new())
+		return steps
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(300.0, 0.0))
+	var pond := _manager.spawn(_world, _catalog, &"water", spot + Vector2(0.0, 300.0))
+	var bush := _manager.spawn(_world, _catalog, &"berry_bush", spot + Vector2(0.0, -300.0))
+	var croc_chase: Array[StringName] = await plan_of.call(&"crocodile", Vector2.ZERO, [rabbit])
+	var dog_chase: Array[StringName] = await plan_of.call(&"wild_dog", Vector2.ZERO, [rabbit])
+	var croc_both: Array[StringName] = await plan_of.call(&"crocodile", Vector2.ZERO, [rabbit, pond])
+	var dog_bush: Array[StringName] = await plan_of.call(&"wild_dog", Vector2.ZERO, [bush])
+	var croc_bush: Array[StringName] = await plan_of.call(&"crocodile", Vector2.ZERO, [bush])
+	_check("too slow, the crocodile won't chase a rabbit (%s)" % " > ".join(croc_chase),
+		not croc_chase.has(&"hunt"))
+	_check("the faster dog will (%s)" % " > ".join(dog_chase),
+		not dog_chase.is_empty() and dog_chase[0] == &"hunt")
+	_check("a pond and a rabbit in sight: the crocodile ambushes (%s)" % " > ".join(croc_both),
+		not croc_both.is_empty() and croc_both[0] == &"go_to_lure")
+	_check("only a bush in sight: the dog ambushes there (%s)" % " > ".join(dog_bush),
+		not dog_bush.is_empty() and dog_bush[0] == &"go_to_lure" and dog_bush.has(&"ambush"))
+	_check("a bush is no lure to a crocodile", not croc_bush.has(&"ambush"))
+	for id in [rabbit, pond, bush]:
+		_world.add(id, EcsDyingFlag.new())
+	EcsLifecycleSystem.new(_manager, _catalog).run(_world, TICK)
+	await get_tree().physics_frame
+
+## Hide holds only in cover of the hider's kind: the dog in a bush, not water; the
+## crocodile in water, not a bush.
+func _each_kind_hides_in_its_own_cover() -> void:
+	var living := EcsScheduler.new()
+	living \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsSkillSystem.new()) \
+		.add(EcsCollisionSystem.new(_manager)) \
+		.add(EcsNodeSyncSystem.new(_manager))
+	var spot := Vector2(-40000.0, 18000.0)
+	var hides_at := func(kind: StringName, cover: StringName, gap: float) -> bool:
+		var place := _manager.spawn(_world, _catalog, cover, spot)
+		var hider := _manager.spawn(_world, _catalog, kind, spot + Vector2(gap, 0.0))
+		_world.remove(hider, EcsLowBrainComponent)
+		_cast(hider, &"hide")
+		for i in 4:
+			living.run_all(_world, TICK)
+			await get_tree().physics_frame
+		var hidden := _world.has(hider, EcsHiddenFlag)
+		for id in [hider, place]:
+			_world.add(id, EcsDyingFlag.new())
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		return hidden
+	var dog_bush: bool = await hides_at.call(&"wild_dog", &"berry_bush", 80.0)
+	var dog_water: bool = await hides_at.call(&"wild_dog", &"water", 150.0)
+	var croc_water: bool = await hides_at.call(&"crocodile", &"water", 150.0)
+	var croc_bush: bool = await hides_at.call(&"crocodile", &"berry_bush", 90.0)
+	_check("the dog hides in a bush", dog_bush)
+	_check("and not in water", not dog_water)
+	_check("the crocodile hides in water", croc_water)
+	_check("and not in a bush", not croc_bush)
+
+## A hunter passes over prey it doesn't notice: it won't start a chase on a hidden
+## rabbit, and it drops one when the rabbit hides.
+func _hidden_prey_is_passed_over() -> void:
+	var living := EcsScheduler.new()
+	living \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsPlanningSystem.new()) \
+		.add(EcsLowBrainSystem.new()) \
+		.add(EcsSkillSystem.new()) \
+		.add(EcsMovementSystem.new()) \
+		.add(EcsCollisionSystem.new(_manager)) \
+		.add(EcsNodeSyncSystem.new(_manager))
+	var spot := Vector2(-40000.0, 27000.0)
+	var dog := _manager.spawn(_world, _catalog, &"wild_dog", spot)
+	var hunger := _world.get_component(dog, EcsHungerComponent) as EcsHungerComponent
+	hunger.fullness = 30.0
+	var energy := _world.get_component(dog, EcsEnergyComponent) as EcsEnergyComponent
+	energy.rolled = true
+	energy.value = energy.max_energy
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(350.0, 0.0))
+	_world.remove(rabbit, EcsLowBrainComponent)
+	var hidden := EcsHiddenFlag.new()
+	hidden.stealth = 0.9
+	_world.add(rabbit, hidden)
+	var brain := _world.get_component(dog, EcsLowBrainComponent) as EcsLowBrainComponent
+	var chased := false
+	for i in 60:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		chased = chased or brain.state == EcsLowBrainComponent.State.HUNT
+	_check("a hunter won't chase prey hidden from it", not chased)
+	_world.remove(rabbit, EcsHiddenFlag)
+	for i in 60:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		if brain.state == EcsLowBrainComponent.State.HUNT:
+			break
+	var hunting := brain.state == EcsLowBrainComponent.State.HUNT
+	var hide := EcsHiddenFlag.new()
+	hide.stealth = 0.9
+	_world.add(rabbit, hide)
+	for i in 6:
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+	_check("it drops a chase when the prey hides",
+		hunting and brain.state != EcsLowBrainComponent.State.HUNT
+		and brain.state != EcsLowBrainComponent.State.ATTACK)
+	for id in [dog, rabbit]:
+		_world.add(id, EcsDyingFlag.new())
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+
+## Staying safe, by cost: beside a bush a frightened rabbit hides in it; in the open
+## with its dash ready it escapes, dashing once; with the dash cooling it flees.
+func _prey_stay_safe_by_hiding_or_escaping() -> void:
+	var living := EcsScheduler.new()
+	living \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsPlanningSystem.new()) \
+		.add(EcsLowBrainSystem.new()) \
+		.add(EcsSkillSystem.new()) \
+		.add(EcsMovementSystem.new()) \
+		.add(EcsCollisionSystem.new(_manager)) \
+		.add(EcsNodeSyncSystem.new(_manager))
+	var spot := Vector2(-40000.0, 36000.0)
+	var bounds := EcsConst.world_bounds
+	EcsConst.world_bounds = Rect2(spot - Vector2(3000.0, 3000.0), Vector2(6000.0, 6000.0))
+	var scared := func(at: Vector2, cooling: bool) -> Dictionary:
+		var rabbit := _manager.spawn(_world, _catalog, &"rabbit", at)
+		var energy := _world.get_component(rabbit, EcsEnergyComponent) as EcsEnergyComponent
+		energy.rolled = true
+		energy.value = energy.max_energy
+		var danger := _world.get_component(rabbit, EcsDangerComponent) as EcsDangerComponent
+		danger.value = 0.9
+		danger.threat_at = at + Vector2(-200.0, 0.0)
+		var known := _world.get_component(rabbit, EcsSkillsComponent) as EcsSkillsComponent
+		var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
+		var seen := {"hid": false, "escaped": false, "fled": false, "dashes": 0}
+		var dashing := false
+		for i in 90:
+			if cooling and known.resolved:
+				known.cooldown_left[&"dash"] = 30.0
+			living.run_all(_world, TICK)
+			await get_tree().physics_frame
+			danger.value = 0.9
+			seen["hid"] = seen["hid"] or (brain.state == EcsLowBrainComponent.State.AMBUSH
+				and _world.has(rabbit, EcsHiddenFlag))
+			seen["escaped"] = seen["escaped"] or brain.state == EcsLowBrainComponent.State.ESCAPE
+			seen["fled"] = seen["fled"] or brain.state == EcsLowBrainComponent.State.FLEE
+			var now := _world.has(rabbit, EcsDashingFlag)
+			if now and not dashing:
+				seen["dashes"] += 1
+			dashing = now
+		_world.add(rabbit, EcsDyingFlag.new())
+		return seen
+	var bush := _manager.spawn(_world, _catalog, &"berry_bush", spot)
+	var by_bush: Dictionary = await scared.call(spot + Vector2(60.0, 0.0), false)
+	var in_open: Dictionary = await scared.call(spot + Vector2(0.0, 2000.0), false)
+	var cooling: Dictionary = await scared.call(spot + Vector2(0.0, -2000.0), true)
+	_check("beside a bush it hides (%s)" % by_bush, by_bush["hid"])
+	_check("in the open with dash ready it escapes, dashing once (%s)" % in_open,
+		in_open["escaped"] and in_open["dashes"] == 1)
+	_check("with the dash cooling it flees (%s)" % cooling,
+		cooling["fled"] and not cooling["escaped"] and cooling["dashes"] == 0)
+	_world.add(bush, EcsDyingFlag.new())
+	living.run_all(_world, TICK)
+	await get_tree().physics_frame
+	EcsConst.world_bounds = bounds
+
+## A thirsty rabbit at water scans before it drinks; scanning beside a hidden
+## crocodile, it sees it and runs instead of drinking.
+func _prey_scan_before_drinking() -> void:
+	var living := EcsScheduler.new()
+	living \
+		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
+		.add(EcsDangerSystem.new()) \
+		.add(EcsSensorSystem.new(_manager)) \
+		.add(EcsPlanningSystem.new()) \
+		.add(EcsLowBrainSystem.new()) \
+		.add(EcsSkillSystem.new()) \
+		.add(EcsDrinkSystem.new()) \
+		.add(EcsMovementSystem.new()) \
+		.add(EcsCollisionSystem.new(_manager)) \
+		.add(EcsNodeSyncSystem.new(_manager))
+	var spot := Vector2(-40000.0, 45000.0)
+	var bounds := EcsConst.world_bounds
+	EcsConst.world_bounds = Rect2(spot - Vector2(3000.0, 3000.0), Vector2(6000.0, 6000.0))
+	var visit := func(at: Vector2, with_croc: bool) -> Dictionary:
+		var pond := _manager.spawn(_world, _catalog, &"water", at)
+		var croc := EcsWorld.NO_ENTITY
+		if with_croc:
+			croc = _manager.spawn(_world, _catalog, &"crocodile", at + Vector2(185.0, 40.0))
+			_world.remove(croc, EcsLowBrainComponent)
+			var hidden := EcsHiddenFlag.new()
+			hidden.stealth = 0.95
+			_world.add(croc, hidden)
+		var rabbit := _manager.spawn(_world, _catalog, &"rabbit", at + Vector2(170.0, 0.0))
+		var energy := _world.get_component(rabbit, EcsEnergyComponent) as EcsEnergyComponent
+		energy.rolled = true
+		energy.value = energy.max_energy
+		(_world.get_component(rabbit, EcsSensorComponent) as EcsSensorComponent).awareness = 0.0
+		var thirst := _world.get_component(rabbit, EcsThirstComponent) as EcsThirstComponent
+		# Mildly thirsty, so a seen threat outranks the drink.
+		thirst.hydration = 60.0
+		var brain := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
+		var seen := {"scanned_first": false, "drank": false, "ran": false}
+		var scanned := false
+		for i in 240:
+			living.run_all(_world, TICK)
+			await get_tree().physics_frame
+			scanned = scanned or _world.has(rabbit, EcsScanningFlag)
+			if brain.state == EcsLowBrainComponent.State.DRINK and not seen["drank"]:
+				seen["drank"] = true
+				seen["scanned_first"] = scanned
+			seen["ran"] = seen["ran"] or brain.state == EcsLowBrainComponent.State.FLEE \
+				or brain.state == EcsLowBrainComponent.State.ESCAPE
+		for id in [pond, croc, rabbit]:
+			if id != EcsWorld.NO_ENTITY and _world.is_alive(id):
+				_world.add(id, EcsDyingFlag.new())
+		living.run_all(_world, TICK)
+		await get_tree().physics_frame
+		return seen
+	var safe: Dictionary = await visit.call(spot, false)
+	var watched: Dictionary = await visit.call(spot + Vector2(0.0, 2000.0), true)
+	_check("at water it scans, then drinks (%s)" % safe, safe["drank"] and safe["scanned_first"])
+	_check("scanning beside a hidden crocodile, it runs (%s)" % watched,
+		watched["ran"] and not watched["drank"])
+	EcsConst.world_bounds = bounds
 
 func _ambush_pipeline() -> EcsScheduler:
 	var living := EcsScheduler.new()

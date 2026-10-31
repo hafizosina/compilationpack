@@ -5,6 +5,7 @@
 [ext_resource type="Script" uid="uid://occbigie8rhc" path="res://9. EcsSystem/components/ecs_body_component.gd" id="s_body"]
 [ext_resource type="Script" uid="uid://b1jvtg0jugxor" path="res://9. EcsSystem/components/ecs_harvestable_component.gd" id="s_crop"]
 [ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
+[ext_resource type="Script" path="res://9. EcsSystem/components/ecs_cover_component.gd" id="s_cover"]
 [ext_resource type="Texture2D" uid="uid://dlfyft0lv6p2h" path="res://Global/Asset/CircleButtonFull.png" id="tex"]
 
 [sub_resource type="Resource" id="c_sprite"]
@@ -20,8 +21,12 @@ radius = 45.0
 [sub_resource type="Resource" id="c_crop"]
 script = ExtResource("s_crop")
 
+[sub_resource type="Resource" id="c_cover"]
+script = ExtResource("s_cover")
+kind = &"bush"
+
 [resource]
 script = ExtResource("def")
 id = &"berry_bush"
 display_name = "Berry Bush"
-components = Array[ExtResource("base")]([SubResource("c_sprite"), SubResource("c_body"), SubResource("c_crop")])
+components = Array[ExtResource("base")]([SubResource("c_sprite"), SubResource("c_body"), SubResource("c_crop"), SubResource("c_cover")])

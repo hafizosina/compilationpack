@@ -15,6 +15,8 @@ const MAX_REPLANS: int = 64
 const FLOOR: float = EcsNeeds.FLOOR
 ## Added to the current goal's score, so near-ties don't flicker.
 const COMMIT_BONUS: float = 0.5
+## Seconds of chasing that cost one unit of a plan.
+const CHASE_SECONDS: float = 5.0
 
 ## Ids waiting for a replan, oldest first.
 var _queue: Array[int] = []
@@ -27,6 +29,9 @@ var _bushes: Dictionary = {}
 var _water_view: EcsView
 ## Current drinkable water: id -> true.
 var _water: Dictionary = {}
+var _cover_view: EcsView
+## Current cover: id -> its kind.
+var _covers: Dictionary = {}
 
 func label() -> StringName:
 	return &"planning"
@@ -61,7 +66,7 @@ func run(world: EcsWorld, _delta: float) -> void:
 		var id: int = _queue.pop_front()
 		if not facts_of.has(id):
 			continue
-		_replan(world.get_component(id, EcsPlannerComponent) as EcsPlannerComponent,
+		_replan(world, id, world.get_component(id, EcsPlannerComponent) as EcsPlannerComponent,
 			facts_of[id], ranked_of[id])
 		done += 1
 
@@ -116,7 +121,7 @@ static func _rank(planner: EcsPlannerComponent, hunger: EcsHungerComponent,
 		ranked.insert(at, goal)
 	return ranked
 
-func _replan(planner: EcsPlannerComponent, facts: Dictionary,
+func _replan(world: EcsWorld, id: int, planner: EcsPlannerComponent, facts: Dictionary,
 		ranked: Array[EcsGoalDef]) -> void:
 	planner.planned = true
 	planner.dirty = false
@@ -125,12 +130,33 @@ func _replan(planner: EcsPlannerComponent, facts: Dictionary,
 	planner.ranking = _ids(ranked)
 	planner.goal = &""
 	planner.steps = []
+	var costs := _costs(world, id, facts)
 	for goal in ranked:
-		var steps := EcsPlanner.plan(facts, goal.desired, planner.actions)
+		var steps := EcsPlanner.plan(facts, goal.desired, planner.actions, costs)
 		if not steps.is_empty():
 			planner.goal = goal.id
 			planner.steps = steps
 			return
+
+## Costs that come from this entity's stats, built only when it replans. A chase costs
+## its expected time, and is impossible against prey at least as fast.
+func _costs(world: EcsWorld, id: int, facts: Dictionary) -> Dictionary:
+	if not facts.has(&"prey_in_sight"):
+		return {}
+	var move := world.get_component(id, EcsMovementComponent) as EcsMovementComponent
+	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
+	var here := (world.get_component(id, EcsPositionComponent) as EcsPositionComponent).position
+	var best := INF
+	for seen in sensor.perceived:
+		if not EcsHunting.can_hunt(world, id, seen) or not EcsHunting.notices(world, id, seen, here):
+			continue
+		var theirs := world.get_component(seen, EcsMovementComponent) as EcsMovementComponent
+		var closing := move.speed - (theirs.speed if theirs != null else 0.0)
+		if closing <= 0.0:
+			continue
+		var there := (world.get_component(seen, EcsPositionComponent) as EcsPositionComponent).position
+		best = minf(best, 1.0 + here.distance_to(there) / closing / CHASE_SECONDS)
+	return {&"hunt": best}
 
 static func _ids(goals: Array[EcsGoalDef]) -> Array[StringName]:
 	var ids: Array[StringName] = []
@@ -157,12 +183,20 @@ func _facts(world: EcsWorld, id: int, hunger: EcsHungerComponent, bag: EcsInvent
 				facts[&"food_in_bag"] = true
 				break
 	var hunts := world.has(id, EcsDamageComponent)
-	if hunts and EcsHunting.cover_of(world, id) > 0.0:
-		facts[&"in_cover"] = true
+	# One fetch for both; no cover in the world, no cover to look for.
+	var known := world.get_component(id, EcsSkillsComponent) as EcsSkillsComponent
+	var kinds: Array[StringName] = []
+	if not _covers.is_empty():
+		kinds = EcsHunting.kinds_in(known)
+	if EcsHunting.dash_ready_in(known):
+		facts[&"dash_ready"] = true
 	if danger != null and danger.value >= danger.flee_at:
 		facts[&"threat_near"] = true
 	else:
 		facts[&"safe"] = true
+	var here := Vector2.ZERO
+	if hunts:
+		here = (world.get_component(id, EcsPositionComponent) as EcsPositionComponent).position
 
 	var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
 	if action != null:
@@ -177,37 +211,46 @@ func _facts(world: EcsWorld, id: int, hunger: EcsHungerComponent, bag: EcsInvent
 				var held := world.get_component(touched, EcsInventoryComponent) as EcsInventoryComponent
 				if held != null and not held.items.is_empty():
 					facts[&"loot_in_reach"] = true
-			if hunts and EcsHunting.can_hunt(world, id, touched):
+			if hunts and EcsHunting.can_hunt(world, id, touched) \
+					and EcsHunting.notices(world, id, touched, here):
 				facts[&"prey_in_reach"] = true
 			if drinks and _water.has(touched):
 				facts[&"water_in_reach"] = true
+			if _covers.has(touched) and kinds.has(_covers[touched]):
+				facts[&"in_cover"] = true
+				if hunts and _is_lure(touched):
+					facts[&"prey_come_here"] = true
 
 	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
 	# Nothing to look for: skip the scan.
-	if sensor != null and (hunts or drinks or not _diet.is_empty() or not _bushes.is_empty()):
+	if sensor != null and (hunts or drinks or not kinds.is_empty() or not _diet.is_empty() \
+			or not _bushes.is_empty()):
 		var dash_reach := EcsHunting.dash_reach(world, id) if hunts else 0.0
-		var here := Vector2.ZERO
-		if dash_reach > 0.0:
-			here = (world.get_component(id, EcsPositionComponent) as EcsPositionComponent).position
 		for seen in sensor.perceived:
+			if _covers.has(seen) and kinds.has(_covers[seen]):
+				facts[&"cover_in_sight"] = true
+				if hunts and _is_lure(seen):
+					facts[&"lure_in_sight"] = true
 			if _edible(seen, hunger):
 				facts[&"food_in_sight"] = true
 			elif _harvestable(seen, hunger):
 				facts[&"bush_in_sight"] = true
-			elif hunts and EcsHunting.can_hunt(world, id, seen):
+			elif hunts and EcsHunting.can_hunt(world, id, seen) \
+					and EcsHunting.notices(world, id, seen, here):
 				facts[&"prey_in_sight"] = true
 				if dash_reach > 0.0 and _within(world, seen, here, dash_reach):
 					facts[&"prey_close"] = true
-			else:
-				if drinks and _water.has(seen):
-					facts[&"water_in_sight"] = true
-				if hunts and world.has(seen, EcsCoverComponent):
-					facts[&"cover_in_sight"] = true
+			elif drinks and _water.has(seen):
+				facts[&"water_in_sight"] = true
 	return facts
 
 static func _within(world: EcsWorld, id: int, here: Vector2, distance: float) -> bool:
 	var there := world.get_component(id, EcsPositionComponent) as EcsPositionComponent
 	return there != null and here.distance_squared_to(there.position) <= distance * distance
+
+## Drinkable or harvestable: somewhere prey must come.
+func _is_lure(id: int) -> bool:
+	return _water.has(id) or _bushes.has(id)
 
 func _edible(id: int, hunger: EcsHungerComponent) -> bool:
 	return _diet.has(id) and (hunger == null or _diet[id] == hunger.eats)
@@ -237,3 +280,10 @@ func _refresh(world: EcsWorld) -> void:
 		_water = {}
 		for id in water.ids:
 			_water[id] = true
+	var covers := world.view([EcsCoverComponent], [EcsDyingFlag])
+	if covers != _cover_view:
+		_cover_view = covers
+		_covers = {}
+		var found := covers.column(EcsCoverComponent)
+		for k in covers.ids.size():
+			_covers[covers.ids[k]] = (found[k] as EcsCoverComponent).kind

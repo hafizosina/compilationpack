@@ -32,9 +32,9 @@
 [ext_resource type="Script" uid="uid://cs61nhjw8noqy" path="res://9. EcsSystem/components/ecs_danger_component.gd" id="s_danger"]
 
 [ext_resource type="Script" path="res://9. EcsSystem/components/ecs_skills_component.gd" id="s_skills"]
-[ext_resource type="Script" path="res://9. EcsSystem/ai/ecs_skill_def.gd" id="s_skill_def"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/skills/scan.tres" id="k_scan"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/scan.tres" id="a_scan"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/go_to_cover.tres" id="a_go_to_cover"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/hide.tres" id="a_hide"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/escape.tres" id="a_escape"]
 
 [ext_resource type="Script" path="res://9. EcsSystem/components/ecs_thirst_component.gd" id="s_thirst"]
 [ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/go_to_water.tres" id="a_go_to_water"]
@@ -88,7 +88,7 @@ restore = 10.0
 
 [sub_resource type="Resource" id="c_planner"]
 script = ExtResource("s_planner")
-actions = Array[ExtResource("s_action_def")]([ExtResource("a_eat_carried"), ExtResource("a_eat_ground"), ExtResource("a_take"), ExtResource("a_loot"), ExtResource("a_seek_food"), ExtResource("a_seek_bush"), ExtResource("a_harvest"), ExtResource("a_sleep"), ExtResource("a_flee"), ExtResource("a_scan"), ExtResource("a_go_to_water"), ExtResource("a_drink")])
+actions = Array[ExtResource("s_action_def")]([ExtResource("a_eat_carried"), ExtResource("a_eat_ground"), ExtResource("a_take"), ExtResource("a_loot"), ExtResource("a_seek_food"), ExtResource("a_seek_bush"), ExtResource("a_harvest"), ExtResource("a_sleep"), ExtResource("a_flee"), ExtResource("a_go_to_cover"), ExtResource("a_hide"), ExtResource("a_escape"), ExtResource("a_go_to_water"), ExtResource("a_drink")])
 goals = Array[ExtResource("s_goal_def")]([ExtResource("g_satisfy_hunger"), ExtResource("g_provision"), ExtResource("g_rest"), ExtResource("g_flee"), ExtResource("g_quench")])
 
 [sub_resource type="Resource" id="c_danger"]
@@ -96,7 +96,6 @@ script = ExtResource("s_danger")
 
 [sub_resource type="Resource" id="c_skills"]
 script = ExtResource("s_skills")
-skills = Array[ExtResource("s_skill_def")]([ExtResource("k_scan")])
 
 [sub_resource type="Resource" id="c_thirst"]
 script = ExtResource("s_thirst")

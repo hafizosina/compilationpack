@@ -38,17 +38,59 @@ static func visibility_of(world: EcsWorld, id: int, watcher: int, here: Vector2)
 	var awareness := sensor.awareness if sensor != null else 0.0
 	return 1.0 - hidden.stealth * (1.0 - awareness)
 
-## The best cover `id` has in reach, 0 for none.
+## Visibility below this goes unnoticed by a hunter choosing prey.
+const NOTICE_AT: float = 0.5
+
+## Does `hunter` at `here` notice `prey`? Hidden prey it can't see well is passed over.
+static func notices(world: EcsWorld, hunter: int, prey: int, here: Vector2) -> bool:
+	return visibility_of(world, prey, hunter, here) >= NOTICE_AT
+
+## The best cover `id` has in reach of a kind it can hide in, 0 for none.
 static func cover_of(world: EcsWorld, id: int) -> float:
 	var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
-	if action == null:
+	var kinds := hide_kinds(world, id)
+	if action == null or kinds.is_empty():
 		return 0.0
 	var best := 0.0
 	for touched in action.reached:
 		var cover := world.get_component(touched, EcsCoverComponent) as EcsCoverComponent
-		if cover != null:
+		if cover != null and kinds.has(cover.kind):
 			best = maxf(best, cover.conceal)
 	return best
+
+## The cover kinds `id`'s hide skill can use; empty without one.
+static func hide_kinds(world: EcsWorld, id: int) -> Array[StringName]:
+	return kinds_in(world.get_component(id, EcsSkillsComponent) as EcsSkillsComponent)
+
+## The cover kinds the hide skill in `known` can use; empty without one.
+static func kinds_in(known: EcsSkillsComponent) -> Array[StringName]:
+	if known != null:
+		for skill in known.skills:
+			if skill is EcsHideSkill:
+				return (skill as EcsHideSkill).kinds
+	return []
+
+## Does `id` hide in cover `cover`?
+static func hides_in(world: EcsWorld, id: int, cover: int) -> bool:
+	var found := world.get_component(cover, EcsCoverComponent) as EcsCoverComponent
+	return found != null and hide_kinds(world, id).has(found.kind)
+
+## Is `id` a lure: a place prey must visit, to drink or to harvest?
+static func is_lure(world: EcsWorld, id: int) -> bool:
+	return world.has(id, EcsDrinkableComponent) or world.has(id, EcsHarvestableComponent)
+
+## Is `id`'s dash ready to cast?
+static func dash_ready(world: EcsWorld, id: int) -> bool:
+	return dash_ready_in(world.get_component(id, EcsSkillsComponent) as EcsSkillsComponent)
+
+## Is the dash in `known` ready to cast?
+static func dash_ready_in(known: EcsSkillsComponent) -> bool:
+	if known == null:
+		return false
+	for skill in known.skills:
+		if skill is EcsDashSkill:
+			return not known.cooldown_left.has(skill.id) and not known.active_left.has(skill.id)
+	return false
 
 ## How close prey must be for `id` to dash at it, 0 if it has no dash.
 static func dash_reach(world: EcsWorld, id: int) -> float:

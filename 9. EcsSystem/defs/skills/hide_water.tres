@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="EcsHideSkill" format=3]
+
+[ext_resource type="Script" path="res://9. EcsSystem/ai/ecs_hide_skill.gd" id="def"]
+
+[resource]
+script = ExtResource("def")
+id = &"hide"
+stealth = 0.95
+kinds = Array[StringName]([&"water"])

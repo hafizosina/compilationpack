@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="EcsSkillSet" format=3]
+
+[ext_resource type="Script" path="res://9. EcsSystem/ai/ecs_skill_set.gd" id="set"]
+[ext_resource type="Script" path="res://9. EcsSystem/ai/ecs_skill_def.gd" id="s_skill_def"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/skills/dash.tres" id="k_dash"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/skills/hide.tres" id="k_hide"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/skills/scan.tres" id="k_scan"]
+
+[resource]
+script = ExtResource("set")
+skills = Array[ExtResource("s_skill_def")]([ExtResource("k_dash"), ExtResource("k_hide"), ExtResource("k_scan")])

@@ -15,17 +15,18 @@ enum State {
 	HARVEST,    ## Harvesting `target`, which is in reach.
 	FLEE,       ## Running from the danger's last threat.
 	HIDE,       ## Walking to cover `target`, stopping once in it.
-	AMBUSH,     ## Hiding in cover `target`, waiting out `pause_left` for prey.
+	AMBUSH,     ## Hiding in cover `target`: waiting for prey, or hiding from a threat.
 	POUNCE,     ## Dashing at `target`; becomes HUNT once the dash starts.
 	SCAN,       ## Standing still, scanning for `pause_left`.
 	SEEK_WATER, ## Walking to water `target` to drink.
 	DRINK,      ## Drinking from `target`, which is in reach, until full.
+	ESCAPE,     ## Dashing away from the danger's last threat; becomes FLEE once dashing.
 }
 
 ## Display names for `state`, in enum order.
 const STATE_NAMES: Array[String] = ["idle", "wander", "seek food", "taking", "eating", "sleeping",
 	"hunting", "attacking", "harvesting", "fleeing", "to cover", "ambushing", "pouncing",
-	"scanning", "seek water", "drinking"]
+	"scanning", "seek water", "drinking", "escaping"]
 
 ## How far away a wander destination may be.
 @export var radius: float = 260.0

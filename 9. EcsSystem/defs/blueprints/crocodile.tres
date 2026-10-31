@@ -30,9 +30,9 @@
 
 [ext_resource type="Script" path="res://9. EcsSystem/components/ecs_skills_component.gd" id="s_skills"]
 [ext_resource type="Script" path="res://9. EcsSystem/ai/ecs_skill_def.gd" id="s_skill_def"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/skills/dash.tres" id="k_dash"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/skills/hide.tres" id="k_hide"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/go_to_cover.tres" id="a_go_to_cover"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/skills/dash_crocodile.tres" id="k_dash"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/skills/hide_water.tres" id="k_hide"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/go_to_lure.tres" id="a_go_to_lure"]
 [ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/ambush.tres" id="a_ambush"]
 [ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/pounce.tres" id="a_pounce"]
 
@@ -102,7 +102,7 @@ multiplier = 2.0
 
 [sub_resource type="Resource" id="c_planner"]
 script = ExtResource("s_planner")
-actions = Array[ExtResource("s_action_def")]([ExtResource("a_eat_ground"), ExtResource("a_seek_food"), ExtResource("a_hunt"), ExtResource("a_attack"), ExtResource("a_sleep"), ExtResource("a_flee"), ExtResource("a_go_to_cover"), ExtResource("a_ambush"), ExtResource("a_pounce"), ExtResource("a_go_to_water"), ExtResource("a_drink")])
+actions = Array[ExtResource("s_action_def")]([ExtResource("a_eat_ground"), ExtResource("a_seek_food"), ExtResource("a_hunt"), ExtResource("a_attack"), ExtResource("a_sleep"), ExtResource("a_flee"), ExtResource("a_go_to_lure"), ExtResource("a_ambush"), ExtResource("a_pounce"), ExtResource("a_go_to_water"), ExtResource("a_drink")])
 goals = Array[ExtResource("s_goal_def")]([ExtResource("g_satisfy_hunger"), ExtResource("g_rest"), ExtResource("g_flee"), ExtResource("g_quench")])
 
 [sub_resource type="Resource" id="c_danger"]
@@ -110,7 +110,7 @@ script = ExtResource("s_danger")
 
 [sub_resource type="Resource" id="c_skills"]
 script = ExtResource("s_skills")
-skills = Array[ExtResource("s_skill_def")]([ExtResource("k_dash"), ExtResource("k_hide")])
+swaps = Array[ExtResource("s_skill_def")]([ExtResource("k_dash"), ExtResource("k_hide")])
 
 [sub_resource type="Resource" id="c_thirst"]
 script = ExtResource("s_thirst")

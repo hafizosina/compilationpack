@@ -8,9 +8,10 @@ extends RefCounted
 const MAX_DEPTH: int = 8
 
 ## The cheapest action ids that take `state` to one where every fact in `desired`
-## holds. Empty if `desired` already holds or no plan fits in MAX_DEPTH.
+## holds. Empty if `desired` already holds or no plan fits in MAX_DEPTH. `costs`
+## overrides an action's cost by id; INF rules it out.
 static func plan(state: Dictionary, desired: Dictionary,
-		actions: Array[EcsActionDef]) -> Array[StringName]:
+		actions: Array[EcsActionDef], costs: Dictionary = {}) -> Array[StringName]:
 	var none: Array[StringName] = []
 	var open: Array[Dictionary] = [{"state": state, "g": 0.0,
 		"f": _estimate(state, desired), "steps": none}]
@@ -26,9 +27,12 @@ static func plan(state: Dictionary, desired: Dictionary,
 		for action in actions:
 			if not holds(facts, action.preconditions):
 				continue
+			var cost: float = costs.get(action.id, action.cost)
+			if is_inf(cost):
+				continue
 			var next := facts.duplicate()
 			next.merge(action.effects, true)
-			var g: float = at["g"] + action.cost
+			var g: float = at["g"] + cost
 			var key := _key(next)
 			if best.has(key) and best[key] <= g:
 				continue

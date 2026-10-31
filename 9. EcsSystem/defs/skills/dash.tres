@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("def")
 id = &"dash"
-cooldown = 12.0
-duration = 0.6
-speed_scale = 3.5
-reach = 180.0
+cooldown = 10.0
+duration = 0.5
+speed_scale = 2.0
+reach = 150.0

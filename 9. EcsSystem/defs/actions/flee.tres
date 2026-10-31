@@ -11,4 +11,4 @@ preconditions = {
 effects = {
 &"safe": true
 }
-cost = 1.0
+cost = 1.5

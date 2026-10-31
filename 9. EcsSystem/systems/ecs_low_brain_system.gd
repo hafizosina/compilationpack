@@ -2,7 +2,7 @@ class_name EcsLowBrainSystem
 extends EcsSystem
 
 ## The creature's brain: a state machine (IDLE, WANDER, SEEK_FOOD, TAKE, EAT, SLEEP,
-## HUNT, ATTACK, HARVEST, FLEE, HIDE, AMBUSH, POUNCE, SCAN, SEEK_WATER, DRINK).
+## HUNT, ATTACK, HARVEST, FLEE, HIDE, AMBUSH, POUNCE, SCAN, SEEK_WATER, DRINK, ESCAPE).
 ## It decides and writes a destination; executors act on the intent flags it
 ## raises in `_set_state()`.
 ##
@@ -14,7 +14,8 @@ extends EcsSystem
 ## seek water) goes above the food rungs when thirst is the more urgent need
 ## (EcsNeeds), below them otherwise. Food is
 ## filtered by diet: a creature only eats, seeks and harvests what its hunger `eats`.
-## HIDE, AMBUSH, POUNCE and SCAN are plan steps only; skills are cast by intent.
+## HIDE, AMBUSH, POUNCE and ESCAPE are plan steps only; skills are cast by intent. A
+## drinker scans first when its scan is ready.
 
 ## Skill ids the brain casts.
 const HIDE_SKILL: StringName = &"hide"
@@ -63,14 +64,20 @@ func run(world: EcsWorld, delta: float) -> void:
 
 		# Asleep: stay down until rested, starving or parched, or the plan is to flee.
 		if brain.state == EcsLowBrainComponent.State.SLEEP:
-			if not _worth_waking_for(world, id) and step != &"flee":
+			if not _worth_waking_for(world, id) and not _staying_safe(step):
 				continue
 			_release(world, id, brain)
 
 		# Drinking: keep at it until full, unless the plan is to flee.
 		if brain.state == EcsLowBrainComponent.State.DRINK:
-			if step != &"flee" and _keep_drinking(world, id, brain.target):
+			if not _staying_safe(step) and _keep_drinking(world, id, brain.target):
 				continue
+			_release(world, id, brain)
+
+		# A plain flee gives way to an escape while the dash is ready.
+		if brain.state == EcsLowBrainComponent.State.FLEE and step == &"escape" \
+				and EcsHunting.dash_ready(world, id):
+			_abandon_trip(move)
 			_release(world, id, brain)
 
 		# The plan moved on: drop what no longer serves it.
@@ -79,7 +86,11 @@ func run(world: EcsWorld, delta: float) -> void:
 			_release(world, id, brain)
 
 		# Fleeing: keep running from where the threat was last seen.
-		if brain.state == EcsLowBrainComponent.State.FLEE:
+		if brain.state == EcsLowBrainComponent.State.ESCAPE and world.has(id, EcsDashingFlag):
+			# The dash started: its intent is spent, so it never fires twice.
+			_set_state(world, id, brain, EcsLowBrainComponent.State.FLEE)
+		if brain.state == EcsLowBrainComponent.State.FLEE \
+				or brain.state == EcsLowBrainComponent.State.ESCAPE:
 			_run_from(world, id, move, place)
 			continue
 
@@ -140,7 +151,7 @@ func run(world: EcsWorld, delta: float) -> void:
 			and thirst.hydration <= maxf(thirst.drink_below, thirst.seek_water_below)
 		var thirst_first := thirsty and EcsNeeds.thirst_urgency(thirst) \
 			> EcsNeeds.hunger_urgency(world.get_component(id, EcsHungerComponent))
-		if thirst_first and _try_water(world, id, brain, move, place):
+		if thirst_first and _try_water(world, id, brain, move, place, delta):
 			continue
 		if _try_eat(world, id, brain, move):
 			continue
@@ -152,7 +163,7 @@ func run(world: EcsWorld, delta: float) -> void:
 			continue
 		if _try_hunt(world, id, brain, move, place):
 			continue
-		if thirsty and not thirst_first and _try_water(world, id, brain, move, place):
+		if thirsty and not thirst_first and _try_water(world, id, brain, move, place, delta):
 			continue
 		if _try_sleep(world, id, brain, move):
 			continue
@@ -187,27 +198,31 @@ func _try_step(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 			_run_from(world, id, move, place)
 			return true
 		&"go_to_cover":
-			return _try_cover(world, id, brain, move, place)
-		&"ambush":
-			return _try_ambush(world, id, brain, move, place, planner, delta)
+			return _try_cover(world, id, brain, move, place, false)
+		&"go_to_lure":
+			return _try_cover(world, id, brain, move, place, true)
+		&"ambush", &"hide":
+			return _try_ambush(world, id, brain, move, place, planner, step, delta)
 		&"pounce":
 			return _try_pounce(world, id, brain, move, place)
-		&"scan":
-			return _try_scan(world, id, brain, move, delta)
+		&"escape":
+			return _try_escape(world, id, brain, move, place)
 		&"drink":
-			return _try_drink(world, id, brain, move, false)
+			return _try_drink(world, id, brain, move, delta, false)
 		&"go_to_water":
 			return _try_seek_water(world, id, brain, move, place, false)
 	return false
 
 ## Drink water in reach, or walk to the nearest in sight.
 func _try_water(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
-		move: EcsMovementComponent, place: EcsPositionComponent) -> bool:
-	return _try_drink(world, id, brain, move) or _try_seek_water(world, id, brain, move, place)
+		move: EcsMovementComponent, place: EcsPositionComponent, delta: float) -> bool:
+	return _try_drink(world, id, brain, move, delta) \
+		or _try_seek_water(world, id, brain, move, place)
 
-## Drink from water in reach, if thirsty enough (when `gated`) and not full.
+## Drink from water in reach, if thirsty enough (when `gated`) and not full. Scans
+## first when its scan is ready.
 func _try_drink(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
-		move: EcsMovementComponent, gated: bool = true) -> bool:
+		move: EcsMovementComponent, delta: float, gated: bool = true) -> bool:
 	var thirst := world.get_component(id, EcsThirstComponent) as EcsThirstComponent
 	if thirst == null or thirst.hydration >= thirst.max_hydration \
 			or (gated and thirst.hydration > thirst.drink_below):
@@ -215,6 +230,8 @@ func _try_drink(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	var water := _water_in_reach(world, id)
 	if water == EcsWorld.NO_ENTITY:
 		return false
+	if _try_scan(world, id, brain, move, delta):
+		return true
 	_abandon_trip(move)
 	_set_state(world, id, brain, EcsLowBrainComponent.State.DRINK, water)
 	return true
@@ -265,12 +282,14 @@ static func _retreat_leg(brain: EcsLowBrainComponent) -> bool:
 static func _retreating(brain: EcsLowBrainComponent, move: EcsMovementComponent) -> bool:
 	return _retreat_leg(brain) and move.has_destination
 
-## Walk to the nearest cover in sight; once in it, stand at its edge.
+## Walk to the nearest cover in sight it can hide in (only a lure, if `lure_only`); once
+## in it, stand at its edge.
 func _try_cover(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
-		move: EcsMovementComponent, place: EcsPositionComponent) -> bool:
-	if EcsHunting.cover_of(world, id) > 0.0:
+		move: EcsMovementComponent, place: EcsPositionComponent, lure_only: bool) -> bool:
+	var here := _cover_in_reach(world, id, lure_only)
+	if here != EcsWorld.NO_ENTITY:
 		_abandon_trip(move)
-		_set_state(world, id, brain, EcsLowBrainComponent.State.HIDE, _cover_in_reach(world, id))
+		_set_state(world, id, brain, EcsLowBrainComponent.State.HIDE, here)
 		return true
 	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
 	if sensor == null:
@@ -278,7 +297,8 @@ func _try_cover(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	var best := EcsWorld.NO_ENTITY
 	var best_distance := INF
 	for seen in sensor.perceived:
-		if not world.has(seen, EcsCoverComponent):
+		if not EcsHunting.hides_in(world, id, seen) \
+				or (lure_only and not EcsHunting.is_lure(world, seen)):
 			continue
 		var distance := place.position.distance_squared_to(_position_of(world, seen))
 		if distance < best_distance:
@@ -290,11 +310,12 @@ func _try_cover(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	_set_trip(move, _position_of(world, best))
 	return true
 
-## Hide in the cover it is in and wait for prey, for the ambush's `patience`.
-## Out of patience, it walks a leg away from the cover, so the planner decides again.
+## Hide in the cover it is in, for `step` (ambush or hide), up to that action's
+## `patience`. Out of patience, it walks a leg away from the cover, so the planner
+## decides again.
 func _try_ambush(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		move: EcsMovementComponent, place: EcsPositionComponent,
-		planner: EcsPlannerComponent, delta: float) -> bool:
+		planner: EcsPlannerComponent, step: StringName, delta: float) -> bool:
 	if brain.state == EcsLowBrainComponent.State.AMBUSH:
 		brain.pause_left -= delta
 		if brain.pause_left > 0.0:
@@ -306,12 +327,12 @@ func _try_ambush(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		_set_state(world, id, brain, EcsLowBrainComponent.State.WANDER, pond)
 		_set_trip(move, EcsConst.inside(place.position + away.normalized() * brain.radius))
 		return true
-	var pond := _cover_in_reach(world, id)
+	var pond := _cover_in_reach(world, id, false)
 	if pond == EcsWorld.NO_ENTITY:
 		return false
 	_abandon_trip(move)
 	_set_state(world, id, brain, EcsLowBrainComponent.State.AMBUSH, pond)
-	var patience := _patience(planner, &"ambush")
+	var patience := _patience(planner, step)
 	brain.pause_left = patience if patience > 0.0 else INF
 	return true
 
@@ -328,7 +349,8 @@ func _try_pounce(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	var best := EcsWorld.NO_ENTITY
 	var best_distance := reach * reach
 	for seen in sensor.perceived:
-		if not EcsHunting.can_hunt(world, id, seen):
+		if not EcsHunting.can_hunt(world, id, seen) \
+				or not EcsHunting.notices(world, id, seen, place.position):
 			continue
 		var distance := place.position.distance_squared_to(_position_of(world, seen))
 		if distance <= best_distance:
@@ -351,21 +373,35 @@ func _try_scan(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		return false
 	var known := world.get_component(id, EcsSkillsComponent) as EcsSkillsComponent
 	var scan := EcsSkillDef.find(known.skills, SCAN_SKILL) if known != null else null
-	if scan == null or known.cooldown_left.has(SCAN_SKILL):
+	if scan == null or known.cooldown_left.has(SCAN_SKILL) or known.active_left.has(SCAN_SKILL):
 		return false
 	_abandon_trip(move)
 	_set_state(world, id, brain, EcsLowBrainComponent.State.SCAN)
 	brain.pause_left = scan.duration
 	return true
 
-## A cover entity in reach, or NO_ENTITY.
-func _cover_in_reach(world: EcsWorld, id: int) -> int:
+## Cover in reach it can hide in (only a lure, if `lure_only`), or NO_ENTITY.
+func _cover_in_reach(world: EcsWorld, id: int, lure_only: bool) -> int:
 	var action := world.get_component(id, EcsActionComponent) as EcsActionComponent
 	if action != null:
 		for touched in action.reached:
-			if world.has(touched, EcsCoverComponent):
+			if EcsHunting.hides_in(world, id, touched) \
+					and (not lure_only or EcsHunting.is_lure(world, touched)):
 				return touched
 	return EcsWorld.NO_ENTITY
+
+## Dash away from the danger's last threat, if the dash is ready.
+func _try_escape(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
+		move: EcsMovementComponent, place: EcsPositionComponent) -> bool:
+	if not world.has(id, EcsDangerComponent) or not EcsHunting.dash_ready(world, id):
+		return false
+	_set_state(world, id, brain, EcsLowBrainComponent.State.ESCAPE)
+	_run_from(world, id, move, place)
+	return true
+
+## Is `step` a way of staying safe? A sleeper wakes for it and a drinker stops.
+static func _staying_safe(step: StringName) -> bool:
+	return step == &"flee" or step == &"escape" or step == &"hide" or step == &"go_to_cover"
 
 ## The `patience` of the plan's action `action_id`, 0 if none.
 static func _patience(planner: EcsPlannerComponent, action_id: StringName) -> float:
@@ -404,14 +440,14 @@ static func _serves(state: EcsLowBrainComponent.State, step: StringName) -> bool
 			return step == &"hunt" or step == &"attack" or step == &"pounce"
 		EcsLowBrainComponent.State.HARVEST:
 			return step == &"harvest"
-		EcsLowBrainComponent.State.FLEE:
-			return step == &"flee"
+		EcsLowBrainComponent.State.FLEE, EcsLowBrainComponent.State.ESCAPE:
+			return step == &"flee" or step == &"escape"
 		EcsLowBrainComponent.State.HIDE:
-			return step == &"go_to_cover"
+			return step == &"go_to_cover" or step == &"go_to_lure"
 		EcsLowBrainComponent.State.AMBUSH:
-			return step == &"ambush"
+			return step == &"ambush" or step == &"hide"
 		EcsLowBrainComponent.State.SCAN:
-			return step == &"scan"
+			return step == &"drink"
 		EcsLowBrainComponent.State.SEEK_WATER:
 			return step == &"go_to_water"
 		EcsLowBrainComponent.State.DRINK:
@@ -604,7 +640,8 @@ func _try_hunt(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	var best := EcsWorld.NO_ENTITY
 	var best_distance := INF
 	for seen in sensor.perceived:
-		if not EcsHunting.can_hunt(world, id, seen):
+		if not EcsHunting.can_hunt(world, id, seen) \
+				or not EcsHunting.notices(world, id, seen, place.position):
 			continue
 		var there := (world.get_component(seen, EcsPositionComponent) as EcsPositionComponent).position
 		var distance := place.position.distance_squared_to(there)
@@ -625,8 +662,9 @@ func _try_hunt(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 func _keep_hunting(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		move: EcsMovementComponent, planned: bool) -> bool:
 	var prey := brain.target
-	if not EcsHunting.can_hunt(world, id, prey) or (not planned and _sees_food(world, id)):
-		# Dead, dying or gone, or there is food to eat instead.
+	if not EcsHunting.can_hunt(world, id, prey) or (not planned and _sees_food(world, id)) \
+			or not EcsHunting.notices(world, id, prey, _position_of(world, id)):
+		# Dead, dying, gone or hidden, or there is food to eat instead.
 		_abandon_trip(move)
 		_release(world, id, brain)
 		return false
@@ -782,6 +820,8 @@ func _set_state(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 			_cast(world, id, DASH_SKILL)
 		EcsLowBrainComponent.State.SCAN:
 			_cast(world, id, SCAN_SKILL)
+		EcsLowBrainComponent.State.ESCAPE:
+			_cast(world, id, DASH_SKILL)
 		EcsLowBrainComponent.State.DRINK:
 			var drink := EcsDrinkIntentFlag.new()
 			drink.target_id = target
@@ -801,7 +841,7 @@ static func _flag_for(state: EcsLowBrainComponent.State) -> Script:
 		EcsLowBrainComponent.State.HARVEST:
 			return EcsHarvestIntentFlag
 		EcsLowBrainComponent.State.AMBUSH, EcsLowBrainComponent.State.POUNCE, \
-				EcsLowBrainComponent.State.SCAN:
+				EcsLowBrainComponent.State.SCAN, EcsLowBrainComponent.State.ESCAPE:
 			return EcsCastIntentFlag
 		EcsLowBrainComponent.State.DRINK:
 			return EcsDrinkIntentFlag

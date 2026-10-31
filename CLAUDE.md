@@ -10,11 +10,11 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 310 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 330 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments, the hunger/health/energy loop,
 # intent flags, items as records, the drop on death, views, combat, corpses,
 # looting, rot, diet, hunting, harvesting, the planner, utility, fleeing,
-# skills, hiding, the ambush and thirst.
+# skills, hiding, the ambush, thirst, costs from stats and staying safe.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
@@ -220,7 +220,7 @@ diet** and `EcsHungerComponent.eats` says which: rabbits and monkeys eat plants,
 crocodile meat, and the brain's food index filters on it.
 
 **Deciding is one system with state, not a rung per behaviour.** `EcsLowBrainSystem` is a
-small FSM — `IDLE > WANDER > SEEK_FOOD > TAKE > EAT > SLEEP > HUNT > ATTACK > HARVEST > FLEE > HIDE > AMBUSH > POUNCE > SCAN > SEEK_WATER > DRINK` — and `EcsLowBrainComponent` holds its `state` and
+small FSM — `IDLE > WANDER > SEEK_FOOD > TAKE > EAT > SLEEP > HUNT > ATTACK > HARVEST > FLEE > HIDE > AMBUSH > POUNCE > SCAN > SEEK_WATER > DRINK > ESCAPE` — and `EcsLowBrainComponent` holds its `state` and
 its `target`. It replaced `EcsForageSystem`, which was a second decider whose priority was
 its line number in `main.gd`. That read well but was stateless: a creature's only memory
 between ticks was `has_destination`, so nothing could persist ("I am going to *that*
@@ -259,14 +259,21 @@ by score, and collapse is still the only forced override.
 inside the harvester's reach so the existing eat and take rungs finish the job. Keep bushes at
 1.3 per plant-eater in `world1.tres`.
 
+**Every animal is the same** (HANDOFF §19, step 3): one default skill set
+(`defs/skills/default_set.tres` — dash, hide, scan) that a kind changes only through
+`EcsSkillsComponent.swaps`; cover has a kind and a hide skill lists the kinds it uses; **action
+costs come from stats** (`EcsPlanner.plan(..., costs)`, built at replan: a chase is impossible
+against prey as fast), so the slow crocodile ambushes and the fast wild dog chases, from the same
+actions. **Never remove an action from one kind to force a route** — change a stat or a cost.
+Hunters only pick prey they `EcsHunting.notices`, so hiding protects prey too.
+
 **Skills say their own effect** (`9. EcsSystem/HANDOFF.md` §19). An `EcsSkillDef` (`defs/skills/`)
 overrides `make_effect()` — the flag that *is* it being active — and `can_start(world, id)`, its
 requirement; the brain asks with `EcsCastIntentFlag`, and **only `EcsSkillSystem` adds or removes
 an effect flag** (`EcsDashingFlag`, `EcsHiddenFlag`, `EcsScanningFlag`). It never switches on skill
 type. The crocodile is slow (100), hides in water (`EcsCoverComponent`, `water.tres`) and dashes;
-`go_to_cover > ambush > pounce` compete with `hunt` on cost — **no action is removed to force a
-route**. `EcsActionDef.patience` fails a bet like `ambush` that never pays. Prey carry Scan, but
-nothing triggers it yet. Scan's radius and the planner's `prey_close` are distance checks run
+`go_to_lure > ambush > pounce` compete with `hunt` on cost — **no action is removed to force a
+route**. `EcsActionDef.patience` fails a bet like `ambush` that never pays. Prey scan before they drink. Scan's radius and the planner's `prey_close` are distance checks run
 only over `perceived` — the one deliberate addition to "perception is physics".
 
 **Thirst is hunger's twin** (HANDOFF §8). `EcsThirstComponent.hydration` drains, and at zero
@@ -275,7 +282,7 @@ only over `perceived` — the one deliberate addition to "perception is physics"
 `EcsDrinkIntentFlag`; `EcsDrinkSystem` is the executor; DRINK holds until full. **Parched mirrors
 starving** (no sleep, wakes a sleeper). **The more urgent need wins**, thirst or hunger, scored by
 one curve in `ai/ecs_needs.gd` that the planner (`quench` weight 10 = eat) and the ladder both read.
-`ambush` now needs `water_in_reach`: the crocodile bets only where prey must come to drink.
+`ambush` needs `prey_come_here`: hunters bet only at a lure — water or a bush prey must visit.
 **A kill is not one action** — it is attacks until dead; choosing skills to kill from the
 enemy's skills and stats is left to combat planning. Don't patch it with a one-shot kill.
 
@@ -341,8 +348,8 @@ singletons, 28 systems
 (`lifecycle > spawner > hunger > energy > thirst > health > danger > sensor > planning > low_brain > skill > consume > drink > harvest > attack > crit > damage > movement > collision > pickup > rot > corpse > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
 rank in the plan's decision ladder — the planner sits *above* it — and not for the
 wandering it happens to do), and a world
-of 44 animals in 3 types (20 rabbits, 20 monkeys and 4 crocodiles — a grazer, a carrier
-and a hunter, differing by a component or two and some authored values) plus 52 berry
+of 48 animals in 4 types (20 rabbits, 20 monkeys, 4 crocodiles and 4 wild dogs — a grazer,
+a carrier, an ambusher and a chaser, differing by a component or two and some authored values) plus 52 berry
 bushes and 16 ponds, on a 6400×3360 arena — the old density at 4× the area. `EcsDebugSystem` is a pure
 reader feeding one dumb view, `EcsDebugOverlay`, which annotates each entity in world
 space: name, a velocity arrow, a dashed line to its destination, **fullness, energy and

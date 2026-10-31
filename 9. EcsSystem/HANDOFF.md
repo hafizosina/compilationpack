@@ -13,7 +13,7 @@ a recorded design, not something you can run.
 ```bash
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 "$GODOT" --path . "res://9. EcsSystem/main.tscn"                          # run it (also the main scene)
-"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 310 checks, exit 0 = all pass
+"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 330 checks, exit 0 = all pass
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"    # population ramp, minutes
 "$GODOT" --headless --editor --quit --path . 2>&1 | grep -iE "error|invalid|uid"  # after any .tscn/.tres edit
 ```
@@ -79,7 +79,7 @@ systems hold all behaviour and never call each other, and nothing outside a syst
 component data. Queries key on the script object — `world.query([EcsPositionComponent])` —
 so a typo is a parse error, not a silently empty result.
 
-The world today is 44 animals — 20 rabbits, 20 monkeys, 4 crocodiles — 52 bushes, 1.3 per
+The world today is 48 animals — 20 rabbits, 20 monkeys, 4 crocodiles, 4 wild dogs — 52 bushes, 1.3 per
 plant-eater, and 16 ponds (`defs/world1.tres`), on a 6400×3360 arena. The arena was doubled each
 way on 2026-10-31 to make room for more kinds; doubling it alone left food 4× sparser and 2–5
 of 10 plant-eaters starved per 300 s run (≈0 before), so every count was then multiplied by 4
@@ -580,7 +580,7 @@ after its producer keeps its data one tick old, as at full rate.
 
 ## 12. Tests
 
-`tests/lifecycle_test.tscn` — **310 checks**, exit code 0 only if all pass. Run it after
+`tests/lifecycle_test.tscn` — **330 checks**, exit code 0 only if all pass. Run it after
 touching the manager, collision, pickup, spawner, sensor, node sync, the brain or any
 executor. It covers: declared nodes built and undeclared ones not; kill takes data and nodes;
 spawn notes fulfilled a tick later; soft collision, immovable and non-solid bodies; seeing is
@@ -610,7 +610,13 @@ eating; thirst draining, slower asleep, and a death of thirst leaving a corpse; 
 on land and at cover that isn't drinkable, and working with no brain; a thirsty rabbit seeking
 water and drinking until full with the flag up exactly while it drinks; the more urgent of
 thirst and hunger going first, on the ladder and in utility; being parched waking a sleeper; the
-water chains; and a thirsty rabbit walking to a pond where a hidden crocodile pounces and bites.
+water chains; a thirsty rabbit walking to a pond where a hidden crocodile pounces and bites;
+every animal resolving the default skills and the crocodile's swaps; a chase priced from
+speeds (the crocodile can't, the dog can), the same actions making one ambush and the other
+chase, and a dog ambushing at a bush; each kind hiding only in its own cover; hunters passing
+over hidden prey and dropping a chase when it hides; a frightened rabbit hiding beside a bush,
+escaping with a ready dash or fleeing with it cooling; and a rabbit scanning before it drinks,
+running when the scan shows a crocodile.
 
 `tests/stress_test.tscn` — the population ramp and the per-stage bookkeeping split (§14). Knobs after a bare `--`:
 `--spacing=180` (grid px), `--n=4000` (one population), `--skip=hunger,health` (leave stages
@@ -650,7 +656,10 @@ brain's food index. The ceiling went from 4,800–6,400 to over 9,600 entities (
   dearer. The cost of raising a flag under load is unmeasured — the stress population never
   raises one.
 - **Features roadmap, step 1: skills, water and the ambush** — done (2026-10-31, §19).
-- **Features roadmap, step 2: thirst** — done (2026-10-31, §8 and §19). The
+- **Features roadmap, step 2: thirst** — done (2026-10-31, §8 and §19).
+- **Features roadmap, step 3: uniform skills, costs from stats, cover kinds, the wild dog,
+  staying safe, scanning before drinking** — done (2026-10-31, §19). Pounce/stun was taken out
+  of it by decision: killing belongs to combat planning. The
   roadmap (`FEATURES_ROADMAP.md`, kept outside the repo) goes on: 2 thirst, 3 uniform skills
   with costs from stats, pounce and stun, 4 memory, 5 traffic-based ambush.
 - **7, GOAP** — done (2026-10-29, `cf53229` to `ae1ef52`): harvesting first, then a pure A*
@@ -891,7 +900,7 @@ state, flag and destination.
   (`id`, `preconditions`, `effects`, `cost`). Each `id` names a brain rung, so one action is
   one existing executor: `eat_carried`, `eat_ground`, `take`, `loot`, `seek_food`,
   `seek_bush`, `harvest`, `hunt`, `attack`, `sleep`, `flee`, and since §19 `go_to_cover`,
-  `ambush`, `pounce` and `scan`. `attack`'s effect is
+  `go_to_lure`, `ambush`, `pounce`, `hide`, `escape`, `go_to_water` and `drink`. `attack`'s effect is
   `food_in_sight` — a kill leaves a corpse — which is the predicted effect the meat chain
   reasons over. `take` sets `has_room` false, so Provision means "fill the bag".
 - **Goals** are data too: `ai/ecs_goal_def.gd`, in `defs/goals/` — `satisfy_hunger`
@@ -1077,5 +1086,73 @@ game rates with `thirst:6:3`): 269.6 ms against 255.0. `thirst` itself is 3 ms; 
 ladder read both thirst and hunger every run to order its rungs, and now reads hunger only
 when the creature is actually thirsty.
 
-**Open, to decide:** what triggers scan (a timer, scanning while eating near water, an alarm
-when a neighbour flees, a faint threat in sight).
+### Step 3: the same skills for everyone, and stats decide (2026-10-31)
+
+**Every animal is the same.** The roadmap's rule: behaviour differs only because stats, diet
+and goals differ, and removing an action from one kind to force a route is a script in
+disguise. Step 3 makes that true.
+
+- **One default skill set.** `defs/skills/default_set.tres` (`EcsSkillSet`) holds dash (×2 for
+  0.5 s, cooldown 10 s, reach 150), hide (0.9, in `bush`) and scan. `EcsSkillsComponent.swaps`
+  replaces a default with the same id, or adds one. `EcsSkillSystem` fills the runtime `skills`
+  the first time it sees an animal, as energy rolls its start, so a runtime spawn gets them too.
+  The crocodile swaps in `dash_crocodile.tres` (today's ×3.5 dash) and `hide_water.tres`;
+  nothing else swaps. Attack stays `EcsDamageComponent` — prey fighting back is combat.
+- **Cover has a kind** (`EcsCoverComponent.kind`, `water` or `bush`; berry bushes are cover
+  now), and a hide skill lists the kinds it uses (`EcsHideSkill.kinds`). `EcsHunting.cover_of`
+  and `hides_in` count only those. The crocodile refuses bushes and the dog refuses water;
+  nobody branches on species.
+- **A lure is cover that prey must visit** — drinkable or harvestable. Hunters get
+  `lure_in_sight` and `prey_come_here`; the new `go_to_lure` (→ `in_cover`, `prey_come_here`)
+  replaces their `go_to_cover`, and `ambush` needs `{in_cover, prey_come_here}`. That
+  generalizes step 2's `water_in_reach`: a pond backs the bet with drinkers, a bush with
+  foragers. The crocodile's chain is six steps again.
+- **Costs come from the entity.** `EcsPlanner.plan` takes a `costs` override, `INF` ruling an
+  action out, and stays pure. `EcsPlanningSystem` builds them only when it replans (moving prey
+  never cause a replan): `hunt` costs `1 + gap / closing speed / 5 s`, against the cheapest
+  noticed prey, and is impossible against prey at least as fast. So the crocodile (100) never
+  chases a rabbit (165) or a monkey (130) and ambushes instead; the wild dog (200) chases, and
+  ambushes at a bush when no prey is in sight. The step-1 hand cost (`hunt` 3 beating ambush) is
+  only the default now.
+- **Hunters notice.** `EcsHunting.notices` (visibility ≥ 0.5) gates every choice of prey — the
+  brain's hunt and pounce, a running chase, the planner's prey facts and chase cost. Hiding
+  protects prey exactly as it hides a crocodile.
+
+**The wild dog** (`wild_dog.tres`, `dog.png`): speed 200, sight 420, reach 46, body 26, health
+100, power 35 (it hunts rabbits and monkeys; a crocodile can hunt it), bite 15 every 0.9 s,
+meat, `max_fullness` 150 at 0.5 drain, thirst 0.4. Same planner actions as the crocodile. Four
+are placed, spread away from the crocodiles.
+
+**Staying safe.** The `flee` goal ({safe}) has three routes, priced so the A* estimate stays
+admissible (every action ≥ 1): **`hide`** (`threat_near`, `in_cover` → safe, 1.0, with
+`go_to_cover`), **`escape`** (`threat_near`, `dash_ready` → safe, 1.2) and `flee` (1.5). A
+rabbit beside a bush hides; one in the open dashes; one whose dash is cooling runs. ESCAPE is a
+new state: a trip away plus a dash, becoming FLEE once dashing, so the dash fires once; a plain
+flee gives way to it when the dash comes ready. Hiding is AMBUSH again, serving `ambush` or
+`hide`. **`hide` has a patience of 8 s**: without it, a rabbit hiding at a bush where a dog lay
+in ambush could see the dog faintly forever while the dog could not see it, and 2–8 plant-eaters
+a run died of thirst holding still. Now a hide that hasn't made it safe fails like an ambush —
+a leg away, then a replan.
+
+**Scan before drinking.** `_try_drink` scans first when the scan is ready, then drinks once it
+is cooling. A scanning watcher sees a hider within 200 px plainly, so a rabbit scanning beside a
+hidden crocodile fills danger fast and — unless thirst outranks it — runs. The placeholder
+`scan` action is gone.
+
+**Measured** (probe, 5 runs of 300 s, 48 animals): 7–9 kills a run, almost all by dogs, about
+half by chase and half from a bush; the crocodiles take about one, from water. Crocodiles
+ambushed 20–37 times a run and dogs about 10; prey escaped about 150 times, hid 60–100 and
+scanned about 100, 8–17 of those scans ending in a run. No plant-eater died of thirst; 0–4
+starved; 29–32 of 40 were alive at the end. Nothing is born, so the dogs still empty the world
+given time.
+
+**Cost**: level with step 2. Against `a8fe73e` in one sitting (6,400 fed, 40 hunters, game
+rates): 190.9 ms against 194.4; planning 51.9 against 48.9. A first version cost +45%: once every
+animal had a hide skill, every planner walked its whole perceived list for cover, even on the
+stress grid, which has none. Planning now skips cover when the world has none and reads the
+skills component once for both hide kinds and dash readiness. The grid has no cover, so the
+cover lookups the real world pays — dictionary hits inside a walk it already makes for food —
+are not in that number.
+
+**Open, to decide:** combat — choosing skills to kill from the enemy's skills and stats, and
+whether prey fight back.

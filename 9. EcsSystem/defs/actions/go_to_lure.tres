@@ -4,9 +4,12 @@
 
 [resource]
 script = ExtResource("def")
-id = &"scan"
-preconditions = {}
-effects = {
-&"scanned": true
+id = &"go_to_lure"
+preconditions = {
+&"lure_in_sight": true
 }
-cost = 1.0
+effects = {
+&"in_cover": true,
+&"prey_come_here": true
+}
+cost = 2.0

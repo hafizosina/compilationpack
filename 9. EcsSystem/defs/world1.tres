@@ -1071,6 +1071,54 @@ overrides = {
 }
 }
 
+[sub_resource type="Resource" id="d0"]
+script = ExtResource("place")
+entity_name = &"wild_dog_0"
+type = &"wild_dog"
+position = Vector2(170, -1250)
+overrides = {
+"energy": {
+"value": 90.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="d1"]
+script = ExtResource("place")
+entity_name = &"wild_dog_1"
+type = &"wild_dog"
+position = Vector2(-1160, -1490)
+overrides = {
+"energy": {
+"value": 71.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="d2"]
+script = ExtResource("place")
+entity_name = &"wild_dog_2"
+type = &"wild_dog"
+position = Vector2(-1360, 1180)
+overrides = {
+"energy": {
+"value": 66.0,
+"rolled": true
+}
+}
+
+[sub_resource type="Resource" id="d3"]
+script = ExtResource("place")
+entity_name = &"wild_dog_3"
+type = &"wild_dog"
+position = Vector2(1770, 380)
+overrides = {
+"energy": {
+"value": 63.0,
+"rolled": true
+}
+}
+
 [resource]
 script = ExtResource("world")
-entries = Array[ExtResource("place")]([SubResource("p0"), SubResource("p1"), SubResource("p2"), SubResource("p3"), SubResource("p4"), SubResource("p5"), SubResource("p6"), SubResource("p7"), SubResource("p8"), SubResource("p9"), SubResource("c0"), SubResource("b0"), SubResource("b1"), SubResource("b2"), SubResource("b3"), SubResource("b4"), SubResource("b5"), SubResource("b6"), SubResource("b7"), SubResource("b8"), SubResource("b9"), SubResource("b10"), SubResource("b11"), SubResource("b12"), SubResource("w0"), SubResource("w1"), SubResource("w2"), SubResource("w3"), SubResource("w4"), SubResource("w5"), SubResource("w6"), SubResource("w7"), SubResource("w8"), SubResource("w9"), SubResource("w10"), SubResource("w11"), SubResource("w12"), SubResource("w13"), SubResource("w14"), SubResource("w15"), SubResource("b13"), SubResource("b14"), SubResource("b15"), SubResource("b16"), SubResource("b17"), SubResource("b18"), SubResource("b19"), SubResource("b20"), SubResource("b21"), SubResource("b22"), SubResource("b23"), SubResource("b24"), SubResource("b25"), SubResource("b26"), SubResource("b27"), SubResource("b28"), SubResource("b29"), SubResource("b30"), SubResource("b31"), SubResource("b32"), SubResource("b33"), SubResource("b34"), SubResource("b35"), SubResource("b36"), SubResource("b37"), SubResource("b38"), SubResource("b39"), SubResource("b40"), SubResource("b41"), SubResource("b42"), SubResource("b43"), SubResource("b44"), SubResource("b45"), SubResource("b46"), SubResource("b47"), SubResource("b48"), SubResource("b49"), SubResource("b50"), SubResource("b51"), SubResource("p10"), SubResource("p11"), SubResource("p12"), SubResource("p13"), SubResource("p14"), SubResource("p15"), SubResource("p16"), SubResource("p17"), SubResource("p18"), SubResource("p19"), SubResource("p20"), SubResource("p21"), SubResource("p22"), SubResource("p23"), SubResource("p24"), SubResource("p25"), SubResource("p26"), SubResource("p27"), SubResource("p28"), SubResource("p29"), SubResource("p30"), SubResource("p31"), SubResource("p32"), SubResource("p33"), SubResource("p34"), SubResource("p35"), SubResource("p36"), SubResource("p37"), SubResource("p38"), SubResource("p39"), SubResource("c1"), SubResource("c2"), SubResource("c3")])
+entries = Array[ExtResource("place")]([SubResource("p0"), SubResource("p1"), SubResource("p2"), SubResource("p3"), SubResource("p4"), SubResource("p5"), SubResource("p6"), SubResource("p7"), SubResource("p8"), SubResource("p9"), SubResource("c0"), SubResource("b0"), SubResource("b1"), SubResource("b2"), SubResource("b3"), SubResource("b4"), SubResource("b5"), SubResource("b6"), SubResource("b7"), SubResource("b8"), SubResource("b9"), SubResource("b10"), SubResource("b11"), SubResource("b12"), SubResource("w0"), SubResource("w1"), SubResource("w2"), SubResource("w3"), SubResource("w4"), SubResource("w5"), SubResource("w6"), SubResource("w7"), SubResource("w8"), SubResource("w9"), SubResource("w10"), SubResource("w11"), SubResource("w12"), SubResource("w13"), SubResource("w14"), SubResource("w15"), SubResource("b13"), SubResource("b14"), SubResource("b15"), SubResource("b16"), SubResource("b17"), SubResource("b18"), SubResource("b19"), SubResource("b20"), SubResource("b21"), SubResource("b22"), SubResource("b23"), SubResource("b24"), SubResource("b25"), SubResource("b26"), SubResource("b27"), SubResource("b28"), SubResource("b29"), SubResource("b30"), SubResource("b31"), SubResource("b32"), SubResource("b33"), SubResource("b34"), SubResource("b35"), SubResource("b36"), SubResource("b37"), SubResource("b38"), SubResource("b39"), SubResource("b40"), SubResource("b41"), SubResource("b42"), SubResource("b43"), SubResource("b44"), SubResource("b45"), SubResource("b46"), SubResource("b47"), SubResource("b48"), SubResource("b49"), SubResource("b50"), SubResource("b51"), SubResource("p10"), SubResource("p11"), SubResource("p12"), SubResource("p13"), SubResource("p14"), SubResource("p15"), SubResource("p16"), SubResource("p17"), SubResource("p18"), SubResource("p19"), SubResource("p20"), SubResource("p21"), SubResource("p22"), SubResource("p23"), SubResource("p24"), SubResource("p25"), SubResource("p26"), SubResource("p27"), SubResource("p28"), SubResource("p29"), SubResource("p30"), SubResource("p31"), SubResource("p32"), SubResource("p33"), SubResource("p34"), SubResource("p35"), SubResource("p36"), SubResource("p37"), SubResource("p38"), SubResource("p39"), SubResource("c1"), SubResource("c2"), SubResource("c3"), SubResource("d0"), SubResource("d1"), SubResource("d2"), SubResource("d3")])

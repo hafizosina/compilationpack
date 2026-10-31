@@ -5,4 +5,5 @@
 [resource]
 script = ExtResource("def")
 id = &"hide"
-stealth = 0.95
+stealth = 0.9
+kinds = Array[StringName]([&"bush"])

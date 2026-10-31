@@ -5,7 +5,15 @@ extends EcsSystem
 ## effect flag: it adds `make_effect()` when a skill starts and removes it when it
 ## ends. A timed skill ends after `duration`; a held one when its intent is gone
 ## or `can_start` stops holding. The cooldown starts when a skill ends. A cast that
-## is unknown, active, cooling or refused by `can_start` does nothing.
+## is unknown, active, cooling or refused by `can_start` does nothing. The first time it
+## sees an animal it fills its skills from the default set and its swaps.
+
+const DEFAULTS: EcsSkillSet = preload("res://9. EcsSystem/defs/skills/default_set.tres")
+
+var _defaults: EcsSkillSet
+
+func _init(defaults: EcsSkillSet = DEFAULTS) -> void:
+	_defaults = defaults
 
 func label() -> StringName:
 	return &"skill"
@@ -15,6 +23,8 @@ func run(world: EcsWorld, delta: float) -> void:
 	var columns := view.column(EcsSkillsComponent)
 	for k in view.ids.size():
 		var known := columns[k] as EcsSkillsComponent
+		if not known.resolved:
+			_resolve(known)
 		# Nothing running: only a cast could change it, and casts are started below.
 		if known.cooldown_left.is_empty() and known.active_left.is_empty():
 			continue
@@ -49,6 +59,16 @@ func run(world: EcsWorld, delta: float) -> void:
 		if wanted != null and wanted.can_start(world, id):
 			known.active_left[asked] = wanted.duration
 			world.add(id, wanted.make_effect())
+
+func _resolve(known: EcsSkillsComponent) -> void:
+	known.skills = []
+	for skill in _defaults.skills:
+		var swap := EcsSkillDef.find(known.swaps, skill.id)
+		known.skills.append(swap if swap != null else skill)
+	for swap in known.swaps:
+		if EcsSkillDef.find(known.skills, swap.id) == null:
+			known.skills.append(swap)
+	known.resolved = true
 
 func _end(world: EcsWorld, id: int, known: EcsSkillsComponent, skill: EcsSkillDef) -> void:
 	known.active_left.erase(skill.id)
