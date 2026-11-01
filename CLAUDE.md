@@ -60,7 +60,7 @@ Hand-edited scene/resource files are the main breakage risk in this repo: `.tscn
 | `<N>. <Name>/` | One isolated demo module per folder |
 | `docs/devlog/Summary.md` | Longer per-module write-up, one section per module |
 | `8. SimpleAiSystem/*.md` | **Design archive — the code is deleted.** Five docs kept for the reasoning module 9 is built against |
-| `9. EcsSystem/*.md` | Module 9 likewise — `HANDOFF.md` is its state-of-the-build, `ECS_REFACTOR_PLAN.md` the roadmap it follows; `HANDOFF.md` §3 covers the entity-lifecycle model. Plans for finished work are deleted once folded into `HANDOFF.md` (the fetch-time job is in §14) |
+| `9. EcsSystem/*.md` | Module 9 likewise — `HANDOFF.md` is its state-of-the-build, `ECS_GOAP_REPORT.md` a short overview of where the ECS and planner stand, `PSEUDOCODE.md` the core logic of every component and system, `ECS_REFACTOR_PLAN.md` the roadmap it follows; `HANDOFF.md` §3 covers the entity-lifecycle model. Plans for finished work are deleted once folded into `HANDOFF.md` (the fetch-time job is in §14) |
 | `9. EcsSystem/tests/` | The repo's only tests — module 9's lifecycle acceptance test and its population stress test |
 
 Keep feature work inside the module folder it belongs to; promote something to `Global/` or `System/` only when a second module needs it.

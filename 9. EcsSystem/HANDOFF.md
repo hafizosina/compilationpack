@@ -1,7 +1,9 @@
 # Module 9 — EcsSystem: state of the build
 
-The living state of module 9, and the only document in this folder besides the roadmap
-(`ECS_REFACTOR_PLAN.md`). Read it before touching the folder. It says what exists, why it is
+The living state of module 9. Beside it are the roadmap (`ECS_REFACTOR_PLAN.md`) and
+`ECS_GOAP_REPORT.md`, a short report on where the ECS and the planner stand as of 2026-11-01 —
+read that first for the overview, this for the detail — and `PSEUDOCODE.md`, the core logic of
+every component, flag, singleton and system as pseudocode. Read this before touching the folder. It says what exists, why it is
 shaped that way, what is settled, what is open, and what has been measured. History —
 earlier designs and the reasoning that retired them — is in git; commit hashes are given
 where a design is worth recovering.
@@ -51,7 +53,7 @@ ones that run every third or sixth tick (§11); the rest run every tick.
 | `danger` `[20 Hz]` | fills on a threat in sight, jumps on a hit, decays | `EcsDanger`, clears `EcsHurtFlag` |
 | `sensor` `[20 Hz]` | what each entity sees and can touch | `EcsSensor.perceived`, `EcsAction.reached` |
 | `breeding` `[20 Hz]` | who is ready to breed; carries out a mate intent | `EcsReadyFlag`, `EcsBreeding`, the bars, a note on `EcsLifecycleSingleton` |
-| `memory` `[20 Hz]` | remembers water and lures seen; fades and falsifies (§20) | `EcsMemory` |
+| `memory` `[20 Hz]` | remembers what matters to the animal; fades and falsifies (§20) | `EcsMemory` |
 | `planning` `[20 Hz]` | scores goals, replans on events, under a budget (§18) | `EcsPlanner` |
 | `low_brain` `[20 Hz]` | runs the plan's first step, or its own ladder | its own state, a destination, intent flags |
 | `skill` | carries out a cast intent; runs skill timers (§19) | `EcsSkills`, the effect flags |
@@ -108,16 +110,20 @@ break it for a good reason and write the reason down where it breaks.
 A wall that gains movement is no longer a wall — that is a kill and a spawn, not an `add()`.
 Nothing today adds or removes a component after spawn.
 
-**23 components** — `name`, `position` (both added by the manager from the placement, not the
+**29 components** — `name`, `position` (both added by the manager from the placement, not the
 blueprint), `sprite`, `body`, `movement`, `low_brain`, `sensor`, `action`, `hunger`, `health`,
 `energy`, `inventory`, `consumable`, `pickable`, `spawner`, `harvestable`, for combat and
-corpses `damage`, `armor`, `crit_chance`, `lootable`, `rot`, and for planning `planner` and
-`danger` (§18).
+corpses `damage`, `armor`, `crit_chance`, `lootable`, `rot`, for planning `planner` and
+`danger` (§18), for skills and cover `skills`, `cover`, `drinkable` (§19), `thirst` (§8),
+`memory` (§20) and `breeding` (§21).
 
-**9 flags** — `EcsSelectedFlag` (selection owns it), `EcsCollapsedFlag` (energy), five
-brain intents, `EcsEatIntentFlag{target_id | record_uid}`, `EcsTakeIntentFlag{target_id,
-record_uid}`, `EcsAttackIntentFlag{target_id}`, `EcsHarvestIntentFlag{target_id, progress}`
-and `EcsAsleepFlag`, `EcsHurtFlag{by}` (damage raises it, danger reads and clears it), plus
+**17 flags** — `EcsSelectedFlag` (selection owns it), `EcsCollapsedFlag` (energy), eight
+brain instructions — `EcsEatIntentFlag{target_id | record_uid}`, `EcsTakeIntentFlag{target_id,
+record_uid}`, `EcsAttackIntentFlag{target_id}`, `EcsHarvestIntentFlag{target_id, progress}`,
+`EcsDrinkIntentFlag{target_id}`, `EcsCastIntentFlag{skill}`, `EcsMateIntentFlag{target_id}` and
+`EcsAsleepFlag` — `EcsHurtFlag{by}` (damage raises it, danger reads and clears it),
+`EcsStunnedFlag{left}` (damage), the skill effects `EcsDashingFlag`, `EcsHiddenFlag`,
+`EcsScanningFlag` (only `EcsSkillSystem` writes them), `EcsReadyFlag` (breeding), plus
 `EcsDyingFlag` (§3). A flag may carry data — an intent names its target
 — but nothing about a flag is decided before the game starts.
 
@@ -572,10 +578,10 @@ shared camera reads the wheel in `_unhandled_input` and zooms once per notch.
 
 ## 11. The scheduler: a stage may declare how often it runs
 
-`EcsScheduler.add(system, every, phase)` takes a rate in ticks; `main.gd` runs `sensor`
-(phase 0), `danger` and `low_brain` (1), `planning` and `health` (2) at `SLOW` (every 3
-ticks, 20 Hz), `hunger` (2) and `energy` (5) at `BARS` (every 6, 10 Hz), while everything the
-eye watches stays at 60. Planning sits on its own phase rather than sensor's because the two
+`EcsScheduler.add(system, every, phase)` takes a rate in ticks; `main.gd` runs `sensor` and
+`breeding` (phase 0), `danger`, `memory` and `low_brain` (1), `planning` and `health` (2) at
+`SLOW` (every 3 ticks, 20 Hz), `hunger` (2), `thirst` (3) and `energy` (5) at `BARS` (every 6,
+10 Hz), while everything the eye watches stays at 60. Planning sits on its own phase rather than sensor's because the two
 together made the heaviest tick (§14).
 This is safe because every system takes `delta` and means it: **the scheduler banks delta
 per system**, so a stage run a third as often is handed three ticks' worth, and hunger still
@@ -686,7 +692,17 @@ brain's food index. The ceiling went from 4,800–6,400 to over 9,600 entities (
   priced by fear and traffic (§20) are done. Then hiders went to the middle of their cover and
   bushes stopped being solid, and memory widened to whatever matters to the animal (water, food,
   bushes, threats, prey, lures). Then the pounce
-  stuns, hunted prey can't hide, and a showcase scene (§19); then births (§21).
+  stuns, hunted prey can't hide, and a showcase scene (§19); then births (§21); then a kill
+  settles before the hunter replans (§18).
+
+**Checkpoint, 2026-11-01** (`1549fa2`): the ECS core and the planner are feature-complete for
+this proof of concept. `ECS_GOAP_REPORT.md` is the summary of that state. What remains is world
+tuning (§21: breeding gates per kind, food per bush, hunter hunger) and the open items below, not
+new mechanisms.
+
+**Next, in order of what the runs show:** balance the world (§21 — crocodiles or dogs starve in
+some 900 s runs, monkeys breed far less than rabbits); re-run the population ramp in one sitting
+against `8ff4bc1`, since the last full ramp (§14) predates memory's widening and births.
 
 **Open and deferred, by decision:** combat planning (a kill is many attacks; the planner
 should choose skills from the enemy's skills and stats, §19); crocodiles exploring for other
@@ -942,13 +958,14 @@ state, flag and destination.
 - **Actions** are data: `ai/ecs_action_def.gd`, one `.tres` per action in `defs/actions/`
   (`id`, `preconditions`, `effects`, `cost`). Each `id` names a brain rung, so one action is
   one existing executor: `eat_carried`, `eat_ground`, `take`, `loot`, `seek_food`,
-  `seek_bush`, `harvest`, `hunt`, `attack`, `sleep`, `flee`, and since §19 `go_to_cover`,
-  `go_to_lure`, `ambush`, `pounce`, `hide`, `escape`, `go_to_water` and `drink`. `attack`'s effect is
+  `seek_bush`, `harvest`, `hunt`, `attack`, `sleep`, `flee`, since §19 `go_to_cover`,
+  `go_to_lure`, `ambush`, `pounce`, `hide`, `escape`, `go_to_water` and `drink`, since §20 the
+  five recalls, and since §21 `seek_mate` and `mate` — 26 in all. `attack`'s effect is
   `food_in_sight` — a kill leaves a corpse — which is the predicted effect the meat chain
   reasons over. `take` sets `has_room` false, so Provision means "fill the bag".
 - **Goals** are data too: `ai/ecs_goal_def.gd`, in `defs/goals/` — `satisfy_hunger`
-  {fed}, `provision` {bag full}, `rest` {rested}, `flee` {safe}. Each names a `need` and a
-  `weight`.
+  {fed}, `quench` {hydrated}, `flee` {safe}, `provision` {bag full}, `breed` {bred}, `rest`
+  {rested}. Each names a `need` and a `weight` (10, 10, 8, 4, 3, 2).
 - **`EcsPlanner.plan(facts, desired, actions)`** is forward A* over a dictionary of true
   facts, depth 8 (6 until §19, whose ambush chain is 6 steps long). It is pure — it reads only its arguments — so it can run on a worker
   thread later without being rewritten.
@@ -1185,11 +1202,11 @@ The stress grid has no water or bushes, so the cover and lure lookups the real w
 not in those numbers.
 
 **Open, to decide:** combat — choosing skills to kill from the enemy's skills and stats, and
-whether prey fight back. Births.
+whether prey fight back.
 
 ---
 
-## 20. Memory: remembered water and lures
+## 20. Memory: what each animal remembers
 
 Roadmap step 4, first slice (2026-10-31). Without it, a thirsty animal with no water in sight
 had no plan and wandered. Now it walks to a pond it remembers.
