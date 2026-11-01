@@ -2,7 +2,7 @@ class_name EcsDebugOverlay
 extends Node2D
 
 ## Debug drawing on each entity: name, velocity arrow, line to destination,
-## fullness/energy/health bars, a carried-count badge, a sleep icon and stun stars.
+## fullness/energy/health bars, a carried-count badge, a sleep icon, stun stars and bite marks.
 ## Draws only what EcsDebugSystem sends; never reads the world.
 
 ## Half the sprite's drawn height at the default scale.
@@ -31,6 +31,8 @@ const COLLAPSED_COLOR := Color(0.85, 0.25, 0.2, 0.95)
 ## Stars circling a stunned head.
 const STUN_COLOR := Color(1.0, 0.85, 0.2, 0.95)
 const STUN_STARS := 3
+## Claw slashes on a bitten body.
+const BITE_COLOR := Color(1.0, 0.2, 0.15)
 
 ## The sleep icon. `_ready` makes a white copy so it can be tinted.
 const SLEEP_ICON := preload("res://Global/Asset/Icon/sleep.png")
@@ -72,6 +74,16 @@ func _stun_stars(center: Vector2, radius: float, px: float) -> void:
 			var r := size if p % 2 == 0 else size * 0.4
 			star.append(at + Vector2(r, 0.0).rotated(TAU * p / 8.0))
 		draw_colored_polygon(star, STUN_COLOR)
+
+## Three claw slashes across `center`, at right angles to the bite's direction.
+func _bite(center: Vector2, from: Vector2, size: float, fresh: float, px: float) -> void:
+	var along := (center - from).normalized() if center != from else Vector2.RIGHT
+	var across := along.orthogonal()
+	var color := Color(BITE_COLOR, clampf(fresh, 0.0, 1.0))
+	for i in 3:
+		var at := center + along * size * 0.35 * (i - 1)
+		draw_line(at - across * size * 0.5 - along * size * 0.15,
+			at + across * size * 0.5 + along * size * 0.15, color, 3.0 * px)
 
 func _draw() -> void:
 	# Divide sizes by the zoom so text and bars stay the same size on screen.
@@ -146,6 +158,10 @@ func _draw() -> void:
 
 		if row["stunned"]:
 			_stun_stars(pos + Vector2(0.0, -shoulder * 1.15), shoulder * 0.55, px)
+
+		var bitten: float = row["bitten"]
+		if bitten > 0.0:
+			_bite(pos, row["bitten_from"], shoulder * (1.0 + 0.3 * bitten), bitten, px)
 
 		if not row["has_movement"]:
 			continue

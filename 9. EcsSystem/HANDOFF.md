@@ -987,6 +987,13 @@ corpse appears they change again, and the cheapest plan is now to eat. Tested: t
 range, one killed, the corpse eaten. Live over 300 s it left five corpses (a starved animal
 leaves one too, so that counts deaths by health, not kills).
 
+**A kill settles before a replan** (2026-11-01, a traced bug). The prey is marked dying and
+the planner replanned in that same tick, with no corpse yet, so a hunter planned `recall_lure >
+ambush` and walked back to its bush before coming back to eat. Now a planner whose attack target
+is dying doesn't replan, and waits `SETTLE_RUNS` (1) more run so its sensor has seen the corpse:
+a new body's overlap shows a physics step after it is made. `EcsPlannerComponent.settling` counts
+it down.
+
 **Danger and flee.** `EcsDangerComponent.value` (0–1) fills at `fill` per second while
 anything that `EcsHunting.threatens` it is in sight, jumps by `hit_jump` on an `EcsHurtFlag`
 (raised by `EcsDamageSystem`, read and cleared by `EcsDangerSystem`), and decays otherwise; it
@@ -1127,13 +1134,16 @@ Both carry the same planner actions. A corpse's `nutrition` is 150.
 choosing skills to kill from the enemy's skills and stats is left to combat planning. Don't
 patch it with a one-shot kill.
 
-**The pounce stuns** (2026-11-01, asked for directly). `EcsDashSkill.stun` (dog 1.5 s, crocodile
-2.0 s) rides on a hit landed while the attacker is dashing (`EcsHit.stun`, set by
+**The pounce stuns** (2026-11-01, asked for directly). `EcsDashSkill.stun` (2.0 s for both dash and
+the crocodile's) rides on a hit landed while the attacker is dashing (`EcsHit.stun`, set by
 `EcsAttackSystem`). `EcsDamageSystem` raises `EcsStunnedFlag{left}` on the target and counts it
 down. A stunned animal has no say — the brain drops its trip and state, so its intents go, which
 ends a held hide — and a stunned attacker can't bite. Movement doesn't check the flag; the brain
 stops the trip on its next run, within two ticks. The overlay draws yellow stars circling a
-stunned head. So a pounce buys free bites, and the kill is still the bites that follow it.
+stunned head, and red claw slashes on whatever was just bitten, fading over 0.35 s (from the
+attacker's cooldown, so the debug system stays a reader). The stun was 1.5 s, which fit one bite
+at the dog's 0.9 s interval and looked like both animals standing still; at 2.0 s two land. So a
+pounce buys free bites, and the kill is still the bites that follow it.
 
 **Hunted prey can't hide.** A traced bug: a dog chasing a monkey, the monkey hid in a bush, the
 dog stopped noticing it and planned an ambush in the same bush — both stood still until hide's

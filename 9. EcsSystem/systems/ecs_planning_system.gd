@@ -7,7 +7,8 @@ extends EcsSystem
 ## Each run it snapshots facts and ranks goals for every planner. A planner is
 ## queued for a replan only when its facts or its ranking changed; at most
 ## MAX_REPLANS are planned per run, oldest first. Planning goes through goals in
-## rank order until one has a plan.
+## rank order until one has a plan. A planner whose kill is dying waits until its
+## sensor has seen the corpse, rather than walking off before it appears.
 
 ## Replans per run.
 const MAX_REPLANS: int = 64
@@ -15,6 +16,8 @@ const MAX_REPLANS: int = 64
 const FLOOR: float = EcsNeeds.FLOOR
 ## Added to the current goal's score, so near-ties don't flicker.
 const COMMIT_BONUS: float = 0.5
+## Extra planning runs a kill waits once its target is gone: one sensor run to see the corpse.
+const SETTLE_RUNS: int = 1
 ## Seconds of travel that cost one unit of a plan.
 const TRAVEL_SECONDS: float = EcsMemoryFact.TRAVEL_SECONDS
 
@@ -57,6 +60,12 @@ func run(world: EcsWorld, _delta: float) -> void:
 	for k in planners.ids.size():
 		var id := planners.ids[k]
 		var planner := columns[k] as EcsPlannerComponent
+		if _kill_pending(world, id):
+			planner.settling = SETTLE_RUNS
+			continue
+		if planner.settling > 0:
+			planner.settling -= 1
+			continue
 		# Fetched once, shared by the facts and the scores.
 		var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
 		var energy := world.get_component(id, EcsEnergyComponent) as EcsEnergyComponent
@@ -77,10 +86,19 @@ func run(world: EcsWorld, _delta: float) -> void:
 	while done < MAX_REPLANS and not _queue.is_empty():
 		var id: int = _queue.pop_front()
 		if not facts_of.has(id):
+			# Skipped this run; let the next run queue it again.
+			var skipped := world.get_component(id, EcsPlannerComponent) as EcsPlannerComponent
+			if skipped != null:
+				skipped.dirty = false
 			continue
 		_replan(world, id, world.get_component(id, EcsPlannerComponent) as EcsPlannerComponent,
 			facts_of[id], ranked_of[id])
 		done += 1
+
+## True while what `id` is attacking is dying and its corpse not yet made.
+static func _kill_pending(world: EcsWorld, id: int) -> bool:
+	var intent := world.get_component(id, EcsAttackIntentFlag) as EcsAttackIntentFlag
+	return intent != null and world.has(intent.target_id, EcsDyingFlag)
 
 ## The goals `id` scores above 0, best first. For tests and tools.
 func rank(world: EcsWorld, id: int) -> Array[EcsGoalDef]:

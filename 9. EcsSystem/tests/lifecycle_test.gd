@@ -3198,7 +3198,7 @@ func _a_stun_holds_still_and_wears_off() -> void:
 	damage.run(_world, TICK)
 	var stun := _world.get_component(rabbit, EcsStunnedFlag) as EcsStunnedFlag
 	_check("a bite while dashing stuns for the dash's stun (%.1fs)" % (stun.left if stun else 0.0),
-		stun != null and is_equal_approx(stun.left, 1.5))
+		stun != null and is_equal_approx(stun.left, 2.0))
 
 	var move := _world.get_component(rabbit, EcsMovementComponent) as EcsMovementComponent
 	move.destination = spot + Vector2(500.0, 0.0)
@@ -3215,7 +3215,7 @@ func _a_stun_holds_still_and_wears_off() -> void:
 	damage.run(_world, 0.5)
 	_check("a stunned attacker doesn't bite",
 		(_world.get_component(rabbit, EcsHealthComponent) as EcsHealthComponent).value == before)
-	damage.run(_world, 1.1)
+	damage.run(_world, 1.6)
 	_check("the stun wears off on time",
 		not _world.has(rabbit, EcsStunnedFlag) and not _world.has(dog, EcsStunnedFlag))
 	for id in [dog, rabbit]:

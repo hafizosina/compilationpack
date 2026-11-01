@@ -22,6 +22,8 @@ var facts: Dictionary = {}
 var ranking: Array[StringName] = []
 ## Plans made so far.
 var replans: int = 0
+## Planning runs left to wait after a kill, until its corpse has been seen.
+var settling: int = 0
 
 func key() -> StringName:
 	return &"planner"

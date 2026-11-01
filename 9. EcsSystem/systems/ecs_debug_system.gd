@@ -4,6 +4,9 @@ extends EcsSystem
 ## Sends a per-entity snapshot to the debug overlay. Read only. Bars are
 ## ratios; -1 means the entity has no such reading.
 
+## Seconds a bite stays marked on its target.
+const BITE_SHOW := 0.35
+
 var _overlay: EcsDebugOverlay
 
 func _init(overlay: EcsDebugOverlay) -> void:
@@ -15,6 +18,15 @@ func label() -> StringName:
 func run(world: EcsWorld, _delta: float) -> void:
 	if _overlay == null or not _overlay.visible:
 		return
+
+	# A bite has just landed while the attacker's cooldown is near full.
+	var bites := {}
+	for id in world.query([EcsAttackIntentFlag, EcsDamageComponent, EcsPositionComponent]):
+		var attack := world.get_component(id, EcsDamageComponent) as EcsDamageComponent
+		var fresh := (attack.cooldown - attack.interval + BITE_SHOW) / BITE_SHOW
+		if fresh > 0.0:
+			var target := (world.get_component(id, EcsAttackIntentFlag) as EcsAttackIntentFlag).target_id
+			bites[target] = [fresh, (world.get_component(id, EcsPositionComponent) as EcsPositionComponent).position]
 
 	var rows: Array[Dictionary] = []
 	for id in world.query([EcsNameComponent, EcsPositionComponent]):
@@ -41,12 +53,18 @@ func run(world: EcsWorld, _delta: float) -> void:
 			"sleep": 2 if world.has(id, EcsCollapsedFlag)
 				else (1 if world.has(id, EcsAsleepFlag) else 0),
 			"stunned": world.has(id, EcsStunnedFlag),
+			# 1 the tick a bite lands, fading to 0; -1 when not bitten.
+			"bitten": -1.0,
+			"bitten_from": Vector2.ZERO,
 			"carried": bag.items.size() if bag != null else -1,
 			# The planner's goal id, or &"" for none.
 			"goal": &"",
 			# Sprite scale relative to the default.
 			"sprite_scale": 1.0,
 		}
+		if bites.has(id):
+			row["bitten"] = bites[id][0]
+			row["bitten_from"] = bites[id][1]
 		var planner := world.get_component(id, EcsPlannerComponent) as EcsPlannerComponent
 		if planner != null:
 			row["goal"] = planner.goal

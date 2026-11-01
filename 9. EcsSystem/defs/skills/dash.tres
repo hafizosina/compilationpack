@@ -9,4 +9,4 @@ cooldown = 10.0
 duration = 0.5
 speed_scale = 2.0
 reach = 150.0
-stun = 1.5
+stun = 2.0
