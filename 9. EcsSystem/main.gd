@@ -3,8 +3,8 @@ extends Node2D
 ## Module 9 entry point. Builds the world from world1.tres and runs the system
 ## pipeline (see `_build()`) on every physics tick.
 ##
-## Left-click selects an entity for the inspector. F1 toggles the debug overlay,
-## F5 rebuilds the world from data.
+## Left-click selects an entity for the inspector. Space pauses the simulation,
+## F1 toggles the debug overlay, F5 rebuilds the world from data.
 
 ## Ticks between runs for sensor, planning, low_brain, danger and health (3 = 20 Hz).
 const SLOW: int = 3
@@ -28,6 +28,9 @@ var _world: EcsWorld
 var _scheduler: EcsScheduler
 var _collision: EcsCollisionSystem
 var _manager: EcsEntityManager
+## Systems that still run while paused, so selection and the inspector work.
+var _paused_systems: Array[EcsSystem] = []
+var _paused: bool = false
 
 func _ready() -> void:
 	EcsConst.world_bounds = arena
@@ -38,7 +41,11 @@ func _ready() -> void:
 
 ## Runs on the physics tick: a fixed timestep, and overlaps refresh once per tick.
 func _physics_process(delta: float) -> void:
-	_scheduler.run_all(_world, delta)
+	if not _paused:
+		_scheduler.run_all(_world, delta)
+		return
+	for system in _paused_systems:
+		system.run(_world, delta)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed \
@@ -59,6 +66,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_F5:
 			_build()
 			get_viewport().set_input_as_handled()
+		KEY_SPACE:
+			_paused = not _paused
+			EventBus.ecs_pause_changed.emit(_paused)
+			get_viewport().set_input_as_handled()
 
 ## Builds a fresh world and the pipeline. The system order is the frame order.
 func _build() -> void:
@@ -71,6 +82,9 @@ func _build() -> void:
 	_world = EcsWorld.new()
 	_collision = EcsCollisionSystem.new(_manager)
 	_scheduler = EcsScheduler.new()
+	var selection := EcsSelectionSystem.new(_marker)
+	var inspect := EcsInspectSystem.new()
+	_paused_systems = [selection, inspect]
 
 	_scheduler \
 		.add(EcsLifecycleSystem.new(_manager, catalog)) \
@@ -98,11 +112,11 @@ func _build() -> void:
 		.add(EcsRotSystem.new()) \
 		.add(EcsCorpseSystem.new()) \
 		.add(EcsDropSystem.new()) \
-		.add(EcsSelectionSystem.new(_marker)) \
+		.add(selection) \
 		.add(EcsNodeSyncSystem.new(_manager)) \
 		.add(EcsDebugSystem.new(_debug_overlay)) \
 		.add(EcsCensusSystem.new()) \
-		.add(EcsInspectSystem.new())
+		.add(inspect)
 
 	_world.add_singleton(EcsSelectionSingleton.new())
 	_world.add_singleton(EcsLifecycleSingleton.new())

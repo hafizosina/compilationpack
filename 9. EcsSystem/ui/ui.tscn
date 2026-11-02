@@ -42,7 +42,14 @@ text = "— fps"
 [node name="RespawnButton" type="Button" parent="Root/StatsPanel/Stats" unique_id=1121178209]
 unique_name_in_owner = true
 layout_mode = 2
+focus_mode = 0
 text = "Respawn (F5)"
+
+[node name="PausedLabel" type="Label" parent="Root/StatsPanel/Stats" unique_id=1406213377]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+text = "Paused (Space)"
 
 [node name="InspectorHolder" type="VBoxContainer" parent="Root" unique_id=354292531]
 layout_mode = 0

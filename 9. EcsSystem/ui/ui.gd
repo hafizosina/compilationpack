@@ -9,6 +9,7 @@ const KEY_WIDTH := 96.0
 @onready var count_label: Label = %CountLabel
 @onready var fps_label: Label = %FpsLabel
 @onready var respawn_button: Button = %RespawnButton
+@onready var paused_label: Label = %PausedLabel
 @onready var name_label: Label = %NameLabel
 @onready var tabs: TabBar = %Tabs
 @onready var scroll: ScrollContainer = %Scroll
@@ -27,6 +28,7 @@ var _row_values: Dictionary = {}
 func _ready() -> void:
 	EventBus.ecs_world_census.connect(_on_census)
 	EventBus.ecs_entity_inspected.connect(_on_entity_inspected)
+	EventBus.ecs_pause_changed.connect(_on_pause_changed)
 	respawn_button.pressed.connect(_on_respawn_pressed)
 	tabs.tab_changed.connect(_on_tab_changed)
 	inspector_panel.gui_input.connect(_on_inspector_input)
@@ -41,6 +43,9 @@ func _on_inspector_input(event: InputEvent) -> void:
 
 func _process(_delta: float) -> void:
 	fps_label.text = "%d fps" % Engine.get_frames_per_second()
+
+func _on_pause_changed(paused: bool) -> void:
+	paused_label.visible = paused
 
 func _on_census(count: int) -> void:
 	count_label.text = "%d entities" % count

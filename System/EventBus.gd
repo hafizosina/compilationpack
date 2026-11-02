@@ -19,6 +19,9 @@ signal ecs_world_census(count: int)
 ## EcsWorldDef. Module 9's main scene performs the respawn.
 signal ecs_respawn_requested()
 
+## Emitted by module 9's main scene when Space pauses or resumes the simulation.
+signal ecs_pause_changed(paused: bool)
+
 ## Emitted by module 9's EcsInspectSystem with a snapshot of the selected
 ## entity, or an empty dictionary when nothing is selected. The snapshot is
 ## built by reflecting over whatever components the entity happens to carry, so
