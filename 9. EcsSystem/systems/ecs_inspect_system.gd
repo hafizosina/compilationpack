@@ -1,47 +1,61 @@
 class_name EcsInspectSystem
 extends EcsSystem
 
-## Sends a snapshot of the selected entity to the inspector over EventBus.
-## Knows no component type: each component's `describe()` says how it shows,
-## and one without it shows every field. Flags share one tab.
+## Sends a snapshot of the first selected entity to the inspector over EventBus,
+## with the ids of every selected one and the raw fields it can edit. Knows no
+## component type: each component's `describe()` says how it shows, and one
+## without it shows every field. Flags share one tab.
+
+## Field types the inspector can edit.
+const EDITABLE := [TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING, TYPE_STRING_NAME,
+	TYPE_VECTOR2, TYPE_COLOR]
 
 ## Seconds between snapshots.
 const INTERVAL: float = 0.2
 
 var _since: float = 0.0
-var _last_selected: int = EcsWorld.NO_ENTITY
+var _last_selected: Array[int] = []
 
 func label() -> StringName:
 	return &"inspect"
 
 func run(world: EcsWorld, delta: float) -> void:
 	var selected := world.query([EcsSelectedFlag])
-	var id: int = selected[0] if not selected.is_empty() else EcsWorld.NO_ENTITY
+	selected.sort()
 
 	# Send at once when the selection changes, otherwise on the interval.
 	_since += delta
-	if id == _last_selected and _since < INTERVAL:
+	if selected == _last_selected and _since < INTERVAL:
 		return
 	_since = 0.0
-	if id == EcsWorld.NO_ENTITY:
-		if _last_selected != EcsWorld.NO_ENTITY:
-			_last_selected = EcsWorld.NO_ENTITY
+	if selected.is_empty():
+		if not _last_selected.is_empty():
+			_last_selected = []
 			EventBus.ecs_entity_inspected.emit({})
 		return
-	_last_selected = id
-	EventBus.ecs_entity_inspected.emit(_snapshot(world, id))
+	_last_selected = selected
+	var snapshot := _snapshot(world, selected[0])
+	snapshot["ids"] = selected
+	EventBus.ecs_entity_inspected.emit(snapshot)
 
 func _snapshot(world: EcsWorld, id: int) -> Dictionary:
 	var keys := PackedStringArray()
 	var sections: Dictionary = {}
 	var flags: Dictionary = {}
 	var entity_lines: Dictionary = {}
+	var editable: Dictionary = {}
 	var title := {"name": "#%d" % id, "type": "—"}
 	for component in world.components_of(id):
 		if component is EcsFlag:
 			flags[String(component.key()).capitalize()] = _inline(world, component)
 			continue
 		keys.append(String(component.key()))
+		var fields := _editable_of(component)
+		if not fields.is_empty():
+			editable[component.key()] = {
+				"label": String(component.key()).capitalize(),
+				"fields": fields,
+			}
 		var view := _present(world, component)
 		if view.has("title"):
 			title = view["title"]
@@ -67,7 +81,25 @@ func _snapshot(world: EcsWorld, id: int) -> Dictionary:
 		"type": title.get("type", "—"),
 		"fields": entity_lines,
 		"components": sections,
+		"editable": editable,
 	}
+
+## The component's script fields an inspector can edit, raw:
+## `{field: {"type", "hint", "hint_string", "value"}}`.
+func _editable_of(component: EcsComponent) -> Dictionary:
+	var fields: Dictionary = {}
+	for entry in component.get_property_list():
+		var property := String(entry["name"])
+		if not (int(entry["usage"]) & PROPERTY_USAGE_SCRIPT_VARIABLE) or property.begins_with("_") \
+				or not EDITABLE.has(int(entry["type"])):
+			continue
+		fields[property] = {
+			"type": int(entry["type"]),
+			"hint": int(entry["hint"]),
+			"hint_string": String(entry["hint_string"]),
+			"value": component.get(property),
+		}
+	return fields
 
 ## The component's describe(), or a tab of all its fields.
 func _present(world: EcsWorld, component: EcsComponent) -> Dictionary:

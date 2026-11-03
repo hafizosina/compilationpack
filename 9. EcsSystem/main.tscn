@@ -7,11 +7,12 @@
 [ext_resource type="Script" uid="uid://b0j8lemo4ufcc" path="res://9. EcsSystem/ecs_debug_overlay.gd" id="5_overlay"]
 [ext_resource type="Script" uid="uid://ds334ygkjgkce" path="res://9. EcsSystem/ecs_selection_marker.gd" id="6_marker"]
 [ext_resource type="PackedScene" uid="uid://becsui0000001" path="res://9. EcsSystem/ui/ui.tscn" id="7_ui"]
+[ext_resource type="Script" uid="uid://dbk6chycnfg7p" path="res://9. EcsSystem/defs/ecs_world_def.gd" id="8_worlddef"]
 
 [node name="Main" type="Node2D" unique_id=1531045582]
 script = ExtResource("1_main")
 catalog = ExtResource("2_catalog")
-world_def = ExtResource("3_world")
+maps = Array[ExtResource("8_worlddef")]([ExtResource("3_world")])
 
 [node name="Ground" type="Polygon2D" parent="." unique_id=547884703]
 z_index = -10

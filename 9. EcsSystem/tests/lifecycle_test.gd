@@ -118,6 +118,12 @@ func _run() -> void:
 	await _breeding_is_planned()
 	await _a_ready_pair_meets_and_a_third_is_born()
 	_parched_outranks_a_committed_hunt()
+	_the_snapshot_codec_keeps_shared_and_typed_data()
+	await _a_saved_world_loads_as_it_was_and_runs_on()
+	await _placing_while_paused_builds_the_entity()
+	_a_composed_blueprint_saves_loads_and_spawns()
+	_shift_click_toggles_and_a_box_selects_many()
+	_a_live_edit_changes_every_selected_entity()
 
 ## Nodes match the declared NODE_KINDs (a berry gets a sprite and a body, no
 ## sensor) and hang under the entity's own container.
@@ -3606,6 +3612,325 @@ func _a_view_is_kept_until_a_table_it_names_changes() -> void:
 		world.view(include, [EcsDyingFlag]).ids.is_empty())
 	world.remove(a, EcsDyingFlag)
 	_check("and being cleared rebuilds it again", world.view(include, [EcsDyingFlag]).ids == [a])
+
+## Two holders of one object still share it after a round trip, and typed
+## collections keep their type.
+func _the_snapshot_codec_keeps_shared_and_typed_data() -> void:
+	var world := EcsWorld.new()
+	var inbox := world.add_singleton(EcsLifecycleSingleton.new()) as EcsLifecycleSingleton
+	var id := world.create_entity()
+	var spawner := world.add(id, EcsSpawnerComponent.new()) as EcsSpawnerComponent
+	var note := EcsSpawnRequest.new()
+	note.type_id = &"berry"
+	spawner.pending.append(note)
+	spawner.spawned.append(7)
+	inbox.spawn_requests.append(note)
+	var data: Dictionary = str_to_var(var_to_str(EcsSnapshot.capture(world)))
+	var decoded := EcsSnapshot.decode(data)
+	var held: Array = decoded["entities"][id]
+	var back := held[0] as EcsSpawnerComponent
+	var back_inbox: EcsLifecycleSingleton = null
+	for singleton in decoded["singletons"]:
+		if singleton is EcsLifecycleSingleton:
+			back_inbox = singleton
+	_check("a spawner comes back with its request", back != null and back.pending.size() == 1)
+	_check("the request it shares with the inbox is still one object",
+		back_inbox != null and back_inbox.spawn_requests[0] == back.pending[0])
+	_check("typed arrays stay typed", back.spawned.is_typed() and back.spawned == [7])
+
+## A saved world loads with the same ids and every field equal, its nodes rebuilt,
+## and keeps running.
+func _a_saved_world_loads_as_it_was_and_runs_on() -> void:
+	var root := Node2D.new()
+	add_child(root)
+	var manager := EcsEntityManager.new(root)
+	var world := _snapshot_world()
+	var living := _snapshot_pipeline(manager)
+	var spot := Vector2(-60000.0, 60000.0)
+	var bounds := EcsConst.world_bounds
+	EcsConst.world_bounds = Rect2(spot - Vector2(1500.0, 1500.0), Vector2(3000.0, 3000.0))
+	for i in 3:
+		manager.spawn(world, _catalog, &"rabbit", spot + Vector2(i * 120.0, 0.0))
+	var monkey := manager.spawn(world, _catalog, &"monkey", spot + Vector2(0.0, 300.0))
+	manager.spawn(world, _catalog, &"crocodile", spot + Vector2(600.0, 400.0))
+	manager.spawn(world, _catalog, &"water", spot + Vector2(500.0, 500.0))
+	manager.spawn(world, _catalog, &"berry_bush", spot + Vector2(-300.0, 0.0))
+	var berry := manager.spawn(world, _catalog, &"berry", spot + Vector2(-400.0, 200.0))
+	var bag := world.get_component(monkey, EcsInventoryComponent) as EcsInventoryComponent
+	bag.items.append(EcsItemRecord.capture(world, berry))
+	manager.kill(world, berry)
+	for i in 300:
+		living.run_all(world, TICK)
+		await get_tree().physics_frame
+
+	EcsSnapshot.write("_test_roundtrip", EcsSnapshot.capture(world))
+	var data := EcsSnapshot.read("_test_roundtrip")
+	DirAccess.remove_absolute(EcsSnapshot.path_of("_test_roundtrip"))
+	var root2 := Node2D.new()
+	add_child(root2)
+	var manager2 := EcsEntityManager.new(root2)
+	var loaded := EcsWorld.new()
+	_check("a snapshot reads back from disk", manager2.load_snapshot(loaded, data))
+
+	var ids := world.entity_ids()
+	var loaded_ids := loaded.entity_ids()
+	ids.sort()
+	loaded_ids.sort()
+	_check("the same ids come back (%d)" % ids.size(), ids == loaded_ids)
+	_check("and the next id is kept", loaded.next_id() == world.next_id())
+	var differences: Array[String] = []
+	for id: int in ids:
+		for component in world.components_of(id):
+			var twin := loaded.get_component(id, component.get_script())
+			if twin == null:
+				differences.append("#%d lost %s" % [id, component.key()])
+			elif not _same(component, twin, 0):
+				differences.append("#%d %s differs" % [id, component.key()])
+	_check("every component and flag is equal %s" % [differences.slice(0, 3)], differences.is_empty())
+	var bag2 := loaded.get_component(monkey, EcsInventoryComponent) as EcsInventoryComponent
+	_check("the carried record is back, typed",
+		bag2.items.is_typed() and bag2.items.size() == bag.items.size())
+	_check("its nodes are rebuilt", manager2.container_for(monkey) != null
+		and manager2.node_for(monkey, EcsConst.NODE_SPRITE) != null)
+
+	var living2 := _snapshot_pipeline(manager2)
+	var moved := false
+	for i in 300:
+		living2.run_all(loaded, TICK)
+		await get_tree().physics_frame
+		for id in loaded.query([EcsPositionComponent, EcsMovementComponent]):
+			if (loaded.get_component(id, EcsPositionComponent) as EcsPositionComponent).position \
+					!= (world.get_component(id, EcsPositionComponent) as EcsPositionComponent).position:
+				moved = true
+	_check("the loaded world runs on", moved and loaded.entity_count() > 0)
+	manager.clear()
+	manager2.clear()
+	root.queue_free()
+	root2.queue_free()
+	EcsConst.world_bounds = bounds
+
+## While paused only lifecycle, selection, node sync, debug and inspect run, and
+## a placed entity appears at once with its nodes.
+func _placing_while_paused_builds_the_entity() -> void:
+	var paused := EcsScheduler.new()
+	paused.add(EcsLifecycleSystem.new(_manager, _catalog)).add(EcsNodeSyncSystem.new(_manager))
+	var note := EcsSpawnRequest.new()
+	note.type_id = &"crocodile"
+	note.position = Vector2(-62000.0, -62000.0)
+	(_world.get_singleton(EcsLifecycleSingleton) as EcsLifecycleSingleton).spawn_requests.append(note)
+	paused.run_all(_world, TICK)
+	await get_tree().physics_frame
+	_check("a placed entity is born on the next paused tick", note.fulfilled and _world.is_alive(note.born))
+	var sprite := _manager.node_for(note.born, EcsConst.NODE_SPRITE) as Sprite2D
+	_check("with its sprite drawn where it was placed", sprite != null and sprite.texture != null
+		and _manager.container_for(note.born).position == note.position)
+	_world.add(note.born, EcsDyingFlag.new())
+	paused.run_all(_world, TICK)
+
+## A blueprint composed from a copy, with a field changed and a component taken
+## out, saves to user://, loads back and spawns as written.
+func _a_composed_blueprint_saves_loads_and_spawns() -> void:
+	var rabbit := _catalog.get_def(&"rabbit")
+	var def := EcsEntityDef.new()
+	def.id = &"_test_hare"
+	def.display_name = "Hare"
+	for template in rabbit.components:
+		if template is EcsBreedingComponent:
+			continue
+		var copy := template.duplicate(true) as EcsComponent
+		if copy is EcsMovementComponent:
+			copy.speed = 260.0
+		def.components.append(copy)
+	DirAccess.make_dir_recursive_absolute("user://blueprints_test/")
+	var path := "user://blueprints_test/_test_hare.tres"
+	_check("a composed blueprint saves", ResourceSaver.save(def, path) == OK)
+	var back := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_REPLACE) as EcsEntityDef
+	DirAccess.remove_absolute(path)
+	DirAccess.remove_absolute("user://blueprints_test/")
+	var catalog := _catalog.duplicate() as EcsEntityCatalog
+	var defs: Array[EcsEntityDef] = []
+	defs.assign(_catalog.defs)
+	defs.append(back)
+	catalog.defs = defs
+	var id := _manager.spawn(_world, catalog, &"_test_hare", Vector2(-64000.0, -64000.0))
+	var move := _world.get_component(id, EcsMovementComponent) as EcsMovementComponent
+	var planner := _world.get_component(id, EcsPlannerComponent) as EcsPlannerComponent
+	var original := rabbit.template(&"planner") as EcsPlannerComponent
+	_check("it spawns with the changed speed", move != null and move.speed == 260.0)
+	_check("without the component taken out", not _world.has(id, EcsBreedingComponent))
+	_check("and keeps the copied planner's actions", planner != null and original != null
+		and planner.actions.size() == original.actions.size())
+	_manager.kill(_world, id)
+
+## A click selects one, shift-click adds and removes, a box selects what it holds,
+## and the inspector is told every selected id.
+func _shift_click_toggles_and_a_box_selects_many() -> void:
+	var a := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-70000.0, -70000.0))
+	var b := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-69800.0, -70000.0))
+	var c := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-69600.0, -70000.0))
+	var far := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-60000.0, -70000.0))
+	_world.add_singleton(EcsSelectionSingleton.new())
+	var selection := EcsSelectionSystem.new(null)
+	var pick := func(at: Vector2, additive: bool, to: Variant = null) -> void:
+		var request := _world.get_singleton(EcsSelectionSingleton) as EcsSelectionSingleton
+		request.pending = true
+		request.pick_at = at
+		request.is_box = to != null
+		request.drag_to = to if to != null else at
+		request.additive = additive
+		selection.run(_world, TICK)
+	var picked := func() -> Array[int]:
+		var ids := _world.query([EcsSelectedFlag])
+		ids.sort()
+		return ids
+
+	pick.call(Vector2(-70000.0, -70000.0), false)
+	_check("a click selects one, and only that one", picked.call() == [a])
+	pick.call(Vector2(-69800.0, -70000.0), true)
+	_check("shift-click adds another", picked.call() == [a, b])
+	pick.call(Vector2(-70000.0, -70000.0), true)
+	_check("shift-click on a selected one removes it", picked.call() == [b])
+	pick.call(Vector2(-70100.0, -70100.0), false, Vector2(-69500.0, -69900.0))
+	_check("a box selects everything in it and nothing outside", picked.call() == [a, b, c])
+	pick.call(Vector2(-60100.0, -70100.0), true, Vector2(-59900.0, -69900.0))
+	_check("a shift box adds to what was selected", picked.call() == [a, b, c, far])
+
+	var sent: Array = []
+	var listen := func(details: Dictionary) -> void: sent.append(details)
+	EventBus.ecs_entity_inspected.connect(listen)
+	EcsInspectSystem.new().run(_world, TICK)
+	EventBus.ecs_entity_inspected.disconnect(listen)
+	_check("the inspector is told every selected id, the first one shown",
+		sent.size() == 1 and sent[0].get("ids") == [a, b, c, far]
+		and sent[0].get("fields", {}).get("id") == "#%d" % a)
+	_check("with the raw fields it can edit",
+		(sent[0].get("editable", {}) as Dictionary).has(&"movement")
+		and sent[0]["editable"][&"movement"]["fields"].has("speed"))
+
+	pick.call(Vector2(-65000.0, -65000.0), false)
+	_check("a click on bare ground clears the selection", picked.call().is_empty())
+	for id in [a, b, c, far]:
+		_manager.kill(_world, id)
+
+## An edit sets the field on every entity it names that has the component, takes
+## a whole number for a float field, and skips the rest.
+func _a_live_edit_changes_every_selected_entity() -> void:
+	var a := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-71000.0, -70000.0))
+	var b := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-71200.0, -70000.0))
+	var bush := _manager.spawn(_world, _catalog, &"berry_bush", Vector2(-71400.0, -70000.0))
+	var gone := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-71600.0, -70000.0))
+	_manager.kill(_world, gone)
+	var inbox := EcsEditSingleton.new()
+	_world.add_singleton(inbox)
+	var editing := EcsEditSystem.new()
+	var queue := func(component: StringName, field: StringName, value: Variant) -> void:
+		var edit := EcsEdit.new()
+		edit.ids.assign([a, b, bush, gone])
+		edit.component = component
+		edit.field = field
+		edit.value = value
+		inbox.edits.append(edit)
+
+	var bush_speed: Variant = null
+	var bush_move := _world.get_component(bush, EcsMovementComponent) as EcsMovementComponent
+	if bush_move != null:
+		bush_speed = bush_move.speed
+	var before := (_world.get_component(a, EcsMovementComponent) as EcsMovementComponent).speed
+	queue.call(&"movement", &"speed", 333)
+	queue.call(&"movement", &"speed_typo", 1.0)
+	queue.call(&"position", &"position", Vector2(-71000.0, -69000.0))
+	queue.call(&"movement", &"timeout_slack", "not a number")
+	var slack := (_world.get_component(a, EcsMovementComponent) as EcsMovementComponent).timeout_slack
+	editing.run(_world, TICK)
+
+	var move_a := _world.get_component(a, EcsMovementComponent) as EcsMovementComponent
+	var move_b := _world.get_component(b, EcsMovementComponent) as EcsMovementComponent
+	_check("an edit changes every selected entity",
+		before != 333.0 and move_a.speed == 333.0 and move_b.speed == 333.0)
+	_check("a whole number is taken for a float field", typeof(move_a.speed) == TYPE_FLOAT)
+	_check("one without that component is left alone", bush_move == null or bush_move.speed == bush_speed)
+	_check("a value of the wrong type is skipped", move_a.timeout_slack == slack)
+	_check("an edit can move an entity",
+		(_world.get_component(b, EcsPositionComponent) as EcsPositionComponent).position
+		== Vector2(-71000.0, -69000.0))
+	_check("the inbox is emptied", inbox.edits.is_empty())
+	var source := (load("res://9. EcsSystem/systems/ecs_edit_system.gd") as GDScript).source_code
+	_check("the edit system names no component type",
+		RegEx.create_from_string("Ecs[A-Za-z]+Component\\b").search(source) == null)
+	for id in [a, b, bush]:
+		_manager.kill(_world, id)
+
+func _snapshot_world() -> EcsWorld:
+	var world := EcsWorld.new()
+	world.add_singleton(EcsLifecycleSingleton.new())
+	world.add_singleton(EcsCombatSingleton.new())
+	return world
+
+## main.gd's pipeline without the view systems.
+func _snapshot_pipeline(manager: EcsEntityManager) -> EcsScheduler:
+	var living := EcsScheduler.new()
+	living \
+		.add(EcsLifecycleSystem.new(manager, _catalog)) \
+		.add(EcsSpawnerSystem.new()) \
+		.add(EcsHungerSystem.new()) \
+		.add(EcsEnergySystem.new()) \
+		.add(EcsThirstSystem.new()) \
+		.add(EcsHealthSystem.new()) \
+		.add(EcsDangerSystem.new()) \
+		.add(EcsSensorSystem.new(manager)) \
+		.add(EcsBreedingSystem.new()) \
+		.add(EcsMemorySystem.new()) \
+		.add(EcsPlanningSystem.new()) \
+		.add(EcsLowBrainSystem.new()) \
+		.add(EcsSkillSystem.new()) \
+		.add(EcsConsumeSystem.new()) \
+		.add(EcsDrinkSystem.new()) \
+		.add(EcsHarvestSystem.new()) \
+		.add(EcsAttackSystem.new()) \
+		.add(EcsCritSystem.new()) \
+		.add(EcsDamageSystem.new()) \
+		.add(EcsMovementSystem.new()) \
+		.add(EcsCollisionSystem.new(manager)) \
+		.add(EcsPickupSystem.new()) \
+		.add(EcsRotSystem.new()) \
+		.add(EcsCorpseSystem.new()) \
+		.add(EcsDropSystem.new()) \
+		.add(EcsNodeSyncSystem.new(manager))
+	return living
+
+## Field-by-field equality; objects compare by script and fields, resources
+## with a path by identity.
+func _same(a: Variant, b: Variant, depth: int) -> bool:
+	if depth > 8:
+		return true
+	if a is Array and b is Array:
+		if a.size() != b.size():
+			return false
+		for i in a.size():
+			if not _same(a[i], b[i], depth + 1):
+				return false
+		return true
+	if a is Dictionary and b is Dictionary:
+		if a.size() != b.size():
+			return false
+		for key in a:
+			if not b.has(key) or not _same(a[key], b[key], depth + 1):
+				return false
+		return true
+	if a is Object and b is Object:
+		if a is Resource and (a as Resource).resource_path != "" \
+				and not (a as Resource).resource_path.contains("::"):
+			return a == b
+		if a.get_script() != b.get_script():
+			return false
+		for property in a.get_property_list():
+			if int(property["usage"]) & PROPERTY_USAGE_SCRIPT_VARIABLE:
+				if not _same(a.get(property["name"]), b.get(property["name"]), depth + 1):
+					return false
+		return true
+	if a is float and b is float:
+		return is_equal_approx(a, b)
+	return typeof(a) == typeof(b) and a == b
 
 func _check(what: String, passed: bool) -> void:
 	_checks += 1

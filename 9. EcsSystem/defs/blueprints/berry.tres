@@ -2,11 +2,14 @@
 
 [ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="base"]
 [ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
-[ext_resource type="Script" uid="uid://bleyjpnkxl87q" path="res://9. EcsSystem/components/ecs_pickable_component.gd" id="s_pick"]
 [ext_resource type="Script" uid="uid://occbigie8rhc" path="res://9. EcsSystem/components/ecs_body_component.gd" id="s_body"]
-[ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
 [ext_resource type="Script" uid="uid://dv5n5s3kxd2u1" path="res://9. EcsSystem/components/ecs_consumable_component.gd" id="s_food"]
+[ext_resource type="Script" uid="uid://bleyjpnkxl87q" path="res://9. EcsSystem/components/ecs_pickable_component.gd" id="s_pick"]
+[ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
 [ext_resource type="Texture2D" uid="uid://dlfyft0lv6p2h" path="res://Global/Asset/CircleButtonFull.png" id="tex"]
+
+[sub_resource type="Resource" id="c_food"]
+script = ExtResource("s_food")
 
 [sub_resource type="Resource" id="c_sprite"]
 script = ExtResource("s_sprite")
@@ -22,10 +25,6 @@ script = ExtResource("s_pick")
 script = ExtResource("s_body")
 radius = 14.0
 is_solid = false
-
-[sub_resource type="Resource" id="c_food"]
-script = ExtResource("s_food")
-
 
 [resource]
 script = ExtResource("def")

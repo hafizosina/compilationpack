@@ -32,6 +32,26 @@ func destroy_entity(id: int) -> void:
 		if (_store[type] as Dictionary).erase(id):
 			_versions[type] = int(_versions.get(type, 0)) + 1
 
+## Recreates entity `id` when loading a snapshot. False if it is already alive.
+func create_entity_with_id(id: int) -> bool:
+	if id == NO_ENTITY or _alive.has(id):
+		return false
+	_alive[id] = true
+	_next_id = maxi(_next_id, id + 1)
+	return true
+
+## The id the next new entity will get.
+func next_id() -> int:
+	return _next_id
+
+## Raises the next id to at least `id`, so a loaded world never reuses one.
+func reserve_ids_below(id: int) -> void:
+	_next_id = maxi(_next_id, id)
+
+## Every live entity id.
+func entity_ids() -> Array:
+	return _alive.keys()
+
 func is_alive(id: int) -> bool:
 	return _alive.has(id)
 
@@ -153,3 +173,6 @@ func add_singleton(component: EcsComponent) -> EcsComponent:
 
 func get_singleton(type: Script) -> EcsComponent:
 	return _singletons.get(type)
+
+func singletons() -> Array:
+	return _singletons.values()

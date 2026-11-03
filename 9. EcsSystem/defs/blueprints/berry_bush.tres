@@ -3,9 +3,9 @@
 [ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="base"]
 [ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
 [ext_resource type="Script" uid="uid://occbigie8rhc" path="res://9. EcsSystem/components/ecs_body_component.gd" id="s_body"]
+[ext_resource type="Script" uid="uid://c7f0csnl27nyd" path="res://9. EcsSystem/components/ecs_cover_component.gd" id="s_cover"]
 [ext_resource type="Script" uid="uid://b1jvtg0jugxor" path="res://9. EcsSystem/components/ecs_harvestable_component.gd" id="s_crop"]
 [ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
-[ext_resource type="Script" path="res://9. EcsSystem/components/ecs_cover_component.gd" id="s_cover"]
 [ext_resource type="Texture2D" uid="uid://dlfyft0lv6p2h" path="res://Global/Asset/CircleButtonFull.png" id="tex"]
 
 [sub_resource type="Resource" id="c_sprite"]
@@ -24,7 +24,6 @@ script = ExtResource("s_crop")
 
 [sub_resource type="Resource" id="c_cover"]
 script = ExtResource("s_cover")
-kind = &"bush"
 
 [resource]
 script = ExtResource("def")

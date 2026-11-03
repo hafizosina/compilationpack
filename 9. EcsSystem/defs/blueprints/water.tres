@@ -1,11 +1,11 @@
-[gd_resource type="Resource" script_class="EcsEntityDef" format=3 uid="uid://bwater0ecs0001"]
+[gd_resource type="Resource" script_class="EcsEntityDef" format=3 uid="uid://b537i7isv6rfc"]
 
 [ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="base"]
 [ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
 [ext_resource type="Script" uid="uid://occbigie8rhc" path="res://9. EcsSystem/components/ecs_body_component.gd" id="s_body"]
+[ext_resource type="Script" uid="uid://c7f0csnl27nyd" path="res://9. EcsSystem/components/ecs_cover_component.gd" id="s_cover"]
+[ext_resource type="Script" uid="uid://ckx1ax2gvw5oh" path="res://9. EcsSystem/components/ecs_drinkable_component.gd" id="s_drink"]
 [ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
-[ext_resource type="Script" path="res://9. EcsSystem/components/ecs_cover_component.gd" id="s_cover"]
-[ext_resource type="Script" path="res://9. EcsSystem/components/ecs_drinkable_component.gd" id="s_drink"]
 
 [sub_resource type="Gradient" id="g_water"]
 offsets = PackedFloat32Array(0.75, 1)

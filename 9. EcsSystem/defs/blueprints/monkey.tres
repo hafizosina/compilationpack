@@ -1,55 +1,69 @@
 [gd_resource type="Resource" script_class="EcsEntityDef" format=3 uid="uid://47rm6ng56roo"]
 
-[ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="base"]
-[ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
-[ext_resource type="Script" uid="uid://dyejv2wq5luep" path="res://9. EcsSystem/components/ecs_action_component.gd" id="s_action"]
-[ext_resource type="Script" uid="uid://k3ktug7ek8s8" path="res://9. EcsSystem/components/ecs_inventory_component.gd" id="s_bag"]
-[ext_resource type="Script" uid="uid://d4puc66j4jby" path="res://9. EcsSystem/components/ecs_low_brain_component.gd" id="s_brain"]
-[ext_resource type="Script" uid="uid://c62j1k5pdptjl" path="res://9. EcsSystem/components/ecs_movement_component.gd" id="s_movement"]
-[ext_resource type="Script" uid="uid://dlx8sqm54mp4u" path="res://9. EcsSystem/components/ecs_sensor_component.gd" id="s_sensor"]
-[ext_resource type="Script" uid="uid://occbigie8rhc" path="res://9. EcsSystem/components/ecs_body_component.gd" id="s_body"]
-[ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
-[ext_resource type="Script" uid="uid://cxsykqivwrtfc" path="res://9. EcsSystem/components/ecs_hunger_component.gd" id="s_hunger"]
-[ext_resource type="Script" uid="uid://b0cqwu7rlda2j" path="res://9. EcsSystem/components/ecs_health_component.gd" id="s_health"]
-[ext_resource type="Script" uid="uid://debbcabui1aj7" path="res://9. EcsSystem/components/ecs_energy_component.gd" id="s_energy"]
-[ext_resource type="Texture2D" uid="uid://dbllxupj5653t" path="res://Global/Asset/Animal/monkey.png" id="tex_monkey"]
-[ext_resource type="Script" uid="uid://bo6wqgowj8y6s" path="res://9. EcsSystem/components/ecs_planner_component.gd" id="s_planner"]
-[ext_resource type="Script" uid="uid://dvtyowamldw5k" path="res://9. EcsSystem/ai/ecs_action_def.gd" id="s_action_def"]
-[ext_resource type="Script" uid="uid://dhxn4v5fbnav2" path="res://9. EcsSystem/ai/ecs_goal_def.gd" id="s_goal_def"]
+[ext_resource type="Script" uid="uid://nslff4ri8k2p" path="res://9. EcsSystem/ai/ecs_skill_def.gd" id="44_oljrk"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/drink.tres" id="a_drink"]
 [ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/eat_carried.tres" id="a_eat_carried"]
 [ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/eat_ground.tres" id="a_eat_ground"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/take.tres" id="a_take"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/loot.tres" id="a_loot"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/seek_food.tres" id="a_seek_food"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/seek_bush.tres" id="a_seek_bush"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/harvest.tres" id="a_harvest"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/sleep.tres" id="a_sleep"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/goals/satisfy_hunger.tres" id="g_satisfy_hunger"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/goals/provision.tres" id="g_provision"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/goals/rest.tres" id="g_rest"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/flee.tres" id="a_flee"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/goals/flee.tres" id="g_flee"]
-[ext_resource type="Script" uid="uid://cs61nhjw8noqy" path="res://9. EcsSystem/components/ecs_danger_component.gd" id="s_danger"]
-
-[ext_resource type="Script" path="res://9. EcsSystem/components/ecs_skills_component.gd" id="s_skills"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/go_to_cover.tres" id="a_go_to_cover"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/hide.tres" id="a_hide"]
 [ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/escape.tres" id="a_escape"]
-
-[ext_resource type="Script" path="res://9. EcsSystem/components/ecs_thirst_component.gd" id="s_thirst"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/flee.tres" id="a_flee"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/go_to_cover.tres" id="a_go_to_cover"]
 [ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/go_to_water.tres" id="a_go_to_water"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/drink.tres" id="a_drink"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/goals/quench.tres" id="g_quench"]
-[ext_resource type="Script" path="res://9. EcsSystem/components/ecs_memory_component.gd" id="s_memory"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/recall_water.tres" id="a_recall_water"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/recall_food.tres" id="a_recall_food"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/recall_bush.tres" id="a_recall_bush"]
-
-[ext_resource type="Script" path="res://9. EcsSystem/components/ecs_breeding_component.gd" id="s_breeding"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/seek_mate.tres" id="a_seek_mate"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/recall_mate.tres" id="a_recall_mate"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/harvest.tres" id="a_harvest"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/hide.tres" id="a_hide"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/loot.tres" id="a_loot"]
 [ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/mate.tres" id="a_mate"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/recall_bush.tres" id="a_recall_bush"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/recall_food.tres" id="a_recall_food"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/recall_mate.tres" id="a_recall_mate"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/recall_water.tres" id="a_recall_water"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/seek_bush.tres" id="a_seek_bush"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/seek_food.tres" id="a_seek_food"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/seek_mate.tres" id="a_seek_mate"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/sleep.tres" id="a_sleep"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/take.tres" id="a_take"]
+[ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="base"]
+[ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
 [ext_resource type="Resource" path="res://9. EcsSystem/defs/goals/breed.tres" id="g_breed"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/goals/flee.tres" id="g_flee"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/goals/provision.tres" id="g_provision"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/goals/quench.tres" id="g_quench"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/goals/rest.tres" id="g_rest"]
+[ext_resource type="Resource" path="res://9. EcsSystem/defs/goals/satisfy_hunger.tres" id="g_satisfy_hunger"]
+[ext_resource type="Script" uid="uid://dyejv2wq5luep" path="res://9. EcsSystem/components/ecs_action_component.gd" id="s_action"]
+[ext_resource type="Script" uid="uid://dvtyowamldw5k" path="res://9. EcsSystem/ai/ecs_action_def.gd" id="s_action_def"]
+[ext_resource type="Script" uid="uid://k3ktug7ek8s8" path="res://9. EcsSystem/components/ecs_inventory_component.gd" id="s_bag"]
+[ext_resource type="Script" uid="uid://occbigie8rhc" path="res://9. EcsSystem/components/ecs_body_component.gd" id="s_body"]
+[ext_resource type="Script" uid="uid://d4puc66j4jby" path="res://9. EcsSystem/components/ecs_low_brain_component.gd" id="s_brain"]
+[ext_resource type="Script" uid="uid://de23labxksgf8" path="res://9. EcsSystem/components/ecs_breeding_component.gd" id="s_breeding"]
+[ext_resource type="Script" uid="uid://cs61nhjw8noqy" path="res://9. EcsSystem/components/ecs_danger_component.gd" id="s_danger"]
+[ext_resource type="Script" uid="uid://debbcabui1aj7" path="res://9. EcsSystem/components/ecs_energy_component.gd" id="s_energy"]
+[ext_resource type="Script" uid="uid://dhxn4v5fbnav2" path="res://9. EcsSystem/ai/ecs_goal_def.gd" id="s_goal_def"]
+[ext_resource type="Script" uid="uid://b0cqwu7rlda2j" path="res://9. EcsSystem/components/ecs_health_component.gd" id="s_health"]
+[ext_resource type="Script" uid="uid://cxsykqivwrtfc" path="res://9. EcsSystem/components/ecs_hunger_component.gd" id="s_hunger"]
+[ext_resource type="Script" uid="uid://cdrromfj6of1i" path="res://9. EcsSystem/components/ecs_memory_component.gd" id="s_memory"]
+[ext_resource type="Script" uid="uid://c62j1k5pdptjl" path="res://9. EcsSystem/components/ecs_movement_component.gd" id="s_movement"]
+[ext_resource type="Script" uid="uid://bo6wqgowj8y6s" path="res://9. EcsSystem/components/ecs_planner_component.gd" id="s_planner"]
+[ext_resource type="Script" uid="uid://dlx8sqm54mp4u" path="res://9. EcsSystem/components/ecs_sensor_component.gd" id="s_sensor"]
+[ext_resource type="Script" uid="uid://di5dlx4aqxnva" path="res://9. EcsSystem/components/ecs_skills_component.gd" id="s_skills"]
+[ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
+[ext_resource type="Script" uid="uid://bwqchcai3e41n" path="res://9. EcsSystem/components/ecs_thirst_component.gd" id="s_thirst"]
+[ext_resource type="Texture2D" uid="uid://dbllxupj5653t" path="res://Global/Asset/Animal/monkey.png" id="tex_monkey"]
+
+[sub_resource type="Resource" id="c_energy"]
+script = ExtResource("s_energy")
+restore = 10.0
+start_min = 0.5
+
+[sub_resource type="Resource" id="c_health"]
+script = ExtResource("s_health")
+power = 15.0
+
+[sub_resource type="Resource" id="c_hunger"]
+script = ExtResource("s_hunger")
+drain = 2.6
+forage_below = 70.0
+heal_above = 50.0
+heal_rate = 5.0
 
 [sub_resource type="Resource" id="c_body"]
 script = ExtResource("s_body")
@@ -80,23 +94,6 @@ radius = 420.0
 script = ExtResource("s_action")
 radius = 50.0
 
-[sub_resource type="Resource" id="c_hunger"]
-script = ExtResource("s_hunger")
-drain = 2.6
-forage_below = 70.0
-heal_above = 50.0
-heal_rate = 5.0
-
-[sub_resource type="Resource" id="c_health"]
-script = ExtResource("s_health")
-power = 15.0
-
-
-[sub_resource type="Resource" id="c_energy"]
-script = ExtResource("s_energy")
-start_min = 0.5
-restore = 10.0
-
 [sub_resource type="Resource" id="c_planner"]
 script = ExtResource("s_planner")
 actions = Array[ExtResource("s_action_def")]([ExtResource("a_eat_carried"), ExtResource("a_eat_ground"), ExtResource("a_take"), ExtResource("a_loot"), ExtResource("a_seek_food"), ExtResource("a_seek_bush"), ExtResource("a_harvest"), ExtResource("a_sleep"), ExtResource("a_flee"), ExtResource("a_go_to_cover"), ExtResource("a_hide"), ExtResource("a_escape"), ExtResource("a_go_to_water"), ExtResource("a_drink"), ExtResource("a_recall_water"), ExtResource("a_recall_food"), ExtResource("a_recall_bush"), ExtResource("a_seek_mate"), ExtResource("a_recall_mate"), ExtResource("a_mate")])
@@ -110,7 +107,6 @@ script = ExtResource("s_skills")
 
 [sub_resource type="Resource" id="c_thirst"]
 script = ExtResource("s_thirst")
-drain = 0.5
 
 [sub_resource type="Resource" id="c_memory"]
 script = ExtResource("s_memory")

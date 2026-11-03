@@ -15,14 +15,16 @@ a recorded design, not something you can run.
 ```bash
 GODOT="/home/zhenzhu/.local/share/Steam/steamapps/common/Godot Engine/godot.x11.opt.tools.64"
 "$GODOT" --path . "res://9. EcsSystem/main.tscn"                          # run it (also the main scene)
-"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 388 checks, exit 0 = all pass
+"$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn" # 404 checks, exit 0 = all pass
 "$GODOT" --path . "res://9. EcsSystem/showcase/hunt_showcase.tscn"         # one dog, one bush, one rabbit
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"    # population ramp, minutes
 "$GODOT" --headless --editor --quit --path . 2>&1 | grep -iE "error|invalid|uid"  # after any .tscn/.tres edit
 ```
 
-In the running game: **F1** toggles the debug overlay, **F5** respawns the world, left-click
-selects an entity for the inspector, the wheel zooms, middle-drag pans.
+In the running game: **Space** pauses, **F1** toggles the debug overlay, **F5** respawns the
+world, left-click selects an entity for the inspector (or places one in place mode, which
+right-click leaves), the wheel zooms, middle-drag pans. The stats panel's Save / Load, Place
+and Compose buttons open the tools in §22.
 
 One thing outside this folder belongs to module 9: the main-scene line in `project.godot`.
 The shared camera (`Global/Scene/camera_2d.tscn`) and three `EventBus` signals
@@ -594,7 +596,7 @@ after its producer keeps its data one tick old, as at full rate.
 
 ## 12. Tests
 
-`tests/lifecycle_test.tscn` — **388 checks**, exit code 0 only if all pass. Run it after
+`tests/lifecycle_test.tscn` — **404 checks**, exit code 0 only if all pass. Run it after
 touching the manager, collision, pickup, spawner, sensor, node sync, the brain or any
 executor. It covers: declared nodes built and undeclared ones not; kill takes data and nodes;
 spawn notes fulfilled a tick later; soft collision, immovable and non-solid bodies; seeing is
@@ -1360,3 +1362,101 @@ tuning, not a mechanism.
 **Cost**: +5% at 6,400 fed (233.5 / 232.5 against 213.8 / 224.7 ms for `52ba7b9`). `breeding` is
 3.5 ms; planning gained 3–6 ms. The grid's 3,000+ rabbits are over the cap, so nobody there breeds —
 that number is readiness, not mating.
+
+---
+
+## 22. Save, place, compose
+
+**Pause.** Space toggles it in `main.gd`. While paused the scheduler does not run. Only
+lifecycle, edit, selection, node_sync, debug and inspect run, each with its real delta. A click still
+selects, the inspector stays live, and a placed entity is born and drawn at once. Nothing moves,
+drains or decides. The Respawn and tool buttons take no keyboard focus, or Space would press
+them.
+
+**Save is a full live snapshot.** `EcsSnapshot.capture(world)` (`save/ecs_snapshot.gd`) only
+reads the world. It writes every entity's components and flags, and the lifecycle and combat
+singletons, as plain data. It leaves out `EcsSelectedFlag` and the selection and edit singletons. The file
+is `var_to_str` text in `user://saves/<name>.ecs`. Encoding:
+- **A resource with a real path** (action, goal and skill defs, textures) is `{"$path": p}` and is
+  `load()`ed back, so it is the same shared instance again.
+- **Every other object** goes once into an `objects` table, and each holder gets `{"$ref": n}`.
+  That covers components, flags, `EcsItemRecord`, `EcsMemoryFact`, `EcsSpawnRequest`, `EcsHit`, and
+  sub-resources whose path has `::`.
+  - A scripted object keeps its `PROPERTY_USAGE_SCRIPT_VARIABLE` fields (the filter
+    `EcsItemRecord.copy()` uses).
+  - A script-less inline engine resource (a blueprint's `GradientTexture2D`) keeps its class and
+    `PROPERTY_USAGE_STORAGE` properties.
+  - The table keeps shared objects shared (a spawner's pending request *is* the inbox's) and lets
+    cycles resolve.
+- **Decode** builds every object first, then sets fields. A typed `Array` or `Dictionary` field is
+  filled with `.assign()`, so it keeps its type.
+
+**Ids are kept as they were.** Every reference between entities is a plain int: brain target,
+intent flags, memory facts, `sensor.perceived`, `spawner.spawned`. Keeping ids means none of them
+needs remapping. `EcsWorld.create_entity_with_id()` and `reserve_ids_below()` exist only for this.
+Ids are still never reused.
+
+**Load is creation, so it is the manager's.** `EcsEntityManager.load_snapshot()` clears every node,
+recreates each id with its components and the singletons, and builds nodes as a spawn does.
+`main.gd`'s `_build(snapshot)` makes fresh system instances around it, so caches such as planning
+views and collision slots rebuild from the data. The areas start with no overlaps, which is the
+same one tick of lag as a spawn. Not saved: the scheduler's tick and banked delta, and system-local
+caches. Measured on the 116-entity main world: save 53 ms, 392 KB, load 38 ms.
+
+**Placing** goes through the lifecycle inbox, like a spawner. The HUD palette picks a type with
+`ecs_place_type_chosen`. `main.gd` turns a left-click into an `EcsSpawnRequest` (recording onto a
+singleton, as selection does), and the manager makes the entity at the next lifecycle stage, which
+also runs while paused.
+
+**Composing** edits blueprint data, never the world. `ui/composer.gd` builds an `EcsEntityDef`:
+- **Start from** a copy of any catalog type, or from empty, then add or remove components. The
+  addable components come from `ProjectSettings.get_global_class_list()`: classes that extend
+  `EcsComponent` under `components/`, minus name and position, which the manager adds.
+- **Edit exported fields** by reflection: float, int, enum, bool, String, StringName, Vector2,
+  Color, and a picker for textures the catalog already uses.
+- **Resource and array fields** (planner actions and goals, skill swaps) are shown and kept as
+  copied. A planned animal is therefore made by copying one, not from empty.
+- **Save:** `ResourceSaver` writes it to `user://blueprints/<id>.tres`. A built-in id is refused.
+
+`main.gd` keeps a runtime copy of `catalog`, plus every blueprint in that folder, and tells the HUD
+through `ecs_catalog_changed`. A composed type breeds and spawns like any other.
+
+**Tests** (16 checks): the codec keeps shared and typed data. A mixed world run 300 ticks saves to
+disk and loads with the same ids, every field equal, and nodes rebuilt, and then runs on. A request
+placed while paused is born with its sprite. A composed blueprint saves, loads and spawns as
+written.
+
+## 23. Multi-select and live edit
+
+**Selecting many.** `EcsSelectedFlag` may sit on any number of entities. `main.gd` records a pick
+on release: a press that moved under 8 screen pixels is a click, more is a box (drawn by
+`EcsSelectionMarker` while dragging; middle-drag still pans). Shift makes it additive.
+`EcsSelectionSystem` resolves it: a click replaces the selection, shift-click toggles one, a box
+selects every sprite whose position it holds, a shift box adds. Bare ground without shift clears.
+The marker rings every selected entity.
+
+**The inspector shows the lowest id** and says how many more are selected. The snapshot now also
+carries `ids` (every selected one) and `editable`: per component, the raw script fields of types
+the inspector can edit (bool, int, enum, float, String, StringName, Vector2, Color), read by
+reflection, so the inspect system still names no component type.
+
+**An edit is a request, not a write.** The Edit tab (`ui/ui.gd`, controls from
+`ui/ecs_field_editor.gd`, shared with the composer) emits `ecs_entity_edit_requested(ids,
+component, field, value)`. `main.gd` turns it into an `EcsEdit` on the `EcsEditSingleton`, the
+way a click is recorded on the selection singleton. `EcsEditSystem` runs second, right after
+lifecycle, so every system in that tick sees the new value, and it runs while paused. It finds
+the component by `key()`, never by type, and sets the field on each live id that has it. An int
+for a float field (and String for StringName) is converted; any other type mismatch is skipped.
+Flags are never edited: they belong to the systems that raise them.
+
+**What an edit means is the owning system's business.** Fields are set as they are; nothing
+re-derives from them. A changed `speed` prices the next trip, a changed `radius` is written to
+the area by collision on its next run, a moved `position` is drawn by node_sync. Rolled-once
+fields (energy's `rolled`) are editable like any other. The editor refreshes from each snapshot
+except while you type in a field. Edits are not saved as pending; the edited values are, as part
+of the world.
+
+**Tests:** a click, shift-click, a box and a shift box select what they should; the inspector is
+told every id with raw fields; an edit changes every selected entity that has the component,
+converts a whole number, skips a typo'd field and a wrong type, moves an entity, and empties the
+inbox; the edit system names no component type.

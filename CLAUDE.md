@@ -10,11 +10,13 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 388 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 419 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments, the hunger/health/energy loop,
 # intent flags, items as records, the drop on death, views, combat, corpses,
 # looting, rot, diet, hunting, harvesting, the planner, utility, fleeing,
-# skills, hiding, the ambush, thirst, costs from stats, staying safe and memory.
+# skills, hiding, the ambush, thirst, costs from stats, staying safe, memory,
+# save/load snapshots, placing while paused, composed blueprints, multi-select
+# and live edits.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
@@ -366,9 +368,9 @@ been crossed.
 berry dies and becomes a record, so freeing a node is kill and only kill, and every live
 entity has a position to draw.
 
-**It is deliberately kept to a small core**: 29 components, 17 flags, 3
-singletons, 30 systems
-(`lifecycle > spawner > hunger > energy > thirst > health > danger > sensor > breeding > memory > planning > low_brain > skill > consume > drink > harvest > attack > crit > damage > movement > collision > pickup > rot > corpse > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
+**It is deliberately kept to a small core**: 29 components, 17 flags, 4
+singletons, 31 systems
+(`lifecycle > edit > spawner > hunger > energy > thirst > health > danger > sensor > breeding > memory > planning > low_brain > skill > consume > drink > harvest > attack > crit > damage > movement > collision > pickup > rot > corpse > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
 rank in the plan's decision ladder — the planner sits *above* it — and not for the
 wandering it happens to do), and a world
 of 48 animals in 4 types (20 rabbits, 20 monkeys, 4 crocodiles and 4 wild dogs — a grazer,
@@ -408,7 +410,8 @@ entity it describes.
 entity, and the bottom-left panel shows it. The chain is strictly ECS: a click is only
 *recorded* on the `EcsSelectionSingleton` by `main.gd`, `EcsSelectionSystem`
 resolves it on the next tick by a distance query over `EcsPositionComponent` (no physics
-pick, no hitboxes), selection is the presence of `EcsSelectedFlag`, and
+pick, no hitboxes), selection is the presence of `EcsSelectedFlag` — on any number of
+entities (shift-click toggles one, a left-drag box selects many) — and
 `EcsInspectSystem` pushes a formatted snapshot onto `EventBus.ecs_entity_inspected`.
 `ui/ui.tscn` is a dumb renderer that never touches the world. **`EcsInspectSystem` knows no
 component — keep it that way.** How a component reads is its own **`describe()`**:
@@ -436,6 +439,19 @@ positions; the author wants to argue it out. **Do not implement any option from 
 for a decision instead. Cached views (`EcsWorld.view()`, approved 2026-10-29) are an index over
 the existing store, not a storage change (§14). The node structure is settled: one container per
 entity (§3). The plan's steps 0–7 and the features roadmap's steps 1–5 are done; the queue that follows is in HANDOFF §13.
+
+**Save, place, compose** (HANDOFF §22). **Space** pauses: only lifecycle, edit, selection,
+node_sync, debug and inspect run, so you can place, inspect and edit with nothing simulating.
+**Live edit** (HANDOFF §23): the inspector's Edit tab asks over `EventBus`, `main.gd` appends an
+`EcsEdit` to the `EcsEditSingleton`, and `EcsEditSystem` — second in the pipeline, naming no
+component type — sets the field on every selected entity that has it. The UI never writes a
+component; flags are never edited. A save is a **full
+live snapshot** (`save/ecs_snapshot.gd`, `user://saves/`) that keeps entity ids as they were, so
+every cross-entity int stays valid. Capturing only reads the world, and
+`EcsEntityManager.load_snapshot()` rebuilds it, so the manager is still the only creator. Placing
+appends an `EcsSpawnRequest` to the lifecycle inbox. The composer (`ui/composer.gd`) builds an
+`EcsEntityDef` from components and saves it to `user://blueprints/`. `main.gd` runs a runtime copy
+of the catalog that holds these, and never changes `catalog.tres`.
 
 Read `9. EcsSystem/HANDOFF.md` before touching that folder. Module 9 is the main scene,
 ahead of the plan, which held that switch until step 6, and now the only simulation in the

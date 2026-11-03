@@ -1,21 +1,33 @@
 extends Node2D
 
-## Module 9 entry point. Builds the world from world1.tres and runs the system
-## pipeline (see `_build()`) on every physics tick.
+## Module 9 entry point. Starts on a clean world with a start menu (open a map
+## or a save, or start empty) and runs the system pipeline (see `_build()`) on
+## every physics tick.
 ##
-## Left-click selects an entity for the inspector. Space pauses the simulation,
-## F1 toggles the debug overlay, F5 rebuilds the world from data.
+## Left-click selects an entity for the inspector, shift-click adds or removes
+## one, and a left-drag box selects many; in place mode left-click places one
+## (right-click leaves it). The inspector's Edit tab changes every selected entity. Space pauses the simulation, F1 toggles the debug
+## overlay, F5 rebuilds the world from data. Saves and composed blueprints live
+## under user:// (HANDOFF.md §22).
 
 ## Ticks between runs for sensor, planning, low_brain, danger and health (3 = 20 Hz).
 const SLOW: int = 3
+
+## Where composed blueprints are saved and loaded from.
+const BLUEPRINT_DIR := "user://blueprints/"
 
 ## Ticks between runs for hunger, energy and thirst (6 = 10 Hz). Phases are chosen so no
 ## slow stages share a tick.
 const BARS: int = 6
 
+## Screen pixels a left press must travel to become a drag box.
+const DRAG_PIXELS: float = 8.0
+
 ## Blueprint book to resolve placement `type` ids against.
 @export var catalog: EcsEntityCatalog
-## Placement list describing what to spawn and where.
+## Maps the start menu offers, named by file.
+@export var maps: Array[EcsWorldDef] = []
+## Placement list to spawn; empty starts a clean world and opens the start menu.
 @export var world_def: EcsWorldDef
 ## Playable area in global pixels; also the wander bounds.
 @export var arena: Rect2 = Rect2(-3200.0, -1680.0, 6400.0, 3360.0)
@@ -31,13 +43,38 @@ var _manager: EcsEntityManager
 ## Systems that still run while paused, so selection and the inspector work.
 var _paused_systems: Array[EcsSystem] = []
 var _paused: bool = false
+## Built-in blueprints plus composed ones; `catalog` itself is never changed.
+var _catalog: EcsEntityCatalog
+## Blueprint placed on left-click, or empty.
+var _place_type: StringName = &""
+## True while a left press that may select is held.
+var _pressing: bool = false
+## Where that press began, in world and screen coordinates.
+var _press_world: Vector2 = Vector2.ZERO
+var _press_screen: Vector2 = Vector2.ZERO
 
 func _ready() -> void:
 	EcsConst.world_bounds = arena
 	# The manager outlives each world, so it can free the old nodes on F5.
 	_manager = EcsEntityManager.new(_entities_root)
 	EventBus.ecs_respawn_requested.connect(_build)
+	EventBus.ecs_save_requested.connect(_save)
+	EventBus.ecs_load_requested.connect(_load)
+	EventBus.ecs_place_type_chosen.connect(_on_place_type_chosen)
+	EventBus.ecs_blueprint_saved.connect(_add_blueprint)
+	EventBus.ecs_new_world_requested.connect(_on_new_world_requested)
+	EventBus.ecs_entity_edit_requested.connect(_on_edit_requested)
+	_catalog = catalog.duplicate() as EcsEntityCatalog
+	_catalog.defs = catalog.defs.duplicate()
+	DirAccess.make_dir_recursive_absolute(BLUEPRINT_DIR)
+	for file in DirAccess.get_files_at(BLUEPRINT_DIR):
+		if file.get_extension() == "tres":
+			_add_blueprint(BLUEPRINT_DIR + file, false)
+	EventBus.ecs_catalog_changed.emit(_catalog.defs)
+	EventBus.ecs_saves_changed.emit(EcsSnapshot.list_saves())
 	_build()
+	if world_def == null:
+		EventBus.ecs_start_menu_opened.emit(_map_names())
 
 ## Runs on the physics tick: a fixed timestep, and overlaps refresh once per tick.
 func _physics_process(delta: float) -> void:
@@ -47,13 +84,56 @@ func _physics_process(delta: float) -> void:
 	for system in _paused_systems:
 		system.run(_world, delta)
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed \
+## The end of a selecting press is read here, before the GUI, so a drag that ends
+## over a panel still lands.
+func _input(event: InputEvent) -> void:
+	if not _pressing:
+		return
+	if event is InputEventMouseMotion:
+		if _is_drag(event.position):
+			_marker.show_box(Rect2(_press_world, Vector2.ZERO).expand(get_global_mouse_position()))
+		return
+	if event is InputEventMouseButton and not event.pressed \
 			and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+		_pressing = false
+		_marker.clear_box()
 		# Resolved by EcsSelectionSystem next tick.
 		var selection := _world.get_singleton(EcsSelectionSingleton) as EcsSelectionSingleton
 		selection.pending = true
-		selection.pick_at = get_global_mouse_position()
+		selection.is_box = _is_drag(event.position)
+		selection.pick_at = _press_world if selection.is_box else get_global_mouse_position()
+		selection.drag_to = get_global_mouse_position()
+		selection.additive = (event as InputEventMouseButton).shift_pressed
+
+func _is_drag(screen_position: Vector2) -> bool:
+	return screen_position.distance_to(_press_screen) > DRAG_PIXELS
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed \
+			and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_RIGHT \
+			and _place_type != &"":
+		EventBus.ecs_place_type_chosen.emit(&"")
+		get_viewport().set_input_as_handled()
+		return
+
+	if event is InputEventMouseButton and event.pressed \
+			and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT \
+			and _place_type != &"":
+		# Born at the next lifecycle stage, which also runs while paused.
+		var note := EcsSpawnRequest.new()
+		note.type_id = _place_type
+		note.position = get_global_mouse_position()
+		var inbox := _world.get_singleton(EcsLifecycleSingleton) as EcsLifecycleSingleton
+		inbox.spawn_requests.append(note)
+		get_viewport().set_input_as_handled()
+		return
+
+	if event is InputEventMouseButton and event.pressed \
+			and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+		# A click or a box; decided on release in _input().
+		_pressing = true
+		_press_world = get_global_mouse_position()
+		_press_screen = (event as InputEventMouseButton).position
 		get_viewport().set_input_as_handled()
 		return
 
@@ -71,8 +151,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			EventBus.ecs_pause_changed.emit(_paused)
 			get_viewport().set_input_as_handled()
 
-## Builds a fresh world and the pipeline. The system order is the frame order.
-func _build() -> void:
+## Builds a fresh world and the pipeline, from `world_def` or from a snapshot.
+## The system order is the frame order.
+func _build(snapshot: Dictionary = {}) -> void:
 	if _collision != null:
 		_collision.clear()
 	_debug_overlay.clear()
@@ -82,12 +163,18 @@ func _build() -> void:
 	_world = EcsWorld.new()
 	_collision = EcsCollisionSystem.new(_manager)
 	_scheduler = EcsScheduler.new()
+	var lifecycle := EcsLifecycleSystem.new(_manager, _catalog)
+	var edit := EcsEditSystem.new()
 	var selection := EcsSelectionSystem.new(_marker)
+	var node_sync := EcsNodeSyncSystem.new(_manager)
+	var debug := EcsDebugSystem.new(_debug_overlay)
 	var inspect := EcsInspectSystem.new()
-	_paused_systems = [selection, inspect]
+	# Placing, inspecting and editing work while paused; nothing simulates.
+	_paused_systems = [lifecycle, edit, selection, node_sync, debug, inspect]
 
 	_scheduler \
-		.add(EcsLifecycleSystem.new(_manager, catalog)) \
+		.add(lifecycle) \
+		.add(edit) \
 		.add(EcsSpawnerSystem.new()) \
 		.add(EcsHungerSystem.new(), BARS, 2) \
 		.add(EcsEnergySystem.new(), BARS, 5) \
@@ -113,18 +200,80 @@ func _build() -> void:
 		.add(EcsCorpseSystem.new()) \
 		.add(EcsDropSystem.new()) \
 		.add(selection) \
-		.add(EcsNodeSyncSystem.new(_manager)) \
-		.add(EcsDebugSystem.new(_debug_overlay)) \
+		.add(node_sync) \
+		.add(debug) \
 		.add(EcsCensusSystem.new()) \
 		.add(inspect)
 
 	_world.add_singleton(EcsSelectionSingleton.new())
+	_world.add_singleton(EcsEditSingleton.new())
 	_world.add_singleton(EcsLifecycleSingleton.new())
 	_world.add_singleton(EcsCombatSingleton.new())
-	_manager.spawn_world(_world, catalog, world_def)
+	if snapshot.is_empty() or not _manager.load_snapshot(_world, snapshot):
+		if world_def != null:
+			_manager.spawn_world(_world, _catalog, world_def)
 	EventBus.ecs_world_census.emit(_world.entity_count())
-	if Constant.DEBUG:
+	if Constant.DEBUG and snapshot.is_empty() and world_def != null:
 		_debug_report()
+
+## Saves the whole world between ticks.
+func _save(save_name: String) -> void:
+	if save_name.strip_edges().is_empty():
+		return
+	if EcsSnapshot.write(save_name, EcsSnapshot.capture(_world)):
+		EventBus.ecs_saves_changed.emit(EcsSnapshot.list_saves())
+
+## Replaces the world with a saved one; pause stays as it was.
+func _load(save_name: String) -> void:
+	var data := EcsSnapshot.read(save_name)
+	if not data.is_empty():
+		_build(data)
+
+## Builds a fresh world from the map called `map_name`; empty builds an empty world.
+func _on_new_world_requested(map_name: String) -> void:
+	if map_name.is_empty():
+		world_def = null
+		_build()
+		return
+	var names := _map_names()
+	var index := names.find(map_name)
+	if index < 0:
+		return
+	world_def = maps[index]
+	_build()
+
+func _map_names() -> PackedStringArray:
+	var names := PackedStringArray()
+	for map in maps:
+		names.append(map.resource_path.get_file().get_basename())
+	return names
+
+## Queues an inspector edit for EcsEditSystem's next run, which also runs while paused.
+func _on_edit_requested(ids: Array, component: StringName, field: StringName, value: Variant) -> void:
+	var edit := EcsEdit.new()
+	edit.ids.assign(ids)
+	edit.component = component
+	edit.field = field
+	edit.value = value
+	(_world.get_singleton(EcsEditSingleton) as EcsEditSingleton).edits.append(edit)
+
+func _on_place_type_chosen(type_id: StringName) -> void:
+	_place_type = type_id if _catalog.has_def(type_id) else &""
+
+## Adds or replaces a composed blueprint read from `path`.
+func _add_blueprint(path: String, announce: bool = true) -> void:
+	var def := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_REPLACE) as EcsEntityDef
+	if def == null or def.id == &"":
+		push_warning("main: %s is not a blueprint" % path)
+		return
+	var defs: Array[EcsEntityDef] = []
+	for kept in _catalog.defs:
+		if kept.id != def.id:
+			defs.append(kept)
+	defs.append(def)
+	_catalog.defs = defs
+	if announce:
+		EventBus.ecs_catalog_changed.emit(_catalog.defs)
 
 ## Prints what spawned, with each entity's speed.
 func _debug_report() -> void:

@@ -9,12 +9,12 @@ entity_name = &"rabbit_0"
 type = &"rabbit"
 position = Vector2(-2500, -1100)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 92.0
+},
 "movement": {
 "speed": 176.0
-},
-"energy": {
-"value": 92.0,
-"rolled": true
 }
 }
 
@@ -24,12 +24,12 @@ entity_name = &"rabbit_1"
 type = &"rabbit"
 position = Vector2(-700, -1240)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 61.0
+},
 "movement": {
 "speed": 158.0
-},
-"energy": {
-"value": 61.0,
-"rolled": true
 }
 }
 
@@ -39,12 +39,12 @@ entity_name = &"rabbit_2"
 type = &"rabbit"
 position = Vector2(1200, -1000)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 78.0
+},
 "movement": {
 "speed": 168.0
-},
-"energy": {
-"value": 78.0,
-"rolled": true
 }
 }
 
@@ -54,12 +54,12 @@ entity_name = &"rabbit_3"
 type = &"rabbit"
 position = Vector2(-1400, 900)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 47.0
+},
 "movement": {
 "speed": 152.0
-},
-"energy": {
-"value": 47.0,
-"rolled": true
 }
 }
 
@@ -69,12 +69,12 @@ entity_name = &"rabbit_4"
 type = &"rabbit"
 position = Vector2(2600, 1200)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 85.0
+},
 "movement": {
 "speed": 163.0
-},
-"energy": {
-"value": 85.0,
-"rolled": true
 }
 }
 
@@ -84,12 +84,12 @@ entity_name = &"monkey_0"
 type = &"monkey"
 position = Vector2(-2600, 500)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 55.0
+},
 "movement": {
 "speed": 124.0
-},
-"energy": {
-"value": 55.0,
-"rolled": true
 }
 }
 
@@ -99,12 +99,12 @@ entity_name = &"monkey_1"
 type = &"monkey"
 position = Vector2(300, -300)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 97.0
+},
 "movement": {
 "speed": 136.0
-},
-"energy": {
-"value": 97.0,
-"rolled": true
 }
 }
 
@@ -114,12 +114,12 @@ entity_name = &"monkey_2"
 type = &"monkey"
 position = Vector2(2500, -500)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 68.0
+},
 "movement": {
 "speed": 128.0
-},
-"energy": {
-"value": 68.0,
-"rolled": true
 }
 }
 
@@ -129,12 +129,12 @@ entity_name = &"monkey_3"
 type = &"monkey"
 position = Vector2(600, 1160)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 74.0
+},
 "movement": {
 "speed": 133.0
-},
-"energy": {
-"value": 74.0,
-"rolled": true
 }
 }
 
@@ -144,12 +144,12 @@ entity_name = &"monkey_4"
 type = &"monkey"
 position = Vector2(-1200, -200)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 51.0
+},
 "movement": {
 "speed": 121.0
-},
-"energy": {
-"value": 51.0,
-"rolled": true
 }
 }
 
@@ -159,12 +159,12 @@ entity_name = &"crocodile_0"
 type = &"crocodile"
 position = Vector2(0, 900)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 90.0
+},
 "hunger": {
 "fullness": 210.0
-},
-"energy": {
-"value": 90.0,
-"rolled": true
 }
 }
 
@@ -582,12 +582,12 @@ entity_name = &"rabbit_5"
 type = &"rabbit"
 position = Vector2(-2660, -1470)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 55.0
+},
 "movement": {
 "speed": 175.0
-},
-"energy": {
-"value": 55.0,
-"rolled": true
 }
 }
 
@@ -597,12 +597,12 @@ entity_name = &"rabbit_6"
 type = &"rabbit"
 position = Vector2(-690, -820)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 45.0
+},
 "movement": {
 "speed": 164.0
-},
-"energy": {
-"value": 45.0,
-"rolled": true
 }
 }
 
@@ -612,12 +612,12 @@ entity_name = &"rabbit_7"
 type = &"rabbit"
 position = Vector2(2760, -10)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 46.0
+},
 "movement": {
 "speed": 167.0
-},
-"energy": {
-"value": 46.0,
-"rolled": true
 }
 }
 
@@ -627,12 +627,12 @@ entity_name = &"rabbit_8"
 type = &"rabbit"
 position = Vector2(-2600, -490)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 86.0
+},
 "movement": {
 "speed": 162.0
-},
-"energy": {
-"value": 86.0,
-"rolled": true
 }
 }
 
@@ -642,12 +642,12 @@ entity_name = &"rabbit_9"
 type = &"rabbit"
 position = Vector2(-2500, -1500)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 65.0
+},
 "movement": {
 "speed": 157.0
-},
-"energy": {
-"value": 65.0,
-"rolled": true
 }
 }
 
@@ -657,12 +657,12 @@ entity_name = &"rabbit_10"
 type = &"rabbit"
 position = Vector2(-30, 1030)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 50.0
+},
 "movement": {
 "speed": 167.0
-},
-"energy": {
-"value": 50.0,
-"rolled": true
 }
 }
 
@@ -672,12 +672,12 @@ entity_name = &"rabbit_11"
 type = &"rabbit"
 position = Vector2(-3030, 820)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 66.0
+},
 "movement": {
 "speed": 169.0
-},
-"energy": {
-"value": 66.0,
-"rolled": true
 }
 }
 
@@ -687,12 +687,12 @@ entity_name = &"rabbit_12"
 type = &"rabbit"
 position = Vector2(2330, -500)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 66.0
+},
 "movement": {
 "speed": 165.0
-},
-"energy": {
-"value": 66.0,
-"rolled": true
 }
 }
 
@@ -702,12 +702,12 @@ entity_name = &"rabbit_13"
 type = &"rabbit"
 position = Vector2(280, -970)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 80.0
+},
 "movement": {
 "speed": 170.0
-},
-"energy": {
-"value": 80.0,
-"rolled": true
 }
 }
 
@@ -717,12 +717,12 @@ entity_name = &"rabbit_14"
 type = &"rabbit"
 position = Vector2(1130, 500)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 58.0
+},
 "movement": {
 "speed": 165.0
-},
-"energy": {
-"value": 58.0,
-"rolled": true
 }
 }
 
@@ -732,12 +732,12 @@ entity_name = &"rabbit_15"
 type = &"rabbit"
 position = Vector2(2050, -1010)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 40.0
+},
 "movement": {
 "speed": 159.0
-},
-"energy": {
-"value": 40.0,
-"rolled": true
 }
 }
 
@@ -747,12 +747,12 @@ entity_name = &"rabbit_16"
 type = &"rabbit"
 position = Vector2(1170, 1350)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 77.0
+},
 "movement": {
 "speed": 153.0
-},
-"energy": {
-"value": 77.0,
-"rolled": true
 }
 }
 
@@ -762,12 +762,12 @@ entity_name = &"rabbit_17"
 type = &"rabbit"
 position = Vector2(-3050, 330)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 45.0
+},
 "movement": {
 "speed": 175.0
-},
-"energy": {
-"value": 45.0,
-"rolled": true
 }
 }
 
@@ -777,12 +777,12 @@ entity_name = &"rabbit_18"
 type = &"rabbit"
 position = Vector2(-250, 1070)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 50.0
+},
 "movement": {
 "speed": 162.0
-},
-"energy": {
-"value": 50.0,
-"rolled": true
 }
 }
 
@@ -792,12 +792,12 @@ entity_name = &"rabbit_19"
 type = &"rabbit"
 position = Vector2(2040, -560)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 56.0
+},
 "movement": {
 "speed": 176.0
-},
-"energy": {
-"value": 56.0,
-"rolled": true
 }
 }
 
@@ -807,12 +807,12 @@ entity_name = &"monkey_5"
 type = &"monkey"
 position = Vector2(1980, 280)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 72.0
+},
 "movement": {
 "speed": 129.0
-},
-"energy": {
-"value": 72.0,
-"rolled": true
 }
 }
 
@@ -822,12 +822,12 @@ entity_name = &"monkey_6"
 type = &"monkey"
 position = Vector2(-1520, 1500)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 89.0
+},
 "movement": {
 "speed": 130.0
-},
-"energy": {
-"value": 89.0,
-"rolled": true
 }
 }
 
@@ -837,12 +837,12 @@ entity_name = &"monkey_7"
 type = &"monkey"
 position = Vector2(-280, -540)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 40.0
+},
 "movement": {
 "speed": 131.0
-},
-"energy": {
-"value": 40.0,
-"rolled": true
 }
 }
 
@@ -852,12 +852,12 @@ entity_name = &"monkey_8"
 type = &"monkey"
 position = Vector2(1880, -170)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 95.0
+},
 "movement": {
 "speed": 126.0
-},
-"energy": {
-"value": 95.0,
-"rolled": true
 }
 }
 
@@ -867,12 +867,12 @@ entity_name = &"monkey_9"
 type = &"monkey"
 position = Vector2(1010, -1240)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 93.0
+},
 "movement": {
 "speed": 135.0
-},
-"energy": {
-"value": 93.0,
-"rolled": true
 }
 }
 
@@ -882,12 +882,12 @@ entity_name = &"monkey_10"
 type = &"monkey"
 position = Vector2(2030, 860)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 88.0
+},
 "movement": {
 "speed": 133.0
-},
-"energy": {
-"value": 88.0,
-"rolled": true
 }
 }
 
@@ -897,12 +897,12 @@ entity_name = &"monkey_11"
 type = &"monkey"
 position = Vector2(-30, 540)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 40.0
+},
 "movement": {
 "speed": 122.0
-},
-"energy": {
-"value": 40.0,
-"rolled": true
 }
 }
 
@@ -912,12 +912,12 @@ entity_name = &"monkey_12"
 type = &"monkey"
 position = Vector2(-1410, -510)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 67.0
+},
 "movement": {
 "speed": 128.0
-},
-"energy": {
-"value": 67.0,
-"rolled": true
 }
 }
 
@@ -927,12 +927,12 @@ entity_name = &"monkey_13"
 type = &"monkey"
 position = Vector2(-2850, -1240)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 45.0
+},
 "movement": {
 "speed": 132.0
-},
-"energy": {
-"value": 45.0,
-"rolled": true
 }
 }
 
@@ -942,12 +942,12 @@ entity_name = &"monkey_14"
 type = &"monkey"
 position = Vector2(790, 260)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 53.0
+},
 "movement": {
 "speed": 123.0
-},
-"energy": {
-"value": 53.0,
-"rolled": true
 }
 }
 
@@ -957,12 +957,12 @@ entity_name = &"monkey_15"
 type = &"monkey"
 position = Vector2(-10, -470)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 40.0
+},
 "movement": {
 "speed": 129.0
-},
-"energy": {
-"value": 40.0,
-"rolled": true
 }
 }
 
@@ -972,12 +972,12 @@ entity_name = &"monkey_16"
 type = &"monkey"
 position = Vector2(-1060, 1380)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 83.0
+},
 "movement": {
 "speed": 123.0
-},
-"energy": {
-"value": 83.0,
-"rolled": true
 }
 }
 
@@ -987,12 +987,12 @@ entity_name = &"monkey_17"
 type = &"monkey"
 position = Vector2(2170, 1060)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 65.0
+},
 "movement": {
 "speed": 129.0
-},
-"energy": {
-"value": 65.0,
-"rolled": true
 }
 }
 
@@ -1002,12 +1002,12 @@ entity_name = &"monkey_18"
 type = &"monkey"
 position = Vector2(-2130, 740)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 57.0
+},
 "movement": {
 "speed": 126.0
-},
-"energy": {
-"value": 57.0,
-"rolled": true
 }
 }
 
@@ -1017,12 +1017,12 @@ entity_name = &"monkey_19"
 type = &"monkey"
 position = Vector2(-290, 90)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 57.0
+},
 "movement": {
 "speed": 125.0
-},
-"energy": {
-"value": 57.0,
-"rolled": true
 }
 }
 
@@ -1032,12 +1032,12 @@ entity_name = &"crocodile_1"
 type = &"crocodile"
 position = Vector2(-2950, 190)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 70.0
+},
 "hunger": {
 "fullness": 210.0
-},
-"energy": {
-"value": 70.0,
-"rolled": true
 }
 }
 
@@ -1047,12 +1047,12 @@ entity_name = &"crocodile_2"
 type = &"crocodile"
 position = Vector2(2710, -1470)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 62.0
+},
 "hunger": {
 "fullness": 210.0
-},
-"energy": {
-"value": 62.0,
-"rolled": true
 }
 }
 
@@ -1062,12 +1062,12 @@ entity_name = &"crocodile_3"
 type = &"crocodile"
 position = Vector2(3030, 1280)
 overrides = {
+"energy": {
+"rolled": true,
+"value": 66.0
+},
 "hunger": {
 "fullness": 210.0
-},
-"energy": {
-"value": 66.0,
-"rolled": true
 }
 }
 
@@ -1078,8 +1078,8 @@ type = &"wild_dog"
 position = Vector2(170, -1250)
 overrides = {
 "energy": {
-"value": 90.0,
-"rolled": true
+"rolled": true,
+"value": 90.0
 }
 }
 
@@ -1090,8 +1090,8 @@ type = &"wild_dog"
 position = Vector2(-1160, -1490)
 overrides = {
 "energy": {
-"value": 71.0,
-"rolled": true
+"rolled": true,
+"value": 71.0
 }
 }
 
@@ -1102,8 +1102,8 @@ type = &"wild_dog"
 position = Vector2(-1360, 1180)
 overrides = {
 "energy": {
-"value": 66.0,
-"rolled": true
+"rolled": true,
+"value": 66.0
 }
 }
 
@@ -1114,8 +1114,8 @@ type = &"wild_dog"
 position = Vector2(1770, 380)
 overrides = {
 "energy": {
-"value": 63.0,
-"rolled": true
+"rolled": true,
+"value": 63.0
 }
 }
 

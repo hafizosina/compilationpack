@@ -28,6 +28,30 @@ func spawn_world(world: EcsWorld, catalog: EcsEntityCatalog, world_def: EcsWorld
 		spawn(world, catalog, placement.type, placement.position,
 			placement.overrides, placement.entity_name)
 
+## Clears all nodes and rebuilds the world from a snapshot (EcsSnapshot.capture),
+## ids included. Returns false if the data could not be read.
+func load_snapshot(world: EcsWorld, data: Dictionary) -> bool:
+	var decoded := EcsSnapshot.decode(data)
+	if decoded.is_empty():
+		return false
+	clear()
+	var entities: Dictionary = decoded["entities"]
+	for id: int in entities:
+		if not world.create_entity_with_id(id):
+			push_error("EcsEntityManager: snapshot entity %d already exists" % id)
+			continue
+		for component: EcsComponent in entities[id]:
+			world.add(id, component)
+	for singleton: EcsComponent in decoded["singletons"]:
+		world.add_singleton(singleton)
+	world.reserve_ids_below(decoded["next_id"])
+	# Numbered names continue past every id, so none repeats.
+	_serial = world.next_id()
+	for id: int in entities:
+		var place := world.get_component(id, EcsPositionComponent) as EcsPositionComponent
+		_build_nodes(world, id, place.position if place != null else Vector2.ZERO)
+	return true
+
 ## Handles pending spawn requests, then kills everything flagged dying.
 ## Requests raised during the drain wait for the next tick.
 func drain(world: EcsWorld, catalog: EcsEntityCatalog) -> void:
