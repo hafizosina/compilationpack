@@ -51,6 +51,9 @@ def texture(kind, base, seed):
     elif kind == "road":
         cob = ((x + (y // 8 % 2) * 4) % 8 == 0) | (y % 8 == 0)
         img[cob] -= 30
+    elif kind == "planks":
+        img[(y % 8 == 0)] -= 40
+        img[((x + (y // 8) * 11) % 32 == 0)] -= 30
     elif kind == "rug":
         img[((x + y) % 8 < 2)] -= 22
         img[((x - y) % 8 < 1)] += 18
@@ -81,7 +84,7 @@ def dual_sheet(name, kind, base, outline_dark=55):
         for dy in range(-2, 3):
             for dx in range(-2, 3):
                 inner &= p[2 + dy:2 + dy + CELL, 2 + dx:2 + dx + CELL]
-        fill = texture(kind, base, seed=ax * 7 + ay * 13 + hash(name) % 1000)
+        fill = texture(kind, base, seed=ax * 7 + ay * 13 + sum(map(ord, name)))
         fill[shape & ~inner] -= outline_dark
         tile = np.zeros((CELL, CELL, 4), dtype=np.uint8)
         tile[..., :3] = np.clip(fill, 0, 255).astype(np.uint8)
@@ -177,6 +180,7 @@ dual_sheet("terrain_grass.png", "grass", "#5E8A2E")
 dual_sheet("terrain_dirt.png", "dirt", "#7A5A38")
 dual_sheet("terrain_sand.png", "sand", "#D8C38A")
 dual_sheet("terrain_water.png", "water", "#2F5E93")
+dual_sheet("floor_wood.png", "planks", "#9A7650")
 dual_sheet("floor_stone.png", "stone", "#8C8A84")
 dual_sheet("floor_road.png", "road", "#6E665C")
 dual_sheet("floor_rug.png", "rug", "#9E2B25")
