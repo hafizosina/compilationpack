@@ -9,16 +9,22 @@ extends Node2D
 const CATALOG := preload("res://10. Town Generator/defs/town_catalog.tres")
 const MAIN := preload("res://10. Town Generator/main.tscn")
 const ENTITIES := preload("res://10. Town Generator/defs/entity_catalog.tres")
-const GRASS: int = 1
-const DIRT: int = 2
-const WATER: int = 4
-const WOOD: int = 1
-const RUG: int = 4
+var GRASS: int
+var DIRT: int
+var WATER: int
+var WOOD: int
+var RUG: int
 
 var _checks: int = 0
 var _failures: int = 0
 
 func _ready() -> void:
+	GRASS = CATALOG.terrain_id(&"grass")
+	DIRT = CATALOG.terrain_id(&"dirt")
+	WATER = CATALOG.terrain_id(&"water")
+	WOOD = CATALOG.floor_id(&"wood")
+	RUG = CATALOG.floor_id(&"rug")
+	_types_are_named_and_numbered_by_the_catalog()
 	_the_authors_art_is_used_and_its_layout_read()
 	_commands_are_validated()
 	_a_change_redraws_only_its_corners()
@@ -34,6 +40,11 @@ func _ready() -> void:
 	_walls_split_and_merge_rooms()
 	_touching_buildings_keep_their_own_rooms()
 	_roofs_cover_rooms_and_their_walls()
+	_furniture_covers_its_cells()
+	_attachments_need_a_host_with_a_free_slot()
+	_rooms_take_their_type_from_their_furniture()
+	_a_house_built_by_hand()
+	_the_preview_predicts_the_build_system()
 	_measure()
 	_measure_rooms()
 	print("[town] %d/%d checks passed" % [_checks - _failures, _checks])
@@ -52,11 +63,11 @@ func _setup(size: Vector2i) -> Dictionary:
 	add_child(root)
 	var entities := Node2D.new()
 	root.add_child(entities)
-	var build := EcsBuildCommandSystem.new(CATALOG)
+	var build := EcsBuildCommandSystem.new(CATALOG, ENTITIES)
 	var sync := EcsTileSyncSystem.new(root, CATALOG)
 	var scheduler := EcsScheduler.new()
 	# As main.gd: lifecycle first, so a building asked for last tick is born before build binds it.
-	var rooms := EcsRoomDetectionSystem.new()
+	var rooms := EcsRoomDetectionSystem.new(CATALOG)
 	scheduler.add(EcsLifecycleSystem.new(EcsEntityManager.new(entities), ENTITIES)).add(build) \
 		.add(rooms).add(EcsRoofSystem.new(CATALOG)).add(sync)
 	scheduler.run_all(world, 0.0)
@@ -556,6 +567,204 @@ func _roofs_cover_rooms_and_their_walls() -> void:
 		if v != 0:
 			roofed += 1
 	_check("opening the wall takes the roof off", roofed == 0 and sync.roof_layers()[0].get_used_cells().is_empty())
+	t.root.queue_free()
+
+func _obj(cell: Vector2i, blueprint: StringName) -> EcsBuildCommand:
+	return EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, cell, blueprint)
+
+func _att(cell: Vector2i, blueprint: StringName) -> EcsBuildCommand:
+	return EcsBuildCommand.place(EcsBuildCommand.Kind.ATTACH, cell, blueprint)
+
+func _object_at(t: Dictionary, cell: Vector2i) -> int:
+	var grid := t.grid as EcsTownGridSingleton
+	return grid.object_id[EcsTownGrid.index(grid, cell)]
+
+## Furniture covers every cell of its size and draws its slice on each; it goes only on free
+## cells, inside one building or none; plants never on a floor.
+func _furniture_covers_its_cells() -> void:
+	var t := _setup(Vector2i(20, 12))
+	var world := t.world as EcsWorld
+	var sync := t.sync as EcsTileSyncSystem
+	var plan := _box(Rect2i(1, 1, 8, 6), [Vector2i(3, 6)])
+	var bed := _obj(Vector2i(2, 2), &"bed")
+	var on_bed := _obj(Vector2i(2, 3), &"chair")
+	var on_wall := _obj(Vector2i(1, 3), &"chair")
+	plan.append(EcsBuildCommand.create_building(Rect2i(11, 8, 3, 3)))
+	var straddle := _obj(Vector2i(13, 9), &"long_table")
+	var field := _obj(Vector2i(12, 3), &"sawmill")
+	var unknown := _obj(Vector2i(14, 8), &"dragon")
+	plan.append_array([bed, on_bed, on_wall, straddle, field, unknown])
+	for x in range(5, 8):
+		plan.append(_cmd(EcsBuildCommand.Kind.SET_FLOOR, Vector2i(x, 3), 1))
+	var on_floor := _obj(Vector2i(6, 3), &"bush")
+	var grass := _obj(Vector2i(16, 8), &"tree")
+	plan.append_array([on_floor, grass])
+	_send(t, plan)
+	_send(t, [])
+	_check("furniture on free cells is placed, indoors and out",
+		bed.result == &"ok" and field.result == &"ok" and grass.result == &"ok")
+	_check("not on other furniture or a wall, nor across a building's edge",
+		on_bed.result == &"occupied" and on_wall.result == &"occupied" and straddle.result == &"straddles")
+	_check("a plant never on a floor, and an unknown piece is refused",
+		on_floor.result == &"plant_on_floor" and unknown.result == &"unknown_object")
+	var id := _object_at(t, Vector2i(2, 2))
+	_check("a bed is one entity on both its cells, a child of its building",
+		id > 0 and _object_at(t, Vector2i(2, 3)) == id and world.has(id, EcsFurnitureComponent)
+		and _building_at(t, Vector2i(1, 1)).children.has(id))
+	var layer: TileMapLayer = (t.root as Node).get_node(NodePath(CATALOG.furniture_layer))
+	_check("each cell draws its slice: the bed's top and foot, the sawmill's four",
+		layer.get_cell_atlas_coords(Vector2i(2, 2)) == Vector2i(0, 0) and layer.get_cell_atlas_coords(Vector2i(2, 3)) == Vector2i(0, 1)
+		and layer.get_cell_atlas_coords(Vector2i(13, 4)) == Vector2i(1, 3))
+	var sawmill := _object_at(t, Vector2i(12, 3))
+	_check("a sawmill in a field belongs to no building", sawmill > 0
+		and (t.grid as EcsTownGridSingleton).building_id[EcsTownGrid.index(t.grid, Vector2i(12, 3))] == EcsTownGridSingleton.NO_ID)
+	_send(t, [_cmd(EcsBuildCommand.Kind.REMOVE_OBJECT, Vector2i(2, 3))])
+	_check("removing it by any of its cells frees all of them",
+		_object_at(t, Vector2i(2, 2)) == EcsTownGridSingleton.NO_ID and _object_at(t, Vector2i(2, 3)) == EcsTownGridSingleton.NO_ID
+		and world.has(id, EcsDyingFlag) and layer.get_cell_source_id(Vector2i(2, 2)) == -1)
+	t.root.queue_free()
+
+## An attachment needs a host that takes it — a wall, or furniture that holds things —
+## and a free slot; removing the host takes its attachments first.
+func _attachments_need_a_host_with_a_free_slot() -> void:
+	var t := _setup(Vector2i(16, 12))
+	var grid := t.grid as EcsTownGridSingleton
+	var world := t.world as EcsWorld
+	var plan := _box(Rect2i(1, 1, 8, 6), [Vector2i(3, 6)])
+	plan.append(_obj(Vector2i(4, 3), &"table"))
+	var candle := _att(Vector2i(4, 3), &"candle")
+	var lamp := _att(Vector2i(1, 3), &"wall_lamp")
+	var second := _att(Vector2i(4, 3), &"mug")
+	var candle_on_wall := _att(Vector2i(1, 4), &"candle")
+	var lamp_on_table := _att(Vector2i(6, 3), &"wall_lamp")
+	plan.append(_obj(Vector2i(6, 3), &"stove"))
+	plan.append(_obj(Vector2i(6, 4), &"barrel"))
+	var on_barrel := _att(Vector2i(6, 4), &"mug")
+	var on_floor := _att(Vector2i(5, 5), &"mug")
+	plan.append_array([candle, lamp, second, candle_on_wall, lamp_on_table, on_barrel, on_floor])
+	_send(t, plan)
+	_send(t, [])
+	_check("a candle on a table placed in the same batch, a lamp on a wall",
+		candle.result == &"ok" and lamp.result == &"ok")
+	_check("one per slot; a candle won't hang on a wall, a wall lamp won't stand on a stove",
+		second.result == &"slot_taken" and candle_on_wall.result == &"not_for_this_host"
+		and lamp_on_table.result == &"not_for_this_host")
+	_check("a barrel holds nothing, and bare floor is no host", on_barrel.result == &"no_host" and on_floor.result == &"no_host")
+	var candle_id := grid.attachment_id[EcsTownGrid.index(grid, Vector2i(4, 3))]
+	var on := world.get_component(candle_id, EcsAttachedToComponent) as EcsAttachedToComponent
+	_check("the candle knows its table", on != null and on.host_kind == EcsAttachedToComponent.HostKind.ENTITY
+		and on.host_id == _object_at(t, Vector2i(4, 3)))
+	var layer: TileMapLayer = (t.root as Node).get_node(NodePath(CATALOG.attachment_layer))
+	_check("both are drawn", layer.get_cell_atlas_coords(Vector2i(4, 3)) == Vector2i(1, 0)
+		and layer.get_cell_atlas_coords(Vector2i(1, 3)) == Vector2i(0, 0))
+	var lamp_id := grid.attachment_id[EcsTownGrid.index(grid, Vector2i(1, 3))]
+	_send(t, [_cmd(EcsBuildCommand.Kind.REMOVE_OBJECT, Vector2i(4, 3)), _cmd(EcsBuildCommand.Kind.REMOVE_STRUCTURE, Vector2i(1, 3))])
+	_check("removing the table takes its candle, removing the wall its lamp",
+		world.has(candle_id, EcsDyingFlag) and world.has(lamp_id, EcsDyingFlag)
+		and grid.attachment_id[EcsTownGrid.index(grid, Vector2i(4, 3))] == EcsTownGridSingleton.NO_ID
+		and layer.get_cell_source_id(Vector2i(4, 3)) == -1)
+	t.root.queue_free()
+
+func _rooms_take_their_type_from_their_furniture() -> void:
+	var t := _setup(Vector2i(16, 12))
+	var plan := _box(Rect2i(1, 1, 9, 6), [Vector2i(3, 6), Vector2i(7, 6)])
+	for y in range(2, 6):
+		plan.append(_cmd(EcsBuildCommand.Kind.PLACE_WALL, Vector2i(5, y), 1))
+	plan.append(_obj(Vector2i(2, 2), &"bed"))
+	plan.append(_obj(Vector2i(7, 2), &"stove"))
+	_send(t, plan)
+	_send(t, [])
+	_send(t, [])
+	var type_at := func(cell: Vector2i) -> StringName:
+		for room: Dictionary in _building_at(t, Vector2i(1, 1)).rooms:
+			if (room["cells"] as Array).has(cell):
+				return room["type"]
+		return &"?"
+	_check("a bed makes a bedroom, a stove a kitchen", type_at.call(Vector2i(3, 3)) == &"bedroom"
+		and type_at.call(Vector2i(7, 4)) == &"kitchen")
+	_send(t, [_obj(Vector2i(4, 4), &"table")])
+	_send(t, [])
+	_check("the bed outranks a table", type_at.call(Vector2i(3, 3)) == &"bedroom")
+	_send(t, [_cmd(EcsBuildCommand.Kind.REMOVE_OBJECT, Vector2i(2, 2))])
+	_send(t, [])
+	_check("without the bed it is a dining room", type_at.call(Vector2i(3, 3)) == &"dining")
+	_send(t, [_cmd(EcsBuildCommand.Kind.REMOVE_OBJECT, Vector2i(4, 4))])
+	_send(t, [])
+	_check("and empty, no type", type_at.call(Vector2i(3, 3)) == &"")
+	t.root.queue_free()
+
+## The brief's step 5: a house built entirely by hand — walls, a door, a floor, a bed, a
+## table with a lamp on it — and its room typed correctly.
+func _a_house_built_by_hand() -> void:
+	var t := _setup(Vector2i(16, 12))
+	var grid := t.grid as EcsTownGridSingleton
+	var plan := _box(Rect2i(2, 2, 7, 6), [Vector2i(5, 7)])
+	for y in range(3, 7):
+		for x in range(3, 8):
+			plan.append(_cmd(EcsBuildCommand.Kind.SET_FLOOR, Vector2i(x, y), 1))
+	plan.append(_obj(Vector2i(3, 3), &"bed"))
+	plan.append(_obj(Vector2i(6, 4), &"table"))
+	plan.append(_att(Vector2i(6, 4), &"candle"))
+	var all_ok := func(commands: Array[EcsBuildCommand]) -> bool:
+		for command in commands:
+			if command.result != &"ok":
+				return false
+		return true
+	_send(t, plan)
+	_send(t, [])
+	_send(t, [])
+	var rooms: Array = _building_at(t, Vector2i(2, 2)).rooms
+	_check("built by hand in one batch, every command accepted", all_ok.call(plan))
+	_check("one room, a bedroom, with a lamp on its table", rooms.size() == 1 and rooms[0]["type"] == &"bedroom"
+		and grid.attachment_id[EcsTownGrid.index(grid, Vector2i(6, 4))] > 0)
+	t.root.queue_free()
+
+## Defs are named; the catalog numbers each list in order, with no number written by hand.
+func _types_are_named_and_numbered_by_the_catalog() -> void:
+	var unique := true
+	var in_order := true
+	for list: Array in [CATALOG.terrains, CATALOG.floors, CATALOG.walls, CATALOG.doors, CATALOG.roofs]:
+		var seen: Dictionary = {}
+		for k in list.size():
+			if seen.has(list[k].key) or list[k].key == &"":
+				unique = false
+			seen[list[k].key] = true
+			if list[k].id != k + 1:
+				in_order = false
+	_check("every def has its own key in its list", unique)
+	_check("and the catalog numbers each list 1, 2, 3 in order", in_order)
+	_check("a type is found by its name", CATALOG.terrain(CATALOG.terrain_id(&"sand")).key == &"sand"
+		and CATALOG.wall_id(&"stone") == 2 and CATALOG.door_id(&"nothing") == 0)
+
+## The placement preview asks EcsBuildRules; the build system applies with the same rules,
+## so a preview's verdict is the command's result, refused or not.
+func _the_preview_predicts_the_build_system() -> void:
+	var t := _setup(Vector2i(16, 12))
+	var grid := t.grid as EcsTownGridSingleton
+	var world := t.world as EcsWorld
+	var plan := _box(Rect2i(1, 1, 8, 6), [Vector2i(3, 6)])
+	plan.append(_obj(Vector2i(4, 3), &"table"))
+	_send(t, plan)
+	_send(t, [])
+	var tries: Array[EcsBuildCommand] = [
+		_obj(Vector2i(2, 2), &"bed"), _obj(Vector2i(1, 3), &"chair"), _obj(Vector2i(4, 3), &"chair"),
+		_att(Vector2i(4, 3), &"candle"), _att(Vector2i(1, 2), &"candle"), _att(Vector2i(5, 4), &"mug"),
+		_cmd(EcsBuildCommand.Kind.PLACE_DOOR, Vector2i(8, 3), 1), _cmd(EcsBuildCommand.Kind.PLACE_DOOR, Vector2i(1, 1), 1),
+		_cmd(EcsBuildCommand.Kind.PLACE_WALL, Vector2i(12, 8), 1), _cmd(EcsBuildCommand.Kind.TOGGLE_DOOR, Vector2i(3, 6)),
+		_cmd(EcsBuildCommand.Kind.TOGGLE_DOOR, Vector2i(4, 4)), EcsBuildCommand.create_building(Rect2i(6, 4, 4, 4)),
+	]
+	var agree := true
+	var refused := 0
+	for command in tries:
+		var predicted := EcsBuildRules.refusal(world, grid, CATALOG, ENTITIES, command)
+		_send(t, [command])
+		var actual := &"" if command.result == &"ok" else command.result
+		if predicted != actual:
+			agree = false
+			print("[town]   predicted %s, got %s" % [predicted, actual])
+		if actual != &"":
+			refused += 1
+	_check("for %d commands, %d refused, the preview's verdict is the result every time" % [tries.size(), refused], agree)
 	t.root.queue_free()
 
 func _check(what: String, passed: bool) -> void:

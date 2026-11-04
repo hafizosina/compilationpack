@@ -16,7 +16,7 @@ static func make(width: int, height: int, base_terrain: int) -> EcsTownGridSingl
 		var cells := PackedInt32Array()
 		cells.resize(n)
 		grid.set(layer, cells)
-	for layer: String in ["building_id", "object_id", "room_id"]:
+	for layer: String in ["building_id", "object_id", "attachment_id", "room_id"]:
 		var cells := PackedInt32Array()
 		cells.resize(n)
 		cells.fill(-1)

@@ -50,11 +50,6 @@ layout_mode = 2
 theme_type_variation = &"DockLabel"
 text = "Type"
 
-[node name="Types" type="GridContainer" parent="Box"]
-unique_name_in_owner = true
-layout_mode = 2
-columns = 3
-
 [node name="Brush" type="HBoxContainer" parent="Box"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -88,10 +83,16 @@ layout_mode = 2
 theme_type_variation = &"DockButton"
 text = "+"
 
-[node name="Spacer" type="Control" parent="Box"]
+[node name="TypesScroll" type="ScrollContainer" parent="Box"]
 layout_mode = 2
 size_flags_vertical = 3
-mouse_filter = 2
+horizontal_scroll_mode = 0
+
+[node name="Types" type="GridContainer" parent="Box/TypesScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+columns = 3
 
 [node name="Sep2" type="HSeparator" parent="Box"]
 layout_mode = 2

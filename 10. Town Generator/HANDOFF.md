@@ -16,7 +16,7 @@ module 9's ECS core plus the town systems.
 # O the room colours.
 "$GODOT" --path .   # main.tscn is the main scene
 
-# 71 checks; exit 0 only if all pass. Also prints tile sync and command costs.
+# 94 checks; exit 0 only if all pass. Also prints tile sync and command costs.
 "$GODOT" --headless --path . "res://10. Town Generator/tests/town_test.tscn"
 ```
 
@@ -30,8 +30,8 @@ module 9's ECS core plus the town systems.
 | Path | Role |
 |---|---|
 | `singletons/` | `EcsTownGridSingleton` — the grid |
-| `components/` | `EcsBuildingComponent`, `EcsGridPositionComponent`, `EcsDoorComponent` |
-| `ecs/` | `EcsTownGrid` (cell maths, making a grid), `EcsDualGrid` (masks, layout, TileSet), `EcsBuildCommand` |
+| `components/` | `EcsBuildingComponent`, `EcsGridPositionComponent`, `EcsDoorComponent`, `EcsTileComponent`, `EcsFurnitureComponent`, `EcsPlantComponent`, `EcsAttachableComponent`, `EcsAttachedToComponent` |
+| `ecs/` | `EcsTownGrid` (cell maths, making a grid), `EcsDualGrid` (masks, layout, TileSet), `EcsBuildCommand`, `EcsBuildRules` (every check, changing nothing) |
 | `systems/` | `EcsBuildCommandSystem`, `EcsRoomDetectionSystem`, `EcsRoofSystem`, `EcsTileSyncSystem`, `EcsTownOverlaySystem` |
 | `ui/` | `build_panel.tscn` (`EcsBuildPanel`), the build HUD on the left |
 | `town_overlay.gd` | `EcsTownOverlay`, the view that draws footprints and drag previews |
@@ -60,8 +60,15 @@ the parse error hangs a headless run, since the script never reaches `quit()`.
 cell to what it already holds is `ok` and marks nothing. Step 1's kinds are `SET_TERRAIN`,
 `SET_FLOOR`, `CLEAR_FLOOR`; the debug brush sends them, and so will the generator.
 
-**Catalog ids are authored**, in each def's `.tres`, never load order; 0 is none. Terrain:
-grass 1, dirt 2, sand 3, water 4. Floor: wood 1, stone 2, road 3, rug 4. Walls: wood 1, stone 2.
+**Types are named, not numbered by hand.** Each terrain, floor, wall, door and roof def has a `key`
+(`&"dirt"`, `&"stone"`), unique within its list — that is its identity. The grid still stores ints
+(`PackedInt32Array`, 4 bytes a cell), but **the catalog assigns them**: `number()` gives each list
+1, 2, 3, … in order, once, and warns on a repeated key; every lookup calls it. `terrain_id(&"dirt")`
+and its siblings turn a name into the grid's number. So adding a type is adding a def to the
+catalog — no last number to remember. **Anything kept stores keys, never these numbers**: saves and
+building defs (step 6) will write `&"dirt"`, so reordering a list can't break them. This replaces the
+brief's "stable ids authored in each `.tres`" with stable names, which meets the same need. Room types
+and blueprints were already named.
 
 **The layers are the scene's.** A terrain or floor def names its TileMapLayer (`layer`); a wall
 def names a source in the wall layer's TileSet (`source_id`). The art, tile size, half-cell offset
@@ -76,7 +83,9 @@ The author's art is used wherever it exists; placeholders fill only the slots wi
 | `DirtLayer`, `SandLayer`, `WaterLayer` | terrain | placeholders |
 | `FloorLayer` | wood | author's WoodFloor TileSet, peering bits painted |
 | `StoneLayer`, `RoadLayer`, `RugLayer` | floor | placeholders |
-| `RoofLayer` (after `ObjectLayer`) | roofs, dual grid | placeholder `roof.png` |
+| `AttachmentLayer` (after `ObjectLayer`) | attachments, cell grid | placeholder `attachments.png`, 16 px icons centred |
+| `RoofLayer` (last) | roofs, dual grid, hidden by default | placeholder `roof.png` |
+| `FurnitureLayer` (before `ObjectLayer`) | furniture and plants, cell grid | placeholder `objects.png`, 32 px |
 | `ObjectLayer` | walls and doors | author's: 1 WoodWall, 2 WoodenDoor, 3 `BaseWall` (stone wall), 5 `BaseDoor` (stone door); 4 `door_states.png` placeholder for open doors |
 
 **The dual grid.** Terrain and floor are drawn on a grid offset half a cell, so each render tile
@@ -251,7 +260,62 @@ the roof off.
 
 ---
 
-## 6. The build panel (2026-11-04)
+## 6. Step 5 — floors, furniture, attachments, room types (2026-11-04)
+
+**Floors** were already paintable inside and outside buildings (step 1); a floor can't go under a
+plant (`plant_here`).
+
+**Furniture and plants are entities on the grid**: blueprints in `defs/blueprints/` with
+`EcsGridPositionComponent{cell, size}`, `EcsTileComponent{source_id, atlas}` (the tile of its
+top-left cell) and `EcsFurnitureComponent{tags, holds}` or the `EcsPlantComponent` tag. 14 pieces and 3
+plants, generated over `objects.png`'s 32 px grid. **A multi-cell piece fills `object_id` on every
+cell it covers**, and each cell draws its own 32 px slice (the bed is two tiles, the sawmill four), so
+no oversized tile or texture origin is needed. `PLACE_OBJECT(cell, blueprint)` puts the top-left on
+`cell`; every covered cell must be free of walls, doors and objects (`occupied`), all in one building
+or none (`straddles` — a sawmill in a field is fine, `building_id -1`), a plant on no floor
+(`plant_on_floor`). `REMOVE_OBJECT` by any of its cells frees all of them. Rotation waits for step 6,
+where stamps need it.
+
+**Attachments** are entities too — `EcsAttachableComponent{on_wall, on_furniture}`,
+`EcsAttachedToComponent{host_kind, host_cell, host_id}` — six, on `attachments.png`. **One per cell
+slot**: a wall cell, or one cell of furniture that `holds` (table, long table, stove, chest,
+workbench, shelf). The grid gained one layer the brief doesn't list, **`attachment_id`**, so a slot
+check and a redraw are one lookup. `ATTACH(cell, blueprint)` refuses a taken slot (`slot_taken`), a
+host that takes no attachments (`no_host`: a barrel, bare floor) and the wrong kind of host
+(`not_for_this_host`: a candle on a wall, a wall lamp on a stove). `DETACH(cell)` takes one off.
+**Removing a host removes its attachments first** — a table its candle, a wall its lamp.
+
+**Everything placed reserves under a token**, as buildings and doors do, so a generator's batch —
+table, then the candle on it — works in one go. `grid.pending` now binds three kinds, told apart by the
+spawn note's overrides: a building's footprint, an object's covered cells (with `size`), an attachment's
+slot (setting its `host_id` from the table born the same tick). Born things join their building's
+`children`; one removed before it was born is killed when it binds.
+
+**Rooms are typed from their contents.** `EcsRoomTypeDef{id, needs, priority}` in `defs/room/`:
+bedroom (bed, 5), kitchen (stove or hearth, 4), workshop (workbench, 3), dining room (table, 2), store
+room (storage, 1). Room detection gathers the tags of the furniture in each room and gives it the
+highest-priority type any tag satisfies, else none; placing or removing furniture queues its building,
+so the type follows. The overlay prints each typed room's name at its centre.
+
+**Drawn** on two new scene layers: `FurnitureLayer` under the walls and `AttachmentLayer` above them;
+the catalog names both (`furniture_layer`, `attachment_layer`), as it names the wall layer. A dirty
+`CHANGED_OBJECT` cell redraws its furniture slice and its attachment.
+
+**In the panel:** Furniture, Plant and Attach tools, their lists read from the entity catalog and
+their swatches cut from those layers (a multi-cell piece shows whole). Remove now takes off whatever is
+on top of each cell — an attachment, else furniture, else a wall or door. The type swatches sit in a
+scroll area, so a long list never pushes the panel off the screen.
+
+**Tests:** pieces cover and draw every cell; occupied, on a wall, straddling, a plant on a floor and an
+unknown piece refused; outdoors allowed; removal by any cell. Attachments: on a table placed the same
+batch and on a wall; slot taken, wrong host, no host refused; the candle knows its table; removing the
+table and the wall takes their attachments. Types: bedroom, kitchen, a bed outranking a table, dining
+without the bed, none when empty. **The brief's "done": a house built entirely by hand in one batch —
+walls, door, floor, bed, a table with a candle on it — every command accepted, one room, a bedroom.**
+
+---
+
+## 7. The build panel (2026-11-04)
 
 The tools were keys only; step 5 adds furniture and attachments, too many for that. **A left side
 panel**, desktop first (mouse and keyboard; buttons sized so touch can follow without a redesign),
@@ -277,3 +341,16 @@ the panel rather than on the global `EventBus`, so module 10 is self-contained.
 how they use the mouse: brushes paint while held, building drags a rectangle, wall and remove drag a
 line, close/door/toggle act on a click. Clicks on the panel never reach the map: it stops the mouse and
 the map listens in `_unhandled_input`.
+
+**Placement preview** (2026-11-04). With a tool picked, the cell under the mouse shows what a click
+would do before it is made: the piece's tiles across every cell it would cover (furniture, plants),
+the icon in its slot (attachments), the door turned to its wall, the brush square, or the cell
+outline (wall, building, close, open/close). **Red, with the reason beside it** (`occupied`, `plant on
+floor`, `not a straight wall`, …) when the build system would refuse it; a dragged wall line marks
+each refused cell red. **The preview asks the build system's own rules**: every check now lives in
+`EcsBuildRules.refusal(world, grid, catalog, entities, command)`, which changes nothing; the build
+system calls it before applying and applies only what it accepts, and `main.gd` calls it on hover —
+so the two can't drift, and a test sends a dozen mixed commands and checks each predicted verdict is
+the result. The hover is recomputed each physics frame but redrawn only when the cell, tool, choice,
+brush or grid changed, and hidden while the mouse is over the panel.
+

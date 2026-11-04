@@ -16,8 +16,8 @@ const ICONS := "res://10. Town Generator/art/placeholder/icons/%s.png"
 @export var entity_catalog: EcsEntityCatalog
 ## Grid size in cells.
 @export var grid_size: Vector2i = Vector2i(96, 64)
-## Terrain id every cell starts as.
-@export var base_terrain: int = 1
+## Terrain every cell starts as.
+@export var base_terrain: StringName = &"grass"
 
 @onready var _layers_root: Node = $World/TilemapGroup
 @onready var _entities_root: Node2D = $World/Entities
@@ -36,18 +36,26 @@ var _tool_id: int = 2
 var _brush_size: int = 1
 var _pressing: bool = false
 var _press_cell: Vector2i = Vector2i.ZERO
+## Blueprints the furniture, plant and attach tools offer; a choice's id is its index + 1.
+var _blueprints: Dictionary = {}
+## What a tool's choice looks like as a ghost: tool -> {id -> {texture, size}}; doors also
+## keep their upright tile under "down".
+var _ghosts: Dictionary = {}
+## What the hover last showed, so the overlay redraws only on a change.
+var _hover_key: Array = []
 
 func _ready() -> void:
+	catalog.number()
 	_world = EcsWorld.new()
-	_world.add_singleton(EcsTownGrid.make(grid_size.x, grid_size.y, base_terrain))
+	_world.add_singleton(EcsTownGrid.make(grid_size.x, grid_size.y, catalog.terrain_id(base_terrain)))
 	_world.add_singleton(EcsLifecycleSingleton.new())
-	_build = EcsBuildCommandSystem.new(catalog)
+	_build = EcsBuildCommandSystem.new(catalog, entity_catalog)
 	_tile_sync = EcsTileSyncSystem.new(_layers_root, catalog)
 	_scheduler = EcsScheduler.new()
 	_scheduler \
 		.add(EcsLifecycleSystem.new(EcsEntityManager.new(_entities_root), entity_catalog)) \
 		.add(_build) \
-		.add(EcsRoomDetectionSystem.new()) \
+		.add(EcsRoomDetectionSystem.new(catalog)) \
 		.add(EcsRoofSystem.new(catalog)) \
 		.add(_tile_sync) \
 		.add(EcsTownOverlaySystem.new(_overlay))
@@ -61,6 +69,7 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	_scheduler.run_all(_world, delta)
+	_hover()
 	var refusal := "" if _build.refused == 0 else "   refused: %s" % _build.last_refusal
 	_status.text = "%s%s   tile sync %d tiles, %d µs" % [_tool_name(), refusal, _tile_sync.redrawn, _tile_sync.last_usec]
 
@@ -79,8 +88,34 @@ func _panel_tools() -> Array:
 			"icon": _wall_swatch(def.source_id, EcsDualGrid.RIGHT | EcsDualGrid.BOTTOM | EcsDualGrid.LEFT | EcsDualGrid.TOP)})
 	var doors: Array = []
 	for def in catalog.doors:
-		doors.append({"id": def.id, "label": def.display_name.capitalize(),
-			"icon": _cut(_wall_layer().tile_set.get_source(def.closed_source_id) as TileSetAtlasSource, def.closed_horizontal)})
+		var source := _wall_layer().tile_set.get_source(def.closed_source_id) as TileSetAtlasSource
+		var across := _cut(source, def.closed_horizontal)
+		doors.append({"id": def.id, "label": def.display_name.capitalize(), "icon": across})
+		_ghost(&"door", def.id, across, Vector2i.ONE, _cut(source, def.closed_vertical))
+	var furniture: Array = []
+	var plants: Array = []
+	var attachments: Array = []
+	for def in entity_catalog.defs:
+		var place := def.template(&"grid_position") as EcsGridPositionComponent
+		var tile := def.template(&"tile") as EcsTileComponent
+		if tile == null:
+			continue
+		var tool: StringName = &"furniture"
+		var into := furniture
+		if def.template(&"attachable") != null:
+			tool = &"attach"
+			into = attachments
+		elif def.template(&"plant") != null:
+			tool = &"plant"
+			into = plants
+		if not _blueprints.has(tool):
+			_blueprints[tool] = []
+		(_blueprints[tool] as Array).append(def.id)
+		var layer := _layers_root.get_node(NodePath(catalog.attachment_layer if tool == &"attach" else catalog.furniture_layer)) as TileMapLayer
+		var size := place.size if place != null else Vector2i.ONE
+		var swatch := _cut_piece(layer.tile_set.get_source(tile.source_id) as TileSetAtlasSource, tile.atlas, size)
+		into.append({"id": (_blueprints[tool] as Array).size(), "label": def.display_name, "icon": swatch})
+		_ghost(tool, (_blueprints[tool] as Array).size(), swatch, size)
 	return [
 		{"tool": &"terrain", "label": "Terrain", "keys": "1-4", "icon": load(ICONS % "terrain"),
 			"hint": "Drag to paint the ground.", "choices": terrains, "sized": true},
@@ -92,12 +127,19 @@ func _panel_tools() -> Array:
 			"hint": "Drag a straight line of wall inside a building.", "choices": walls},
 		{"tool": &"door", "label": "Door", "keys": "D, F", "icon": load(ICONS % "door"),
 			"hint": "Click a straight wall to set a door in it.", "choices": doors},
+		{"tool": &"furniture", "label": "Furniture", "keys": "", "icon": load(ICONS % "furniture"),
+			"hint": "Click to place it, top-left on the cell. Not on walls; a room takes its type from what's in it.",
+			"choices": furniture},
+		{"tool": &"plant", "label": "Plant", "keys": "", "icon": load(ICONS % "plant"),
+			"hint": "Click to plant on bare ground, never on a floor.", "choices": plants},
+		{"tool": &"attach", "label": "Attach", "keys": "", "icon": load(ICONS % "attach"),
+			"hint": "Click a wall to hang it, or a table, stove or shelf to set it on.", "choices": attachments},
 		{"tool": &"toggle", "label": "Open / close", "keys": "T", "icon": load(ICONS % "toggle"),
 			"hint": "Click a door to open or close it."},
 		{"tool": &"close", "label": "Close building", "keys": "C", "icon": load(ICONS % "close"),
 			"hint": "Click a building to mark it finished."},
 		{"tool": &"remove", "label": "Remove", "keys": "X", "icon": load(ICONS % "remove"),
-			"hint": "Drag over walls and doors to take them out."},
+			"hint": "Drag to take out what is on top of each cell: an attachment, then furniture, then a wall or door."},
 	]
 
 func _wall_layer() -> TileMapLayer:
@@ -114,11 +156,82 @@ func _wall_swatch(source_id: int, mask: int) -> Texture2D:
 	var source := _wall_layer().tile_set.get_source(source_id) as TileSetAtlasSource
 	return _cut(source, (EcsDualGrid.side_layout(source)[mask] as Array)[0])
 
+## The tiles of a piece `size` cells big whose top-left tile is `coords`.
+func _cut_piece(source: TileSetAtlasSource, coords: Vector2i, size: Vector2i) -> Texture2D:
+	var swatch := AtlasTexture.new()
+	swatch.atlas = source.texture
+	var first := source.get_tile_texture_region(coords)
+	swatch.region = Rect2i(first.position, first.size * size)
+	return swatch
+
 func _cut(source: TileSetAtlasSource, coords: Vector2i) -> Texture2D:
 	var swatch := AtlasTexture.new()
 	swatch.atlas = source.texture
 	swatch.region = source.get_tile_texture_region(coords)
 	return swatch
+
+func _ghost(tool: StringName, id: int, texture: Texture2D, size: Vector2i, down: Texture2D = null) -> void:
+	if not _ghosts.has(tool):
+		_ghosts[tool] = {}
+	_ghosts[tool][id] = {"texture": texture, "size": size, "down": down}
+
+## Shows what the tool would do at the cell under the mouse, and whether the build system
+## would refuse it — asked of EcsBuildRules, the build system's own checks.
+func _hover() -> void:
+	var cell := EcsTownGrid.cell_at(get_global_mouse_position())
+	var over_panel := get_viewport().gui_get_hovered_control() != null
+	var key := [] if over_panel or _pressing else [cell, _tool, _tool_id, _brush_size, _build.applied, _grid().pending.size()]
+	if key == _hover_key:
+		return
+	_hover_key = key
+	_overlay.ghost_cells = Rect2i()
+	_overlay.ghost_texture = null
+	_overlay.ghost_reason = ""
+	if not key.is_empty() and EcsTownGrid.in_bounds(_grid(), cell):
+		_show_ghost(cell)
+	_overlay.queue_redraw()
+
+func _show_ghost(cell: Vector2i) -> void:
+	var size := Vector2i.ONE
+	var command: EcsBuildCommand = null
+	var look: Dictionary = (_ghosts.get(_tool, {}) as Dictionary).get(_tool_id, {})
+	match _tool:
+		&"terrain", &"floor":
+			size = Vector2i(_brush_size, _brush_size)
+			cell -= Vector2i(_brush_size / 2, _brush_size / 2)
+		&"furniture", &"plant":
+			command = EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, cell, _chosen_blueprint())
+			size = look.get("size", Vector2i.ONE)
+		&"attach":
+			command = EcsBuildCommand.place(EcsBuildCommand.Kind.ATTACH, cell, _chosen_blueprint())
+		&"door":
+			command = EcsBuildCommand.make(EcsBuildCommand.Kind.PLACE_DOOR, cell, _tool_id)
+		&"wall":
+			command = EcsBuildCommand.make(EcsBuildCommand.Kind.PLACE_WALL, cell, _tool_id)
+		&"building":
+			command = EcsBuildCommand.create_building(Rect2i(cell, Vector2i.ONE))
+		&"toggle":
+			command = EcsBuildCommand.make(EcsBuildCommand.Kind.TOGGLE_DOOR, cell)
+		&"close":
+			command = EcsBuildCommand.new()
+			command.kind = EcsBuildCommand.Kind.CLOSE_BUILDING
+			command.building = _grid().building_id[EcsTownGrid.index(_grid(), cell)]
+	_overlay.ghost_cells = Rect2i(cell, size)
+	if command != null:
+		var why := EcsBuildRules.refusal(_world, _grid(), catalog, entity_catalog, command)
+		_overlay.ghost_reason = String(why).replace("_", " ")
+	var texture: Texture2D = look.get("texture")
+	if texture == null:
+		return
+	var px := float(EcsTownGrid.CELL)
+	if _tool == &"door" and EcsBuildRules.door_runs_down(_grid(), cell):
+		texture = look["down"]
+	_overlay.ghost_texture = texture
+	var drawn := Vector2(texture.get_size())
+	if _tool == &"furniture" or _tool == &"plant":
+		drawn = Vector2(size) * px
+	# Centred on the cell: an attachment's small icon, a door's oversized tile.
+	_overlay.ghost_rect = Rect2(Vector2(cell) * px + (Vector2(size) * px - drawn) * 0.5, drawn)
 
 func _on_tool_picked(tool: StringName, id: int) -> void:
 	_tool = tool
@@ -212,8 +325,14 @@ func _preview(cell: Vector2i) -> void:
 	var rect := DRAG_RECT_TOOLS.has(_tool)
 	_overlay.preview_rect = _drag_rect(cell) if rect else Rect2i()
 	_overlay.preview.clear()
+	_overlay.bad_cells.clear()
 	if not rect:
 		_overlay.preview.append_array(_drag_line(cell))
+		if _tool == &"wall":
+			for at in _overlay.preview:
+				var command := EcsBuildCommand.make(EcsBuildCommand.Kind.PLACE_WALL, at, _tool_id)
+				if EcsBuildRules.refusal(_world, _grid(), catalog, entity_catalog, command) != &"":
+					_overlay.bad_cells.append(at)
 	_overlay.preview_bad = rect and _overlaps(_drag_rect(cell))
 	_overlay.queue_redraw()
 
@@ -227,14 +346,36 @@ func _finish(cell: Vector2i) -> void:
 				_grid().commands.append(EcsBuildCommand.make(EcsBuildCommand.Kind.PLACE_WALL, at, _tool_id))
 		&"remove":
 			for at in _drag_line(cell):
-				_grid().commands.append(EcsBuildCommand.make(EcsBuildCommand.Kind.REMOVE_STRUCTURE, at))
+				_grid().commands.append(EcsBuildCommand.make(_removal_at(at), at))
 	_overlay.preview.clear()
+	_overlay.bad_cells.clear()
 	_overlay.preview_rect = Rect2i()
 	_overlay.queue_redraw()
 
-## A one-click tool on `cell`: close a building, place a door, open or close one.
+## Takes off what is on top of `cell`: its attachment, else its furniture, else its wall or door.
+func _removal_at(cell: Vector2i) -> EcsBuildCommand.Kind:
+	var grid := _grid()
+	if not EcsTownGrid.in_bounds(grid, cell):
+		return EcsBuildCommand.Kind.REMOVE_STRUCTURE
+	var i := EcsTownGrid.index(grid, cell)
+	if grid.attachment_id[i] != EcsTownGridSingleton.NO_ID:
+		return EcsBuildCommand.Kind.DETACH
+	if grid.object_id[i] != EcsTownGridSingleton.NO_ID and grid.structure[i] == EcsTownGridSingleton.NONE:
+		return EcsBuildCommand.Kind.REMOVE_OBJECT
+	return EcsBuildCommand.Kind.REMOVE_STRUCTURE
+
+func _chosen_blueprint() -> StringName:
+	var list: Array = _blueprints.get(_tool, [])
+	return list[_tool_id - 1] if _tool_id >= 1 and _tool_id <= list.size() else &""
+
+## A one-click tool on `cell`: place furniture, a plant, an attachment or a door; close a
+## building; open or close a door.
 func _click(cell: Vector2i) -> void:
 	match _tool:
+		&"furniture", &"plant":
+			_grid().commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, cell, _chosen_blueprint()))
+		&"attach":
+			_grid().commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.ATTACH, cell, _chosen_blueprint()))
 		&"door":
 			_grid().commands.append(EcsBuildCommand.make(EcsBuildCommand.Kind.PLACE_DOOR, cell, _tool_id))
 		&"toggle":
@@ -283,4 +424,6 @@ func _tool_name() -> String:
 			return "Wall: %s" % catalog.wall(_tool_id).display_name
 		&"door":
 			return "Door: %s" % catalog.door(_tool_id).display_name
+		&"furniture", &"plant", &"attach":
+			return "%s: %s" % [String(_tool).capitalize(), entity_catalog.get_def(_chosen_blueprint()).display_name]
 	return String(_tool).capitalize()

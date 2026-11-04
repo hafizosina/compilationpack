@@ -88,7 +88,7 @@ func _open(tool: StringName, announce: bool) -> void:
 	_type_buttons.clear()
 	var choices: Array = spec.get("choices", [])
 	_types_title.visible = not choices.is_empty()
-	_types.visible = not choices.is_empty()
+	(_types.get_parent() as Control).visible = not choices.is_empty()
 	var group := ButtonGroup.new()
 	for choice: Dictionary in choices:
 		var swatch := Button.new()

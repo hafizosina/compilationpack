@@ -4,6 +4,6 @@
 
 [resource]
 script = ExtResource("1")
-id = 1
+key = &"wood"
 display_name = "wood"
 closed_source_id = 2

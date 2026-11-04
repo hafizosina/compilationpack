@@ -4,8 +4,10 @@ extends Resource
 ## A door type: its blueprint and the wall layer's tiles for each state and direction.
 ## A horizontal door sits in a wall running left-right.
 
-## Stable catalog id, stored in the grid's `wall_type` on a DOOR cell; 0 is reserved for none.
-@export var id: int = 0
+## Its name, unique among doors: what commands, saves and building defs refer to it by.
+@export var key: StringName = &""
+## The grid's number for it (`wall_type` on a DOOR cell), set by the catalog from its place in the list.
+var id: int = 0
 @export var display_name: String = ""
 ## Entity blueprint spawned for each door.
 @export var blueprint: StringName = &"door"

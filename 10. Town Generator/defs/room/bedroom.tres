@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="EcsRoomTypeDef" format=3]
+
+[ext_resource type="Script" path="res://10. Town Generator/defs/ecs_room_type_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"bedroom"
+display_name = "Bedroom"
+needs = Array[StringName]([&"bed"])
+priority = 5

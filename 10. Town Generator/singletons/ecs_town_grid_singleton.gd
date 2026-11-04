@@ -35,6 +35,9 @@ var wall_type: PackedInt32Array = PackedInt32Array()
 var building_id: PackedInt32Array = PackedInt32Array()
 ## Door, furniture or plant entity on the cell; -1 = none, below -1 a reservation token.
 var object_id: PackedInt32Array = PackedInt32Array()
+## Attachment in the cell's one slot — on its wall or on the furniture covering it; -1 = none,
+## below -1 a reservation token.
+var attachment_id: PackedInt32Array = PackedInt32Array()
 ## Room the cell belongs to; -1 = not in a room.
 var room_id: PackedInt32Array = PackedInt32Array()
 ## Roof catalog id; 0 = none.

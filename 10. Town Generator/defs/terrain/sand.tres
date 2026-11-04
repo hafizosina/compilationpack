@@ -4,6 +4,6 @@
 
 [resource]
 script = ExtResource("1")
-id = 3
+key = &"sand"
 display_name = "sand"
 layer = &"SandLayer"

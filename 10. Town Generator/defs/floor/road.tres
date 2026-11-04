@@ -4,6 +4,6 @@
 
 [resource]
 script = ExtResource("1")
-id = 3
+key = &"road"
 display_name = "road"
 layer = &"RoadLayer"

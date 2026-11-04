@@ -17,6 +17,7 @@ func run(world: EcsWorld, _delta: float) -> void:
 	var grid := world.get_singleton(EcsTownGridSingleton) as EcsTownGridSingleton
 	if grid == null or grid.dirty_roofs.is_empty():
 		return
+	_catalog.number()
 	var roof_id: int = _catalog.roofs[0].id if not _catalog.roofs.is_empty() else 0
 	for id: int in grid.dirty_roofs:
 		var building := world.get_component(id, EcsBuildingComponent) as EcsBuildingComponent

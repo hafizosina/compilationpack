@@ -204,6 +204,11 @@ def ui_icons():
     icon("remove", lambda d: (d.line([(7, 7), (25, 25)], fill=ink, width=3), d.line([(25, 7), (7, 25)], fill=ink, width=3)))
     icon("roofs", lambda d: (d.polygon([(2, 17), (16, 5), (30, 17)], outline=ink, width=2), d.rectangle([7, 17, 25, 28], outline=ink, width=2)))
     icon("rooms", lambda d: [d.rectangle([4 + (k % 2) * 13, 4 + (k // 2) * 13, 15 + (k % 2) * 13, 15 + (k // 2) * 13], outline=ink, width=2) for k in range(4)])
+    icon("furniture", lambda d: (d.rectangle([8, 4, 24, 14], outline=ink, width=2), d.rectangle([6, 14, 26, 19], outline=ink, width=2),
+                                 d.line([(8, 19), (8, 28)], fill=ink, width=2), d.line([(24, 19), (24, 28)], fill=ink, width=2)))
+    icon("plant", lambda d: (d.ellipse([7, 3, 25, 21], outline=ink, width=2), d.line([(16, 21), (16, 29)], fill=ink, width=3)))
+    icon("attach", lambda d: (d.line([(16, 3), (16, 10)], fill=ink, width=2), d.ellipse([9, 10, 23, 24], outline=ink, width=2),
+                              d.line([(12, 28), (20, 28)], fill=ink, width=2)))
     icon("none", lambda d: (d.ellipse([5, 5, 27, 27], outline=ink, width=2), d.line([(9, 23), (23, 9)], fill=ink, width=2)))
 
 

@@ -24,6 +24,8 @@ var _terrain_rank: Dictionary = {}
 var _floor_rank: Dictionary = {}
 var _roof_rank: Dictionary = {}
 var _wall_layer: TileMapLayer
+var _furniture_layer: TileMapLayer
+var _attachment_layer: TileMapLayer
 ## Wall type id -> [source id, side layout].
 var _wall_sources: Dictionary = {}
 ## The world of the current run, for a door's open state.
@@ -92,9 +94,15 @@ func wall_mask_at(cell: Vector2i) -> int:
 	return -1
 
 func _build() -> void:
+	_catalog.number()
 	_collect(_catalog.terrains, _terrain_defs, _terrain_layers, _terrain_rank)
 	_collect(_catalog.floors, _floor_defs, _floor_layers, _floor_rank)
 	_collect(_catalog.roofs, _roof_defs, _roof_layers, _roof_rank)
+	_furniture_layer = _layers_root.get_node_or_null(NodePath(_catalog.furniture_layer)) as TileMapLayer
+	_attachment_layer = _layers_root.get_node_or_null(NodePath(_catalog.attachment_layer)) as TileMapLayer
+	for layer in [_furniture_layer, _attachment_layer]:
+		if layer != null:
+			(layer as TileMapLayer).clear()
 	_wall_layer = _layers_root.get_node_or_null(NodePath(_catalog.wall_layer)) as TileMapLayer
 	if _wall_layer == null:
 		push_error("EcsTileSyncSystem: no wall layer '%s' in the scene" % _catalog.wall_layer)
@@ -139,12 +147,14 @@ func _draw_all(grid: EcsTownGridSingleton) -> void:
 	for y in grid.height:
 		for x in grid.width:
 			_draw_wall(grid, Vector2i(x, y))
+			_draw_objects(grid, Vector2i(x, y))
 
 func _draw_dirty(grid: EcsTownGridSingleton) -> void:
 	var terrain_tiles: Dictionary = {}
 	var floor_tiles: Dictionary = {}
 	var roof_tiles: Dictionary = {}
 	var wall_cells: Dictionary = {}
+	var object_cells: Dictionary = {}
 	for i: int in grid.dirty:
 		var bits: int = grid.dirty[i]
 		var cell := Vector2i(i % grid.width, i / grid.width)
@@ -157,6 +167,7 @@ func _draw_dirty(grid: EcsTownGridSingleton) -> void:
 				roof_tiles[cell + corner] = true
 		if bits & EcsTownGridSingleton.CHANGED_OBJECT:
 			wall_cells[cell] = true
+			object_cells[cell] = true
 		if bits & EcsTownGridSingleton.CHANGED_STRUCTURE:
 			wall_cells[cell] = true
 			for side in EcsDualGrid.SIDES:
@@ -172,6 +183,8 @@ func _draw_dirty(grid: EcsTownGridSingleton) -> void:
 	for cell: Vector2i in wall_cells:
 		if EcsTownGrid.in_bounds(grid, cell):
 			_draw_wall(grid, cell)
+	for cell: Vector2i in object_cells:
+		_draw_objects(grid, cell)
 
 ## Redraws render tile `at` on the chosen groups. `erase` clears tiles whose mask became
 ## empty; a first draw has nothing to clear.
@@ -266,4 +279,26 @@ func _draw_door(grid: EcsTownGridSingleton, cell: Vector2i, i: int) -> void:
 		_wall_layer.set_cell(cell, def.open_source_id, def.open_horizontal if horizontal else def.open_vertical)
 	else:
 		_wall_layer.set_cell(cell, def.closed_source_id, def.closed_horizontal if horizontal else def.closed_vertical)
+	redrawn += 1
+
+## The furniture or plant covering `cell` — its slice of the piece's tiles — and the
+## attachment in the cell's slot. Doors are the wall layer's; unborn things draw nothing yet.
+func _draw_objects(grid: EcsTownGridSingleton, cell: Vector2i) -> void:
+	var i := EcsTownGrid.index(grid, cell)
+	if _furniture_layer != null:
+		_draw_entity_tile(_furniture_layer, cell, grid.object_id[i])
+	if _attachment_layer != null:
+		_draw_entity_tile(_attachment_layer, cell, grid.attachment_id[i])
+
+func _draw_entity_tile(layer: TileMapLayer, cell: Vector2i, id: int) -> void:
+	var tile := _world.get_component(id, EcsTileComponent) as EcsTileComponent \
+		if _world != null and id > EcsWorld.NO_ENTITY else null
+	if tile == null:
+		if layer.get_cell_source_id(cell) != -1:
+			layer.erase_cell(cell)
+			redrawn += 1
+		return
+	var place := _world.get_component(id, EcsGridPositionComponent) as EcsGridPositionComponent
+	var offset := cell - place.cell if place != null else Vector2i.ZERO
+	layer.set_cell(cell, tile.source_id, tile.atlas + offset)
 	redrawn += 1
