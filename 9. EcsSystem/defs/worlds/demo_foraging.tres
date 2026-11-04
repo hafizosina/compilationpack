@@ -1,0 +1,98 @@
+[gd_resource type="Resource" script_class="EcsWorldDef" format=3 uid="uid://ddjhdvg06brrm"]
+
+[ext_resource type="Script" uid="uid://ds75i3pla1ms3" path="res://9. EcsSystem/defs/ecs_placement.gd" id="place"]
+[ext_resource type="Script" uid="uid://dbk6chycnfg7p" path="res://9. EcsSystem/defs/ecs_world_def.gd" id="world"]
+
+[sub_resource type="Resource" id="p0"]
+script = ExtResource("place")
+entity_name = &"bush_a"
+type = &"berry_bush"
+position = Vector2(-120, -120)
+
+[sub_resource type="Resource" id="p1"]
+script = ExtResource("place")
+entity_name = &"bush_b"
+type = &"berry_bush"
+position = Vector2(120, -120)
+
+[sub_resource type="Resource" id="p2"]
+script = ExtResource("place")
+entity_name = &"bush_c"
+type = &"berry_bush"
+position = Vector2(0, 160)
+
+[sub_resource type="Resource" id="p3"]
+script = ExtResource("place")
+entity_name = &"pond"
+type = &"water"
+position = Vector2(560, 0)
+
+[sub_resource type="Resource" id="p4"]
+script = ExtResource("place")
+entity_name = &"monkey_gatherer"
+type = &"monkey"
+position = Vector2(-380, -40)
+overrides = {
+"breeding": {
+"cooldown_left": 600.0,
+"rolled": true
+},
+"energy": {
+"rolled": true,
+"value": 100.0
+},
+"hunger": {
+"fullness": 60.0
+},
+"thirst": {
+"hydration": 90.0
+}
+}
+
+[sub_resource type="Resource" id="p5"]
+script = ExtResource("place")
+entity_name = &"monkey_hungry"
+type = &"monkey"
+position = Vector2(380, -40)
+overrides = {
+"breeding": {
+"cooldown_left": 600.0,
+"rolled": true
+},
+"energy": {
+"rolled": true,
+"value": 100.0
+},
+"hunger": {
+"fullness": 30.0
+},
+"thirst": {
+"hydration": 90.0
+}
+}
+
+[sub_resource type="Resource" id="p6"]
+script = ExtResource("place")
+entity_name = &"rabbit_grazer"
+type = &"rabbit"
+position = Vector2(0, 360)
+overrides = {
+"breeding": {
+"cooldown_left": 600.0,
+"rolled": true
+},
+"energy": {
+"rolled": true,
+"value": 100.0
+},
+"hunger": {
+"fullness": 40.0
+},
+"thirst": {
+"hydration": 90.0
+}
+}
+
+[resource]
+script = ExtResource("world")
+entries = Array[ExtResource("place")]([SubResource("p0"), SubResource("p1"), SubResource("p2"), SubResource("p3"), SubResource("p4"), SubResource("p5"), SubResource("p6")])

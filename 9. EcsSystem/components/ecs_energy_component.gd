@@ -35,5 +35,5 @@ func key() -> StringName:
 	return &"energy"
 
 func describe() -> Dictionary:
-	return {"tab": &"entity",
-		"lines": {"energy": "%d/%d" % [roundi(value), roundi(max_energy)]}}
+	return {"tab": &"entity", "lines": {},
+		"bars": [{"label": "energy", "value": value, "max": max_energy, "tone": &"energy"}]}

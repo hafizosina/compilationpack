@@ -3,7 +3,8 @@ extends EcsSystem
 
 ## Executes EcsAttackIntentFlag: when the attack is off cooldown, the attacker isn't
 ## stunned and the target is alive, unclaimed and in reach, adds a hit to the combat
-## inbox. A hit landed while dashing carries the dash's stun.
+## inbox. The hit rolls the attacker's crit and carries its bleed and poison; one
+## landed while dashing carries the dash's stun.
 
 func label() -> StringName:
 	return &"attack"
@@ -31,6 +32,13 @@ func run(world: EcsWorld, delta: float) -> void:
 		hit.from = id
 		hit.to = target
 		hit.amount = attack.damage
+		hit.bleed_rate = attack.bleed_rate
+		hit.bleed_for = attack.bleed_for
+		hit.poison_rate = attack.poison_rate
+		hit.poison_for = attack.poison_for
+		if randf() < attack.crit_chance:
+			hit.amount *= attack.crit_multiplier
+			hit.critical = true
 		if world.has(id, EcsDashingFlag):
 			hit.stun = _dash_stun(world, id)
 		combat.hits.append(hit)

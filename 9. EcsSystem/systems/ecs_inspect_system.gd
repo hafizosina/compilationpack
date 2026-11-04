@@ -2,16 +2,18 @@ class_name EcsInspectSystem
 extends EcsSystem
 
 ## Sends a snapshot of the first selected entity to the inspector over EventBus,
-## with the ids of every selected one and the raw fields it can edit. Knows no
-## component type: each component's `describe()` says how it shows, and one
-## without it shows every field. Flags share one tab.
-
-## Field types the inspector can edit.
-const EDITABLE := [TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING, TYPE_STRING_NAME,
-	TYPE_VECTOR2, TYPE_COLOR]
+## with the ids of every selected one. Knows no component type: each component's
+## `describe()` says how it reads, and one without it shows every field.
+##
+## Snapshot: `{name, type, ids, summary: {label: text}, bars: [{label, value, max,
+## tone}], flags: [text], cards: [{key, label, enabled, lines: {label: text},
+## fields: {field: {type, hint, hint_string, value}}}]}`. Cards are sorted by label.
 
 ## Seconds between snapshots.
 const INTERVAL: float = 0.2
+## Field types the inspector can edit.
+const EDITABLE := [TYPE_BOOL, TYPE_INT, TYPE_FLOAT, TYPE_STRING, TYPE_STRING_NAME,
+	TYPE_VECTOR2, TYPE_COLOR]
 
 var _since: float = 0.0
 var _last_selected: Array[int] = []
@@ -39,59 +41,68 @@ func run(world: EcsWorld, delta: float) -> void:
 	EventBus.ecs_entity_inspected.emit(snapshot)
 
 func _snapshot(world: EcsWorld, id: int) -> Dictionary:
-	var keys := PackedStringArray()
-	var sections: Dictionary = {}
-	var flags: Dictionary = {}
-	var entity_lines: Dictionary = {}
-	var editable: Dictionary = {}
 	var title := {"name": "#%d" % id, "type": "—"}
+	var summary: Dictionary = {}
+	var bars: Array = []
+	var flags: Array = []
+	var cards: Array = []
 	for component in world.components_of(id):
 		if component is EcsFlag:
-			flags[String(component.key()).capitalize()] = _inline(world, component)
+			var text := _flag_name(component)
+			var detail := _inline(world, component)
+			flags.append(text if detail.is_empty() else "%s: %s" % [text, detail])
 			continue
-		keys.append(String(component.key()))
-		var fields := _editable_of(component)
-		if not fields.is_empty():
-			editable[component.key()] = {
-				"label": String(component.key()).capitalize(),
-				"fields": fields,
-			}
 		var view := _present(world, component)
 		if view.has("title"):
 			title = view["title"]
-		match view.get("tab", &"own"):
-			&"hidden":
-				pass
-			&"entity":
-				entity_lines.merge(view.get("lines", {}))
-			_:
-				sections[component.key()] = {
-					"label": String(component.key()).capitalize(),
-					"fields": view.get("lines", {}),
-				}
-	sections[&"flags"] = {
-		"label": "Flags",
-		"fields": flags if not flags.is_empty() else {"none": ""},
-	}
-
-	entity_lines["id"] = "#%d" % id
-	entity_lines["components"] = ", ".join(keys)
+		var lines: Dictionary = {}
+		if component.enabled:
+			match view.get("tab", &"own"):
+				&"entity":
+					summary.merge(view.get("lines", {}))
+					bars.append_array(view.get("bars", []))
+				&"own":
+					lines = view.get("lines", {})
+		cards.append({
+			"key": component.key(),
+			"label": String(component.key()).capitalize(),
+			"enabled": component.enabled,
+			"lines": lines,
+			"fields": _editable_of(component),
+		})
+	cards.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["label"] < b["label"])
+	flags.sort()
 	return {
 		"name": title.get("name", "#%d" % id),
 		"type": title.get("type", "—"),
-		"fields": entity_lines,
-		"components": sections,
-		"editable": editable,
+		"id": id,
+		"summary": summary,
+		"bars": bars,
+		"flags": flags,
+		"cards": cards,
 	}
 
+## The component's describe(), or its fields that can't be edited, as lines.
+func _present(world: EcsWorld, component: EcsComponent) -> Dictionary:
+	if component.has_method(&"describe"):
+		return component.call(&"describe")
+	var lines: Dictionary = {}
+	var fields := _fields_of(world, component)
+	var editable := _editable_of(component)
+	for field in fields:
+		if not editable.has(field):
+			lines[field] = fields[field]
+	return {"tab": &"own", "lines": lines}
+
 ## The component's script fields an inspector can edit, raw:
-## `{field: {"type", "hint", "hint_string", "value"}}`.
+## `{field: {"type", "hint", "hint_string", "value"}}`. `enabled` is left to the
+## card's own switch.
 func _editable_of(component: EcsComponent) -> Dictionary:
 	var fields: Dictionary = {}
 	for entry in component.get_property_list():
 		var property := String(entry["name"])
 		if not (int(entry["usage"]) & PROPERTY_USAGE_SCRIPT_VARIABLE) or property.begins_with("_") \
-				or not EDITABLE.has(int(entry["type"])):
+				or property == "enabled" or not EDITABLE.has(int(entry["type"])):
 			continue
 		fields[property] = {
 			"type": int(entry["type"]),
@@ -101,12 +112,6 @@ func _editable_of(component: EcsComponent) -> Dictionary:
 		}
 	return fields
 
-## The component's describe(), or a tab of all its fields.
-func _present(world: EcsWorld, component: EcsComponent) -> Dictionary:
-	if component.has_method(&"describe"):
-		return component.call(&"describe")
-	return {"tab": &"own", "lines": _fields_of(world, component)}
-
 ## The component's own script fields, formatted.
 func _fields_of(world: EcsWorld, component: EcsComponent) -> Dictionary:
 	var fields: Dictionary = {}
@@ -114,10 +119,18 @@ func _fields_of(world: EcsWorld, component: EcsComponent) -> Dictionary:
 		if not (int(entry["usage"]) & PROPERTY_USAGE_SCRIPT_VARIABLE):
 			continue
 		var property := String(entry["name"])
-		if property.begins_with("_"):
+		if property.begins_with("_") or property == "enabled":
 			continue
 		fields[property] = _format(world, property, component.get(property))
 	return fields
+
+## A flag's key, or its class name without "Ecs" and "Flag" when it has none.
+func _flag_name(flag: EcsFlag) -> String:
+	if flag.key() != &"":
+		return String(flag.key()).capitalize()
+	var script := flag.get_script() as Script
+	var class_text := String(script.get_global_name()) if script != null else "Flag"
+	return class_text.trim_prefix("Ecs").trim_suffix("Flag").capitalize()
 
 ## A flag's fields on one line, or empty.
 func _inline(world: EcsWorld, flag: EcsFlag) -> String:
@@ -137,6 +150,18 @@ func _format(world: EcsWorld, property: String, value: Variant) -> String:
 		return "(%.0f, %.0f)" % [value.x, value.y]
 	if value is Color:
 		return "#" + (value as Color).to_html(false)
+	if value is Array:
+		var items := value as Array
+		if items.is_empty():
+			return "—"
+		if items.size() > 6:
+			return "%d items" % items.size()
+		var parts := PackedStringArray()
+		for item in items:
+			parts.append(_format(world, "", item))
+		return ", ".join(parts)
+	if value is Dictionary:
+		return "%d entries" % (value as Dictionary).size()
 	if value is Resource:
 		var path := (value as Resource).resource_path
 		return path.get_file() if not path.is_empty() else "(built-in)"

@@ -33,6 +33,7 @@ static func build(property: Dictionary, value: Variant, on_change: Callable) -> 
 			var line := LineEdit.new()
 			line.text = str(value)
 			line.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			line.theme_type_variation = &"DockField"
 			line.text_submitted.connect(func(_text: String) -> void: line.release_focus())
 			line.text_changed.connect(func(text: String) -> void:
 				on_change.call(StringName(text) if type == TYPE_STRING_NAME else text))
@@ -43,6 +44,8 @@ static func build(property: Dictionary, value: Variant, on_change: Callable) -> 
 			var y := _spin((value as Vector2).y, false)
 			x.value_changed.connect(func(n: float) -> void: on_change.call(Vector2(n, y.value)))
 			y.value_changed.connect(func(n: float) -> void: on_change.call(Vector2(x.value, n)))
+			x.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			y.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			pair.add_child(x)
 			pair.add_child(y)
 			return pair
@@ -90,5 +93,6 @@ static func _spin(value: float, whole: bool) -> SpinBox:
 	spin.max_value = 100000.0
 	spin.step = 1.0 if whole else 0.01
 	spin.value = value
-	spin.custom_minimum_size = Vector2(110, 0)
+	spin.custom_minimum_size = Vector2(72, 0)
+	spin.get_line_edit().theme_type_variation = &"DockField"
 	return spin

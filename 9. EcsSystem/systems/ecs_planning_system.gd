@@ -60,7 +60,7 @@ func run(world: EcsWorld, _delta: float) -> void:
 	for k in planners.ids.size():
 		var id := planners.ids[k]
 		var planner := columns[k] as EcsPlannerComponent
-		if _kill_pending(world, id):
+		if _kill_pending(world, id, planner):
 			planner.settling = SETTLE_RUNS
 			continue
 		if planner.settling > 0:
@@ -95,10 +95,22 @@ func run(world: EcsWorld, _delta: float) -> void:
 			facts_of[id], ranked_of[id])
 		done += 1
 
-## True while what `id` is attacking is dying and its corpse not yet made.
-static func _kill_pending(world: EcsWorld, id: int) -> bool:
+## True from the run that finds what `id` was attacking dying or gone, so the
+## corpse is seen before it replans.
+static func _kill_pending(world: EcsWorld, id: int, planner: EcsPlannerComponent) -> bool:
 	var intent := world.get_component(id, EcsAttackIntentFlag) as EcsAttackIntentFlag
-	return intent != null and world.has(intent.target_id, EcsDyingFlag)
+	if intent != null:
+		planner.attacking = intent.target_id
+	var target := planner.attacking
+	if target == EcsWorld.NO_ENTITY:
+		return false
+	if world.is_alive(target) and not world.has(target, EcsDyingFlag):
+		if intent == null:
+			planner.attacking = EcsWorld.NO_ENTITY  # gave up; the prey lives
+		return false
+	if not world.is_alive(target):
+		planner.attacking = EcsWorld.NO_ENTITY  # the settle runs take it from here
+	return true
 
 ## The goals `id` scores above 0, best first. For tests and tools.
 func rank(world: EcsWorld, id: int) -> Array[EcsGoalDef]:

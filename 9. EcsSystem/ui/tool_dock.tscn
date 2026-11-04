@@ -1,0 +1,38 @@
+[gd_scene format=3 uid="uid://dj40d6b3lio65"]
+
+[ext_resource type="Script" uid="uid://th478gx50nj6" path="res://9. EcsSystem/ui/tool_dock.gd" id="1_script"]
+[ext_resource type="PackedScene" uid="uid://becsplacepnl1" path="res://9. EcsSystem/ui/place_panel.tscn" id="2_place"]
+[ext_resource type="PackedScene" uid="uid://becscomposer01" path="res://9. EcsSystem/ui/composer.tscn" id="3_composer"]
+[ext_resource type="PackedScene" uid="uid://becsoutliner01" path="res://9. EcsSystem/ui/outliner.tscn" id="4_outliner"]
+
+[node name="ToolDock" type="PanelContainer"]
+custom_minimum_size = Vector2(300, 0)
+theme_type_variation = &"DockPanel"
+script = ExtResource("1_script")
+
+[node name="Box" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_type_variation = &"DockVBox"
+
+[node name="Tabs" type="TabBar" parent="Box"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+tab_count = 3
+tab_0/title = "Place"
+tab_1/title = "Compose"
+tab_2/title = "Outliner"
+
+[node name="PlacePanel" parent="Box" instance=ExtResource("2_place")]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Composer" parent="Box" instance=ExtResource("3_composer")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="Outliner" parent="Box" instance=ExtResource("4_outliner")]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2

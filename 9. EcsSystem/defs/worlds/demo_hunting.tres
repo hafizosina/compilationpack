@@ -1,0 +1,114 @@
+[gd_resource type="Resource" script_class="EcsWorldDef" format=3 uid="uid://bfn02gtk1a8mv"]
+
+[ext_resource type="Script" uid="uid://ds75i3pla1ms3" path="res://9. EcsSystem/defs/ecs_placement.gd" id="place"]
+[ext_resource type="Script" uid="uid://dbk6chycnfg7p" path="res://9. EcsSystem/defs/ecs_world_def.gd" id="world"]
+
+[sub_resource type="Resource" id="p0"]
+script = ExtResource("place")
+entity_name = &"pond"
+type = &"water"
+position = Vector2(-450, 0)
+
+[sub_resource type="Resource" id="p1"]
+script = ExtResource("place")
+entity_name = &"croc_hungry"
+type = &"crocodile"
+position = Vector2(-450, 0)
+overrides = {
+"breeding": {
+"cooldown_left": 600.0,
+"rolled": true
+},
+"energy": {
+"rolled": true,
+"value": 100.0
+},
+"hunger": {
+"fullness": 25.0
+},
+"thirst": {
+"hydration": 90.0
+}
+}
+
+[sub_resource type="Resource" id="p2"]
+script = ExtResource("place")
+entity_name = &"rabbit_thirsty"
+type = &"rabbit"
+position = Vector2(-150, 220)
+overrides = {
+"breeding": {
+"cooldown_left": 600.0,
+"rolled": true
+},
+"energy": {
+"rolled": true,
+"value": 100.0
+},
+"hunger": {
+"fullness": 90.0
+},
+"thirst": {
+"hydration": 20.0
+}
+}
+
+[sub_resource type="Resource" id="p3"]
+script = ExtResource("place")
+entity_name = &"bush_west"
+type = &"berry_bush"
+position = Vector2(-150, -260)
+
+[sub_resource type="Resource" id="p4"]
+script = ExtResource("place")
+entity_name = &"dog_hungry"
+type = &"wild_dog"
+position = Vector2(300, -200)
+overrides = {
+"breeding": {
+"cooldown_left": 600.0,
+"rolled": true
+},
+"energy": {
+"rolled": true,
+"value": 100.0
+},
+"hunger": {
+"fullness": 25.0
+},
+"thirst": {
+"hydration": 90.0
+}
+}
+
+[sub_resource type="Resource" id="p5"]
+script = ExtResource("place")
+entity_name = &"rabbit_in_open"
+type = &"rabbit"
+position = Vector2(520, 60)
+overrides = {
+"breeding": {
+"cooldown_left": 600.0,
+"rolled": true
+},
+"energy": {
+"rolled": true,
+"value": 100.0
+},
+"hunger": {
+"fullness": 90.0
+},
+"thirst": {
+"hydration": 90.0
+}
+}
+
+[sub_resource type="Resource" id="p6"]
+script = ExtResource("place")
+entity_name = &"bush_east"
+type = &"berry_bush"
+position = Vector2(650, 260)
+
+[resource]
+script = ExtResource("world")
+entries = Array[ExtResource("place")]([SubResource("p0"), SubResource("p1"), SubResource("p2"), SubResource("p3"), SubResource("p4"), SubResource("p5"), SubResource("p6")])

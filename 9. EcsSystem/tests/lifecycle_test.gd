@@ -29,6 +29,7 @@ func _ready() -> void:
 	_world = EcsWorld.new()
 	_world.add_singleton(EcsLifecycleSingleton.new())
 	_world.add_singleton(EcsCombatSingleton.new())
+	_world.add_singleton(EcsHealthSingleton.new())
 
 	# No brain or movement here, so nothing moves unless the test moves it.
 	_scheduler = EcsScheduler.new()
@@ -124,6 +125,14 @@ func _run() -> void:
 	_a_composed_blueprint_saves_loads_and_spawns()
 	_shift_click_toggles_and_a_box_selects_many()
 	_a_live_edit_changes_every_selected_entity()
+	_an_id_is_selected_listed_and_a_save_deleted()
+	_a_removed_carrier_dies_drops_its_bag_and_leaves_no_corpse()
+	_a_disabled_component_counts_as_absent()
+	_idle_health_is_never_visited()
+	_needs_raise_health_flags()
+	_bites_bleed_and_poison()
+	_an_edit_to_zero_health_kills()
+	_only_the_health_system_writes_health()
 
 ## Nodes match the declared NODE_KINDs (a berry gets a sprite and a body, no
 ## sensor) and hang under the entity's own container.
@@ -222,43 +231,47 @@ func _kill_takes_the_data_and_the_nodes() -> void:
 	_check("one container freed takes the whole entity with it",
 		_entities.get_child_count() == containers_before - 1)
 
-## Components get their own inspector tab; flags share one "Flags" tab.
+## The inspector's page: bars and a summary from describe(), flags as chips, and
+## one card per component with its readout and editable fields.
 func _flags_share_one_inspector_tab() -> void:
 	var monkey := _first_of(&"monkey")
 	var inspect := EcsInspectSystem.new()
-	var before: Dictionary = inspect._snapshot(_world, monkey)["components"]
-	_check("with no flags raised the Flags tab is there, and empty",
-		before.has(&"flags") and (before[&"flags"]["fields"] as Dictionary).has("none"))
+	var cards_of := func(snapshot: Dictionary) -> Dictionary:
+		var by_key := {}
+		for card: Dictionary in snapshot["cards"]:
+			by_key[card["key"]] = card
+		return by_key
+	_check("with no flags raised there are no chips", inspect._snapshot(_world, monkey)["flags"].is_empty())
 
 	_world.add(monkey, EcsSelectedFlag.new())
 	_world.add(monkey, EcsCollapsedFlag.new())
-	var sections: Dictionary = inspect._snapshot(_world, monkey)["components"]
-	var flags: Dictionary = sections[&"flags"]["fields"]
-	_check("both flags are listed on the one tab",
-		flags.has("Selected") and flags.has("Collapsed") and not flags.has("none"))
-	_check("and neither gets a tab of its own",
-		not sections.has(&"selected") and not sections.has(&"collapsed"))
-	_check("components still do", sections.has(&"inventory") and sections.has(&"movement"))
 	var snapshot: Dictionary = inspect._snapshot(_world, monkey)
+	var cards: Dictionary = cards_of.call(snapshot)
+	_check("both flags are chips", (snapshot["flags"] as Array).has("Selected")
+		and (snapshot["flags"] as Array).any(func(t: String) -> bool: return t.begins_with("Collapsed")))
+	_check("and neither gets a card", not cards.has(&"selected") and not cards.has(&"collapsed"))
+	_check("every component gets a card, hidden ones too",
+		cards.has(&"inventory") and cards.has(&"movement") and cards.has(&"body")
+		and cards.has(&"low_brain") and cards.has(&"name"))
 	var named := _world.get_component(monkey, EcsNameComponent) as EcsNameComponent
-	_check("the name component has no tab of its own", not sections.has(&"name"))
-	_check("its entity name is on the Entity tab instead",
-		snapshot["fields"].get("entity_name") == String(named.entity_name))
-	_check("and so is its position, with no Position tab",
-		not sections.has(&"position") and snapshot["fields"].has("position"))
-	var bars := _world.get_component(monkey, EcsHealthComponent) as EcsHealthComponent
-	_check("the three bars are on the Entity tab, each under its own label",
-		snapshot["fields"].has("fullness") and snapshot["fields"].has("energy")
-		and snapshot["fields"].get("health") == "%d/%d" % [roundi(bars.value), roundi(bars.max_health)])
-	_check("with no tabs of their own",
-		not sections.has(&"hunger") and not sections.has(&"energy") and not sections.has(&"health"))
-	_check("body, sprite, brain, sensor and action are not shown at all",
-		not sections.has(&"body") and not sections.has(&"sprite")
-		and not sections.has(&"low_brain") and not sections.has(&"sensor")
-		and not sections.has(&"action"))
-	_check("but every component is still named on the components line",
-		String(snapshot["fields"].get("components")).contains("body")
-		and String(snapshot["fields"].get("components")).contains("name"))
+	_check("entity-tab lines go to the summary",
+		snapshot["summary"].get("entity_name") == String(named.entity_name)
+		and snapshot["summary"].has("position"))
+	var health := _world.get_component(monkey, EcsHealthComponent) as EcsHealthComponent
+	var bars := {}
+	for bar: Dictionary in snapshot["bars"]:
+		bars[bar["label"]] = bar
+	_check("health, fullness, energy and hydration are bars with their value and max",
+		bars.has("fullness") and bars.has("energy") and bars.has("hydration")
+		and bars.has("health") and bars["health"]["value"] == health.value
+		and bars["health"]["max"] == health.max_health and bars["health"]["tone"] == &"health")
+	_check("own-tab lines are the card's readout", cards[&"inventory"]["lines"].has("items"))
+	_check("and its raw fields are there to edit, but not enabled",
+		cards[&"movement"]["fields"].has("speed") and not cards[&"movement"]["fields"].has("enabled"))
+	var labels: Array = snapshot["cards"].map(func(card: Dictionary) -> String: return card["label"])
+	var sorted := labels.duplicate()
+	sorted.sort()
+	_check("cards are sorted by label", labels == sorted)
 	var source := (load("res://9. EcsSystem/systems/ecs_inspect_system.gd") as GDScript).source_code
 	var names_one := RegEx.create_from_string("Ecs[A-Za-z]+Component\\b").search(source)
 	_check("the inspector names no component type — each describes itself",
@@ -925,7 +938,7 @@ func _a_dead_carrier_puts_back_what_it_carried() -> void:
 	_check("the carried berries are no longer entities", _ids_with_uids(uids).is_empty())
 
 	# Death by health: the ordinary route, not a flag raised by the test.
-	(_world.get_component(monkey, EcsHealthComponent) as EcsHealthComponent).value = 0.0
+	_lose_all_health(monkey)
 	living.run_all(_world, TICK)
 	await get_tree().physics_frame
 	_check("the carrier is flagged to die", _world.has(monkey, EcsDyingFlag))
@@ -1051,7 +1064,7 @@ func _a_stage_on_a_slower_tick_still_simulates_the_same() -> void:
 ## Well fed heals, starving hurts, and the band between does neither.
 func _being_well_fed_mends_and_the_band_between_does_neither() -> void:
 	var living := EcsScheduler.new()
-	living.add(EcsHungerSystem.new())
+	living.add(EcsHungerSystem.new()).add(EcsHealthSystem.new())
 
 	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-8000.0, 2000.0))
 	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
@@ -1154,7 +1167,7 @@ func _it_tires_sleeps_and_wakes_rested() -> void:
 ## ordinary sleeper.
 func _running_out_of_energy_drops_it_once() -> void:
 	var living := EcsScheduler.new()
-	living.add(EcsEnergySystem.new()).add(EcsLowBrainSystem.new())
+	living.add(EcsEnergySystem.new()).add(EcsHealthSystem.new()).add(EcsLowBrainSystem.new())
 
 	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-9000.0, 2000.0))
 	var energy := _world.get_component(rabbit, EcsEnergyComponent) as EcsEnergyComponent
@@ -1297,8 +1310,6 @@ func _a_hit_lands_less_armour_on_cooldown_and_can_crit() -> void:
 		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
 		.add(EcsSensorSystem.new(_manager)) \
 		.add(EcsAttackSystem.new()) \
-		.add(EcsCritSystem.new()) \
-		.add(EcsDamageSystem.new()) \
 		.add(EcsHealthSystem.new())
 
 	var spot := Vector2(9000.0, 9000.0)
@@ -1327,10 +1338,8 @@ func _a_hit_lands_less_armour_on_cooldown_and_can_crit() -> void:
 		await get_tree().physics_frame
 	_check("and not again before the interval is up", is_equal_approx(health.value, 93.0))
 
-	var crit := EcsCritChanceComponent.new()
-	crit.chance = 1.0
-	crit.multiplier = 2.0
-	_world.add(attacker, crit)
+	attack.crit_chance = 1.0
+	attack.crit_multiplier = 2.0
 	for i in 40:
 		fighting.run_all(_world, TICK)
 		await get_tree().physics_frame
@@ -1353,7 +1362,7 @@ func _a_hit_lands_less_armour_on_cooldown_and_can_crit() -> void:
 	(_world.get_component(target, EcsPositionComponent) as EcsPositionComponent).position = spot + Vector2(20.0, 0.0)
 	_manager.container_for(target).position = spot + Vector2(20.0, 0.0)
 	armor.reduction = 0.0
-	_world.remove(attacker, EcsCritChanceComponent)
+	attack.crit_chance = 0.0
 	health.value = 15.0
 	for i in 3:
 		await get_tree().physics_frame
@@ -1389,7 +1398,7 @@ func _death_by_health_leaves_a_corpse_to_loot_and_eat() -> void:
 		uids.append((_world.get_component(berry, EcsNameComponent) as EcsNameComponent).uid)
 		bag.items.append(EcsItemRecord.capture(_world, berry))
 		_world.add(berry, EcsDyingFlag.new())
-	(_world.get_component(dead, EcsHealthComponent) as EcsHealthComponent).value = 0.0
+	_lose_all_health(dead)
 	for i in 2:
 		living.run_all(_world, TICK)
 		await get_tree().physics_frame
@@ -1467,13 +1476,11 @@ func _a_hungry_hunter_kills_its_prey_and_eats_the_corpse() -> void:
 	var living := EcsScheduler.new()
 	living \
 		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
-		.add(EcsHealthSystem.new()) \
 		.add(EcsSensorSystem.new(_manager)) \
 		.add(EcsLowBrainSystem.new()) \
 		.add(EcsConsumeSystem.new()) \
 		.add(EcsAttackSystem.new()) \
-		.add(EcsCritSystem.new()) \
-		.add(EcsDamageSystem.new()) \
+		.add(EcsHealthSystem.new()) \
 		.add(EcsMovementSystem.new()) \
 		.add(EcsCollisionSystem.new(_manager)) \
 		.add(EcsCorpseSystem.new()) \
@@ -1765,14 +1772,12 @@ func _a_planned_hunter_kills_once_and_eats_the_corpse() -> void:
 	var living := EcsScheduler.new()
 	living \
 		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
-		.add(EcsHealthSystem.new()) \
 		.add(EcsSensorSystem.new(_manager)) \
 		.add(EcsPlanningSystem.new()) \
 		.add(EcsLowBrainSystem.new()) \
 		.add(EcsConsumeSystem.new()) \
 		.add(EcsAttackSystem.new()) \
-		.add(EcsCritSystem.new()) \
-		.add(EcsDamageSystem.new()) \
+		.add(EcsHealthSystem.new()) \
 		.add(EcsMovementSystem.new()) \
 		.add(EcsCollisionSystem.new(_manager)) \
 		.add(EcsCorpseSystem.new()) \
@@ -1970,7 +1975,7 @@ func _a_rabbit_flees_what_could_hunt_it() -> void:
 		.add(EcsSensorSystem.new(_manager)) \
 		.add(EcsPlanningSystem.new()) \
 		.add(EcsLowBrainSystem.new()) \
-		.add(EcsDamageSystem.new()) \
+		.add(EcsHealthSystem.new()) \
 		.add(EcsMovementSystem.new()) \
 		.add(EcsCollisionSystem.new(_manager)) \
 		.add(EcsNodeSyncSystem.new(_manager))
@@ -3184,10 +3189,12 @@ func _memory_keeps_what_matters_to_it() -> void:
 func _a_stun_holds_still_and_wears_off() -> void:
 	var skills := EcsSkillSystem.new()
 	var attack := EcsAttackSystem.new()
-	var damage := EcsDamageSystem.new()
+	var damage := EcsHealthSystem.new()
 	var brain := EcsLowBrainSystem.new()
 	var spot := Vector2(-40000.0, 27000.0)
 	var dog := _manager.spawn(_world, _catalog, &"wild_dog", spot)
+	# No bleeding, so the bite count is all that moves health.
+	(_world.get_component(dog, EcsDamageComponent) as EcsDamageComponent).bleed_rate = 0.0
 	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(30.0, 0.0))
 	skills.run(_world, TICK)
 	var reach := _world.get_component(dog, EcsActionComponent) as EcsActionComponent
@@ -3496,15 +3503,13 @@ func _ambush_pipeline() -> EcsScheduler:
 	var living := EcsScheduler.new()
 	living \
 		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
-		.add(EcsHealthSystem.new()) \
 		.add(EcsSensorSystem.new(_manager)) \
 		.add(EcsPlanningSystem.new()) \
 		.add(EcsLowBrainSystem.new()) \
 		.add(EcsSkillSystem.new()) \
 		.add(EcsConsumeSystem.new()) \
 		.add(EcsAttackSystem.new()) \
-		.add(EcsCritSystem.new()) \
-		.add(EcsDamageSystem.new()) \
+		.add(EcsHealthSystem.new()) \
 		.add(EcsMovementSystem.new()) \
 		.add(EcsCollisionSystem.new(_manager)) \
 		.add(EcsCorpseSystem.new()) \
@@ -3802,10 +3807,10 @@ func _shift_click_toggles_and_a_box_selects_many() -> void:
 	EventBus.ecs_entity_inspected.disconnect(listen)
 	_check("the inspector is told every selected id, the first one shown",
 		sent.size() == 1 and sent[0].get("ids") == [a, b, c, far]
-		and sent[0].get("fields", {}).get("id") == "#%d" % a)
+		and sent[0].get("id") == a)
 	_check("with the raw fields it can edit",
-		(sent[0].get("editable", {}) as Dictionary).has(&"movement")
-		and sent[0]["editable"][&"movement"]["fields"].has("speed"))
+		(sent[0]["cards"] as Array).any(func(card: Dictionary) -> bool:
+			return card["key"] == &"movement" and card["fields"].has("speed")))
 
 	pick.call(Vector2(-65000.0, -65000.0), false)
 	_check("a click on bare ground clears the selection", picked.call().is_empty())
@@ -3860,10 +3865,322 @@ func _a_live_edit_changes_every_selected_entity() -> void:
 	for id in [a, b, bush]:
 		_manager.kill(_world, id)
 
+## The outliner's plumbing: an id is selected like a click, the census lists
+## every entity by name and type, and a save can be listed with its time and deleted.
+func _an_id_is_selected_listed_and_a_save_deleted() -> void:
+	var a := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-72000.0, -70000.0))
+	var b := _manager.spawn(_world, _catalog, &"monkey", Vector2(-72200.0, -70000.0))
+	if _world.get_singleton(EcsSelectionSingleton) == null:
+		_world.add_singleton(EcsSelectionSingleton.new())
+	var selection := EcsSelectionSystem.new(null)
+	var pick := func(id: int, additive: bool) -> void:
+		var request := _world.get_singleton(EcsSelectionSingleton) as EcsSelectionSingleton
+		request.pending = true
+		request.pick_id = id
+		request.additive = additive
+		selection.run(_world, TICK)
+	var picked := func() -> Array[int]:
+		var ids := _world.query([EcsSelectedFlag])
+		ids.sort()
+		return ids
+	pick.call(a, false)
+	_check("an id picked selects only it", picked.call() == [a])
+	pick.call(b, true)
+	_check("an id picked with shift is added", picked.call() == [a, b])
+	pick.call(a, true)
+	_check("and picked again with shift is removed", picked.call() == [b])
+	_check("the pick is used up",
+		(_world.get_singleton(EcsSelectionSingleton) as EcsSelectionSingleton).pick_id == EcsWorld.NO_ENTITY)
+
+	var listed := {}
+	for entry in EcsCensusSystem.entries(_world):
+		listed[entry["id"]] = entry
+	var named := _world.get_component(b, EcsNameComponent) as EcsNameComponent
+	_check("the census lists every entity with its name and type",
+		listed.size() == _world.entity_count() and listed.has(b)
+		and listed[b]["name"] == String(named.entity_name) and listed[b]["type"] == "monkey")
+
+	var save_name := "_test_delete_me"
+	EcsSnapshot.write(save_name, {"version": 1})
+	var found := false
+	for save in EcsSnapshot.list_save_info():
+		found = found or (save["name"] == save_name and int(save["time"]) > 0)
+	_check("a save is listed with its time", found)
+	_check("and deleted", EcsSnapshot.delete(save_name) and not EcsSnapshot.list_saves().has(save_name))
+	_check("deleting a missing save says so", not EcsSnapshot.delete(save_name))
+	pick.call(a, false)
+	_world.remove(a, EcsSelectedFlag)
+	_manager.kill(_world, a)
+	_manager.kill(_world, b)
+
+## A removal from the inspector flags the entity dying; the paused pipeline drops
+## its bag and kills it at the next lifecycle stage, with no corpse.
+func _a_removed_carrier_dies_drops_its_bag_and_leaves_no_corpse() -> void:
+	var monkey := _manager.spawn(_world, _catalog, &"monkey", Vector2(-73000.0, -70000.0))
+	var berry := _manager.spawn(_world, _catalog, &"berry", Vector2(-73000.0, -70000.0))
+	var bag := _world.get_component(monkey, EcsInventoryComponent) as EcsInventoryComponent
+	var record := EcsItemRecord.capture(_world, berry)
+	bag.items.append(record)
+	_manager.kill(_world, berry)
+	var inbox := _world.get_singleton(EcsEditSingleton) as EcsEditSingleton
+	if inbox == null:
+		inbox = EcsEditSingleton.new()
+		_world.add_singleton(inbox)
+	var corpses_before := _count_of(&"corpse")
+	var paused := EcsScheduler.new()
+	paused.add(EcsLifecycleSystem.new(_manager, _catalog)).add(EcsEditSystem.new()) \
+		.add(EcsDropSystem.new())
+	inbox.removals.append_array([monkey, 999999])
+	paused.run_all(_world, TICK)
+	_check("a removal flags it dying, and an unknown id is ignored",
+		_world.has(monkey, EcsDyingFlag) and inbox.removals.is_empty())
+	paused.run_all(_world, TICK)
+	var dropped := EcsWorld.NO_ENTITY
+	for id in _world.query([EcsNameComponent]):
+		if (_world.get_component(id, EcsNameComponent) as EcsNameComponent).uid == record.uid:
+			dropped = id
+	_check("next tick it is gone and its berry is back on the ground",
+		not _world.is_alive(monkey) and dropped != EcsWorld.NO_ENTITY)
+	_check("with no corpse", _count_of(&"corpse") == corpses_before)
+	_manager.kill(_world, dropped)
+
+## A component switched off stays on the entity but no query, lookup or system
+## sees it; switched back on, it is there again. A blueprint override can ship it off.
+func _a_disabled_component_counts_as_absent() -> void:
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-74000.0, -70000.0))
+	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
+	var inbox := _world.get_singleton(EcsEditSingleton) as EcsEditSingleton
+	if inbox == null:
+		inbox = EcsEditSingleton.new()
+		_world.add_singleton(inbox)
+	var editing := EcsEditSystem.new()
+	var flip := func(on: bool) -> void:
+		var edit := EcsEdit.new()
+		edit.ids.assign([rabbit])
+		edit.component = &"hunger"
+		edit.field = &"enabled"
+		edit.value = on
+		inbox.edits.append(edit)
+		editing.run(_world, TICK)
+
+	var view_before := _world.view([EcsHungerComponent]).ids.has(rabbit)
+	flip.call(false)
+	_check("switched off, it counts as absent to has, get and queries",
+		view_before and not _world.has(rabbit, EcsHungerComponent)
+		and _world.get_component(rabbit, EcsHungerComponent) == null
+		and not _world.query([EcsHungerComponent]).has(rabbit)
+		and not _world.view([EcsHungerComponent]).ids.has(rabbit))
+	_check("but stays on the entity", _world.components_of(rabbit).has(hunger))
+	var fullness := hunger.fullness
+	EcsHungerSystem.new().run(_world, 5.0)
+	_check("and no system touches it", hunger.fullness == fullness)
+	var shown: Dictionary = EcsInspectSystem.new()._snapshot(_world, rabbit)
+	var card: Dictionary = (shown["cards"] as Array).filter(func(c: Dictionary) -> bool:
+		return c["key"] == &"hunger")[0]
+	_check("the inspector shows its card off, with no bar",
+		not card["enabled"] and not (shown["bars"] as Array).any(func(b: Dictionary) -> bool:
+			return b["label"] == "fullness"))
+	flip.call(true)
+	_check("switched back on, it is there again",
+		_world.get_component(rabbit, EcsHungerComponent) == hunger
+		and _world.view([EcsHungerComponent]).ids.has(rabbit))
+	EcsHungerSystem.new().run(_world, 5.0)
+	_check("and drains again", hunger.fullness < fullness)
+	_manager.kill(_world, rabbit)
+
+	var shipped := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-74200.0, -70000.0),
+		{"thirst": {"enabled": false}})
+	_check("a placement can ship a component off",
+		not _world.has(shipped, EcsThirstComponent)
+		and _world.components_of(shipped).any(func(c: EcsComponent) -> bool: return c is EcsThirstComponent))
+	var record := EcsItemRecord.capture(_world, shipped)
+	var off_in_record := false
+	for component in record.components:
+		if component is EcsThirstComponent:
+			off_in_record = not component.enabled
+	_check("and a record of it keeps it off", off_in_record)
+	_manager.kill(_world, shipped)
+
+## Asks EcsHealthSystem to take all of `id`'s health, the ordinary route to death.
+func _lose_all_health(id: int) -> void:
+	var change := EcsHealthChange.new()
+	change.to = id
+	change.amount = -1.0e9
+	(_world.get_singleton(EcsHealthSingleton) as EcsHealthSingleton).changes.append(change)
+
+## Health with nothing happening to it is never visited: a thousand idle walls cost
+## the health system nothing, and a hit on one visits that one.
+func _idle_health_is_never_visited() -> void:
+	var system := EcsHealthSystem.new()
+	system.run(_world, TICK)
+	var baseline := system.touched
+	var walls: Array[int] = []
+	for i in 1000:
+		var wall := _world.create_entity()
+		_world.add(wall, EcsHealthComponent.new())
+		walls.append(wall)
+	system.run(_world, TICK)
+	_check("a thousand idle walls add nothing to visit (%d -> %d)" % [baseline, system.touched],
+		system.touched == baseline)
+	var hit := EcsHit.new()
+	hit.to = walls[7]
+	hit.amount = 30.0
+	(_world.get_singleton(EcsCombatSingleton) as EcsCombatSingleton).hits.append(hit)
+	system.run(_world, TICK)
+	_check("a hit on one visits that one", system.touched == baseline + 1
+		and is_equal_approx((_world.get_component(walls[7], EcsHealthComponent) as EcsHealthComponent).value, 70.0))
+	for wall in walls:
+		_world.destroy_entity(wall)
+
+## Hunger and thirst speak to health only through flags: starving and dehydrating at
+## zero, mending only while fed and hurt. A fed body hit to zero dies, never mended.
+func _needs_raise_health_flags() -> void:
+	var hungers := EcsHungerSystem.new()
+	var thirsts := EcsThirstSystem.new()
+	var health_system := EcsHealthSystem.new()
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-75000.0, -70000.0))
+	var hunger := _world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
+	var thirst := _world.get_component(rabbit, EcsThirstComponent) as EcsThirstComponent
+	var health := _world.get_component(rabbit, EcsHealthComponent) as EcsHealthComponent
+
+	hunger.fullness = hunger.max_fullness
+	hungers.run(_world, 0.0)
+	_check("fed and unhurt: no mending flag", not _world.has(rabbit, EcsMendingFlag))
+	health.value = 50.0
+	hungers.run(_world, 0.0)
+	_check("fed and hurt: mending", _world.has(rabbit, EcsMendingFlag))
+	health_system.run(_world, 1.0)
+	_check("and health comes back", health.value > 50.0)
+
+	hunger.fullness = 0.0
+	hungers.run(_world, 0.0)
+	_check("empty: starving, not mending",
+		_world.has(rabbit, EcsStarvingFlag) and not _world.has(rabbit, EcsMendingFlag))
+	var before := health.value
+	health_system.run(_world, 1.0)
+	_check("and starving costs starve_damage a second",
+		is_equal_approx(health.value, before - hunger.starve_damage))
+	hunger.fullness = 50.0
+	hungers.run(_world, 0.0)
+	_check("fed again: the starving flag is gone", not _world.has(rabbit, EcsStarvingFlag))
+
+	thirst.hydration = 0.0
+	thirsts.run(_world, 0.0)
+	_check("dry: dehydrating", _world.has(rabbit, EcsDehydratingFlag))
+	thirst.hydration = thirst.max_hydration
+	thirsts.run(_world, 0.0)
+	_check("watered: not", not _world.has(rabbit, EcsDehydratingFlag))
+
+	hunger.fullness = hunger.max_fullness
+	hungers.run(_world, 0.0)
+	_lose_all_health(rabbit)
+	health_system.run(_world, 1.0)
+	_check("fed and mending, hit to zero: dying, not mended",
+		_world.has(rabbit, EcsDyingFlag) and health.value == 0.0)
+	_manager.kill(_world, rabbit)
+
+## A dog's bite bleeds and a crocodile's poisons: timed flags that cost health, run out
+## on time and refresh rather than stack. Enough poison kills, and leaves a corpse.
+func _bites_bleed_and_poison() -> void:
+	var attack := EcsAttackSystem.new()
+	var health_system := EcsHealthSystem.new()
+	var spot := Vector2(-78000.0, -70000.0)
+	var dog := _manager.spawn(_world, _catalog, &"wild_dog", spot)
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(30.0, 0.0))
+	var bite := _world.get_component(dog, EcsDamageComponent) as EcsDamageComponent
+	bite.crit_chance = 0.0
+	var health := _world.get_component(rabbit, EcsHealthComponent) as EcsHealthComponent
+	(_world.get_component(dog, EcsActionComponent) as EcsActionComponent).reached.append(rabbit)
+	var intent := EcsAttackIntentFlag.new()
+	intent.target_id = rabbit
+	_world.add(dog, intent)
+
+	attack.run(_world, TICK)
+	health_system.run(_world, 0.0)
+	var bleed := _world.get_component(rabbit, EcsBleedingFlag) as EcsBleedingFlag
+	_check("a dog's bite bleeds", bleed != null
+		and is_equal_approx(bleed.rate, -bite.bleed_rate) and is_equal_approx(bleed.left, bite.bleed_for))
+	var before := health.value
+	health_system.run(_world, 1.0)
+	_check("bleeding costs bleed_rate a second", is_equal_approx(health.value, before - bite.bleed_rate))
+	bite.cooldown = 0.0
+	attack.run(_world, TICK)
+	health_system.run(_world, 0.0)
+	bleed = _world.get_component(rabbit, EcsBleedingFlag) as EcsBleedingFlag
+	_check("a second bite refreshes the bleeding, no stacking", bleed != null
+		and is_equal_approx(bleed.rate, -bite.bleed_rate) and is_equal_approx(bleed.left, bite.bleed_for))
+	_world.remove(dog, EcsAttackIntentFlag)
+	health_system.run(_world, bite.bleed_for + 0.1)
+	_check("and it stops on time", not _world.has(rabbit, EcsBleedingFlag))
+
+	var croc := _manager.spawn(_world, _catalog, &"crocodile", spot + Vector2(0.0, 300.0))
+	var jaws := _world.get_component(croc, EcsDamageComponent) as EcsDamageComponent
+	jaws.crit_chance = 0.0
+	(_world.get_component(croc, EcsActionComponent) as EcsActionComponent).reached.append(rabbit)
+	var croc_intent := EcsAttackIntentFlag.new()
+	croc_intent.target_id = rabbit
+	_world.add(croc, croc_intent)
+	attack.run(_world, TICK)
+	health_system.run(_world, 0.0)
+	_world.remove(croc, EcsAttackIntentFlag)
+	_check("a crocodile's bite poisons", _world.has(rabbit, EcsPoisonedFlag))
+	health.value = jaws.poison_rate * 2.0
+	health_system.run(_world, 1.0)
+	_check("poison takes it down a second at a time", not _world.has(rabbit, EcsDyingFlag)
+		and is_equal_approx(health.value, jaws.poison_rate))
+	health_system.run(_world, 1.5)
+	_check("and kills it", _world.has(rabbit, EcsDyingFlag))
+	var inbox := _world.get_singleton(EcsLifecycleSingleton) as EcsLifecycleSingleton
+	var asked := inbox.spawn_requests.size()
+	EcsCorpseSystem.new().run(_world, TICK)
+	_check("leaving a corpse", inbox.spawn_requests.size() == asked + 1
+		and inbox.spawn_requests.back().type_id == &"corpse")
+	inbox.spawn_requests.resize(asked)
+	for id in [dog, croc, rabbit]:
+		_manager.kill(_world, id)
+
+## A live edit of health to zero kills at the next health run.
+func _an_edit_to_zero_health_kills() -> void:
+	var previous := _world.get_singleton(EcsEditSingleton)
+	var edits := _world.add_singleton(EcsEditSingleton.new()) as EcsEditSingleton
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-81000.0, -70000.0))
+	var edit := EcsEdit.new()
+	edit.ids.append(rabbit)
+	edit.component = &"health"
+	edit.field = &"value"
+	edit.value = 0.0
+	edits.edits.append(edit)
+	EcsEditSystem.new().run(_world, TICK)
+	EcsHealthSystem.new().run(_world, TICK)
+	_check("an edit to zero health kills", _world.has(rabbit, EcsDyingFlag))
+	if previous != null:
+		_world.add_singleton(previous)
+	_manager.kill(_world, rabbit)
+
+## No system but EcsHealthSystem assigns to a health component's `value`.
+func _only_the_health_system_writes_health() -> void:
+	var writers: Array[String] = []
+	var folder := "res://9. EcsSystem/systems/"
+	var pattern := RegEx.create_from_string("health\\.value\\s*=[^=]")
+	for file in DirAccess.get_files_at(folder):
+		if not file.ends_with(".gd") or file == "ecs_health_system.gd":
+			continue
+		if pattern.search(FileAccess.get_file_as_string(folder + file)) != null:
+			writers.append(file)
+	_check("only EcsHealthSystem writes health (others: %s)" % [writers], writers.is_empty())
+
+func _count_of(type_id: StringName) -> int:
+	var count := 0
+	for id in _world.query([EcsNameComponent]):
+		if (_world.get_component(id, EcsNameComponent) as EcsNameComponent).type_id == type_id:
+			count += 1
+	return count
+
 func _snapshot_world() -> EcsWorld:
 	var world := EcsWorld.new()
 	world.add_singleton(EcsLifecycleSingleton.new())
 	world.add_singleton(EcsCombatSingleton.new())
+	world.add_singleton(EcsHealthSingleton.new())
 	return world
 
 ## main.gd's pipeline without the view systems.
@@ -3875,7 +4192,6 @@ func _snapshot_pipeline(manager: EcsEntityManager) -> EcsScheduler:
 		.add(EcsHungerSystem.new()) \
 		.add(EcsEnergySystem.new()) \
 		.add(EcsThirstSystem.new()) \
-		.add(EcsHealthSystem.new()) \
 		.add(EcsDangerSystem.new()) \
 		.add(EcsSensorSystem.new(manager)) \
 		.add(EcsBreedingSystem.new()) \
@@ -3887,8 +4203,7 @@ func _snapshot_pipeline(manager: EcsEntityManager) -> EcsScheduler:
 		.add(EcsDrinkSystem.new()) \
 		.add(EcsHarvestSystem.new()) \
 		.add(EcsAttackSystem.new()) \
-		.add(EcsCritSystem.new()) \
-		.add(EcsDamageSystem.new()) \
+		.add(EcsHealthSystem.new()) \
 		.add(EcsMovementSystem.new()) \
 		.add(EcsCollisionSystem.new(manager)) \
 		.add(EcsPickupSystem.new()) \

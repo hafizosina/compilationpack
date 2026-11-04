@@ -3,14 +3,14 @@ extends EcsSystem
 
 ## Drains energy while awake (more while moving) and restores it while asleep, or
 ## at `hide_restore` while hidden.
-## At zero it adds EcsCollapsedFlag and costs health once; the flag lifts at
-## `collapse_release`.
+## At zero it adds EcsCollapsedFlag and asks EcsHealthSystem for `collapse_damage`
+## once; the flag lifts at `collapse_release`.
 
 func label() -> StringName:
 	return &"energy"
 
 func run(world: EcsWorld, delta: float) -> void:
-	# Movement and health are optional, so they are looked up.
+	# Movement is optional, so it is looked up.
 	var bars := world.view([EcsEnergyComponent])
 	var energies := bars.column(EcsEnergyComponent)
 	for k in bars.ids.size():
@@ -37,8 +37,11 @@ func run(world: EcsWorld, delta: float) -> void:
 		if not collapsed and energy.value <= 0.0:
 			# Collapse once; the flag prevents repeating it.
 			world.add(id, EcsCollapsedFlag.new())
-			var health := world.get_component(id, EcsHealthComponent) as EcsHealthComponent
-			if health != null:
-				health.value = maxf(health.value - energy.collapse_damage, 0.0)
+			var inbox := world.get_singleton(EcsHealthSingleton) as EcsHealthSingleton
+			if inbox != null and world.has(id, EcsHealthComponent):
+				var change := EcsHealthChange.new()
+				change.to = id
+				change.amount = -energy.collapse_damage
+				inbox.changes.append(change)
 		elif collapsed and energy.value >= energy.collapse_release:
 			world.remove(id, EcsCollapsedFlag)

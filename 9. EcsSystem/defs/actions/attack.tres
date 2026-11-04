@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="EcsActionDef" format=3]
+[gd_resource type="Resource" script_class="EcsActionDef" format=3 uid="uid://ckyxpi43wx5i"]
 
 [ext_resource type="Script" uid="uid://dvtyowamldw5k" path="res://9. EcsSystem/ai/ecs_action_def.gd" id="def"]
 

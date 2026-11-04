@@ -25,5 +25,5 @@ func key() -> StringName:
 	return &"thirst"
 
 func describe() -> Dictionary:
-	return {"tab": &"entity",
-		"lines": {"hydration": "%d/%d" % [roundi(hydration), roundi(max_hydration)]}}
+	return {"tab": &"entity", "lines": {},
+		"bars": [{"label": "hydration", "value": hydration, "max": max_hydration, "tone": &"hydration"}]}

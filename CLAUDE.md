@@ -10,16 +10,22 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 419 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 457 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments, the hunger/health/energy loop,
 # intent flags, items as records, the drop on death, views, combat, corpses,
 # looting, rot, diet, hunting, harvesting, the planner, utility, fleeing,
 # skills, hiding, the ambush, thirst, costs from stats, staying safe, memory,
-# save/load snapshots, placing while paused, composed blueprints, multi-select
-# and live edits.
+# save/load snapshots, placing while paused, composed blueprints, multi-select,
+# live edits, selecting by id, the entity list, deleting a save,
+# removing an entity, switching a component off, and health only visiting what changes.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
+
+# The four demo maps (defs/worlds/, also in the World menu) played in the real main
+# scene, 21 checks that each shows its concept: needs and utility, hunting by stats,
+# carry vs graze, and ECS toggles with the life cycle. ~8 s with --fixed-fps.
+"$GODOT" --headless --fixed-fps 60 --path . "res://9. EcsSystem/tests/demo_worlds_test.tscn"
 
 # The hunt on its own: one dog in a bush, one rabbit — ambush, pounce, stun, bites.
 "$GODOT" --path . "res://9. EcsSystem/showcase/hunt_showcase.tscn"
@@ -137,14 +143,22 @@ at the bottom. The class keeps the name because hunger is what it is *about*; th
 named for what it counts, so no call site has to hold the inversion in its head. The
 brain's food rung declines *above* `forage_below`, so a fed creature wanders past a berry
 it can plainly see, and its eat rung fires below `eat_below`.
-**What being empty or full does to you is hunger's rule**, so both halves live in
-`EcsHungerSystem`: at zero it spends `EcsHealthComponent` at `starve_damage`, above
-`heal_above` it gives health back at the slower `heal_rate`, and the band between does
-neither. `EcsHealthSystem` owns only the threshold, adding `EcsDyingFlag` at zero. Each
-system owns the consequences of the component it is named for and neither knows the other
-exists. Regeneration was argued against while starvation was the only damage source —
+**What being empty or full does to you is hunger's rule**, so both halves are decided in
+`EcsHungerSystem`: at zero it raises `EcsStarvingFlag` (−`starve_damage`/s), above
+`heal_above` and hurt it raises `EcsMendingFlag` (+`heal_rate`/s), and the band between does
+neither. Applying them is `EcsHealthSystem`'s (below). Regeneration was argued against while starvation was the only damage source —
 gating it on being *well fed* is what answers that: mending is the reward for having
 eaten, not the absence of starving.
+**Only `EcsHealthSystem` writes `EcsHealthComponent.value`, and it decides death in the same
+pass** (HANDOFF §28). Everything else asks: hits through the `EcsCombatSingleton` inbox, one-off
+changes (collapse, a live edit's recheck) through `EcsHealthSingleton`, and ongoing ones as an
+`EcsHealthOverTimeFlag` subclass — `EcsStarvingFlag`, `EcsDehydratingFlag`, `EcsMendingFlag`
+(raised and removed by their owners) and `EcsBleedingFlag`, `EcsPoisonedFlag` (timed, raised
+by a bite's `EcsDamageComponent.bleed_*`/`poison_*`, run out by health). It applies losses before
+gains, so a body at zero never mends, and **visits only entities with a hit, a change or an
+effect**: idle health — a thousand walls — costs nothing (measured: 18 µs a run at 0 or 100,000
+idle walls). A new effect is a flag and a line in its `kinds`. A test fails if any other system
+assigns `health.value`.
 **The brain is the only thing that chooses.** `EcsPickupSystem` used to be a reflex — it
 ran on reach alone, so a sated monkey pocketed every berry it wandered across with nothing
 having decided that. Taking is now a `TAKE` rung on the brain, gated on the same
@@ -174,6 +188,15 @@ a bag as a *cap on how much it may fetch*, never as a requirement to go. Food is
 tool. The brain *decides* to eat by raising `EcsEatIntentFlag` naming the meal;
 `EcsConsumeSystem` carries it out, one berry per decision. **Do not let the brain grow
 hands.**
+
+**A component can be switched off without removing it** (HANDOFF §25). `EcsComponent.enabled`
+(exported, on by default) off means the entity is treated as not having it: `EcsWorld` files it in
+a separate disabled table, so `query`, `view`, `has` and `get_component` skip it and no system
+code changes; `components_of()` still returns it, so the inspector, records, snapshots and node
+building keep it. Toggle it with the checkbox on its inspector card (`EcsEditSystem` re-files it) or ship it
+off in a blueprint or placement override. Its node, if it declares one, is kept: systems ignore
+it, so a disabled sprite freezes and a disabled body can still be perceived — chosen
+deliberately over freeing nodes. Flags and singletons ignore the field.
 
 **Components, flags and singletons are three kinds.** A **component** is what an entity
 *is*: present from spawn to death, its data authored in the blueprint or placement. A wall
@@ -274,7 +297,7 @@ one. `EcsActionDef.patience` fails a bet that never pays. Hunters only pick prey
 `EcsHunting.notices`, so hiding protects prey too. **A kill is not one action** — it is attacks
 until dead; choosing skills to kill from the enemy's skills and stats is left to combat
 planning. Don't patch it with a one-shot kill. A pounce (a hit while dashing) **stuns**
-(`EcsStunnedFlag`, raised and counted down by `EcsDamageSystem`): no say, no bite. **Hunted
+(`EcsStunnedFlag`, raised and counted down by `EcsHealthSystem`): no say, no bite. **Hunted
 prey can't hide** — `hide` needs the planner fact `hunted` false.
 
 **Skills say their own effect** (HANDOFF §19). An `EcsSkillDef` (`defs/skills/`) overrides
@@ -312,7 +335,7 @@ per pair, both parents pay. The `breed` goal sits below real needs and danger. *
 are critical** (`EcsNeeds.CRITICAL`): either outranks every other need and every commitment.
 
 **A stage may declare how often it runs.** `EcsScheduler.add(system, every, phase)` takes a
-rate in ticks — `main.gd` runs `sensor`, `breeding`, `memory`, `danger`, `planning`, `low_brain` and `health` at `SLOW` (3 ticks, 20 Hz),
+rate in ticks — `main.gd` runs `sensor`, `breeding`, `memory`, `danger`, `planning` and `low_brain` at `SLOW` (3 ticks, 20 Hz),
 `hunger`, `energy` and `thirst` at `BARS` (6 ticks, 10 Hz), while
 `movement`, `collision` and `node_sync` stay at every tick. This is safe only because every
 system already takes `delta` and means it: **the scheduler banks delta per system**, so a
@@ -368,9 +391,9 @@ been crossed.
 berry dies and becomes a record, so freeing a node is kill and only kill, and every live
 entity has a position to draw.
 
-**It is deliberately kept to a small core**: 29 components, 17 flags, 4
-singletons, 31 systems
-(`lifecycle > edit > spawner > hunger > energy > thirst > health > danger > sensor > breeding > memory > planning > low_brain > skill > consume > drink > harvest > attack > crit > damage > movement > collision > pickup > rot > corpse > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
+**It is deliberately kept to a small core**: 28 components, 23 flags, 5
+singletons, 29 systems
+(`lifecycle > edit > spawner > hunger > energy > thirst > danger > sensor > breeding > memory > planning > low_brain > skill > consume > drink > harvest > attack > health > movement > collision > pickup > rot > corpse > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
 rank in the plan's decision ladder — the planner sits *above* it — and not for the
 wandering it happens to do), and a world
 of 48 animals in 4 types (20 rabbits, 20 monkeys, 4 crocodiles and 4 wild dogs — a grazer,
@@ -407,26 +430,29 @@ theme rather than carrying `theme_override_*`. **F1** toggles it. There is no
 entity it describes.
 
 **Selection and the inspector are back** (restored from `928b9d1`). Left-click picks an
-entity, and the bottom-left panel shows it. The chain is strictly ECS: a click is only
+entity, and the inspector dock on the right shows it. The chain is strictly ECS: a click is only
 *recorded* on the `EcsSelectionSingleton` by `main.gd`, `EcsSelectionSystem`
 resolves it on the next tick by a distance query over `EcsPositionComponent` (no physics
 pick, no hitboxes), selection is the presence of `EcsSelectedFlag` — on any number of
 entities (shift-click toggles one, a left-drag box selects many) — and
 `EcsInspectSystem` pushes a formatted snapshot onto `EventBus.ecs_entity_inspected`.
-`ui/ui.tscn` is a dumb renderer that never touches the world. **`EcsInspectSystem` knows no
+The HUD (`ui/`, one scene per panel, HANDOFF §24) is a dumb renderer that never touches the world. **`EcsInspectSystem` knows no
 component — keep it that way.** How a component reads is its own **`describe()`**:
-`{"tab": &"entity" | &"own" | &"hidden", "lines": {label: text}, "title"?: {name, type}}`. To
-change how a component shows, edit its `describe()` — **never the inspect system**; a test
-fails if that file names a component type. A component without `describe()` gets its own tab
-of every field, by reflection. Flags are the one thing the inspector lays out itself, by base
-class: one "Flags" tab. This brings back module 8's `describe()` **for display only** — the
+`{"tab": &"entity" | &"own" | &"hidden", "lines": {label: text}, "title"?: {name, type},
+"bars"?: [{label, value, max, tone}]}` — "entity" lines and bars go to the top of the page,
+"own" lines into the component's card. The inspector is one scrolling page (HANDOFF §26): bars,
+summary, flag chips, then a foldable card per component with its on/off switch and its fields
+edited in place. To change how a component shows, edit its `describe()` — **never the inspect
+system**; a test fails if that file names a component type. A component without `describe()`
+shows its non-editable fields by reflection. Flags are the one thing the inspector lays out
+itself, by base class: as chips. This brings back module 8's `describe()` **for display only** — the
 argument was settled that way; it is not a door for other methods.
 
 **Combat is back** (2026-10-29), rebuilt on the current architecture rather than restored
 from `928b9d1`: the brain decides (ATTACK), `EcsAttackSystem` executes the flag,
-and a hit travels through an `EcsCombatSingleton` inbox — attack adds `EcsHit`s,
-`EcsCritSystem` may multiply them, `EcsDamageSystem` applies them less `EcsArmorComponent`
-and clears the list. Death stays `EcsHealthSystem`'s. **Weapons, durability and broken are
+and a hit travels through an `EcsCombatSingleton` inbox — attack adds `EcsHit`s (rolling
+`EcsDamageComponent.crit_chance` as it makes one), and `EcsHealthSystem` applies them less `EcsArmorComponent`,
+raises hurt, stun, bleeding and poison, and clears the list. **Weapons, durability and broken are
 not back**: an attack is natural (`EcsDamageComponent` on the attacker), and a weapon waits
 on deciding what a carried record may *do*. The old pipeline is still in git at `928b9d1`
 (`9. EcsSystem/HANDOFF.md` §16). **Do not re-add breadth to module 9 without being asked**;
@@ -442,14 +468,15 @@ entity (§3). The plan's steps 0–7 and the features roadmap's steps 1–5 are 
 
 **Save, place, compose** (HANDOFF §22). **Space** pauses: only lifecycle, edit, selection,
 node_sync, debug and inspect run, so you can place, inspect and edit with nothing simulating.
-**Live edit** (HANDOFF §23): the inspector's Edit tab asks over `EventBus`, `main.gd` appends an
+**Live edit** (HANDOFF §23): the inspector's cards ask over `EventBus`, `main.gd` appends an
 `EcsEdit` to the `EcsEditSingleton`, and `EcsEditSystem` — second in the pipeline, naming no
 component type — sets the field on every selected entity that has it. The UI never writes a
-component; flags are never edited. A save is a **full
+component; flags are never edited. **Remove** (inspector, or Delete) goes through the same
+inbox: `EcsEditSystem` adds `EcsDyingFlag`, so it dies at the next lifecycle like any death. A save is a **full
 live snapshot** (`save/ecs_snapshot.gd`, `user://saves/`) that keeps entity ids as they were, so
 every cross-entity int stays valid. Capturing only reads the world, and
 `EcsEntityManager.load_snapshot()` rebuilds it, so the manager is still the only creator. Placing
-appends an `EcsSpawnRequest` to the lifecycle inbox. The composer (`ui/composer.gd`) builds an
+appends an `EcsSpawnRequest` to the lifecycle inbox. The composer (the Compose tab, `ui/composer.tscn`) builds an
 `EcsEntityDef` from components and saves it to `user://blueprints/`. `main.gd` runs a runtime copy
 of the catalog that holds these, and never changes `catalog.tres`.
 

@@ -212,9 +212,8 @@ Fields below the line in each row are runtime, written by systems; the rest are 
 | `Harvestable` | yields, diet, stock_max, regrow, harvest_time | stock, regrow_left, stocked | harvest; brain, planning, memory |
 | `Drinkable` | rate | — | drink |
 | `Cover` | kind, conceal | — | hiding, lures |
-| `Damage` | damage, interval | cooldown | attack |
-| `Armor` | reduction, minimum | — | damage |
-| `CritChance` | chance, multiplier | — | crit |
+| `Damage` | damage, interval, crit_chance, crit_multiplier, bleed_rate, bleed_for, poison_rate, poison_for | cooldown | attack |
+| `Armor` | reduction, minimum | — | health |
 | `Rot` | lasts | age | rot; memory (a corpse) |
 | `Spawner` | spawns, radius, interval, max_loose | cooldown, pending, spawned | spawner (no blueprint uses it) |
 
@@ -236,18 +235,27 @@ The one method a component may have: `describe() -> {tab, lines, title?}`, displ
 | `Dashing` | speed_scale | skill | skill | movement, attack, brain |
 | `Hidden` | stealth | skill | skill | visibility, memory |
 | `Scanning` | radius | skill | skill | visibility |
-| `Stunned` | left | damage | damage | brain, attack |
-| `Hurt` | by | damage | danger | danger |
+| `Stunned` | left | health (from a hit) | health | brain, attack |
+| `Hurt` | by | health (from a hit) | danger | danger |
+| `Starving` ¹ | rate, left = INF | hunger | hunger | health |
+| `Dehydrating` ¹ | rate, left = INF | thirst | thirst | health |
+| `Mending` ¹ | rate, left = INF | hunger (fed and hurt) | hunger | health |
+| `Bleeding` ¹ | rate, left | health (a bite's bleed) | health (timed) | health |
+| `Poisoned` ¹ | rate, left | health (a bite's poison) | health (timed) | health |
 | `Ready` | — | breeding | breeding | breeding, planning, memory, brain |
 | `Selected` | — | selection | selection | inspect, debug |
 | `Dying` | — | health, consume, pickup, rot | (entity destroyed) | lifecycle, corpse, drop, every executor |
+
+¹ An `EcsHealthOverTimeFlag`: health applies `rate` per second while it is on.
 
 ## 4. Singletons
 
 ```
 EcsLifecycleSingleton { spawn_requests: [EcsSpawnRequest{type_id | record, position,
                                          overrides, entity_name, fulfilled, born}] }
-EcsCombatSingleton    { hits: [EcsHit{from, to, amount, critical, stun}] }   # cleared by damage
+EcsCombatSingleton    { hits: [EcsHit{from, to, amount, critical, stun,
+                               bleed_rate, bleed_for, poison_rate, poison_for}] }  # cleared by health
+EcsHealthSingleton    { changes: [EcsHealthChange{to, amount, from}] }      # cleared by health
 EcsSelectionSingleton { pending, pick_at }                                   # written by main.gd
 ```
 
@@ -281,9 +289,9 @@ for e with Position, Spawner:
 for e with Hunger:
     rate = drain * (asleep_drain_scale if Asleep or Collapsed else 1)
     fullness = max(fullness - rate * dt, 0)
-for e with Hunger, Health:
-    if fullness <= 0:            health -= starve_damage * dt
-    elif fullness >= heal_above: health += heal_rate * dt   (capped)
+for e with Hunger, Health:                       # flags only; health applies them
+    Starving{rate -starve_damage} while fullness <= 0, else removed
+    Mending{rate heal_rate} while fullness >= heal_above and 0 < health < max, else removed
 ```
 
 ### energy `[10 Hz]`
@@ -294,7 +302,7 @@ for e with Energy:
     if Collapsed or Asleep:           value += restore * dt
     elif hide_restore and Hidden:     value += hide_restore * dt
     else:                             value -= (drain_idle + drain_moving if moving) * dt
-    if not Collapsed and value <= 0:  add Collapsed; health -= collapse_damage (once)
+    if not Collapsed and value <= 0:  add Collapsed; health inbox += -collapse_damage (once)
     elif Collapsed and value >= collapse_release: remove Collapsed
 ```
 
@@ -305,14 +313,7 @@ for e with Thirst:
     rate = drain * (asleep_drain_scale if Asleep or Collapsed else 1)
     hydration = max(hydration - rate * dt, 0)
 for e with Thirst, Health:
-    if hydration <= 0: health -= dehydrate_damage * dt
-```
-
-### health `[20 Hz]`
-
-```
-for e with Health, not Dying:
-    if health <= 0: add Dying
+    Dehydrating{rate -dehydrate_damage} while hydration <= 0, else removed
 ```
 
 ### danger `[20 Hz]`
@@ -587,27 +588,30 @@ for e with Damage: cooldown -= dt
 for e with AttackIntent, Damage, Action, not Dying:
     skip if cooldown > 0 or Stunned
     t = target; require Health, not Dying, in reached(e)
-    hit = {from e, to t, amount damage, stun = dash.stun if Dashing else 0}
+    hit = {from e, to t, amount damage, bleed_*, poison_*, stun = dash.stun if Dashing else 0}
+    if random < crit_chance: amount *= crit_multiplier; critical = true
     combat.hits += hit; cooldown = interval
 ```
 
-### crit
-
-```
-for hit in combat.hits:
-    if from has CritChance and random < chance: amount *= multiplier; critical = true
-```
-
-### damage
+### health — the only writer of health, and where death is decided
 
 ```
 for e with Stunned: left -= dt; remove at 0
-for hit in combat.hits:
+loss = {}, gain = {}                              # only ids with something pending
+for kind in [Starving, Dehydrating, Mending, Bleeding, Poisoned]:
+    for e with Health, kind: (gain if rate > 0 else loss)[e] += |rate| * min(dt, left)
+                             left -= dt; remove the flag at 0 (timed ones only run out)
+for hit in combat.hits (target has Health, not Dying):
     taken = amount; with Armor: taken = max(taken - reduction, minimum)
-    health -= taken
-    Hurt{by = from} on the target (add or update)
-    if hit.stun: Stunned.left = max(left, stun)
+    loss[to] += taken; Hurt{by = from}; Stunned.left = max(left, stun) if stun
+    Bleeding / Poisoned: rate = worse of the two, left = longer of the two
 clear combat.hits
+for change in health inbox: (gain or loss)[to] += amount  # 0 just rechecks
+clear inbox
+for e in loss ∪ gain, not Dying:
+    health = max(health - loss, 0)
+    if health <= 0: add Dying; continue           # a body at zero never mends
+    health = min(health + gain, max)
 ```
 
 ### movement — a destination is a budget

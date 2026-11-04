@@ -1,8 +1,8 @@
 class_name EcsSelectionSystem
 extends EcsSystem
 
-## Resolves a click or a drag box into EcsSelectedFlags: a click selects one,
-## shift-click toggles one, a box selects what it holds (shift adds). Also draws
+## Resolves a click, a drag box or an id into EcsSelectedFlags: a click or id
+## selects one, shift toggles one, a box selects what it holds (shift adds). Also draws
 ## the selection marks.
 
 var _marker: EcsSelectionMarker
@@ -17,7 +17,11 @@ func run(world: EcsWorld, _delta: float) -> void:
 	var request := world.get_singleton(EcsSelectionSingleton) as EcsSelectionSingleton
 	if request != null and request.pending:
 		request.pending = false
-		if request.is_box:
+		if request.pick_id != EcsWorld.NO_ENTITY:
+			_click(world, request.pick_id if world.is_alive(request.pick_id) else EcsWorld.NO_ENTITY,
+				request.additive)
+			request.pick_id = EcsWorld.NO_ENTITY
+		elif request.is_box:
 			_select_box(world, Rect2(request.pick_at, Vector2.ZERO).expand(request.drag_to),
 				request.additive)
 		else:

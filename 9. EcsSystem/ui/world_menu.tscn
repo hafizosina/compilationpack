@@ -1,0 +1,64 @@
+[gd_scene format=3 uid="uid://dj43eab3jkr15"]
+
+[ext_resource type="Script" uid="uid://dwdsllxwqbid3" path="res://9. EcsSystem/ui/world_menu.gd" id="1_script"]
+
+[node name="WorldMenu" type="PanelContainer"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_type_variation = &"DockPanel"
+script = ExtResource("1_script")
+
+[node name="Box" type="VBoxContainer" parent="."]
+custom_minimum_size = Vector2(340, 0)
+layout_mode = 2
+theme_type_variation = &"DockVBox"
+
+[node name="Title" type="Label" parent="Box"]
+layout_mode = 2
+theme_type_variation = &"DockTitle"
+text = "Worlds"
+
+[node name="Hint" type="Label" parent="Box"]
+layout_mode = 2
+theme_type_variation = &"DockHint"
+text = "A map starts fresh from its layout. A save opens as it was saved."
+autowrap_mode = 3
+
+[node name="WorldList" type="ItemList" parent="Box"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 240)
+layout_mode = 2
+focus_mode = 0
+theme_type_variation = &"DockList"
+
+[node name="Buttons" type="HBoxContainer" parent="Box"]
+layout_mode = 2
+theme_type_variation = &"SimHBox"
+
+[node name="OpenButton" type="Button" parent="Box/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme_type_variation = &"DockButton"
+text = "Open"
+
+[node name="NewEmptyButton" type="Button" parent="Box/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme_type_variation = &"DockButton"
+text = "New empty world"
+
+[node name="CloseButton" type="Button" parent="Box"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+theme_type_variation = &"DockButton"
+text = "Close"

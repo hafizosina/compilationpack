@@ -1,0 +1,88 @@
+[gd_scene format=3 uid="uid://dj4odbf380465"]
+
+[ext_resource type="Script" uid="uid://ri64kh1m8gsv" path="res://9. EcsSystem/ui/inspector.gd" id="1_script"]
+
+[node name="Inspector" type="PanelContainer"]
+custom_minimum_size = Vector2(340, 0)
+theme_type_variation = &"DockPanel"
+script = ExtResource("1_script")
+
+[node name="Box" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_type_variation = &"DockVBox"
+
+[node name="Header" type="HBoxContainer" parent="Box"]
+layout_mode = 2
+theme_type_variation = &"SimHBox"
+
+[node name="NameLabel" type="Label" parent="Box/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"DockTitle"
+text = "Nothing selected"
+clip_text = true
+
+[node name="FocusButton" type="Button" parent="Box/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Centre the camera on it"
+focus_mode = 0
+theme_type_variation = &"DockButton"
+text = "Focus"
+
+[node name="RemoveButton" type="Button" parent="Box/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Remove every selected entity (Delete)"
+focus_mode = 0
+theme_type_variation = &"DockButton"
+text = "Remove"
+
+[node name="Subtitle" type="Label" parent="Box"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"DockHint"
+autowrap_mode = 3
+
+[node name="Scroll" type="ScrollContainer" parent="Box"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Page" type="VBoxContainer" parent="Box/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"DockVBox"
+
+[node name="Bars" type="VBoxContainer" parent="Box/Scroll/Page"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"DockVBox"
+
+[node name="Summary" type="VBoxContainer" parent="Box/Scroll/Page"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SimVBox"
+
+[node name="Flags" type="HFlowContainer" parent="Box/Scroll/Page"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Rule" type="HSeparator" parent="Box/Scroll/Page"]
+layout_mode = 2
+
+[node name="Cards" type="VBoxContainer" parent="Box/Scroll/Page"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"DockVBox"
+
+[node name="EmptyHint" type="Label" parent="Box"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+theme_type_variation = &"DockHint"
+text = "Click an entity to inspect it.
+Shift-click adds or removes one; drag a box to select many."
+autowrap_mode = 3

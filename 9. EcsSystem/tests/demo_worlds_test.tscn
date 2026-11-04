@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://dj4i24fkbyx65"]
+
+[ext_resource type="Script" path="res://9. EcsSystem/tests/demo_worlds_test.gd" id="1_test"]
+
+[node name="DemoWorldsTest" type="Node"]
+script = ExtResource("1_test")

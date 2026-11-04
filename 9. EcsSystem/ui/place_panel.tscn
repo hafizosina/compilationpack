@@ -1,0 +1,39 @@
+[gd_scene format=3 uid="uid://becsplacepnl1"]
+
+[ext_resource type="Script" uid="uid://dyaf2xv54cjh7" path="res://9. EcsSystem/ui/place_panel.gd" id="1_script"]
+
+[node name="PlacePanel" type="VBoxContainer"]
+size_flags_vertical = 3
+theme_type_variation = &"DockVBox"
+script = ExtResource("1_script")
+
+[node name="Hint" type="Label" parent="."]
+layout_mode = 2
+theme_type_variation = &"DockHint"
+text = "Pick a type, then left-click in the world to place it. Right-click or Esc stops."
+autowrap_mode = 3
+
+[node name="TypeList" type="ItemList" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+focus_mode = 0
+theme_type_variation = &"DockList"
+
+[node name="PlacingRow" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_type_variation = &"SimHBox"
+
+[node name="PlacingLabel" type="Label" parent="PlacingRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"DockLabel"
+text = "Not placing"
+
+[node name="StopButton" type="Button" parent="PlacingRow"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+theme_type_variation = &"DockButton"
+text = "Stop"

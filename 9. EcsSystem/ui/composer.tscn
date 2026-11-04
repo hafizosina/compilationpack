@@ -1,0 +1,163 @@
+[gd_scene format=3 uid="uid://dj4id4gfpkv65"]
+
+[ext_resource type="Script" uid="uid://cofcfmpypf0up" path="res://9. EcsSystem/ui/composer.gd" id="1_script"]
+
+[node name="Composer" type="VBoxContainer"]
+size_flags_vertical = 3
+theme_type_variation = &"DockVBox"
+script = ExtResource("1_script")
+
+[node name="LibraryTitle" type="Label" parent="."]
+layout_mode = 2
+theme_type_variation = &"DockTitle"
+text = "Blueprints"
+
+[node name="Library" type="ItemList" parent="."]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 110)
+layout_mode = 2
+focus_mode = 0
+theme_type_variation = &"DockList"
+
+[node name="LibraryRow" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_type_variation = &"SimHBox"
+
+[node name="OpenButton" type="Button" parent="LibraryRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Edit a blueprint you made, or copy a built-in one"
+focus_mode = 0
+theme_type_variation = &"DockButton"
+text = "Open"
+
+[node name="DeleteButton" type="Button" parent="LibraryRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Delete a blueprint you made"
+focus_mode = 0
+theme_type_variation = &"DockButton"
+text = "Delete"
+
+[node name="Rule" type="HSeparator" parent="."]
+layout_mode = 2
+
+[node name="EditingLabel" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"DockTitle"
+text = "New blueprint"
+clip_text = true
+
+[node name="NameRow" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_type_variation = &"SimHBox"
+
+[node name="NameLabel" type="Label" parent="NameRow"]
+custom_minimum_size = Vector2(44, 0)
+layout_mode = 2
+theme_type_variation = &"DockHint"
+text = "Name"
+
+[node name="NameField" type="LineEdit" parent="NameRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"DockField"
+placeholder_text = "e.g. Hare"
+
+[node name="IdRow" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_type_variation = &"SimHBox"
+
+[node name="IdLabel" type="Label" parent="IdRow"]
+custom_minimum_size = Vector2(44, 0)
+layout_mode = 2
+theme_type_variation = &"DockHint"
+text = "Id"
+
+[node name="IdField" type="LineEdit" parent="IdRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"DockField"
+placeholder_text = "optional; taken from the name"
+
+[node name="ComponentList" type="ItemList" parent="."]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 110)
+layout_mode = 2
+focus_mode = 0
+theme_type_variation = &"DockList"
+
+[node name="AddRow" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_type_variation = &"SimHBox"
+
+[node name="AddOption" type="OptionButton" parent="AddRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme_type_variation = &"DockButton"
+fit_to_longest_item = false
+
+[node name="AddButton" type="Button" parent="AddRow"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+theme_type_variation = &"DockButton"
+text = "Add"
+
+[node name="RemoveButton" type="Button" parent="AddRow"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+theme_type_variation = &"DockButton"
+text = "Remove"
+
+[node name="FieldsTitle" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"DockLabel"
+text = "Pick a component to edit its fields"
+
+[node name="FieldsScroll" type="ScrollContainer" parent="."]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Fields" type="VBoxContainer" parent="FieldsScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"DockVBox"
+
+[node name="SaveRow" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_type_variation = &"SimHBox"
+
+[node name="NewButton" type="Button" parent="SaveRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Start an empty blueprint"
+focus_mode = 0
+theme_type_variation = &"DockButton"
+text = "New"
+
+[node name="SaveButton" type="Button" parent="SaveRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme_type_variation = &"DockButton"
+text = "Save blueprint"
+
+[node name="Status" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"DockHint"
+autowrap_mode = 3

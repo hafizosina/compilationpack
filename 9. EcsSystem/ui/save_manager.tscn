@@ -1,0 +1,108 @@
+[gd_scene format=3 uid="uid://becssavemgr01"]
+
+[ext_resource type="Script" uid="uid://q4lkl1cubhrk" path="res://9. EcsSystem/ui/save_manager.gd" id="1_script"]
+
+[node name="SaveManager" type="PanelContainer"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_type_variation = &"DockPanel"
+script = ExtResource("1_script")
+
+[node name="Box" type="VBoxContainer" parent="."]
+custom_minimum_size = Vector2(380, 0)
+layout_mode = 2
+theme_type_variation = &"DockVBox"
+
+[node name="Title" type="Label" parent="Box"]
+layout_mode = 2
+theme_type_variation = &"DockTitle"
+text = "Save / Load"
+
+[node name="SaveList" type="ItemList" parent="Box"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 220)
+layout_mode = 2
+focus_mode = 0
+theme_type_variation = &"DockList"
+
+[node name="NameRow" type="HBoxContainer" parent="Box"]
+layout_mode = 2
+theme_type_variation = &"SimHBox"
+
+[node name="SaveName" type="LineEdit" parent="Box/NameRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"DockField"
+placeholder_text = "save name"
+
+[node name="SaveButton" type="Button" parent="Box/NameRow"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+theme_type_variation = &"DockButton"
+text = "Save"
+
+[node name="ConfirmRow" type="HBoxContainer" parent="Box"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_type_variation = &"SimHBox"
+
+[node name="ConfirmLabel" type="Label" parent="Box/ConfirmRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"StatusError"
+
+[node name="YesButton" type="Button" parent="Box/ConfirmRow"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+theme_type_variation = &"DockButton"
+text = "Yes"
+
+[node name="NoButton" type="Button" parent="Box/ConfirmRow"]
+unique_name_in_owner = true
+layout_mode = 2
+focus_mode = 0
+theme_type_variation = &"DockButton"
+text = "No"
+
+[node name="Buttons" type="HBoxContainer" parent="Box"]
+layout_mode = 2
+theme_type_variation = &"SimHBox"
+
+[node name="LoadButton" type="Button" parent="Box/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme_type_variation = &"DockButton"
+text = "Load"
+
+[node name="DeleteButton" type="Button" parent="Box/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme_type_variation = &"DockButton"
+text = "Delete"
+
+[node name="CloseButton" type="Button" parent="Box/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+theme_type_variation = &"DockButton"
+text = "Close"
+
+[node name="Status" type="Label" parent="Box"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"DockHint"

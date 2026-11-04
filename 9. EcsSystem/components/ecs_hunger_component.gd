@@ -30,5 +30,5 @@ func key() -> StringName:
 	return &"hunger"
 
 func describe() -> Dictionary:
-	return {"tab": &"entity",
-		"lines": {"fullness": "%d/%d" % [roundi(fullness), roundi(max_fullness)]}}
+	return {"tab": &"entity", "lines": {},
+		"bars": [{"label": "fullness", "value": fullness, "max": max_fullness, "tone": &"fullness"}]}

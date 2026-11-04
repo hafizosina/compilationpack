@@ -1,7 +1,7 @@
 class_name EcsHealthComponent
 extends EcsComponent
 
-## Health. At zero, EcsHealthSystem flags the entity dying.
+## Health. Only EcsHealthSystem changes `value`, and flags the entity dying at zero.
 
 ## Full health.
 @export var max_health: float = 100.0
@@ -16,5 +16,5 @@ func key() -> StringName:
 	return &"health"
 
 func describe() -> Dictionary:
-	return {"tab": &"entity",
-		"lines": {"health": "%d/%d" % [roundi(value), roundi(max_health)]}}
+	return {"tab": &"entity", "lines": {},
+		"bars": [{"label": "health", "value": value, "max": max_health, "tone": &"health"}]}

@@ -1,0 +1,219 @@
+[gd_resource type="Resource" script_class="EcsWorldDef" format=3 uid="uid://ba54glqowsqgq"]
+
+[ext_resource type="Script" uid="uid://ds75i3pla1ms3" path="res://9. EcsSystem/defs/ecs_placement.gd" id="place"]
+[ext_resource type="Script" uid="uid://dbk6chycnfg7p" path="res://9. EcsSystem/defs/ecs_world_def.gd" id="world"]
+
+[sub_resource type="Resource" id="p0"]
+script = ExtResource("place")
+entity_name = &"pond"
+type = &"water"
+position = Vector2(-300, 0)
+
+[sub_resource type="Resource" id="p1"]
+script = ExtResource("place")
+entity_name = &"bush_0"
+type = &"berry_bush"
+position = Vector2(300, -330)
+
+[sub_resource type="Resource" id="p2"]
+script = ExtResource("place")
+entity_name = &"bush_1"
+type = &"berry_bush"
+position = Vector2(410, -235)
+
+[sub_resource type="Resource" id="p3"]
+script = ExtResource("place")
+entity_name = &"bush_2"
+type = &"berry_bush"
+position = Vector2(300, -140)
+
+[sub_resource type="Resource" id="p4"]
+script = ExtResource("place")
+entity_name = &"bush_3"
+type = &"berry_bush"
+position = Vector2(410, -45)
+
+[sub_resource type="Resource" id="p5"]
+script = ExtResource("place")
+entity_name = &"bush_4"
+type = &"berry_bush"
+position = Vector2(300, 50)
+
+[sub_resource type="Resource" id="p6"]
+script = ExtResource("place")
+entity_name = &"bush_5"
+type = &"berry_bush"
+position = Vector2(410, 145)
+
+[sub_resource type="Resource" id="p7"]
+script = ExtResource("place")
+entity_name = &"bush_6"
+type = &"berry_bush"
+position = Vector2(300, 240)
+
+[sub_resource type="Resource" id="p8"]
+script = ExtResource("place")
+entity_name = &"bush_7"
+type = &"berry_bush"
+position = Vector2(410, 335)
+
+[sub_resource type="Resource" id="p9"]
+script = ExtResource("place")
+entity_name = &"rabbit_thirsty"
+type = &"rabbit"
+position = Vector2(-60, -260)
+overrides = {
+"breeding": {
+"cooldown_left": 600.0,
+"rolled": true
+},
+"energy": {
+"rolled": true,
+"value": 100.0
+},
+"hunger": {
+"fullness": 90.0
+},
+"thirst": {
+"hydration": 25.0
+}
+}
+
+[sub_resource type="Resource" id="p10"]
+script = ExtResource("place")
+entity_name = &"rabbit_hungry"
+type = &"rabbit"
+position = Vector2(60, -260)
+overrides = {
+"breeding": {
+"cooldown_left": 600.0,
+"rolled": true
+},
+"energy": {
+"rolled": true,
+"value": 100.0
+},
+"hunger": {
+"fullness": 25.0
+},
+"thirst": {
+"hydration": 90.0
+}
+}
+
+[sub_resource type="Resource" id="p11"]
+script = ExtResource("place")
+entity_name = &"rabbit_both"
+type = &"rabbit"
+position = Vector2(0, -120)
+overrides = {
+"breeding": {
+"cooldown_left": 600.0,
+"rolled": true
+},
+"energy": {
+"rolled": true,
+"value": 100.0
+},
+"hunger": {
+"fullness": 35.0
+},
+"thirst": {
+"hydration": 20.0
+}
+}
+
+[sub_resource type="Resource" id="p12"]
+script = ExtResource("place")
+entity_name = &"rabbit_tired"
+type = &"rabbit"
+position = Vector2(-70, 60)
+overrides = {
+"breeding": {
+"cooldown_left": 600.0,
+"rolled": true
+},
+"energy": {
+"rolled": true,
+"value": 20.0
+},
+"hunger": {
+"fullness": 90.0
+},
+"thirst": {
+"hydration": 90.0
+}
+}
+
+[sub_resource type="Resource" id="p13"]
+script = ExtResource("place")
+entity_name = &"rabbit_starving"
+type = &"rabbit"
+position = Vector2(70, 60)
+overrides = {
+"breeding": {
+"cooldown_left": 600.0,
+"rolled": true
+},
+"energy": {
+"rolled": true,
+"value": 15.0
+},
+"health": {
+"value": 60.0
+},
+"hunger": {
+"fullness": 0.0
+},
+"thirst": {
+"hydration": 90.0
+}
+}
+
+[sub_resource type="Resource" id="p14"]
+script = ExtResource("place")
+entity_name = &"rabbit_pair_a"
+type = &"rabbit"
+position = Vector2(-40, 250)
+overrides = {
+"breeding": {
+"cooldown_left": 0.0,
+"rolled": true
+},
+"energy": {
+"rolled": true,
+"value": 100.0
+},
+"hunger": {
+"fullness": 100.0
+},
+"thirst": {
+"hydration": 100.0
+}
+}
+
+[sub_resource type="Resource" id="p15"]
+script = ExtResource("place")
+entity_name = &"rabbit_pair_b"
+type = &"rabbit"
+position = Vector2(40, 250)
+overrides = {
+"breeding": {
+"cooldown_left": 0.0,
+"rolled": true
+},
+"energy": {
+"rolled": true,
+"value": 100.0
+},
+"hunger": {
+"fullness": 100.0
+},
+"thirst": {
+"hydration": 100.0
+}
+}
+
+[resource]
+script = ExtResource("world")
+entries = Array[ExtResource("place")]([SubResource("p0"), SubResource("p1"), SubResource("p2"), SubResource("p3"), SubResource("p4"), SubResource("p5"), SubResource("p6"), SubResource("p7"), SubResource("p8"), SubResource("p9"), SubResource("p10"), SubResource("p11"), SubResource("p12"), SubResource("p13"), SubResource("p14"), SubResource("p15")])

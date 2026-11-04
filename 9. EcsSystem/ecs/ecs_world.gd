@@ -3,6 +3,8 @@ extends RefCounted
 
 ## Entity ids, component storage and queries. An entity is just an int.
 ## Storage is `{ Script : { entity_id : EcsComponent } }`, one table per type.
+## A component with `enabled` off is filed in `_disabled` instead, so every query
+## and lookup skips it for free; `components_of()` still returns it.
 
 ## Id 0 means "no entity".
 const NO_ENTITY: int = 0
@@ -10,6 +12,7 @@ const NO_ENTITY: int = 0
 var _next_id: int = 1
 var _alive: Dictionary = {}  # entity_id -> true
 var _store: Dictionary = {}  # Script -> { entity_id -> EcsComponent }
+var _disabled: Dictionary = {}  # Script -> { entity_id -> EcsComponent }, enabled off
 var _singletons: Dictionary = {}  # Script -> EcsComponent
 ## Script -> int, bumped whenever that table gains, loses or replaces an entry.
 var _versions: Dictionary = {}
@@ -31,6 +34,8 @@ func destroy_entity(id: int) -> void:
 	for type: Script in _store:
 		if (_store[type] as Dictionary).erase(id):
 			_versions[type] = int(_versions.get(type, 0)) + 1
+	for type: Script in _disabled:
+		(_disabled[type] as Dictionary).erase(id)
 
 ## Recreates entity `id` when loading a snapshot. False if it is already alive.
 func create_entity_with_id(id: int) -> bool:
@@ -60,7 +65,8 @@ func entity_count() -> int:
 
 # --- components -------------------------------------------------------------
 
-## Adds `component` to `id`, replacing any component of the same type.
+## Adds `component` to `id`, replacing any component of the same type. Files it
+## by `enabled`; adding it again after flipping `enabled` moves it.
 func add(id: int, component: EcsComponent) -> EcsComponent:
 	if component == null:
 		push_error("EcsWorld: cannot add a null component to entity %d" % id)
@@ -69,9 +75,14 @@ func add(id: int, component: EcsComponent) -> EcsComponent:
 		push_error("EcsWorld: entity %d is not alive; component dropped" % id)
 		return null
 	var type: Script = component.get_script()
-	if not _store.has(type):
-		_store[type] = {}
-	_store[type][id] = component
+	var live := component.enabled or component is EcsFlag
+	var into: Dictionary = _store if live else _disabled
+	var out_of: Dictionary = _disabled if live else _store
+	if out_of.has(type):
+		(out_of[type] as Dictionary).erase(id)
+	if not into.has(type):
+		into[type] = {}
+	into[type][id] = component
 	# Bumped on replace too, so views drop the old reference.
 	_versions[type] = int(_versions.get(type, 0)) + 1
 	return component
@@ -88,6 +99,7 @@ func remove(id: int, type: Script) -> void:
 	var table: Dictionary = _store.get(type)
 	if table != null and table.erase(id):
 		_versions[type] = int(_versions.get(type, 0)) + 1
+	(_disabled.get(type, {}) as Dictionary).erase(id)
 
 ## Cached `query(include, exclude)` with component columns (see EcsView).
 ## Returns the same view until a table it names changes. Avoid naming types
@@ -152,10 +164,15 @@ func query(include: Array, exclude: Array = []) -> Array[int]:
 			result.append(id)
 	return result
 
-## Every component on `id`. For the inspector and item records.
+## Every component on `id`, disabled ones included. For the inspector, item
+## records, snapshots and node building.
 func components_of(id: int) -> Array[EcsComponent]:
 	var found: Array[EcsComponent] = []
 	for table: Dictionary in _store.values():
+		var component: EcsComponent = table.get(id)
+		if component != null:
+			found.append(component)
+	for table: Dictionary in _disabled.values():
 		var component: EcsComponent = table.get(id)
 		if component != null:
 			found.append(component)

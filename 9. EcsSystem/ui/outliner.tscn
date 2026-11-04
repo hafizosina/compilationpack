@@ -1,0 +1,33 @@
+[gd_scene format=3 uid="uid://dj4ukcb8kkv65"]
+
+[ext_resource type="Script" uid="uid://ysfmfvelhhpt" path="res://9. EcsSystem/ui/outliner.gd" id="1_script"]
+
+[node name="Outliner" type="VBoxContainer"]
+size_flags_vertical = 3
+theme_type_variation = &"DockVBox"
+script = ExtResource("1_script")
+
+[node name="Search" type="LineEdit" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"DockField"
+placeholder_text = "Search by name or type"
+clear_button_enabled = true
+
+[node name="EntityTree" type="Tree" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+focus_mode = 0
+theme_type_variation = &"DockTree"
+
+[node name="Summary" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"DockLabel"
+
+[node name="Hint" type="Label" parent="."]
+layout_mode = 2
+theme_type_variation = &"DockHint"
+text = "Click selects · Shift-click adds · Double-click centres the camera"
+autowrap_mode = 3

@@ -24,6 +24,8 @@ var ranking: Array[StringName] = []
 var replans: int = 0
 ## Planning runs left to wait after a kill, until its corpse has been seen.
 var settling: int = 0
+## What it was last seen attacking, so a kill is noticed even after the target is gone.
+var attacking: int = EcsWorld.NO_ENTITY
 
 func key() -> StringName:
 	return &"planner"

@@ -24,7 +24,8 @@ static func capture(world: EcsWorld) -> Dictionary:
 		entities[id] = held
 	var singletons: Array = []
 	for singleton in world.singletons():
-		if singleton is EcsSelectionSingleton or singleton is EcsEditSingleton:
+		if singleton is EcsSelectionSingleton or singleton is EcsEditSingleton \
+				or singleton is EcsHealthSingleton:
 			continue
 		singletons.append(_encode(singleton, ctx))
 	return {
@@ -104,6 +105,19 @@ static func list_saves() -> PackedStringArray:
 			names.append(file.get_basename())
 	names.sort()
 	return names
+
+## Every save as `{name, time}`, newest first.
+static func list_save_info() -> Array:
+	var saves: Array = []
+	for save_name in list_saves():
+		saves.append({"name": save_name, "time": FileAccess.get_modified_time(path_of(save_name))})
+	saves.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["time"] > b["time"])
+	return saves
+
+## Deletes the save called `save_name`. True if it existed and is gone.
+static func delete(save_name: String) -> bool:
+	var path := path_of(save_name)
+	return FileAccess.file_exists(path) and DirAccess.remove_absolute(path) == OK
 
 static func path_of(save_name: String) -> String:
 	return SAVE_DIR + save_name.validate_filename() + "." + EXTENSION

@@ -10,3 +10,9 @@ var amount: float = 0.0
 var critical: bool = false
 ## Seconds it stuns the target; 0 for none.
 var stun: float = 0.0
+## Bleeding it starts: health per second, for seconds. 0 for none.
+var bleed_rate: float = 0.0
+var bleed_for: float = 0.0
+## Poison it starts: health per second, for seconds. 0 for none.
+var poison_rate: float = 0.0
+var poison_for: float = 0.0

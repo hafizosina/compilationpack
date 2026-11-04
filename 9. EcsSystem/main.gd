@@ -6,11 +6,11 @@ extends Node2D
 ##
 ## Left-click selects an entity for the inspector, shift-click adds or removes
 ## one, and a left-drag box selects many; in place mode left-click places one
-## (right-click leaves it). The inspector's Edit tab changes every selected entity. Space pauses the simulation, F1 toggles the debug
-## overlay, F5 rebuilds the world from data. Saves and composed blueprints live
-## under user:// (HANDOFF.md §22).
+## (right-click or Escape stops). Space pauses, F1 toggles the debug overlay,
+## F5 rebuilds the world, Delete removes the selection; the HUD does the same. Saves and composed
+## blueprints live under user:// (HANDOFF.md §22, the HUD §24).
 
-## Ticks between runs for sensor, planning, low_brain, danger and health (3 = 20 Hz).
+## Ticks between runs for sensor, planning, low_brain and danger (3 = 20 Hz).
 const SLOW: int = 3
 
 ## Where composed blueprints are saved and loaded from.
@@ -35,6 +35,7 @@ const DRAG_PIXELS: float = 8.0
 @onready var _entities_root: Node2D = $World/Entities
 @onready var _debug_overlay: EcsDebugOverlay = $World/DebugOverlay
 @onready var _marker: EcsSelectionMarker = $World/SelectionMarker
+@onready var _camera: Camera2D = $Camera2D
 
 var _world: EcsWorld
 var _scheduler: EcsScheduler
@@ -64,6 +65,13 @@ func _ready() -> void:
 	EventBus.ecs_blueprint_saved.connect(_add_blueprint)
 	EventBus.ecs_new_world_requested.connect(_on_new_world_requested)
 	EventBus.ecs_entity_edit_requested.connect(_on_edit_requested)
+	EventBus.ecs_entity_remove_requested.connect(_on_remove_requested)
+	EventBus.ecs_pause_requested.connect(_toggle_pause)
+	EventBus.ecs_overlay_toggle_requested.connect(_toggle_overlay)
+	EventBus.ecs_entity_pick_requested.connect(_on_pick_requested)
+	EventBus.ecs_camera_focus_requested.connect(_on_camera_focus_requested)
+	EventBus.ecs_save_delete_requested.connect(_delete_save)
+	EventBus.ecs_blueprint_delete_requested.connect(_delete_blueprint)
 	_catalog = catalog.duplicate() as EcsEntityCatalog
 	_catalog.defs = catalog.defs.duplicate()
 	DirAccess.make_dir_recursive_absolute(BLUEPRINT_DIR)
@@ -71,7 +79,8 @@ func _ready() -> void:
 		if file.get_extension() == "tres":
 			_add_blueprint(BLUEPRINT_DIR + file, false)
 	EventBus.ecs_catalog_changed.emit(_catalog.defs)
-	EventBus.ecs_saves_changed.emit(EcsSnapshot.list_saves())
+	EventBus.ecs_saves_changed.emit(EcsSnapshot.list_save_info())
+	EventBus.ecs_overlay_changed.emit(_debug_overlay.visible)
 	_build()
 	if world_def == null:
 		EventBus.ecs_start_menu_opened.emit(_map_names())
@@ -109,9 +118,10 @@ func _is_drag(screen_position: Vector2) -> bool:
 	return screen_position.distance_to(_press_screen) > DRAG_PIXELS
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed \
-			and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_RIGHT \
-			and _place_type != &"":
+	var stops_placing: bool = (event is InputEventMouseButton and event.pressed
+		and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_RIGHT) \
+		or (event is InputEventKey and event.pressed and (event as InputEventKey).keycode == KEY_ESCAPE)
+	if stops_placing and _place_type != &"":
 		EventBus.ecs_place_type_chosen.emit(&"")
 		get_viewport().set_input_as_handled()
 		return
@@ -141,15 +151,25 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	match (event as InputEventKey).keycode:
 		KEY_F1:
-			_debug_overlay.visible = not _debug_overlay.visible
+			_toggle_overlay()
 			get_viewport().set_input_as_handled()
 		KEY_F5:
 			_build()
 			get_viewport().set_input_as_handled()
 		KEY_SPACE:
-			_paused = not _paused
-			EventBus.ecs_pause_changed.emit(_paused)
+			_toggle_pause()
 			get_viewport().set_input_as_handled()
+		KEY_DELETE:
+			_on_remove_requested(_world.query([EcsSelectedFlag]))
+			get_viewport().set_input_as_handled()
+
+func _toggle_pause() -> void:
+	_paused = not _paused
+	EventBus.ecs_pause_changed.emit(_paused)
+
+func _toggle_overlay() -> void:
+	_debug_overlay.visible = not _debug_overlay.visible
+	EventBus.ecs_overlay_changed.emit(_debug_overlay.visible)
 
 ## Builds a fresh world and the pipeline, from `world_def` or from a snapshot.
 ## The system order is the frame order.
@@ -169,8 +189,11 @@ func _build(snapshot: Dictionary = {}) -> void:
 	var node_sync := EcsNodeSyncSystem.new(_manager)
 	var debug := EcsDebugSystem.new(_debug_overlay)
 	var inspect := EcsInspectSystem.new()
-	# Placing, inspecting and editing work while paused; nothing simulates.
-	_paused_systems = [lifecycle, edit, selection, node_sync, debug, inspect]
+	var census := EcsCensusSystem.new()
+	var drop := EcsDropSystem.new()
+	# Placing, inspecting, editing, removing and the outliner work while paused; nothing
+	# simulates. Drop runs so a carrier removed while paused still leaves its bag.
+	_paused_systems = [lifecycle, edit, drop, selection, node_sync, debug, census, inspect]
 
 	_scheduler \
 		.add(lifecycle) \
@@ -179,7 +202,6 @@ func _build(snapshot: Dictionary = {}) -> void:
 		.add(EcsHungerSystem.new(), BARS, 2) \
 		.add(EcsEnergySystem.new(), BARS, 5) \
 		.add(EcsThirstSystem.new(), BARS, 3) \
-		.add(EcsHealthSystem.new(), SLOW, 2) \
 		.add(EcsDangerSystem.new(), SLOW, 1) \
 		.add(EcsSensorSystem.new(_manager), SLOW, 0) \
 		.add(EcsBreedingSystem.new(), SLOW, 0) \
@@ -191,24 +213,24 @@ func _build(snapshot: Dictionary = {}) -> void:
 		.add(EcsDrinkSystem.new()) \
 		.add(EcsHarvestSystem.new()) \
 		.add(EcsAttackSystem.new()) \
-		.add(EcsCritSystem.new()) \
-		.add(EcsDamageSystem.new()) \
+		.add(EcsHealthSystem.new()) \
 		.add(EcsMovementSystem.new()) \
 		.add(_collision) \
 		.add(EcsPickupSystem.new()) \
 		.add(EcsRotSystem.new()) \
 		.add(EcsCorpseSystem.new()) \
-		.add(EcsDropSystem.new()) \
+		.add(drop) \
 		.add(selection) \
 		.add(node_sync) \
 		.add(debug) \
-		.add(EcsCensusSystem.new()) \
+		.add(census) \
 		.add(inspect)
 
 	_world.add_singleton(EcsSelectionSingleton.new())
 	_world.add_singleton(EcsEditSingleton.new())
 	_world.add_singleton(EcsLifecycleSingleton.new())
 	_world.add_singleton(EcsCombatSingleton.new())
+	_world.add_singleton(EcsHealthSingleton.new())
 	if snapshot.is_empty() or not _manager.load_snapshot(_world, snapshot):
 		if world_def != null:
 			_manager.spawn_world(_world, _catalog, world_def)
@@ -221,7 +243,11 @@ func _save(save_name: String) -> void:
 	if save_name.strip_edges().is_empty():
 		return
 	if EcsSnapshot.write(save_name, EcsSnapshot.capture(_world)):
-		EventBus.ecs_saves_changed.emit(EcsSnapshot.list_saves())
+		EventBus.ecs_saves_changed.emit(EcsSnapshot.list_save_info())
+
+func _delete_save(save_name: String) -> void:
+	if EcsSnapshot.delete(save_name):
+		EventBus.ecs_saves_changed.emit(EcsSnapshot.list_save_info())
 
 ## Replaces the world with a saved one; pause stays as it was.
 func _load(save_name: String) -> void:
@@ -257,8 +283,43 @@ func _on_edit_requested(ids: Array, component: StringName, field: StringName, va
 	edit.value = value
 	(_world.get_singleton(EcsEditSingleton) as EcsEditSingleton).edits.append(edit)
 
+## Selects `id` (toggles it, when `additive`) at EcsSelectionSystem's next run.
+func _on_pick_requested(id: int, additive: bool) -> void:
+	var selection := _world.get_singleton(EcsSelectionSingleton) as EcsSelectionSingleton
+	selection.pending = true
+	selection.pick_id = id
+	selection.additive = additive
+
+## Centres the camera on `id`. Only reads the world.
+func _on_camera_focus_requested(id: int) -> void:
+	if not _world.is_alive(id):
+		return
+	var place := _world.get_component(id, EcsPositionComponent) as EcsPositionComponent
+	if place != null:
+		_camera.global_position = place.position
+
+## Queues `ids` for removal by EcsEditSystem, which also runs while paused.
+func _on_remove_requested(ids: Array) -> void:
+	(_world.get_singleton(EcsEditSingleton) as EcsEditSingleton).removals.append_array(ids)
+
 func _on_place_type_chosen(type_id: StringName) -> void:
 	_place_type = type_id if _catalog.has_def(type_id) else &""
+
+## Deletes a composed blueprint's file and drops it from the runtime catalog.
+## Built-in blueprints live in res:// and are never touched.
+func _delete_blueprint(type_id: StringName) -> void:
+	var def := _catalog.get_def(type_id)
+	if def == null or not def.resource_path.begins_with(BLUEPRINT_DIR):
+		return
+	DirAccess.remove_absolute(def.resource_path)
+	var defs: Array[EcsEntityDef] = []
+	for kept in _catalog.defs:
+		if kept.id != type_id:
+			defs.append(kept)
+	_catalog.defs = defs
+	if _place_type == type_id:
+		EventBus.ecs_place_type_chosen.emit(&"")
+	EventBus.ecs_catalog_changed.emit(_catalog.defs)
 
 ## Adds or replaces a composed blueprint read from `path`.
 func _add_blueprint(path: String, announce: bool = true) -> void:

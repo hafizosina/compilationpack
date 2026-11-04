@@ -23,4 +23,5 @@ func key() -> StringName:
 	return &"danger"
 
 func describe() -> Dictionary:
-	return {"tab": &"entity", "lines": {"danger": "%d%%" % roundi(value * 100.0)}}
+	return {"tab": &"entity", "lines": {},
+		"bars": [{"label": "danger", "value": value, "max": 1.0, "tone": &"danger"}]}

@@ -1,7 +1,7 @@
 [gd_resource type="Resource" script_class="EcsEntityDef" format=3 uid="uid://bcroc0ecs0001"]
 
 [ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/ambush.tres" id="a_ambush"]
-[ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/attack.tres" id="a_attack"]
+[ext_resource type="Resource" uid="uid://ckyxpi43wx5i" path="res://9. EcsSystem/defs/actions/attack.tres" id="a_attack"]
 [ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/drink.tres" id="a_drink"]
 [ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/eat_ground.tres" id="a_eat_ground"]
 [ext_resource type="Resource" path="res://9. EcsSystem/defs/actions/flee.tres" id="a_flee"]
@@ -32,7 +32,6 @@
 [ext_resource type="Script" uid="uid://occbigie8rhc" path="res://9. EcsSystem/components/ecs_body_component.gd" id="s_body"]
 [ext_resource type="Script" uid="uid://d4puc66j4jby" path="res://9. EcsSystem/components/ecs_low_brain_component.gd" id="s_brain"]
 [ext_resource type="Script" uid="uid://de23labxksgf8" path="res://9. EcsSystem/components/ecs_breeding_component.gd" id="s_breeding"]
-[ext_resource type="Script" uid="uid://bndwompu454gu" path="res://9. EcsSystem/components/ecs_crit_chance_component.gd" id="s_crit"]
 [ext_resource type="Script" uid="uid://dggyv3jo4spyn" path="res://9. EcsSystem/components/ecs_damage_component.gd" id="s_damage"]
 [ext_resource type="Script" uid="uid://cs61nhjw8noqy" path="res://9. EcsSystem/components/ecs_danger_component.gd" id="s_danger"]
 [ext_resource type="Script" uid="uid://debbcabui1aj7" path="res://9. EcsSystem/components/ecs_energy_component.gd" id="s_energy"]
@@ -102,10 +101,10 @@ radius = 50.0
 [sub_resource type="Resource" id="c_damage"]
 script = ExtResource("s_damage")
 damage = 20.0
-
-[sub_resource type="Resource" id="c_crit"]
-script = ExtResource("s_crit")
-chance = 0.15
+interval = 0.5
+crit_chance = 0.15
+poison_rate = 1.5
+poison_for = 8.0
 
 [sub_resource type="Resource" id="c_planner"]
 script = ExtResource("s_planner")
@@ -133,4 +132,4 @@ script = ExtResource("s_breeding")
 script = ExtResource("def")
 id = &"crocodile"
 display_name = "Crocodile"
-components = Array[ExtResource("base")]([SubResource("c_energy"), SubResource("c_health"), SubResource("c_hunger"), SubResource("c_body"), SubResource("c_sprite"), SubResource("c_movement"), SubResource("c_brain"), SubResource("c_sensor"), SubResource("c_action"), SubResource("c_damage"), SubResource("c_crit"), SubResource("c_planner"), SubResource("c_danger"), SubResource("c_skills"), SubResource("c_thirst"), SubResource("c_memory"), SubResource("c_breeding")])
+components = Array[ExtResource("base")]([SubResource("c_energy"), SubResource("c_health"), SubResource("c_hunger"), SubResource("c_body"), SubResource("c_sprite"), SubResource("c_movement"), SubResource("c_brain"), SubResource("c_sensor"), SubResource("c_action"), SubResource("c_damage"), SubResource("c_planner"), SubResource("c_danger"), SubResource("c_skills"), SubResource("c_thirst"), SubResource("c_memory"), SubResource("c_breeding")])
