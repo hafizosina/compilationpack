@@ -18,6 +18,7 @@ const CHANGED_FLOOR: int = 2
 const CHANGED_STRUCTURE: int = 4
 ## Only the object on the cell changed state (a door opened): redraw that cell alone.
 const CHANGED_OBJECT: int = 8
+const CHANGED_ROOF: int = 16
 
 var width: int = 0
 var height: int = 0
@@ -44,7 +45,13 @@ var wall_hp: Dictionary = {}
 var commands: Array[EcsBuildCommand] = []
 ## Reservations awaiting their entity — a building's footprint or a door's cell: token -> EcsSpawnRequest.
 var pending: Dictionary = {}
-## Bumped whenever a building's own data changes (closing it), so views redraw without scanning.
+## Buildings whose walls or doors changed, for room detection: id -> true.
+var dirty_buildings: Dictionary = {}
+## Buildings whose rooms changed, for the roof system: id -> true.
+var dirty_roofs: Dictionary = {}
+## Next room id; room ids are unique across the town.
+var next_room_id: int = 1
+## Bumped whenever a building's own data changes (closing it, its rooms), so views redraw without scanning.
 var building_revision: int = 0
 ## Next reservation token; counts down from -2.
 var next_token: int = -2

@@ -19,6 +19,8 @@
 [ext_resource type="Script" uid="uid://d278qmhu52iih" path="res://10. Town Generator/town_overlay.gd" id="16_overlay"]
 [ext_resource type="Texture2D" uid="uid://duanrqhv5h4tu" path="res://Global/Asset/Tilemap/BaseDoor.png" id="17_basedoor"]
 [ext_resource type="Texture2D" uid="uid://bgxb5df62mi43" path="res://10. Town Generator/art/placeholder/door_states.png" id="18_doorstates"]
+[ext_resource type="Texture2D" path="res://10. Town Generator/art/placeholder/roof.png" id="19_roof"]
+[ext_resource type="PackedScene" path="res://10. Town Generator/ui/build_panel.tscn" id="20_panel"]
 
 [sub_resource type="TileSetAtlasSource" id="Src_grass"]
 texture = ExtResource("7_grass")
@@ -492,6 +494,32 @@ sources/3 = SubResource("Src_basewall")
 sources/4 = SubResource("Src_doorstates")
 sources/5 = SubResource("Src_basedoor")
 
+[sub_resource type="TileSetAtlasSource" id="Src_roof"]
+texture = ExtResource("19_roof")
+texture_region_size = Vector2i(32, 32)
+0:0/0 = 0
+1:0/0 = 0
+2:0/0 = 0
+3:0/0 = 0
+4:0/0 = 0
+5:0/0 = 0
+0:1/0 = 0
+1:1/0 = 0
+2:1/0 = 0
+3:1/0 = 0
+4:1/0 = 0
+5:1/0 = 0
+0:2/0 = 0
+1:2/0 = 0
+2:2/0 = 0
+3:2/0 = 0
+4:2/0 = 0
+5:2/0 = 0
+
+[sub_resource type="TileSet" id="TileSet_roof"]
+tile_size = Vector2i(32, 32)
+sources/0 = SubResource("Src_roof")
+
 [node name="Main" type="Node2D" unique_id=903953012]
 script = ExtResource("4_main")
 catalog = ExtResource("5_catalog")
@@ -539,6 +567,11 @@ tile_set = SubResource("TileSet_rug")
 tile_map_data = PackedByteArray("AAAWAAMAAQAFAAIAAAAVAAMAAQABAAIAAAAUAAMAAQABAAAAAAATAAMAAQABAAAAAAASAAMAAQABAAAAAAARAAMAAQADAAAAAAAQAAMAAgAAAAAAAAAPAAMAAQAFAAIAAAAOAAMAAQABAAIAAAANAAMAAQABAAAAAAAMAAMAAQABAAIAAAALAAMAAQABAAAAAAAKAAMAAQABAAIAAAAJAAMAAQADAAAAAAAIAAMAAgAAAAAAAAAHAAMAAQAFAAIAAAAGAAMAAQABAAAAAAAFAAMAAQABAAIAAAAEAAMAAQABAAIAAAADAAMAAQAAAAAAAAADAA0AAQADAAAAAAADAAwAAgABAAAAAAADAAsAAQADAAIAAAADAAoAAQAAAAEAAAADAAkAAQAAAAEAAAADAAgAAQACAAEAAAADAAcAAQACAAEAAAADAAYAAQAAAAEAAAADAAUAAQACAAEAAAADAAQAAQAAAAEAAAAWAA0AAQACAAIAAAAVAA0AAQABAAIAAAAUAA0AAQABAAAAAAATAA0AAQABAAIAAAASAA0AAQABAAIAAAARAA0AAQABAAAAAAAQAA0AAQABAAIAAAAPAA0AAQABAAIAAAAOAA0AAQABAAAAAAANAA0AAQABAAIAAAAMAA0AAQABAAIAAAALAA0AAQABAAAAAAAKAA0AAQABAAAAAAAJAA0AAQABAAAAAAAIAA0AAQABAAIAAAAHAA0AAQABAAAAAAAGAA0AAQABAAAAAAAFAA0AAQABAAAAAAAEAA0AAQABAAIAAAAWAAQAAgABAAAAAAAWAAUAAQAFAAAAAAAWAAYAAQACAAEAAAAWAAcAAQACAAEAAAAWAAgAAQAAAAEAAAAWAAkAAQAAAAEAAAAWAAoAAQACAAEAAAAWAAsAAQAAAAEAAAAWAAwAAQAAAAEAAAA=")
 tile_set = SubResource("TileSet_w38ka")
 
+[node name="RoofLayer" type="TileMapLayer" parent="World/TilemapGroup"]
+visible = false
+position = Vector2(-16, -16)
+tile_set = SubResource("TileSet_roof")
+
 [node name="Entities" type="Node2D" parent="World" unique_id=935430116]
 
 [node name="Overlay" type="Node2D" parent="World" unique_id=655977488]
@@ -561,9 +594,15 @@ grow_vertical = 2
 mouse_filter = 2
 theme = ExtResource("6_theme")
 
-[node name="Status" type="Label" parent="UI/Root" unique_id=1494824739]
+[node name="BuildPanel" parent="UI/Root" instance=ExtResource("20_panel")]
+
+[node name="StatusBar" type="PanelContainer" parent="UI/Root"]
 layout_mode = 0
-offset_left = 12.0
+offset_left = 272.0
 offset_top = 8.0
-offset_right = 1200.0
-offset_bottom = 40.0
+mouse_filter = 2
+theme_type_variation = &"TopBar"
+
+[node name="Status" type="Label" parent="UI/Root/StatusBar"]
+layout_mode = 2
+theme_type_variation = &"TopBarLabel"

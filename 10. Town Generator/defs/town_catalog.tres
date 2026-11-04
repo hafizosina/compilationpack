@@ -5,6 +5,8 @@
 [ext_resource type="Script" path="res://10. Town Generator/defs/ecs_floor_def.gd" id="f"]
 [ext_resource type="Script" path="res://10. Town Generator/defs/ecs_wall_def.gd" id="w"]
 [ext_resource type="Script" path="res://10. Town Generator/defs/ecs_door_def.gd" id="d"]
+[ext_resource type="Script" path="res://10. Town Generator/defs/ecs_roof_def.gd" id="r"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/roof/thatch.tres" id="r1"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/door/wood.tres" id="d1"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/door/stone.tres" id="d2"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/wall/wood.tres" id="w1"]
@@ -24,3 +26,4 @@ terrains = Array[ExtResource("t")]([ExtResource("t1"), ExtResource("t2"), ExtRes
 floors = Array[ExtResource("f")]([ExtResource("f1"), ExtResource("f2"), ExtResource("f3"), ExtResource("f4")])
 walls = Array[ExtResource("w")]([ExtResource("w1"), ExtResource("w2")])
 doors = Array[ExtResource("d")]([ExtResource("d1"), ExtResource("d2")])
+roofs = Array[ExtResource("r")]([ExtResource("r1")])

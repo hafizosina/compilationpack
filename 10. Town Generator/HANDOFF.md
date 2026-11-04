@@ -12,10 +12,11 @@ module 9's ECS core plus the town systems.
 ```bash
 # Tools: 1-4 terrain and 5-8 floor brushes, 0 clears floor, [ ] brush size; B drags a building,
 # W/E drag a wood/stone wall line, X a removal line, C closes the building under the mouse,
-# D/F click a wood/stone door into a straight wall, T opens or closes one.
+# D/F click a wood/stone door into a straight wall, T opens or closes one; R shows/hides roofs,
+# O the room colours.
 "$GODOT" --path .   # main.tscn is the main scene
 
-# 59 checks; exit 0 only if all pass. Also prints tile sync and command costs.
+# 71 checks; exit 0 only if all pass. Also prints tile sync and command costs.
 "$GODOT" --headless --path . "res://10. Town Generator/tests/town_test.tscn"
 ```
 
@@ -31,13 +32,14 @@ module 9's ECS core plus the town systems.
 | `singletons/` | `EcsTownGridSingleton` — the grid |
 | `components/` | `EcsBuildingComponent`, `EcsGridPositionComponent`, `EcsDoorComponent` |
 | `ecs/` | `EcsTownGrid` (cell maths, making a grid), `EcsDualGrid` (masks, layout, TileSet), `EcsBuildCommand` |
-| `systems/` | `EcsBuildCommandSystem`, `EcsTileSyncSystem`, `EcsTownOverlaySystem` |
+| `systems/` | `EcsBuildCommandSystem`, `EcsRoomDetectionSystem`, `EcsRoofSystem`, `EcsTileSyncSystem`, `EcsTownOverlaySystem` |
+| `ui/` | `build_panel.tscn` (`EcsBuildPanel`), the build HUD on the left |
 | `town_overlay.gd` | `EcsTownOverlay`, the view that draws footprints and drag previews |
 | `defs/` | `EcsTileDef` → `EcsTerrainDef`, `EcsFloorDef`; `EcsWallDef`; `EcsTownCatalog`; `town_catalog.tres` and one `.tres` per type; `entity_catalog.tres` (module 9's `EcsEntityCatalog`) and `blueprints/` |
 | `art/placeholder/` | Generated placeholder sheets, `make_placeholders.py`, layout in its README |
 | `tests/` | `town_test.tscn` |
 
-Pipeline (`main.gd`): `lifecycle > build > tile_sync > overlay`. Lifecycle is module 9's, with its
+Pipeline (`main.gd`): `lifecycle > build > rooms > roof > tile_sync > overlay`. Lifecycle is module 9's, with its
 `EcsEntityManager` rooted at `World/Entities`; buildings declare no node, so it builds none.
 
 ---
@@ -74,6 +76,7 @@ The author's art is used wherever it exists; placeholders fill only the slots wi
 | `DirtLayer`, `SandLayer`, `WaterLayer` | terrain | placeholders |
 | `FloorLayer` | wood | author's WoodFloor TileSet, peering bits painted |
 | `StoneLayer`, `RoadLayer`, `RugLayer` | floor | placeholders |
+| `RoofLayer` (after `ObjectLayer`) | roofs, dual grid | placeholder `roof.png` |
 | `ObjectLayer` | walls and doors | author's: 1 WoodWall, 2 WoodenDoor, 3 `BaseWall` (stone wall), 5 `BaseDoor` (stone door); 4 `door_states.png` placeholder for open doors |
 
 **The dual grid.** Terrain and floor are drawn on a grid offset half a cell, so each render tile
@@ -98,7 +101,7 @@ them is step 2 (§3).
 the four render tiles at its corners, on the layer group that changed — terrain or floor, never
 both. An idle tick redraws nothing.
 
-**Not done in step 1, on purpose:** roofs. Nothing writes `roof` until step 4.
+Roofs came with step 4 (§5).
 
 **Measured** (2026-11-04, `town_test`; machine busy, as in module 9 §14):
 
@@ -207,3 +210,70 @@ closed tiles, the walls beside it ending in posts; no wall over a door; no toggl
 a wall; toggling swaps the tile and redraws one cell, twice back to closed; removal frees the cell,
 kills the door with cause `removed`, and the walls end at the gap; a door removed before birth.
 
+---
+
+## 5. Step 4 — rooms and roofs (2026-11-04)
+
+**Only `EcsRoomDetectionSystem` writes `room_id` and a building's `rooms`.** The build system queues
+a building in `grid.dirty_buildings` whenever a wall or door in its footprint changes, and when it is
+born (walls placed under its token had no id to queue). Room detection clears that building's rooms
+and `room_id`s and flood-fills its footprint, 4-connected, walls and doors as boundaries:
+- a fill that **leaves the footprint is open** and not kept;
+- an enclosed fill with **a door on its boundary is a room**: a town-unique id (`next_room_id`)
+  written to its cells, and a record `{id, cells, door_cells, sealed: false, type}`;
+- one with **no door is sealed**: recorded with `sealed: true`, no `room_id`.
+
+Four-connected means **a corner missing only diagonally still seals**. The whole building is
+recomputed on every change — no incremental patching — and only the buildings that changed. It
+then queues the building in `grid.dirty_roofs` and bumps `building_revision` so the overlay redraws.
+`type` is empty until step 5 types rooms from their contents.
+
+**Only `EcsRoofSystem` writes `roof`.** For each queued building it roofs every enclosed region,
+room or sealed, plus the building's walls and doors around it, and clears the rest of its footprint;
+changed cells are marked `CHANGED_ROOF`. One roof type for now (`EcsRoofDef` thatch, id 1); per
+building type when the generator picks roofs.
+
+**Roofs are drawn on the dual grid**, on `RoofLayer` above the walls, like a floor — a deviation from
+the brief's cell grid, for rounded, joined edges. Two touching roofed buildings therefore read as one
+roof. **R** hides or shows the layer (hiding around the ruler comes later); **O** the room colours.
+The overlay tints each room by its id and sealed areas red.
+
+**Measured** (`town_test`, one wall placed or removed, averaged over 20): room recompute 136 µs for a
+10×10 building, 669 µs for 20×20, 2.7 ms for 40×40 — linear in the footprint, the cost of recomputing
+the whole building. Idle buildings cost nothing: nothing is queued.
+
+**Tests:** enclosed with a door (12 cells, the door on its boundary, `room_id` written); an open gap
+keeps nothing; no door is sealed with no `room_id`; a corner missing diagonally still encloses; a wall
+across a room makes two, each with its own door, and removing one of its cells merges them, with only
+that building recomputed; two touching buildings each with their own room inside their own footprint;
+a room roofed with its walls and door (all 30 cells of a 6×5 house), drawn, and opening the wall takes
+the roof off.
+
+---
+
+## 6. The build panel (2026-11-04)
+
+The tools were keys only; step 5 adds furniture and attachments, too many for that. **A left side
+panel**, desktop first (mouse and keyboard; buttons sized so touch can follow without a redesign),
+dressed in module 9's HUD styles from `main_theme` — `DockPanel`, `DockButton`, `DockTitle`,
+`DockLabel`, `DockHint`, `DockChip`, `TopBar` — as type variations, never per-node overrides.
+
+**Layout, top to bottom:** a 4-wide grid of tool icons (tooltips give the name and shortcut); the
+tool's name and a one-line hint; **swatches of its types cut from the scene's own tiles** —
+`AtlasTexture` regions of each layer's TileSet, so the author's grass, WoodFloor, WoodWall/BaseWall
+(the cross tile, which reads best) and closed doors show as they draw, and a placeholder only where
+there is no art; a brush-size row for the brushes only; Roofs / Rooms view toggles at the foot (roofs start hidden: `RoofLayer` is off in the scene). The
+status line is a `TopBar` strip right of the panel. Tool icons are generated parchment line icons,
+`art/placeholder/icons/`, from `make_placeholders.py`.
+
+**`ui/build_panel.tscn` (`EcsBuildPanel`) is a dumb view.** `main.gd` builds its tools and swatches
+from the catalogs and the scene with `setup()` — a new type in a catalog appears with no panel edit —
+and listens to its signals: `tool_picked(tool, id)`, `brush_size_changed`, `view_toggled`. They stay on
+the panel rather than on the global `EventBus`, so module 10 is self-contained.
+
+**Shortcuts stay** (1–4, 5–8, 0, `[ ]`, B, C, W/E, D/F, T, X, R, O) and keep the panel in step through
+`select()`, `set_brush_size()` and `set_views()`; `set_pressed_no_signal` skips a `ButtonGroup`, so
+`select()` releases the other tools itself. Tools are named (`&"terrain"`, `&"wall"`, …) and grouped by
+how they use the mouse: brushes paint while held, building drags a rectangle, wall and remove drag a
+line, close/door/toggle act on a click. Clicks on the panel never reach the map: it stops the mouse and
+the map listens in `_unhandled_input`.

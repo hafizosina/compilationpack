@@ -176,6 +176,38 @@ def attachments_atlas(name):
     img.save(os.path.join(HERE, name))
 
 
+def ui_icons():
+    """32 px parchment icons for the build panel's tools, in icons/."""
+    out = os.path.join(HERE, "icons")
+    os.makedirs(out, exist_ok=True)
+    ink = (231, 214, 172, 255)
+    def icon(name, draw):
+        img = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
+        draw(ImageDraw.Draw(img))
+        img.save(os.path.join(out, name + ".png"))
+    icon("terrain", lambda d: (d.polygon([(2, 26), (11, 10), (17, 18), (22, 12), (30, 26)], outline=ink, width=2),
+                               d.ellipse([22, 3, 28, 9], outline=ink, width=2)))
+    icon("floor", lambda d: [d.rectangle([4, 6 + k * 7, 28, 10 + k * 7], outline=ink, width=2) for k in range(3)])
+    icon("building", lambda d: ([d.line([(x, 5), (x + 3, 5)], fill=ink, width=2) for x in range(4, 28, 6)],
+                                [d.line([(x, 27), (x + 3, 27)], fill=ink, width=2) for x in range(4, 28, 6)],
+                                [d.line([(5, y), (5, y + 3)], fill=ink, width=2) for y in range(4, 28, 6)],
+                                [d.line([(27, y), (27, y + 3)], fill=ink, width=2) for y in range(4, 28, 6)]))
+    icon("close", lambda d: (d.rectangle([4, 4, 28, 28], outline=ink, width=2), d.line([(9, 16), (14, 22), (23, 10)], fill=ink, width=3)))
+    icon("wall", lambda d: (d.rectangle([3, 8, 29, 24], outline=ink, width=2), d.line([(3, 16), (29, 16)], fill=ink, width=2),
+                            d.line([(12, 8), (12, 16)], fill=ink, width=2), d.line([(21, 8), (21, 16)], fill=ink, width=2),
+                            d.line([(8, 16), (8, 24)], fill=ink, width=2), d.line([(17, 16), (17, 24)], fill=ink, width=2),
+                            d.line([(25, 16), (25, 24)], fill=ink, width=2)))
+    icon("door", lambda d: (d.rectangle([9, 3, 23, 29], outline=ink, width=2), d.ellipse([18, 15, 21, 18], fill=ink)))
+    icon("toggle", lambda d: (d.line([(6, 28), (6, 4)], fill=ink, width=2), d.line([(6, 4), (18, 8)], fill=ink, width=2),
+                              d.line([(18, 8), (18, 26)], fill=ink, width=2), d.line([(18, 26), (6, 28)], fill=ink, width=2),
+                              d.arc([12, 6, 30, 30], 270, 360, fill=ink, width=2)))
+    icon("remove", lambda d: (d.line([(7, 7), (25, 25)], fill=ink, width=3), d.line([(25, 7), (7, 25)], fill=ink, width=3)))
+    icon("roofs", lambda d: (d.polygon([(2, 17), (16, 5), (30, 17)], outline=ink, width=2), d.rectangle([7, 17, 25, 28], outline=ink, width=2)))
+    icon("rooms", lambda d: [d.rectangle([4 + (k % 2) * 13, 4 + (k // 2) * 13, 15 + (k % 2) * 13, 15 + (k // 2) * 13], outline=ink, width=2) for k in range(4)])
+    icon("none", lambda d: (d.ellipse([5, 5, 27, 27], outline=ink, width=2), d.line([(9, 23), (23, 9)], fill=ink, width=2)))
+
+
+ui_icons()
 dual_sheet("terrain_grass.png", "grass", "#5E8A2E")
 dual_sheet("terrain_dirt.png", "dirt", "#7A5A38")
 dual_sheet("terrain_sand.png", "sand", "#D8C38A")

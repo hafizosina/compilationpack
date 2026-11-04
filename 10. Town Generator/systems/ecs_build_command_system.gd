@@ -199,6 +199,9 @@ func _bind_born(world: EcsWorld, grid: EcsTownGridSingleton) -> void:
 		var born := note.born if note.born != EcsWorld.NO_ENTITY else EcsTownGridSingleton.NO_ID
 		if note.overrides.has("building"):
 			_fill(grid, (note.overrides["building"] as Dictionary)["footprint"], token, born)
+			# Walls placed while it was a token had no building to queue.
+			if born != EcsTownGridSingleton.NO_ID:
+				grid.dirty_buildings[born] = true
 			continue
 		var cell: Vector2i = (note.overrides["grid_position"] as Dictionary)["cell"]
 		var i := EcsTownGrid.index(grid, cell)
@@ -223,5 +226,8 @@ func _fill(grid: EcsTownGridSingleton, rect: Rect2i, from: int, to: int) -> void
 			if grid.building_id[i] == from:
 				grid.building_id[i] = to
 
+## Marks cell `i` for redraw; a wall or door change also queues its building for room detection.
 func _mark(grid: EcsTownGridSingleton, i: int, bits: int) -> void:
 	grid.dirty[i] = int(grid.dirty.get(i, 0)) | bits
+	if bits & EcsTownGridSingleton.CHANGED_STRUCTURE and grid.building_id[i] > EcsWorld.NO_ENTITY:
+		grid.dirty_buildings[grid.building_id[i]] = true

@@ -7,6 +7,7 @@ extends Resource
 @export var floors: Array[EcsFloorDef] = []
 @export var walls: Array[EcsWallDef] = []
 @export var doors: Array[EcsDoorDef] = []
+@export var roofs: Array[EcsRoofDef] = []
 ## Name of the TileMapLayer that draws walls and doors, on the cell grid.
 @export var wall_layer: StringName = &"ObjectLayer"
 

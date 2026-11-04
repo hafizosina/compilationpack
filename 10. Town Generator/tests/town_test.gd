@@ -30,7 +30,12 @@ func _ready() -> void:
 	_walls_stay_inside_their_own_building()
 	_a_door_goes_into_a_straight_wall()
 	_a_door_toggles_and_is_removed()
+	_rooms_need_walls_all_round_and_a_door()
+	_walls_split_and_merge_rooms()
+	_touching_buildings_keep_their_own_rooms()
+	_roofs_cover_rooms_and_their_walls()
 	_measure()
+	_measure_rooms()
 	print("[town] %d/%d checks passed" % [_checks - _failures, _checks])
 	get_tree().quit(1 if _failures > 0 else 0)
 
@@ -51,10 +56,12 @@ func _setup(size: Vector2i) -> Dictionary:
 	var sync := EcsTileSyncSystem.new(root, CATALOG)
 	var scheduler := EcsScheduler.new()
 	# As main.gd: lifecycle first, so a building asked for last tick is born before build binds it.
-	scheduler.add(EcsLifecycleSystem.new(EcsEntityManager.new(entities), ENTITIES)).add(build).add(sync)
+	var rooms := EcsRoomDetectionSystem.new()
+	scheduler.add(EcsLifecycleSystem.new(EcsEntityManager.new(entities), ENTITIES)).add(build) \
+		.add(rooms).add(EcsRoofSystem.new(CATALOG)).add(sync)
 	scheduler.run_all(world, 0.0)
 	_sync_for_mask = sync
-	return {"world": world, "grid": world.get_singleton(EcsTownGridSingleton), "build": build,
+	return {"world": world, "grid": world.get_singleton(EcsTownGridSingleton), "build": build, "rooms": rooms,
 		"sync": sync, "scheduler": scheduler, "root": root}
 
 func _send(t: Dictionary, commands: Array[EcsBuildCommand]) -> void:
@@ -179,6 +186,24 @@ func _measure() -> void:
 		t.root.queue_free()
 
 var _sync_for_mask: EcsTileSyncSystem
+
+## Prints room recompute time after one wall changes, by building size.
+func _measure_rooms() -> void:
+	var t := _setup(Vector2i(128, 64))
+	var line := ""
+	var x := 1
+	for side in [10, 20, 40]:
+		_send(t, _box(Rect2i(x, 1, side, side), [Vector2i(x + 2, side)]))
+		_send(t, [])
+		var total := 0
+		for k in 20:
+			var kind := EcsBuildCommand.Kind.PLACE_WALL if k % 2 == 0 else EcsBuildCommand.Kind.REMOVE_STRUCTURE
+			_send(t, [_cmd(kind, Vector2i(x + 3, 4), 1)])
+			total += (t.rooms as EcsRoomDetectionSystem).last_usec
+		line += "  %d²: %d µs" % [side, total / 20]
+		x += side + 1
+	print("[town] room recompute after one wall, by building size:%s" % line)
+	t.root.queue_free()
 
 func _mask(layer: TileMapLayer, at: Vector2i) -> int:
 	return _sync_for_mask.mask_at(layer, at)
@@ -427,6 +452,110 @@ func _a_door_toggles_and_is_removed() -> void:
 	_send(t, [])
 	_check("a door removed before it was born doesn't outlive its cell",
 		world.query([EcsDoorComponent]).size() == doors_before and grid.pending.is_empty())
+	t.root.queue_free()
+
+## Commands for a building on `rect` walled all round, less `gaps`, with doors on `doors`.
+func _box(rect: Rect2i, doors: Array = [], gaps: Array = []) -> Array[EcsBuildCommand]:
+	var plan: Array[EcsBuildCommand] = [EcsBuildCommand.create_building(rect)]
+	for y in range(rect.position.y, rect.end.y):
+		for x in range(rect.position.x, rect.end.x):
+			var edge := x == rect.position.x or y == rect.position.y or x == rect.end.x - 1 or y == rect.end.y - 1
+			if edge and not gaps.has(Vector2i(x, y)):
+				plan.append(_cmd(EcsBuildCommand.Kind.PLACE_WALL, Vector2i(x, y), 1))
+	for door in doors:
+		plan.append(_cmd(EcsBuildCommand.Kind.PLACE_DOOR, door, 1))
+	return plan
+
+## The building owning `cell`, by its grid id.
+func _building_at(t: Dictionary, cell: Vector2i) -> EcsBuildingComponent:
+	var grid := t.grid as EcsTownGridSingleton
+	return (t.world as EcsWorld).get_component(grid.building_id[EcsTownGrid.index(grid, cell)], EcsBuildingComponent) as EcsBuildingComponent
+
+func _room_at(t: Dictionary, cell: Vector2i) -> int:
+	var grid := t.grid as EcsTownGridSingleton
+	return grid.room_id[EcsTownGrid.index(grid, cell)]
+
+## Enclosed with a door is a room; with a gap it is open and nothing is kept; with no door
+## it is sealed; a corner missing only diagonally still seals.
+func _rooms_need_walls_all_round_and_a_door() -> void:
+	var t := _setup(Vector2i(40, 12))
+	var plan: Array[EcsBuildCommand] = []
+	plan.append_array(_box(Rect2i(1, 1, 6, 5), [Vector2i(3, 5)]))
+	plan.append_array(_box(Rect2i(9, 1, 6, 5), [], [Vector2i(11, 1)]))
+	plan.append_array(_box(Rect2i(17, 1, 6, 5)))
+	plan.append_array(_box(Rect2i(25, 1, 6, 5), [Vector2i(27, 5)], [Vector2i(30, 5)]))
+	_send(t, plan)
+	_send(t, [])
+	var room: Array = _building_at(t, Vector2i(1, 1)).rooms
+	_check("walls all round with a door make a room: 12 cells, the door on its boundary",
+		room.size() == 1 and not room[0]["sealed"] and (room[0]["cells"] as Array).size() == 12
+		and room[0]["door_cells"] == [Vector2i(3, 5)] and _room_at(t, Vector2i(3, 3)) == room[0]["id"])
+	_check("a gap in the wall leaves it open: no room kept",
+		_building_at(t, Vector2i(9, 1)).rooms.is_empty() and _room_at(t, Vector2i(11, 3)) == EcsTownGridSingleton.NO_ID)
+	var sealed: Array = _building_at(t, Vector2i(17, 1)).rooms
+	_check("enclosed with no door is sealed, not a room",
+		sealed.size() == 1 and sealed[0]["sealed"] and _room_at(t, Vector2i(19, 3)) == EcsTownGridSingleton.NO_ID)
+	var diagonal: Array = _building_at(t, Vector2i(25, 1)).rooms
+	_check("a corner missing only diagonally still encloses it",
+		diagonal.size() == 1 and not diagonal[0]["sealed"] and (diagonal[0]["cells"] as Array).size() == 12)
+	t.root.queue_free()
+
+## A wall across a room splits it in two, each with its own door; removing it merges them.
+func _walls_split_and_merge_rooms() -> void:
+	var t := _setup(Vector2i(16, 12))
+	_send(t, _box(Rect2i(1, 1, 9, 5), [Vector2i(3, 5), Vector2i(7, 5)]))
+	_send(t, [])
+	var building := _building_at(t, Vector2i(1, 1))
+	_check("one room before the split", building.rooms.size() == 1)
+	var split: Array[EcsBuildCommand] = []
+	for y in range(2, 5):
+		split.append(_cmd(EcsBuildCommand.Kind.PLACE_WALL, Vector2i(5, y), 1))
+	_send(t, split)
+	_check("a wall across it makes two rooms, each with its own door",
+		building.rooms.size() == 2 and _room_at(t, Vector2i(3, 3)) != _room_at(t, Vector2i(7, 3))
+		and not building.rooms[0]["sealed"] and not building.rooms[1]["sealed"])
+	_send(t, [_cmd(EcsBuildCommand.Kind.REMOVE_STRUCTURE, Vector2i(5, 3))])
+	_check("removing a wall of it merges them again", building.rooms.size() == 1
+		and _room_at(t, Vector2i(3, 3)) == _room_at(t, Vector2i(7, 3)))
+	_check("only the changed building is recomputed", (t.rooms as EcsRoomDetectionSystem).recomputed == 1)
+	t.root.queue_free()
+
+func _touching_buildings_keep_their_own_rooms() -> void:
+	var t := _setup(Vector2i(16, 12))
+	var plan: Array[EcsBuildCommand] = []
+	plan.append_array(_box(Rect2i(1, 1, 5, 5), [Vector2i(3, 5)]))
+	plan.append_array(_box(Rect2i(6, 1, 5, 5), [Vector2i(8, 5)]))
+	_send(t, plan)
+	_send(t, [])
+	var left := _building_at(t, Vector2i(1, 1))
+	var right := _building_at(t, Vector2i(6, 1))
+	var inside := true
+	for room: Dictionary in right.rooms:
+		for cell: Vector2i in room["cells"]:
+			if not right.footprint.has_point(cell):
+				inside = false
+	_check("two touching buildings each have their own room, inside their own footprint",
+		left.rooms.size() == 1 and right.rooms.size() == 1 and left.rooms[0]["id"] != right.rooms[0]["id"] and inside)
+	t.root.queue_free()
+
+func _roofs_cover_rooms_and_their_walls() -> void:
+	var t := _setup(Vector2i(16, 12))
+	var grid := t.grid as EcsTownGridSingleton
+	var sync := t.sync as EcsTileSyncSystem
+	_send(t, _box(Rect2i(1, 1, 6, 5), [Vector2i(3, 5)]))
+	_send(t, [])
+	var roofed := 0
+	for v in grid.roof:
+		if v != 0:
+			roofed += 1
+	_check("a room is roofed with its walls and door: the whole 6x5 house", roofed == 30)
+	_check("and drawn on the roof layer", not sync.roof_layers()[0].get_used_cells().is_empty())
+	_send(t, [_cmd(EcsBuildCommand.Kind.REMOVE_STRUCTURE, Vector2i(1, 3))])
+	roofed = 0
+	for v in grid.roof:
+		if v != 0:
+			roofed += 1
+	_check("opening the wall takes the roof off", roofed == 0 and sync.roof_layers()[0].get_used_cells().is_empty())
 	t.root.queue_free()
 
 func _check(what: String, passed: bool) -> void:

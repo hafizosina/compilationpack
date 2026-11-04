@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="EcsRoofDef" format=3]
+
+[ext_resource type="Script" path="res://10. Town Generator/defs/ecs_roof_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = 1
+display_name = "thatch"
+layer = &"RoofLayer"

@@ -1,7 +1,7 @@
 class_name EcsTownOverlaySystem
 extends EcsSystem
 
-## Hands the overlay every building's footprint and whether it is closed, when buildings
+## Hands the overlay every building's footprint, whether it is closed, and its rooms, when buildings
 ## come or go or one changes (`building_revision`); idle buildings cost nothing.
 
 var _overlay: EcsTownOverlay
@@ -24,9 +24,12 @@ func run(world: EcsWorld, _delta: float) -> void:
 	_revision = revision
 	var rects: Array[Rect2i] = []
 	var closed: Array[bool] = []
+	var rooms: Array = []
 	for building in buildings.column(EcsBuildingComponent):
 		rects.append((building as EcsBuildingComponent).footprint)
 		closed.append((building as EcsBuildingComponent).closed)
+		rooms.append_array((building as EcsBuildingComponent).rooms)
 	_overlay.footprints = rects
 	_overlay.closed = closed
+	_overlay.rooms = rooms
 	_overlay.queue_redraw()

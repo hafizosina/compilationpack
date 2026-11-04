@@ -16,10 +16,13 @@ var _terrain_defs: Array[EcsTileDef] = []
 var _floor_defs: Array[EcsTileDef] = []
 var _terrain_layers: Array[TileMapLayer] = []
 var _floor_layers: Array[TileMapLayer] = []
+var _roof_defs: Array[EcsTileDef] = []
+var _roof_layers: Array[TileMapLayer] = []
 var _layouts: Dictionary = {}
 ## Catalog id -> draw order.
 var _terrain_rank: Dictionary = {}
 var _floor_rank: Dictionary = {}
+var _roof_rank: Dictionary = {}
 var _wall_layer: TileMapLayer
 ## Wall type id -> [source id, side layout].
 var _wall_sources: Dictionary = {}
@@ -60,6 +63,9 @@ func terrain_layers() -> Array[TileMapLayer]:
 func floor_layers() -> Array[TileMapLayer]:
 	return _floor_layers
 
+func roof_layers() -> Array[TileMapLayer]:
+	return _roof_layers
+
 func wall_layer() -> TileMapLayer:
 	return _wall_layer
 
@@ -88,6 +94,7 @@ func wall_mask_at(cell: Vector2i) -> int:
 func _build() -> void:
 	_collect(_catalog.terrains, _terrain_defs, _terrain_layers, _terrain_rank)
 	_collect(_catalog.floors, _floor_defs, _floor_layers, _floor_rank)
+	_collect(_catalog.roofs, _roof_defs, _roof_layers, _roof_rank)
 	_wall_layer = _layers_root.get_node_or_null(NodePath(_catalog.wall_layer)) as TileMapLayer
 	if _wall_layer == null:
 		push_error("EcsTileSyncSystem: no wall layer '%s' in the scene" % _catalog.wall_layer)
@@ -136,6 +143,7 @@ func _draw_all(grid: EcsTownGridSingleton) -> void:
 func _draw_dirty(grid: EcsTownGridSingleton) -> void:
 	var terrain_tiles: Dictionary = {}
 	var floor_tiles: Dictionary = {}
+	var roof_tiles: Dictionary = {}
 	var wall_cells: Dictionary = {}
 	for i: int in grid.dirty:
 		var bits: int = grid.dirty[i]
@@ -145,6 +153,8 @@ func _draw_dirty(grid: EcsTownGridSingleton) -> void:
 				terrain_tiles[cell + corner] = true
 			if bits & EcsTownGridSingleton.CHANGED_FLOOR:
 				floor_tiles[cell + corner] = true
+			if bits & EcsTownGridSingleton.CHANGED_ROOF:
+				roof_tiles[cell + corner] = true
 		if bits & EcsTownGridSingleton.CHANGED_OBJECT:
 			wall_cells[cell] = true
 		if bits & EcsTownGridSingleton.CHANGED_STRUCTURE:
@@ -155,6 +165,10 @@ func _draw_dirty(grid: EcsTownGridSingleton) -> void:
 		_draw_at(grid, at, true, false, true)
 	for at: Vector2i in floor_tiles:
 		_draw_at(grid, at, false, true, true)
+	for at: Vector2i in roof_tiles:
+		var around := _around(grid, at, grid.roof, _roof_rank, false)
+		for k in _roof_layers.size():
+			_put(_roof_layers[k], at, _mask(around, k), true)
 	for cell: Vector2i in wall_cells:
 		if EcsTownGrid.in_bounds(grid, cell):
 			_draw_wall(grid, cell)
