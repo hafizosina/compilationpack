@@ -7,6 +7,8 @@ extends EcsSingleton
 var edits: Array[EcsEdit] = []
 ## Entities to remove.
 var removals: Array[int] = []
+## Counts runs that applied an edit, so node sync knows to redraw.
+var applied: int = 0
 
 func key() -> StringName:
 	return &"edit"

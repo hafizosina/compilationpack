@@ -15,7 +15,9 @@ func run(world: EcsWorld, _delta: float) -> void:
 		return
 	for id in inbox.removals:
 		if world.is_alive(id) and not world.has(id, EcsDyingFlag):
-			world.add(id, EcsDyingFlag.new())
+			var dying := EcsDyingFlag.new()
+			dying.cause = EcsDyingFlag.REMOVED
+			world.add(id, dying)
 	inbox.removals.clear()
 	if inbox.edits.is_empty():
 		return
@@ -30,6 +32,7 @@ func run(world: EcsWorld, _delta: float) -> void:
 					recheck.to = id
 					health.changes.append(recheck)
 	inbox.edits.clear()
+	inbox.applied += 1
 
 func _apply(world: EcsWorld, id: int, edit: EcsEdit) -> void:
 	for component in world.components_of(id):

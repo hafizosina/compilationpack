@@ -27,7 +27,9 @@ func run(world: EcsWorld, _delta: float) -> void:
 			continue
 		var food := world.get_component(meal, EcsConsumableComponent) as EcsConsumableComponent
 		hunger.fullness = minf(hunger.fullness + food.nutrition, hunger.max_fullness)
-		world.add(meal, EcsDyingFlag.new())
+		var dying := EcsDyingFlag.new()
+		dying.cause = EcsDyingFlag.EATEN
+		world.add(meal, dying)
 
 ## Alive, edible and not already claimed this tick.
 func _still_food(world: EcsWorld, meal: int) -> bool:

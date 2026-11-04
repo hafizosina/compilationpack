@@ -42,6 +42,7 @@ func run(world: EcsWorld, delta: float) -> void:
 				var change := EcsHealthChange.new()
 				change.to = id
 				change.amount = -energy.collapse_damage
+				change.cause = &"collapsed"
 				inbox.changes.append(change)
 		elif collapsed and energy.value >= energy.collapse_release:
 			world.remove(id, EcsCollapsedFlag)

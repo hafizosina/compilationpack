@@ -28,7 +28,9 @@ func run(world: EcsWorld, _delta: float) -> void:
 		if not action.reached.has(item):
 			continue
 		bag.items.append(EcsItemRecord.capture(world, item))
-		world.add(item, EcsDyingFlag.new())
+		var dying := EcsDyingFlag.new()
+		dying.cause = EcsDyingFlag.TAKEN
+		world.add(item, dying)
 
 ## Moves the record with `uid` from `source`'s bag into `bag`, if `source` is
 ## lootable, not dying and in reach.

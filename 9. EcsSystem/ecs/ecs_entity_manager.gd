@@ -131,8 +131,8 @@ func new_uid() -> String:
 
 ## The node of `kind` belonging to `id`, or null.
 func node_for(id: int, kind: StringName) -> Node2D:
-	var owned: Dictionary = _nodes.get(id, {})
-	return owned.get(kind)
+	var owned: Variant = _nodes.get(id)
+	return (owned as Dictionary).get(kind) if owned != null else null
 
 ## The `entity_<id>` container, or null.
 func container_for(id: int) -> Node2D:

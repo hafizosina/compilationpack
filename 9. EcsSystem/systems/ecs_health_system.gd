@@ -7,10 +7,12 @@ extends EcsSystem
 ## only entities with something pending, so idle health costs nothing.
 ## Also counts stuns down, since only a hit raises one.
 
-## Every over-time effect it applies; a new one is a flag and a line here.
-var kinds: Array[Script] = [
-	EcsStarvingFlag, EcsDehydratingFlag, EcsMendingFlag, EcsBleedingFlag, EcsPoisonedFlag,
-]
+## Every over-time effect it applies, with the death detail it gives; a new one is a
+## flag and a line here.
+var kinds: Dictionary[Script, StringName] = {
+	EcsStarvingFlag: &"starved", EcsDehydratingFlag: &"parched", EcsMendingFlag: &"",
+	EcsBleedingFlag: &"bled", EcsPoisonedFlag: &"poisoned",
+}
 
 ## Entities whose health it changed or checked on its last run.
 var touched: int = 0
@@ -21,16 +23,17 @@ func label() -> StringName:
 func run(world: EcsWorld, delta: float) -> void:
 	var loss: Dictionary = {}  # id -> health lost this run
 	var gain: Dictionary = {}  # id -> health gained this run
+	var worst: Dictionary = {}  # id -> [biggest single loss, its detail]
 	_count_stuns(world, delta)
-	_effects(world, delta, loss, gain)
-	_hits(world, loss)
+	_effects(world, delta, loss, gain, worst)
+	_hits(world, loss, worst)
 	var inbox := world.get_singleton(EcsHealthSingleton) as EcsHealthSingleton
 	if inbox != null:
 		for change in inbox.changes:
 			if change.amount > 0.0:
 				gain[change.to] = float(gain.get(change.to, 0.0)) + change.amount
 			else:
-				loss[change.to] = float(loss.get(change.to, 0.0)) - change.amount
+				_lose(loss, worst, change.to, -change.amount, change.cause)
 		inbox.changes.clear()
 
 	touched = 0
@@ -42,7 +45,10 @@ func run(world: EcsWorld, delta: float) -> void:
 		# Losses first: a body at zero never mends.
 		health.value = maxf(health.value - float(loss.get(id, 0.0)), 0.0)
 		if health.value <= 0.0:
-			world.add(id, EcsDyingFlag.new())
+			var dying := EcsDyingFlag.new()
+			dying.cause = EcsDyingFlag.HEALTH
+			dying.detail = (worst[id] as Array)[1] if worst.has(id) else &""
+			world.add(id, dying)
 			continue
 		health.value = minf(health.value + float(gain.get(id, 0.0)), health.max_health)
 
@@ -53,7 +59,8 @@ func _count_stuns(world: EcsWorld, delta: float) -> void:
 		if stunned.left <= 0.0:
 			world.remove(id, EcsStunnedFlag)
 
-func _effects(world: EcsWorld, delta: float, loss: Dictionary, gain: Dictionary) -> void:
+func _effects(world: EcsWorld, delta: float, loss: Dictionary, gain: Dictionary,
+		worst: Dictionary) -> void:
 	for kind in kinds:
 		var held := world.view([EcsHealthComponent, kind])
 		if held.ids.is_empty():
@@ -67,7 +74,7 @@ func _effects(world: EcsWorld, delta: float, loss: Dictionary, gain: Dictionary)
 			if amount > 0.0:
 				gain[id] = float(gain.get(id, 0.0)) + amount
 			elif amount < 0.0:
-				loss[id] = float(loss.get(id, 0.0)) - amount
+				_lose(loss, worst, id, -amount, kinds[kind])
 			effect.left -= delta
 			if effect.left <= 0.0:
 				ended.append(id)
@@ -75,7 +82,7 @@ func _effects(world: EcsWorld, delta: float, loss: Dictionary, gain: Dictionary)
 		for id in ended:
 			world.remove(id, kind)
 
-func _hits(world: EcsWorld, loss: Dictionary) -> void:
+func _hits(world: EcsWorld, loss: Dictionary, worst: Dictionary) -> void:
 	var combat := world.get_singleton(EcsCombatSingleton) as EcsCombatSingleton
 	if combat == null:
 		return
@@ -86,7 +93,7 @@ func _hits(world: EcsWorld, loss: Dictionary) -> void:
 		var armor := world.get_component(hit.to, EcsArmorComponent) as EcsArmorComponent
 		if armor != null:
 			taken = maxf(taken - armor.reduction, armor.minimum)
-		loss[hit.to] = float(loss.get(hit.to, 0.0)) + taken
+		_lose(loss, worst, hit.to, taken, &"hit")
 		var hurt := world.get_component(hit.to, EcsHurtFlag) as EcsHurtFlag
 		if hurt == null:
 			hurt = world.add(hit.to, EcsHurtFlag.new()) as EcsHurtFlag
@@ -111,6 +118,12 @@ func _afflict(world: EcsWorld, id: int, kind: Script, per_second: float, seconds
 		effect.left = 0.0
 	effect.rate = minf(effect.rate, -per_second)
 	effect.left = maxf(effect.left, seconds)
+
+## Adds `amount` to `id`'s loss, remembering the biggest single one as the death detail.
+func _lose(loss: Dictionary, worst: Dictionary, id: int, amount: float, detail: StringName) -> void:
+	loss[id] = float(loss.get(id, 0.0)) + amount
+	if not worst.has(id) or amount > float((worst[id] as Array)[0]):
+		worst[id] = [amount, detail]
 
 func _union(a: Dictionary, b: Dictionary) -> Array:
 	var ids := a.keys()

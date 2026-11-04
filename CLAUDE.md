@@ -10,14 +10,15 @@ There are no build scripts; the editor is the tool chain. The only tests in the 
 module 9's, in `9. EcsSystem/tests/`:
 
 ```bash
-# 457 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 468 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments, the hunger/health/energy loop,
 # intent flags, items as records, the drop on death, views, combat, corpses,
 # looting, rot, diet, hunting, harvesting, the planner, utility, fleeing,
 # skills, hiding, the ambush, thirst, costs from stats, staying safe, memory,
 # save/load snapshots, placing while paused, composed blueprints, multi-select,
 # live edits, selecting by id, the entity list, deleting a save,
-# removing an entity, switching a component off, and health only visiting what changes.
+# removing an entity, switching a component off, health only visiting what changes,
+# what a death leaves by its cause, and static entities drawn only on change.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
@@ -93,7 +94,8 @@ first in the pipeline. A system that wants something born writes a note to the
 `EcsLifecycleSingleton`; one that wants something dead adds `EcsDyingFlag` to it. It never
 calls `create_entity`, `destroy_entity`,
 `add_child` or `queue_free` itself. The manager *creates and destroys*; it never updates.
-Per-tick writes onto nodes belong to `EcsNodeSyncSystem` (sprites) and
+Per-tick writes onto nodes belong to `EcsNodeSyncSystem` (sprites; only movers every tick,
+the rest on a birth, death or edit, HANDOFF §29) and
 `EcsCollisionSystem` (bodies). Keep that line — it is what stops the manager becoming a
 god object. A component says it needs a node by declaring `const NODE_KIND` naming a kind
 from `EcsConst`; the manager reads the constant and builds one, never switching on
@@ -236,8 +238,10 @@ back what it carried**, where it fell, as itself — same uid, new id, via
 `EcsEntityManager.restore()`. That also fixed a leak: a dead carrier's berries used to live
 forever with no position.
 
-**Death by health leaves a corpse** (2026-10-29). `EcsCorpseSystem` turns a dying entity
-with zero health into a spawn request for the `corpse` blueprint where it fell — its
+**Death by health leaves a corpse** (2026-10-29), and **what a death leaves is data** (HANDOFF
+§29): `EcsDyingFlag` carries a `cause` (`health`, `eaten`, `taken`, `rotted`, `removed`) and a
+`detail` (`hit`, `starved`, …), and `EcsRemainsSystem` spawns the blueprint the dying entity's
+`EcsRemainsComponent.leaves` names for it — animals carry `{health: corpse}` — where it fell — its
 sprite darkened, its body radius, and its bag passed as overrides — so the creature still
 dies by kill and the corpse is a new entity, never a creature that changed kind. A corpse
 is non-solid meat (`EcsConsumableComponent.diet = &"meat"`), `EcsLootableComponent`, and
@@ -391,9 +395,9 @@ been crossed.
 berry dies and becomes a record, so freeing a node is kill and only kill, and every live
 entity has a position to draw.
 
-**It is deliberately kept to a small core**: 28 components, 23 flags, 5
+**It is deliberately kept to a small core**: 29 components, 23 flags, 5
 singletons, 29 systems
-(`lifecycle > edit > spawner > hunger > energy > thirst > danger > sensor > breeding > memory > planning > low_brain > skill > consume > drink > harvest > attack > health > movement > collision > pickup > rot > corpse > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
+(`lifecycle > edit > spawner > hunger > energy > thirst > danger > sensor > breeding > memory > planning > low_brain > skill > consume > drink > harvest > attack > health > movement > collision > pickup > rot > remains > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
 rank in the plan's decision ladder — the planner sits *above* it — and not for the
 wandering it happens to do), and a world
 of 48 animals in 4 types (20 rabbits, 20 monkeys, 4 crocodiles and 4 wild dogs — a grazer,

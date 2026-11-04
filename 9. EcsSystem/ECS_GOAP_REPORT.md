@@ -52,12 +52,12 @@ name changes (§14).
 
 ```
 structure   lifecycle > spawner
-needs       hunger > energy > thirst > health
+needs       hunger > energy > thirst
 sense       danger > sensor > breeding > memory
 decide      planning > low_brain
-act         skill > consume > drink > harvest > attack > crit > damage
+act         skill > consume > drink > harvest > attack > health
 move        movement > collision
-aftermath   pickup > rot > corpse > drop
+aftermath   pickup > rot > remains > drop
 view        selection > node_sync > debug > census > inspect
 ```
 

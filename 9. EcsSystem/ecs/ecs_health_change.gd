@@ -7,3 +7,5 @@ var to: int = EcsWorld.NO_ENTITY
 ## Health added; negative hurts.
 var amount: float = 0.0
 var from: int = EcsWorld.NO_ENTITY
+## Death detail if this change kills, such as &"collapsed".
+var cause: StringName = &""

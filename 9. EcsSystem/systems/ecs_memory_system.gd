@@ -23,9 +23,6 @@ var _food: Dictionary = {}
 var _hunters: Dictionary = {}
 ## Diets some current food or harvestable yields: diet -> true.
 var _diets: Dictionary = {}
-var _body_view: EcsView
-## Current living animals: id -> EcsHealthComponent, for power.
-var _bodies: Dictionary = {}
 var _ready_view: EcsView
 ## Current animals ready to breed: id -> their kind.
 var _ready: Dictionary = {}
@@ -125,11 +122,14 @@ func _learn(world: EcsWorld, id: int, here: Vector2, sensor: EcsSensorComponent,
 			continue
 		_write(world, memory, seen, bits, false)
 
-## EcsHunting.can_hunt and notices, from the indexes: weaker, alive, and not hidden from it.
+## EcsHunting.can_hunt and notices, for a known hunter: weaker, alive, and not hidden from it.
+## Looked up per sighting, so no death rebuilds an index of every body.
 func _is_prey(world: EcsWorld, id: int, seen: int, here: Vector2) -> bool:
-	var theirs: EcsHealthComponent = _bodies.get(seen)
-	var mine: EcsHealthComponent = _bodies.get(id)
-	if theirs == null or mine == null or seen == id or theirs.power >= mine.power:
+	if seen == id or world.has(seen, EcsDyingFlag) or not world.has(seen, EcsPositionComponent):
+		return false
+	var theirs := world.get_component(seen, EcsHealthComponent) as EcsHealthComponent
+	var mine := world.get_component(id, EcsHealthComponent) as EcsHealthComponent
+	if theirs == null or mine == null or theirs.power >= mine.power:
 		return false
 	return not world.has(seen, EcsHiddenFlag) or EcsHunting.notices(world, id, seen, here)
 
@@ -186,13 +186,6 @@ static func _near(fact: EcsMemoryFact, point: Vector2, near: float) -> bool:
 	return fact.position.distance_squared_to(point) <= reach * reach
 
 func _refresh(world: EcsWorld) -> void:
-	var bodies := world.view([EcsHealthComponent, EcsPositionComponent], [EcsDyingFlag])
-	if bodies != _body_view:
-		_body_view = bodies
-		_bodies = {}
-		var healths := bodies.column(EcsHealthComponent)
-		for k in bodies.ids.size():
-			_bodies[bodies.ids[k]] = healths[k]
 	var ready := world.view([EcsReadyFlag, EcsNameComponent], [EcsDyingFlag])
 	if ready != _ready_view:
 		_ready_view = ready

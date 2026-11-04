@@ -13,4 +13,6 @@ func run(world: EcsWorld, delta: float) -> void:
 		var rot := rots[k] as EcsRotComponent
 		rot.age += delta
 		if rot.age >= rot.lasts:
-			world.add(rotting.ids[k], EcsDyingFlag.new())
+			var dying := EcsDyingFlag.new()
+			dying.cause = EcsDyingFlag.ROTTED
+			world.add(rotting.ids[k], dying)

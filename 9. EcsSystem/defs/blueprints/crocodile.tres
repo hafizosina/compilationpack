@@ -41,6 +41,7 @@
 [ext_resource type="Script" uid="uid://cdrromfj6of1i" path="res://9. EcsSystem/components/ecs_memory_component.gd" id="s_memory"]
 [ext_resource type="Script" uid="uid://c62j1k5pdptjl" path="res://9. EcsSystem/components/ecs_movement_component.gd" id="s_movement"]
 [ext_resource type="Script" uid="uid://bo6wqgowj8y6s" path="res://9. EcsSystem/components/ecs_planner_component.gd" id="s_planner"]
+[ext_resource type="Script" uid="uid://bohokd74mhp07" path="res://9. EcsSystem/components/ecs_remains_component.gd" id="s_remains"]
 [ext_resource type="Script" uid="uid://dlx8sqm54mp4u" path="res://9. EcsSystem/components/ecs_sensor_component.gd" id="s_sensor"]
 [ext_resource type="Script" uid="uid://di5dlx4aqxnva" path="res://9. EcsSystem/components/ecs_skills_component.gd" id="s_skills"]
 [ext_resource type="Script" uid="uid://nslff4ri8k2p" path="res://9. EcsSystem/ai/ecs_skill_def.gd" id="s_skill_def"]
@@ -128,8 +129,14 @@ script = ExtResource("s_memory")
 [sub_resource type="Resource" id="c_breeding"]
 script = ExtResource("s_breeding")
 
+[sub_resource type="Resource" id="c_remains"]
+script = ExtResource("s_remains")
+leaves = Dictionary[StringName, StringName]({
+&"health": &"corpse"
+})
+
 [resource]
 script = ExtResource("def")
 id = &"crocodile"
 display_name = "Crocodile"
-components = Array[ExtResource("base")]([SubResource("c_energy"), SubResource("c_health"), SubResource("c_hunger"), SubResource("c_body"), SubResource("c_sprite"), SubResource("c_movement"), SubResource("c_brain"), SubResource("c_sensor"), SubResource("c_action"), SubResource("c_damage"), SubResource("c_planner"), SubResource("c_danger"), SubResource("c_skills"), SubResource("c_thirst"), SubResource("c_memory"), SubResource("c_breeding")])
+components = Array[ExtResource("base")]([SubResource("c_energy"), SubResource("c_health"), SubResource("c_hunger"), SubResource("c_body"), SubResource("c_sprite"), SubResource("c_movement"), SubResource("c_brain"), SubResource("c_sensor"), SubResource("c_action"), SubResource("c_damage"), SubResource("c_planner"), SubResource("c_danger"), SubResource("c_skills"), SubResource("c_thirst"), SubResource("c_memory"), SubResource("c_breeding"), SubResource("c_remains")])

@@ -218,7 +218,7 @@ func _build(snapshot: Dictionary = {}) -> void:
 		.add(_collision) \
 		.add(EcsPickupSystem.new()) \
 		.add(EcsRotSystem.new()) \
-		.add(EcsCorpseSystem.new()) \
+		.add(EcsRemainsSystem.new()) \
 		.add(drop) \
 		.add(selection) \
 		.add(node_sync) \

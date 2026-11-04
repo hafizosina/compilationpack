@@ -133,6 +133,8 @@ func _run() -> void:
 	_bites_bleed_and_poison()
 	_an_edit_to_zero_health_kills()
 	_only_the_health_system_writes_health()
+	_what_a_death_leaves_is_data()
+	_a_static_entity_is_drawn_on_change_not_every_tick()
 
 ## Nodes match the declared NODE_KINDs (a berry gets a sprite and a body, no
 ## sensor) and hang under the entity's own container.
@@ -338,9 +340,8 @@ func _it_sees_before_it_takes() -> void:
 	_check("seeing is not reaching", not action.reached.has(near))
 	_check("so it has not taken it", not _holds(bag, near))
 
-	# Bring it to arm's length without moving the rabbit.
-	(_world.get_component(near, EcsPositionComponent) as EcsPositionComponent).position \
-		= Vector2(2000.0, 2030.0)
+	# Bring it to arm's length without moving the rabbit, as a live edit would.
+	_edit(near, &"position", &"position", Vector2(2000.0, 2030.0))
 	await _tick(2)
 
 	_check("once the bodies touch the action area, it is in reach",
@@ -1483,7 +1484,7 @@ func _a_hungry_hunter_kills_its_prey_and_eats_the_corpse() -> void:
 		.add(EcsHealthSystem.new()) \
 		.add(EcsMovementSystem.new()) \
 		.add(EcsCollisionSystem.new(_manager)) \
-		.add(EcsCorpseSystem.new()) \
+		.add(EcsRemainsSystem.new()) \
 		.add(EcsDropSystem.new()) \
 		.add(EcsNodeSyncSystem.new(_manager))
 
@@ -1553,7 +1554,7 @@ func _corpse_pipeline(with_brain: bool) -> EcsScheduler:
 	living.add(EcsConsumeSystem.new())
 	living.add(EcsPickupSystem.new())
 	living.add(EcsRotSystem.new())
-	living.add(EcsCorpseSystem.new())
+	living.add(EcsRemainsSystem.new())
 	living.add(EcsDropSystem.new())
 	return living
 
@@ -1780,7 +1781,7 @@ func _a_planned_hunter_kills_once_and_eats_the_corpse() -> void:
 		.add(EcsHealthSystem.new()) \
 		.add(EcsMovementSystem.new()) \
 		.add(EcsCollisionSystem.new(_manager)) \
-		.add(EcsCorpseSystem.new()) \
+		.add(EcsRemainsSystem.new()) \
 		.add(EcsDropSystem.new()) \
 		.add(EcsNodeSyncSystem.new(_manager))
 
@@ -2330,7 +2331,7 @@ func _thirst_drains_and_dehydration_kills() -> void:
 		.add(EcsLifecycleSystem.new(_manager, _catalog)) \
 		.add(EcsThirstSystem.new()) \
 		.add(EcsHealthSystem.new()) \
-		.add(EcsCorpseSystem.new()) \
+		.add(EcsRemainsSystem.new()) \
 		.add(EcsNodeSyncSystem.new(_manager))
 	var spot := Vector2(-30000.0, 9000.0)
 	var awake := _manager.spawn(_world, _catalog, &"rabbit", spot)
@@ -3512,7 +3513,7 @@ func _ambush_pipeline() -> EcsScheduler:
 		.add(EcsHealthSystem.new()) \
 		.add(EcsMovementSystem.new()) \
 		.add(EcsCollisionSystem.new(_manager)) \
-		.add(EcsCorpseSystem.new()) \
+		.add(EcsRemainsSystem.new()) \
 		.add(EcsDropSystem.new()) \
 		.add(EcsNodeSyncSystem.new(_manager))
 	return living
@@ -3567,6 +3568,20 @@ func _holds(bag: EcsInventoryComponent, id: int) -> bool:
 	var uid: String = _uids.get(id, "")
 	return uid != "" and bag.items.any(func(record: EcsItemRecord) -> bool:
 		return record.uid == uid)
+
+## Applies a live edit of one field on `id` through the edit inbox, as the inspector does.
+func _edit(id: int, component: StringName, field: StringName, value: Variant) -> void:
+	var inbox := _world.get_singleton(EcsEditSingleton) as EcsEditSingleton
+	if inbox == null:
+		inbox = EcsEditSingleton.new()
+		_world.add_singleton(inbox)
+	var edit := EcsEdit.new()
+	edit.ids = [id]
+	edit.component = component
+	edit.field = field
+	edit.value = value
+	inbox.edits.append(edit)
+	EcsEditSystem.new().run(_world, 0.0)
 
 func _first_of(type_id: StringName) -> int:
 	for id in _world.query([EcsNameComponent]):
@@ -4008,6 +4023,81 @@ func _lose_all_health(id: int) -> void:
 	change.amount = -1.0e9
 	(_world.get_singleton(EcsHealthSingleton) as EcsHealthSingleton).changes.append(change)
 
+## What a death leaves is the dying entity's EcsRemainsComponent, keyed by the cause on
+## its EcsDyingFlag: a body by health, nothing when eaten or removed, a per-detail entry
+## overriding the cause's, and any blueprint, not only a corpse.
+func _what_a_death_leaves_is_data() -> void:
+	var inbox := _world.get_singleton(EcsLifecycleSingleton) as EcsLifecycleSingleton
+	var remains_system := EcsRemainsSystem.new()
+	var health_system := EcsHealthSystem.new()
+	var spot := Vector2(-81000.0, -81000.0)
+	var leaves := func(cause: StringName, detail: StringName, setup: Callable) -> StringName:
+		var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot)
+		setup.call(_world.get_component(rabbit, EcsRemainsComponent))
+		var dying := EcsDyingFlag.new()
+		dying.cause = cause
+		dying.detail = detail
+		_world.add(rabbit, dying)
+		var asked := inbox.spawn_requests.size()
+		remains_system.run(_world, TICK)
+		var left: StringName = inbox.spawn_requests.back().type_id \
+			if inbox.spawn_requests.size() > asked else &""
+		inbox.spawn_requests.resize(asked)
+		_manager.kill(_world, rabbit)
+		return left
+	var as_authored := func(_remains: EcsRemainsComponent) -> void: pass
+	_check("an animal killed by health leaves a corpse",
+		leaves.call(EcsDyingFlag.HEALTH, &"hit", as_authored) == &"corpse")
+	_check("starved, by default, too",
+		leaves.call(EcsDyingFlag.HEALTH, &"starved", as_authored) == &"corpse")
+	_check("eaten or removed, nothing",
+		leaves.call(EcsDyingFlag.EATEN, &"", as_authored) == &""
+		and leaves.call(EcsDyingFlag.REMOVED, &"", as_authored) == &"")
+	var no_starved_body := func(remains: EcsRemainsComponent) -> void:
+		remains.leaves[&"starved"] = &""
+	_check("a per-detail entry wins: no starved body",
+		leaves.call(EcsDyingFlag.HEALTH, &"starved", no_starved_body) == &""
+		and leaves.call(EcsDyingFlag.HEALTH, &"hit", no_starved_body) == &"corpse")
+	var rubble := func(remains: EcsRemainsComponent) -> void:
+		remains.leaves[&"rotted"] = &"berry"
+	_check("and it can leave any blueprint", leaves.call(EcsDyingFlag.ROTTED, &"", rubble) == &"berry")
+
+	var starving := _manager.spawn(_world, _catalog, &"rabbit", spot)
+	var flag := EcsStarvingFlag.new()
+	flag.rate = -1.0e9
+	_world.add(starving, flag)
+	health_system.run(_world, 1.0)
+	var dying := _world.get_component(starving, EcsDyingFlag) as EcsDyingFlag
+	_check("health names what took the last of it", dying != null
+		and dying.cause == EcsDyingFlag.HEALTH and dying.detail == &"starved")
+	_manager.kill(_world, starving)
+
+## Node sync writes a mover's container every tick but a static entity's only when
+## something changes: entities coming or going, or a live edit.
+func _a_static_entity_is_drawn_on_change_not_every_tick() -> void:
+	var sync := EcsNodeSyncSystem.new(_manager)
+	var edit_inbox := _world.get_singleton(EcsEditSingleton) as EcsEditSingleton
+	if edit_inbox == null:
+		edit_inbox = EcsEditSingleton.new()
+		_world.add_singleton(edit_inbox)
+	var spot := Vector2(-83000.0, -83000.0)
+	var bush := _manager.spawn(_world, _catalog, &"berry_bush", spot)
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(400.0, 0.0))
+	sync.run(_world, TICK)
+	_check("a fresh static entity is drawn where it is",
+		_manager.container_for(bush).position.is_equal_approx(spot))
+	(_world.get_component(rabbit, EcsPositionComponent) as EcsPositionComponent).position += Vector2(10.0, 0.0)
+	_manager.container_for(bush).position = Vector2.ZERO
+	sync.run(_world, TICK)
+	_check("a mover is drawn every tick",
+		_manager.container_for(rabbit).position.is_equal_approx(spot + Vector2(410.0, 0.0)))
+	_check("a static one is not", _manager.container_for(bush).position == Vector2.ZERO)
+	edit_inbox.applied += 1
+	sync.run(_world, TICK)
+	_check("until an edit lands", _manager.container_for(bush).position.is_equal_approx(spot))
+	for id in [bush, rabbit]:
+		_manager.kill(_world, id)
+
 ## Health with nothing happening to it is never visited: a thousand idle walls cost
 ## the health system nothing, and a hit on one visits that one.
 func _idle_health_is_never_visited() -> void:
@@ -4132,7 +4222,8 @@ func _bites_bleed_and_poison() -> void:
 	_check("and kills it", _world.has(rabbit, EcsDyingFlag))
 	var inbox := _world.get_singleton(EcsLifecycleSingleton) as EcsLifecycleSingleton
 	var asked := inbox.spawn_requests.size()
-	EcsCorpseSystem.new().run(_world, TICK)
+	EcsRemainsSystem.new().run(_world, TICK)
+	_check("its death says poison", (_world.get_component(rabbit, EcsDyingFlag) as EcsDyingFlag).detail == &"poisoned")
 	_check("leaving a corpse", inbox.spawn_requests.size() == asked + 1
 		and inbox.spawn_requests.back().type_id == &"corpse")
 	inbox.spawn_requests.resize(asked)
@@ -4208,7 +4299,7 @@ func _snapshot_pipeline(manager: EcsEntityManager) -> EcsScheduler:
 		.add(EcsCollisionSystem.new(manager)) \
 		.add(EcsPickupSystem.new()) \
 		.add(EcsRotSystem.new()) \
-		.add(EcsCorpseSystem.new()) \
+		.add(EcsRemainsSystem.new()) \
 		.add(EcsDropSystem.new()) \
 		.add(EcsNodeSyncSystem.new(manager))
 	return living

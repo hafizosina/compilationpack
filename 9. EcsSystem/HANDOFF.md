@@ -113,12 +113,12 @@ break it for a good reason and write the reason down where it breaks.
 A wall that gains movement is no longer a wall — that is a kill and a spawn, not an `add()`.
 Nothing today adds or removes a component after spawn.
 
-**28 components** — `name`, `position` (both added by the manager from the placement, not the
+**29 components** — `name`, `position` (both added by the manager from the placement, not the
 blueprint), `sprite`, `body`, `movement`, `low_brain`, `sensor`, `action`, `hunger`, `health`,
 `energy`, `inventory`, `consumable`, `pickable`, `spawner`, `harvestable`, for combat and
 corpses `damage` (crit, bleed and poison ride on it, §28), `armor`, `lootable`, `rot`, for
 planning `planner` and `danger` (§18), for skills and cover `skills`, `cover`, `drinkable` (§19),
-`thirst` (§8), `memory` (§20) and `breeding` (§21).
+`thirst` (§8), `memory` (§20), `breeding` (§21) and `remains` (§29).
 
 **23 flags** — `EcsSelectedFlag` (selection owns it), `EcsCollapsedFlag` (energy), eight
 brain instructions — `EcsEatIntentFlag{target_id | record_uid}`, `EcsTakeIntentFlag{target_id,
@@ -518,8 +518,9 @@ solid). It runs late, after everything that can kill a carrier; a system that fl
 Dying after it would lose the bag. This also fixed a leak: a dead carrier's berries used to
 live forever with no position.
 
-**Death by health leaves a corpse** (2026-10-29). `EcsCorpseSystem` runs before drop: for a
-dying entity at zero health it writes a spawn note for the `corpse` blueprint where it fell,
+**Death by health leaves a corpse** (2026-10-29; by data since §29). `EcsRemainsSystem` runs
+before drop: for a dying animal whose `EcsRemainsComponent` names a blueprint for the death's
+cause (`{health: corpse}`) it writes a spawn note for that blueprint where it fell,
 with overrides for its look (the dead sprite, darkened), its body radius and its bag's records.
 The creature dies by the ordinary kill; the corpse is a new entity — nothing changes kind. A
 corpse is a non-solid body, `EcsConsumableComponent` meat, `EcsLootableComponent`, an
@@ -716,7 +717,8 @@ health written by one system only, with bleed and poison (§28).
 **Next, in order of what the runs show:** balance the world (§21 — crocodiles or dogs starve in
 some 900 s runs, monkeys breed far less than rabbits); re-run the population ramp in one sitting
 against `8ff4bc1`, since the last full ramp (§14) predates memory's widening and births; and
-before walls arrive, `EcsMemorySystem._refresh`'s loop over every living health entity (§28).
+before walls arrive (§29, done): death causes and remains as data, memory's scan over every body,
+and node_sync skipping static entities.
 
 **Open and deferred, by decision:** combat planning (a kill is many attacks; the planner
 should choose skills from the enemy's skills and stats, §19); crocodiles exploring for other
@@ -725,8 +727,7 @@ what a carried record may *do*); prey fighting back; bag capacity and stacking; 
 derived, tweakable value** (today it is authored). **Do not re-add breadth without being
 asked** — the small size is the point.
 
-Smaller, not done: `EcsEntityManager.node_for()` allocates a throwaway dictionary on every
-call (`_nodes.get(id, {})`); speed variance is per placement, so a runtime
+Smaller, not done: speed variance is per placement, so a runtime
 spawn gets the blueprint default; the Respawn button keeps keyboard focus after a click.
 
 ---
@@ -870,8 +871,8 @@ death, a view naming only components rebuilds only on births and deaths. Rules:
    which no view touches; the lever is reading less (fewer sensors, smaller radius, density).
 3. **The brain's optional components** — hunger, energy, bag, reach, sensor — are still
    fetched per rung. A few ms; fetch once per creature after the mid-trip early-out.
-4. **node_sync writes texture, scale, tint and z-index every tick** though they almost never
-   change. Measure before skipping unchanged writes.
+4. ~~node_sync writes every sprite and position every tick~~ — done in §29: only movers are
+   written per tick.
 5. Past views, the per-entity floor is §15's storage argument.
 
 ---
@@ -1467,8 +1468,8 @@ Flags are never edited: they belong to the systems that raise them.
 `ecs_entity_remove_requested(ids)`; `main.gd` appends them to `EcsEditSingleton.removals`, and
 `EcsEditSystem` adds `EcsDyingFlag` to each live one. The entity dies at the next lifecycle stage
 like any other death: `EcsDropSystem` spills its bag (drop now also runs while paused, so a
-carrier removed while paused still leaves what it held), and no corpse is left, because a corpse
-needs zero health.
+carrier removed while paused still leaves what it held), and no corpse is left, because its cause is
+`removed`, which no remains entry names (§29).
 
 **What an edit means is the owning system's business.** Fields are set as they are; nothing
 re-derives from them. A changed `speed` prices the next trip, a changed `radius` is written to
@@ -1678,5 +1679,42 @@ kill, first bite 8–14 frames after it. The demo test checks it.
 
 **Bites** are 0.5 s apart for both the dog and the crocodile (user's call).
 
-**Still to look at before walls arrive:** `EcsMemorySystem._refresh` loops every living health
-entity whenever that view rebuilds, which any death causes.
+**Memory's scan over every body** is gone (§29).
+
+---
+
+## 29. Before walls: death causes, remains, static entities
+
+Three changes that only touch module 9, made before module 10 builds on it (2026-11-04).
+
+**A death has a cause.** `EcsDyingFlag.cause` says what ended it — `health`, `eaten`, `taken`,
+`rotted`, `removed` — and, for a death by health, `detail` says what took the last of it: `hit`,
+`starved`, `parched`, `bled`, `poisoned`, `collapsed`. Whoever adds the flag sets it. The health
+system names the biggest single loss of the run that killed; over-time effects name theirs in
+`EcsHealthSystem.kinds` (now a dictionary, flag -> detail), and an `EcsHealthChange` carries its
+own (`cause`; energy's collapse sets `collapsed`).
+
+**What a death leaves is data.** `EcsRemainsComponent.leaves` maps a detail or a cause to a
+blueprint, detail first; no entry or an empty one leaves nothing, and the bag is then spilled by
+drop. `darken` draws it like the dead (below 0 keeps the blueprint's look), `keeps_bag` hands the
+bag over. `EcsCorpseSystem` became `EcsRemainsSystem` (stage `remains`); the rule "health at zero
+means corpse" is gone. The four animals carry `{health: corpse}`, so behaviour is unchanged: a
+starved animal still leaves a corpse. **That question is now a blueprint line** —
+`starved: ""` leaves no starved body. Furniture can name rubble the same way. Saves made before
+this have no remains component, so their animals leave nothing.
+
+**Memory no longer indexes every body.** `_refresh` rebuilt an id -> health map of every living
+health entity whenever that view changed, which every death does. `_is_prey` now looks the two
+up per sighting. Measured, one death per run among 10,000 idle health entities: 28 ms -> 88 µs.
+
+**node_sync writes only what moves.** Containers of entities with `EcsMovementComponent` are
+written every tick; every other position and every sprite only when the working set changes
+(a birth, a death, a toggle) or an edit lands (`EcsEditSingleton.applied` counts them). Nothing
+else writes a static entity's position or any sprite at runtime; a system that starts to must
+bump that count or the view won't follow. Measured, 3,600 bushes and 400 rabbits: 7.5 ms ->
+85 µs a run. `node_for()` no longer allocates a dictionary per miss.
+
+**Tests:** what a death leaves, by cause and detail and with a per-detail override; health
+naming the detail; a static entity drawn on change and not every tick. The reach test moved its
+berry by writing the component; it now does it as a live edit.
+
