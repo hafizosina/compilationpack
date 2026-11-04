@@ -5,7 +5,7 @@ extends EcsSystem
 ## Each terrain and floor def names its layer, configured in the scene with its TileSet,
 ## half-cell offset and scale; a layer's place among its siblings is its draw order, and
 ## a type's layer also fills under every later type so edges blend. Walls go on the wall
-## layer's cell grid, one atlas source per wall type, joined to neighbouring walls.
+## layer's cell grid, one atlas source per wall type, joined to its building's neighbouring walls.
 ## The first run clears and draws all; after that only what changed is redrawn.
 
 var _layers_root: Node
@@ -192,7 +192,7 @@ func _put(layer: TileMapLayer, at: Vector2i, mask: int, erase: bool) -> void:
 	layer.set_cell(at, layer.tile_set.get_source_id(0), EcsDualGrid.atlas_for(_layouts[layer], mask, at))
 	redrawn += 1
 
-## A wall joins each neighbour that is a wall or a door.
+## A wall joins each neighbouring wall of its own building; a touching building's walls stay apart.
 func _draw_wall(grid: EcsTownGridSingleton, cell: Vector2i) -> void:
 	if _wall_layer == null:
 		return
@@ -206,8 +206,10 @@ func _draw_wall(grid: EcsTownGridSingleton, cell: Vector2i) -> void:
 	var mask := 0
 	for k in 4:
 		var next: Vector2i = cell + EcsDualGrid.SIDES[k]
-		if EcsTownGrid.in_bounds(grid, next) \
-				and grid.structure[EcsTownGrid.index(grid, next)] != EcsTownGridSingleton.NONE:
+		if not EcsTownGrid.in_bounds(grid, next):
+			continue
+		var n := EcsTownGrid.index(grid, next)
+		if grid.structure[n] == EcsTownGridSingleton.WALL and grid.building_id[n] == grid.building_id[i]:
 			mask |= EcsDualGrid.SIDE_BITS[k]
 	_wall_layer.set_cell(cell, entry[0], EcsDualGrid.atlas_for(entry[1], mask, cell))
 	redrawn += 1

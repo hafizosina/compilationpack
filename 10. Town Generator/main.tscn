@@ -15,6 +15,8 @@
 [ext_resource type="Texture2D" uid="uid://xdymmfubcry2" path="res://10. Town Generator/art/placeholder/floor_stone.png" id="12_stone"]
 [ext_resource type="Texture2D" uid="uid://bp6ld8fwjnahx" path="res://10. Town Generator/art/placeholder/floor_road.png" id="13_road"]
 [ext_resource type="Texture2D" uid="uid://bt05cms1ggnac" path="res://10. Town Generator/art/placeholder/floor_rug.png" id="14_rug"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/entity_catalog.tres" id="15_entities"]
+[ext_resource type="Script" uid="uid://d278qmhu52iih" path="res://10. Town Generator/town_overlay.gd" id="16_overlay"]
 
 [sub_resource type="TileSetAtlasSource" id="Src_grass"]
 texture = ExtResource("7_grass")
@@ -474,6 +476,7 @@ sources/3 = SubResource("Src_basewall")
 [node name="Main" type="Node2D" unique_id=903953012]
 script = ExtResource("4_main")
 catalog = ExtResource("5_catalog")
+entity_catalog = ExtResource("15_entities")
 
 [node name="World" type="Node2D" parent="." unique_id=574391949]
 
@@ -516,6 +519,12 @@ tile_set = SubResource("TileSet_rug")
 [node name="ObjectLayer" type="TileMapLayer" parent="World/TilemapGroup" unique_id=1757595312]
 tile_map_data = PackedByteArray("AAAWAAMAAQAFAAIAAAAVAAMAAQABAAIAAAAUAAMAAQABAAAAAAATAAMAAQABAAAAAAASAAMAAQABAAAAAAARAAMAAQADAAAAAAAQAAMAAgAAAAAAAAAPAAMAAQAFAAIAAAAOAAMAAQABAAIAAAANAAMAAQABAAAAAAAMAAMAAQABAAIAAAALAAMAAQABAAAAAAAKAAMAAQABAAIAAAAJAAMAAQADAAAAAAAIAAMAAgAAAAAAAAAHAAMAAQAFAAIAAAAGAAMAAQABAAAAAAAFAAMAAQABAAIAAAAEAAMAAQABAAIAAAADAAMAAQAAAAAAAAADAA0AAQADAAAAAAADAAwAAgABAAAAAAADAAsAAQADAAIAAAADAAoAAQAAAAEAAAADAAkAAQAAAAEAAAADAAgAAQACAAEAAAADAAcAAQACAAEAAAADAAYAAQAAAAEAAAADAAUAAQACAAEAAAADAAQAAQAAAAEAAAAWAA0AAQACAAIAAAAVAA0AAQABAAIAAAAUAA0AAQABAAAAAAATAA0AAQABAAIAAAASAA0AAQABAAIAAAARAA0AAQABAAAAAAAQAA0AAQABAAIAAAAPAA0AAQABAAIAAAAOAA0AAQABAAAAAAANAA0AAQABAAIAAAAMAA0AAQABAAIAAAALAA0AAQABAAAAAAAKAA0AAQABAAAAAAAJAA0AAQABAAAAAAAIAA0AAQABAAIAAAAHAA0AAQABAAAAAAAGAA0AAQABAAAAAAAFAA0AAQABAAAAAAAEAA0AAQABAAIAAAAWAAQAAgABAAAAAAAWAAUAAQAFAAAAAAAWAAYAAQACAAEAAAAWAAcAAQACAAEAAAAWAAgAAQAAAAEAAAAWAAkAAQAAAAEAAAAWAAoAAQACAAEAAAAWAAsAAQAAAAEAAAAWAAwAAQAAAAEAAAA=")
 tile_set = SubResource("TileSet_w38ka")
+
+[node name="Entities" type="Node2D" parent="World" unique_id=935430116]
+
+[node name="Overlay" type="Node2D" parent="World" unique_id=655977488]
+z_index = 10
+script = ExtResource("16_overlay")
 
 [node name="Camera2D" parent="." unique_id=1692781263 instance=ExtResource("1_wsjta")]
 position = Vector2(449, 277)

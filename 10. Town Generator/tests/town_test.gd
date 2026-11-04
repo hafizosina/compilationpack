@@ -8,6 +8,7 @@ extends Node2D
 
 const CATALOG := preload("res://10. Town Generator/defs/town_catalog.tres")
 const MAIN := preload("res://10. Town Generator/main.tscn")
+const ENTITIES := preload("res://10. Town Generator/defs/entity_catalog.tres")
 const GRASS: int = 1
 const DIRT: int = 2
 const WATER: int = 4
@@ -24,6 +25,9 @@ func _ready() -> void:
 	_terrain_blends_and_lower_types_fill_under()
 	_a_floor_never_bleeds_past_its_cells()
 	_walls_join_their_neighbours()
+	_a_building_owns_its_footprint()
+	_footprints_touch_but_never_overlap()
+	_walls_stay_inside_their_own_building()
 	_measure()
 	print("[town] %d/%d checks passed" % [_checks - _failures, _checks])
 	get_tree().quit(1 if _failures > 0 else 0)
@@ -32,16 +36,20 @@ func _ready() -> void:
 func _setup(size: Vector2i) -> Dictionary:
 	var world := EcsWorld.new()
 	world.add_singleton(EcsTownGrid.make(size.x, size.y, GRASS))
+	world.add_singleton(EcsLifecycleSingleton.new())
 	# The scene's own tile layers, taken out of main.tscn: nothing is built in code.
 	var main := MAIN.instantiate()
 	var root := main.get_node("World/TilemapGroup")
 	root.get_parent().remove_child(root)
 	main.free()
 	add_child(root)
+	var entities := Node2D.new()
+	root.add_child(entities)
 	var build := EcsBuildCommandSystem.new(CATALOG)
 	var sync := EcsTileSyncSystem.new(root, CATALOG)
 	var scheduler := EcsScheduler.new()
-	scheduler.add(build).add(sync)
+	# As main.gd: lifecycle first, so a building asked for last tick is born before build binds it.
+	scheduler.add(EcsLifecycleSystem.new(EcsEntityManager.new(entities), ENTITIES)).add(build).add(sync)
 	scheduler.run_all(world, 0.0)
 	_sync_for_mask = sync
 	return {"world": world, "grid": world.get_singleton(EcsTownGridSingleton), "build": build,
@@ -151,12 +159,20 @@ func _measure() -> void:
 			_send(t, [_cmd(kind, cell, DIRT if i % 2 == 0 else WOOD)])
 			per_change += sync.last_usec
 			per_command += build.last_usec
+		var house: Array[EcsBuildCommand] = [EcsBuildCommand.create_building(Rect2i(1, 1, 20, 20))]
+		for k in 20:
+			for cell in [Vector2i(1 + k, 1), Vector2i(1 + k, 20), Vector2i(1, 1 + k), Vector2i(20, 1 + k)]:
+				house.append(_cmd(EcsBuildCommand.Kind.PLACE_WALL, cell, 1))
+		_send(t, house)
+		var house_usec := build.last_usec
+		var house_sync := sync.last_usec
+		_send(t, [])
 		started = Time.get_ticks_usec()
 		for i in 100:
 			(t.scheduler as EcsScheduler).run_all(t.world, 0.0)
 		var idle := float(Time.get_ticks_usec() - started) / 100.0
-		print("[town] %dx%d: first draw %d ms; one cell: tile sync %.0f µs, command %.1f µs; idle tick %.1f µs"
-			% [side, side, full / 1000, float(per_change) / n, float(per_command) / n, idle])
+		print("[town] %dx%d: first draw %d ms; one cell: tile sync %.0f µs, command %.1f µs; a 20x20 building and its 80 walls: commands %d µs, tile sync %d µs; idle tick %.1f µs"
+			% [side, side, full / 1000, float(per_change) / n, float(per_command) / n, house_usec, house_sync, idle])
 		_check("an idle %d² grid redraws nothing" % side, sync.redrawn == 0)
 		t.root.queue_free()
 
@@ -218,7 +234,7 @@ func _walls_join_their_neighbours() -> void:
 	var t := _setup(Vector2i(10, 10))
 	var grid := t.grid as EcsTownGridSingleton
 	var sync := t.sync as EcsTileSyncSystem
-	var plan: Array[EcsBuildCommand] = []
+	var plan: Array[EcsBuildCommand] = [EcsBuildCommand.create_building(Rect2i(0, 0, 10, 10))]
 	for cell in [Vector2i(2, 2), Vector2i(3, 2), Vector2i(4, 2), Vector2i(5, 2), Vector2i(5, 3), Vector2i(5, 4)]:
 		plan.append(_cmd(EcsBuildCommand.Kind.PLACE_WALL, cell, 1))
 	_send(t, plan)
@@ -242,6 +258,85 @@ func _walls_join_their_neighbours() -> void:
 		sync.wall_layer().get_cell_source_id(Vector2i(8, 8)) == 3 and sync.wall_mask_at(Vector2i(8, 8)) == 0)
 	_check("an unknown wall type, or a cell with an object, is refused",
 		unknown.result == &"unknown_wall" and blocked.result == &"occupied")
+	t.root.queue_free()
+
+## A building asked for is born at the next lifecycle; its footprint is reserved at once,
+## so walls in the same batch belong to it, and then carries its entity id.
+func _a_building_owns_its_footprint() -> void:
+	var t := _setup(Vector2i(16, 12))
+	var grid := t.grid as EcsTownGridSingleton
+	var world := t.world as EcsWorld
+	var create := EcsBuildCommand.create_building(Rect2i(2, 2, 6, 5))
+	var wall := _cmd(EcsBuildCommand.Kind.PLACE_WALL, Vector2i(2, 2), 1)
+	_send(t, [create, wall])
+	_check("a building is reserved at once, and a wall in the same batch is its",
+		create.result == &"ok" and create.building < -1 and wall.result == &"ok"
+		and grid.building_id[EcsTownGrid.index(grid, Vector2i(2, 2))] == create.building)
+	_send(t, [])
+	var ids := world.query([EcsBuildingComponent])
+	var id: int = ids[0] if ids.size() == 1 else EcsWorld.NO_ENTITY
+	var building := world.get_component(id, EcsBuildingComponent) as EcsBuildingComponent
+	var owned := 0
+	for owner in grid.building_id:
+		if owner == id:
+			owned += 1
+	_check("next tick it is an entity with that footprint, on all 30 of its cells",
+		building != null and building.footprint == Rect2i(2, 2, 6, 5) and owned == 30 and grid.pending.is_empty())
+	_check("placed at its footprint's centre", (world.get_component(id, EcsPositionComponent) as EcsPositionComponent).position
+		== Vector2(5, 4.5) * EcsTownGrid.CELL)
+	var close := EcsBuildCommand.new()
+	close.kind = EcsBuildCommand.Kind.CLOSE_BUILDING
+	close.building = id
+	var nothing := EcsBuildCommand.new()
+	nothing.kind = EcsBuildCommand.Kind.CLOSE_BUILDING
+	var overlay := EcsTownOverlay.new()
+	t.root.add_child(overlay)
+	var overlay_system := EcsTownOverlaySystem.new(overlay)
+	overlay_system.run(world, 0.0)
+	var open_before: bool = overlay.closed == [false]
+	_send(t, [close, nothing])
+	_check("closing it needs no room", building.closed and nothing.result == &"no_building")
+	overlay_system.run(world, 0.0)
+	_check("and the overlay shows it closed", open_before and overlay.closed == [true])
+	t.root.queue_free()
+
+func _footprints_touch_but_never_overlap() -> void:
+	var t := _setup(Vector2i(16, 12))
+	var a := EcsBuildCommand.create_building(Rect2i(1, 1, 5, 5))
+	var touching := EcsBuildCommand.create_building(Rect2i(6, 1, 4, 5))
+	var overlapping := EcsBuildCommand.create_building(Rect2i(5, 5, 3, 3))
+	var outside := EcsBuildCommand.create_building(Rect2i(14, 10, 4, 4))
+	_send(t, [a, touching, overlapping, outside])
+	_check("a footprint touching another is allowed", a.result == &"ok" and touching.result == &"ok")
+	_check("one overlapping is refused, even in the same batch", overlapping.result == &"overlaps")
+	_check("one off the grid is refused", outside.result == &"out_of_bounds")
+	t.root.queue_free()
+
+## Walls go only inside a footprint, belong to it, and join only their own building's walls:
+## two touching buildings' walls along the shared edge stay two walls.
+func _walls_stay_inside_their_own_building() -> void:
+	var t := _setup(Vector2i(16, 12))
+	var grid := t.grid as EcsTownGridSingleton
+	var sync := t.sync as EcsTileSyncSystem
+	var left := EcsBuildCommand.create_building(Rect2i(1, 1, 4, 4))
+	var right := EcsBuildCommand.create_building(Rect2i(5, 1, 4, 4))
+	_send(t, [left, right])
+	var plan: Array[EcsBuildCommand] = []
+	for y in range(1, 5):
+		plan.append(_cmd(EcsBuildCommand.Kind.PLACE_WALL, Vector2i(4, y), 1))
+		plan.append(_cmd(EcsBuildCommand.Kind.PLACE_WALL, Vector2i(5, y), 1))
+	var outside := _cmd(EcsBuildCommand.Kind.PLACE_WALL, Vector2i(12, 8), 1)
+	var wrong := _cmd(EcsBuildCommand.Kind.PLACE_WALL, Vector2i(6, 2), 1)
+	wrong.building = left.building
+	plan.append_array([outside, wrong])
+	_send(t, plan)
+	_check("a wall outside every footprint is refused", outside.result == &"outside_building")
+	_check("a wall named for one building on another's cell is refused", wrong.result == &"not_its_building")
+	_check("each side's walls are its own building's",
+		grid.building_id[EcsTownGrid.index(grid, Vector2i(4, 2))] != grid.building_id[EcsTownGrid.index(grid, Vector2i(5, 2))])
+	_check("and the two walls along the shared edge don't join each other",
+		sync.wall_mask_at(Vector2i(4, 2)) == EcsDualGrid.TOP | EcsDualGrid.BOTTOM
+		and sync.wall_mask_at(Vector2i(5, 2)) == EcsDualGrid.TOP | EcsDualGrid.BOTTOM)
 	t.root.queue_free()
 
 func _check(what: String, passed: bool) -> void:

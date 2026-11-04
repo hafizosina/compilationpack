@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="EcsEntityDef" format=3 uid="uid://b7us0hjinuomi"]
+
+[ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="base"]
+[ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
+[ext_resource type="Script" uid="uid://bcm1ofuohcfva" path="res://10. Town Generator/components/ecs_building_component.gd" id="s_building"]
+
+[sub_resource type="Resource" id="c_building"]
+script = ExtResource("s_building")
+
+[resource]
+script = ExtResource("def")
+id = &"building"
+display_name = "Building"
+components = Array[ExtResource("base")]([SubResource("c_building")])

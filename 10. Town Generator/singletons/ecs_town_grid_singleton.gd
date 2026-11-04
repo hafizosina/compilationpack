@@ -9,6 +9,9 @@ const NONE: int = 0
 const WALL: int = 1
 const DOOR: int = 2
 
+## "No building" or "no object" in `building_id` and `object_id`. Not EcsWorld.NO_ENTITY, which is 0.
+const NO_ID: int = -1
+
 ## What changed on a cell, as bits in `dirty`.
 const CHANGED_TERRAIN: int = 1
 const CHANGED_FLOOR: int = 2
@@ -24,7 +27,8 @@ var floor: PackedInt32Array = PackedInt32Array()
 var structure: PackedInt32Array = PackedInt32Array()
 ## WallDef id of a WALL cell.
 var wall_type: PackedInt32Array = PackedInt32Array()
-## Owning building's entity id; -1 = none.
+## Owning building's entity id; -1 = none. Below -1 is a footprint reserved for a building
+## not yet born, a key into `pending`.
 var building_id: PackedInt32Array = PackedInt32Array()
 ## Door, furniture or plant entity on the cell; -1 = none.
 var object_id: PackedInt32Array = PackedInt32Array()
@@ -36,6 +40,12 @@ var roof: PackedInt32Array = PackedInt32Array()
 var wall_hp: Dictionary = {}
 ## Pending build commands, oldest first.
 var commands: Array[EcsBuildCommand] = []
+## Reserved footprints awaiting their building: token -> EcsSpawnRequest.
+var pending: Dictionary = {}
+## Bumped whenever a building's own data changes (closing it), so views redraw without scanning.
+var building_revision: int = 0
+## Next reservation token; counts down from -2.
+var next_token: int = -2
 ## Cells redrawn on the next tile sync: cell index -> CHANGED_* bits.
 var dirty: Dictionary = {}
 

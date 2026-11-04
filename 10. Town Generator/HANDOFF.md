@@ -10,11 +10,11 @@ module 9 changes only through a hook the author approves first. The plan is the 
 module 9's ECS core plus the town systems.
 
 ```bash
-# The debug brush: left-drag paints, 1-4 terrain, 5-8 floor, 0 clears floor, W/E wood/stone wall,
-# X removes a wall, [ ] brush size.
+# Tools: 1-4 terrain and 5-8 floor brushes, 0 clears floor, [ ] brush size; B drags a building,
+# W/E drag a wood/stone wall line, X a removal line, C closes the building under the mouse.
 "$GODOT" --path .   # main.tscn is the main scene
 
-# 32 checks; exit 0 only if all pass. Also prints tile sync and command costs.
+# 44 checks; exit 0 only if all pass. Also prints tile sync and command costs.
 "$GODOT" --headless --path . "res://10. Town Generator/tests/town_test.tscn"
 ```
 
@@ -28,13 +28,16 @@ module 9's ECS core plus the town systems.
 | Path | Role |
 |---|---|
 | `singletons/` | `EcsTownGridSingleton` — the grid |
+| `components/` | `EcsBuildingComponent` |
 | `ecs/` | `EcsTownGrid` (cell maths, making a grid), `EcsDualGrid` (masks, layout, TileSet), `EcsBuildCommand` |
-| `systems/` | `EcsBuildCommandSystem`, `EcsTileSyncSystem` |
-| `defs/` | `EcsTileDef` → `EcsTerrainDef`, `EcsFloorDef`; `EcsWallDef`; `EcsTownCatalog`; `town_catalog.tres` and one `.tres` per type |
+| `systems/` | `EcsBuildCommandSystem`, `EcsTileSyncSystem`, `EcsTownOverlaySystem` |
+| `town_overlay.gd` | `EcsTownOverlay`, the view that draws footprints and drag previews |
+| `defs/` | `EcsTileDef` → `EcsTerrainDef`, `EcsFloorDef`; `EcsWallDef`; `EcsTownCatalog`; `town_catalog.tres` and one `.tres` per type; `entity_catalog.tres` (module 9's `EcsEntityCatalog`) and `blueprints/` |
 | `art/placeholder/` | Generated placeholder sheets, `make_placeholders.py`, layout in its README |
 | `tests/` | `town_test.tscn` |
 
-Pipeline (`main.gd`): `build > tile_sync`. Lifecycle joins at step 3, when doors become entities.
+Pipeline (`main.gd`): `lifecycle > build > tile_sync > overlay`. Lifecycle is module 9's, with its
+`EcsEntityManager` rooted at `World/Entities`; buildings declare no node, so it builds none.
 
 ---
 
@@ -86,11 +89,9 @@ middle of that edge is — so any arrangement and tile size works: the grass is 
 diagonals at 3:2 and 4:2 and ten full variants. A sheet that reads incomplete falls back to
 WoodFloor's or WoodWall's table, with a warning.
 
-**Walls (ahead of step 2).** `PLACE_WALL(cell, type)` and `REMOVE_STRUCTURE(cell)` write
-`structure` and `wall_type`; a cell holding an object is refused. A wall is drawn on the cell
-grid from its type's source and joins each neighbour that is a wall or a door (16 shapes: ends,
-runs, corners, T-junctions, a cross, a lone post). A change redraws the cell and its four
-neighbours. Buildings, footprints and the rule that walls stay inside their own building are step 2.
+**Walls** are drawn on the cell grid from their type's source (16 shapes: ends, runs, corners,
+T-junctions, a cross, a lone post). A change redraws the cell and its four neighbours. Placing
+them is step 2 (§3).
 
 **Redraws are local.** The first run draws everything; after that each dirty cell redraws only
 the four render tiles at its corners, on the layer group that changed — terrain or floor, never
@@ -119,3 +120,49 @@ per layer of its group only, a no-op redraws nothing; water's four corners and n
 grass and dirt filling under it; wood covers exactly its cells over the whole grid, including a
 rug inside it and two cells touching at a corner (the diagonal tile); clearing erases. Seen in
 `main.tscn`: blends, the rug inside planks, the diagonal, road over water.
+
+---
+
+## 3. Step 2 — buildings and walls (2026-11-04)
+
+**A building is an entity** with `EcsBuildingComponent{footprint, rooms, children, closed, quality,
+owner_id, builder_id}` (blueprint `building`), born through module 9's lifecycle at the footprint's
+centre. It declares no node. Its walls are the wall cells inside its footprint; `building_id` names
+it on every footprint cell.
+
+**A footprint is reserved before its building exists.** The entity id only exists after the next
+lifecycle stage, but the generator will send a building and its walls in one batch. So
+`CREATE_BUILDING(rect)` checks the rectangle, writes a reservation token (−2, −3, …) into
+`building_id` across it, asks lifecycle for the building and keeps the request in `grid.pending`;
+the command's `building` carries the token. The next run, after lifecycle, swaps the token for
+the born id on every footprint cell. The grid's "none" is `EcsTownGridSingleton.NO_ID = -1` —
+not `EcsWorld.NO_ENTITY`, which is 0 and is a valid-looking cell value.
+
+**Validation**, in the build system only: a footprint inside the grid that overlaps no other —
+**touching is allowed** (row houses), overlapping is not, even in the same batch;
+`PLACE_WALL(cell, type)` on a footprint cell (`outside_building` otherwise), optionally naming
+the building it must belong to (`not_its_building`), on a cell with no object (`occupied`).
+**A wall's building is the footprint it stands in**: footprints never overlap, so the cell says
+whose it is. `CLOSE_BUILDING(id)` sets `closed`; it needs no room. Refusals are counted and the
+last reason is shown in the status line.
+
+**Walls join only their own building's walls.** Two touching buildings keep a wall each along
+the shared edge — walls are never shared, every cell has one owner.
+
+**Tools** (`main.gd`): B drags a footprint (preview red when it would overlap), W/E drag a
+straight wall line along the axis moved more, X drags a removal line, C closes the building under
+the mouse. `EcsTownOverlay` draws footprints — **dashed while open, solid with a light fill once closed** —
+and the drag preview. `EcsTownOverlaySystem` hands it footprints only when buildings come or go
+or `grid.building_revision` moves; the build system bumps that when it closes one, so a change
+redraws without scanning every building each tick. The overlay sits at `z_index` 10, since the tile layers'
+parent is a plain `Node` and they would otherwise draw over it.
+
+**Measured** (`town_test`): a 20×20 building with its 80 perimeter walls costs ~0.5 ms of commands
+and ~0.8 ms of tile sync, at any grid size. The idle tick went from ~3 to ~7.5 µs: lifecycle's
+drain now runs every tick.
+
+**Tests:** reserved at once and a same-batch wall is its; next tick an entity whose footprint
+covers all its cells, at its centre; closing; touching allowed, overlapping and off-grid refused;
+the overlay showing it closed; walls outside every footprint or named for another building refused; touching buildings' walls
+on the shared edge don't join. The step-1 wall tests now build inside a building.
+

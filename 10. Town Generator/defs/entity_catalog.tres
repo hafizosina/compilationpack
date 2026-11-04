@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="EcsEntityCatalog" format=3]
+
+[ext_resource type="Script" path="res://9. EcsSystem/defs/ecs_entity_catalog.gd" id="cat"]
+[ext_resource type="Script" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/building.tres" id="bp_building"]
+
+[resource]
+script = ExtResource("cat")
+defs = Array[ExtResource("def")]([ExtResource("bp_building")])
