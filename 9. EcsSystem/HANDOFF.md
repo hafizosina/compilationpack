@@ -715,9 +715,8 @@ component off (§25), the one-page inspector (§26), the four demo worlds and th
 health written by one system only, with bleed and poison (§28).
 
 **Next, in order of what the runs show:** balance the world (§21 — crocodiles or dogs starve in
-some 900 s runs, monkeys breed far less than rabbits); re-run the population ramp in one sitting
-against `8ff4bc1`, since the last full ramp (§14) predates memory's widening and births; and
-before walls arrive (§29, done): death causes and remains as data, memory's scan over every body,
+some 900 s runs, monkeys breed far less than rabbits); the population ramp is re-run and tagged
+`ecs-baseline` (§14); before walls arrive (§29, done): death causes and remains as data, memory's scan over every body,
 and node_sync skipping static entities.
 
 **Open and deferred, by decision:** combat planning (a kill is many attacks; the planner
@@ -742,7 +741,30 @@ game's rates), `--fullness=50` (every animal hungry), `--hunters=N`, `--n=`, `--
 `--spacing=`. Each ramp row also prints replans per second.
 `tests/fetch_bench.tscn` prices the store calls on their own.
 
-**Latest ramp** (2026-10-31, `2876967`: skills, thirst, the dog, memory), game rates
+**Baseline ramp, the finished module 9** (2026-11-04, `06b56cc`, tag `ecs-baseline`): everything
+through §29. Game rates as `main.gd` runs them
+(`sensor:3:0,breeding:3:0,memory:3:1,danger:3:1,planning:3:2,low_brain:3:1,hunger:6:2,energy:6:5,thirst:6:3`;
+health every tick), 40 hunters. Average tick in ms, heaviest in brackets:
+
+| entities | fed | hungry |
+|---|---|---|
+| 800 | 55.5 (103) | 93.6 (199)* |
+| 1,600 | 71.7 (93) | 110.1 (138)* |
+| 3,200 | 153.4 (213) | 163.0 (248) |
+| 4,000 | 184.3 (253) | 195.4 (261) |
+| 4,800 | 219.8 (289) | 230.2 (283) |
+| 6,400 | 260.2 (335) ✗ | 275.2 (356) ✗ |
+
+**The ceiling is 4,800 fed and hungry.** At 6,400 fed: planning 27%, sensor 20%, low_brain 12%,
+collision 8%, memory 8%, danger 7%, movement 5%, node_sync 5%; health 0.24 ms. Taken on a busy
+machine (`powersave` governor, the editor and a browser open): a first fed run read 60–80% slower at
+every stage and stopped at 2,800, and the hungry run sped up between 2,400 and 2,800 (\* rows
+before that are slow). The fed run here is the repeat. Against the previous ramp, 6,400 fed went
+from under budget (243 ms) to just over (260 ms), not in one sitting; births, memory's widening and
+health's rewrite all landed between. **Measure module 10 against this on a quiet machine, in one
+sitting with a re-run of this tag.**
+
+**Previous ramp** (2026-10-31, `2876967`: skills, thirst, the dog, memory), game rates
 (`sensor:3:0,memory:3:1,danger:3:1,planning:3:2,low_brain:3:1,health:3:2,hunger:6:2,energy:6:5,thirst:6:3`),
 40 hunters. Average tick in ms, heaviest in brackets:
 

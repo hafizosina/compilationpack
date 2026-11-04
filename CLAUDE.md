@@ -32,7 +32,7 @@ module 9's, in `9. EcsSystem/tests/`:
 "$GODOT" --path . "res://9. EcsSystem/showcase/hunt_showcase.tscn"
 
 # Population ramp: where a tick crosses 250 ms. At the game's rates (--every=...)
-# with 40 hunters it stays under to 6,400 entities fed, 4,800 hungry (2026-10-31; pass
+# with 40 hunters it stays under to 4,800 entities fed or hungry (2026-11-04, tag `ecs-baseline`; pass
 # memory:3:1 and thirst:6:3 too). Simulation only; takes a few minutes. See HANDOFF.md §14.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"
 ```
