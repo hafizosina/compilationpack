@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://imrlk8au8hgp"
-path="res://.godot/imported/WoodFloor.png-895a229d524b26656bcfa6f4846369f6.ctex"
+uid="uid://duanrqhv5h4tu"
+path="res://.godot/imported/BaseDoor.png-20b5f51a7138bf29b419a82a6b953d69.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Global/Asset/WoodFloor.png"
-dest_files=["res://.godot/imported/WoodFloor.png-895a229d524b26656bcfa6f4846369f6.ctex"]
+source_file="res://Global/Asset/Tilemap/BaseDoor.png"
+dest_files=["res://.godot/imported/BaseDoor.png-20b5f51a7138bf29b419a82a6b953d69.ctex"]
 
 [params]
 
