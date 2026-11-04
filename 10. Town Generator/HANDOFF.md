@@ -11,10 +11,11 @@ module 9's ECS core plus the town systems.
 
 ```bash
 # Tools: 1-4 terrain and 5-8 floor brushes, 0 clears floor, [ ] brush size; B drags a building,
-# W/E drag a wood/stone wall line, X a removal line, C closes the building under the mouse.
+# W/E drag a wood/stone wall line, X a removal line, C closes the building under the mouse,
+# D/F click a wood/stone door into a straight wall, T opens or closes one.
 "$GODOT" --path .   # main.tscn is the main scene
 
-# 44 checks; exit 0 only if all pass. Also prints tile sync and command costs.
+# 59 checks; exit 0 only if all pass. Also prints tile sync and command costs.
 "$GODOT" --headless --path . "res://10. Town Generator/tests/town_test.tscn"
 ```
 
@@ -28,7 +29,7 @@ module 9's ECS core plus the town systems.
 | Path | Role |
 |---|---|
 | `singletons/` | `EcsTownGridSingleton` — the grid |
-| `components/` | `EcsBuildingComponent` |
+| `components/` | `EcsBuildingComponent`, `EcsGridPositionComponent`, `EcsDoorComponent` |
 | `ecs/` | `EcsTownGrid` (cell maths, making a grid), `EcsDualGrid` (masks, layout, TileSet), `EcsBuildCommand` |
 | `systems/` | `EcsBuildCommandSystem`, `EcsTileSyncSystem`, `EcsTownOverlaySystem` |
 | `town_overlay.gd` | `EcsTownOverlay`, the view that draws footprints and drag previews |
@@ -73,7 +74,7 @@ The author's art is used wherever it exists; placeholders fill only the slots wi
 | `DirtLayer`, `SandLayer`, `WaterLayer` | terrain | placeholders |
 | `FloorLayer` | wood | author's WoodFloor TileSet, peering bits painted |
 | `StoneLayer`, `RoadLayer`, `RugLayer` | floor | placeholders |
-| `ObjectLayer` | walls (doors at step 3) | author's: source 1 WoodWall, 2 WoodenDoor; 3 `BaseWall` (stone) added |
+| `ObjectLayer` | walls and doors | author's: 1 WoodWall, 2 WoodenDoor, 3 `BaseWall` (stone wall), 5 `BaseDoor` (stone door); 4 `door_states.png` placeholder for open doors |
 
 **The dual grid.** Terrain and floor are drawn on a grid offset half a cell, so each render tile
 sits on a cell corner and shows a quarter of each of its four cells; the 4-bit mask of which
@@ -165,4 +166,44 @@ drain now runs every tick.
 covers all its cells, at its centre; closing; touching allowed, overlapping and off-grid refused;
 the overlay showing it closed; walls outside every footprint or named for another building refused; touching buildings' walls
 on the shared edge don't join. The step-1 wall tests now build inside a building.
+
+---
+
+## 4. Step 3 — doors (2026-11-04)
+
+**A door is an entity and a grid cell.** `PLACE_DOOR(cell, type)` turns a wall cell into `DOOR`
+(`wall_type` holds the `EcsDoorDef` id) and asks lifecycle for the def's blueprint, `door`:
+`EcsGridPositionComponent{cell, size}` and `EcsDoorComponent{is_open, is_locked}`, no sprite, so no
+nodes; its `EcsPositionComponent` is the cell's centre. Until it is born, `object_id` on the cell
+holds a reservation token, as a building's footprint does; binding swaps in the id and adds the door
+to its building's `children`. `grid.pending` now serves both, told apart by the spawn note's
+override key (`building` or `grid_position`).
+
+**Doors go only into a straight wall** of their own building: the cell must be a wall
+(`not_on_wall`), with a wall or door of that building on both sides along exactly one axis — a
+corner, a wall's end, a T-junction or a cross is `not_a_straight_wall`. A wall can't be placed over a
+door (`occupied`).
+
+**Drawn on the wall layer.** A door lies along its wall: horizontal when its building's wall or
+door is beside it left or right. Closed uses the author's `WoodenDoor` (source 2) or `BaseDoor`
+(source 5), 0:0 across and 1:0 down; open uses `door_states.png` (source 4), 2:0 and 3:0, since there
+is no open-door art yet. Each `EcsDoorDef` names its sources and tiles. **Walls join only walls,** so
+a wall beside a door ends in a post and the door sits between two.
+
+**Open and closed are a tile swap.** `TOGGLE_DOOR(cell)` flips `is_open` (refused on a non-door,
+`not_a_door`, or before the door is born, `not_built_yet`) and marks the cell `CHANGED_OBJECT`, which
+redraws that one cell — a structure change redraws the cell and its four neighbours. This is the
+brief's redraw rule for doors: they are tiles, so the dirty cell is the signal, not
+`EcsEditSingleton.applied` (that is for sprites).
+
+**Removing** a door (`REMOVE_STRUCTURE`) frees the cell and gives the entity `EcsDyingFlag` with
+cause `removed`, out of its building's children; it dies at the next lifecycle and leaves nothing. A
+door removed in the same batch it was placed is killed when it is born, so it never outlives its
+cell.
+
+**Tests:** placed across and down; refused at a corner, a wall's end, an empty cell, an unknown type;
+a token at once, an entity on its cell and a child of its building next tick; drawn with the author's
+closed tiles, the walls beside it ending in posts; no wall over a door; no toggling before birth or of
+a wall; toggling swaps the tile and redraws one cell, twice back to closed; removal frees the cell,
+kills the door with cause `removed`, and the walls end at the gap; a door removed before birth.
 

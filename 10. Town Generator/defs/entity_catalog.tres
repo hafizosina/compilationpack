@@ -3,7 +3,8 @@
 [ext_resource type="Script" path="res://9. EcsSystem/defs/ecs_entity_catalog.gd" id="cat"]
 [ext_resource type="Script" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/building.tres" id="bp_building"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/door.tres" id="bp_door"]
 
 [resource]
 script = ExtResource("cat")
-defs = Array[ExtResource("def")]([ExtResource("bp_building")])
+defs = Array[ExtResource("def")]([ExtResource("bp_building"), ExtResource("bp_door")])

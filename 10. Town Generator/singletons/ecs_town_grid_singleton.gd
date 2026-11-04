@@ -16,6 +16,8 @@ const NO_ID: int = -1
 const CHANGED_TERRAIN: int = 1
 const CHANGED_FLOOR: int = 2
 const CHANGED_STRUCTURE: int = 4
+## Only the object on the cell changed state (a door opened): redraw that cell alone.
+const CHANGED_OBJECT: int = 8
 
 var width: int = 0
 var height: int = 0
@@ -25,12 +27,12 @@ var terrain: PackedInt32Array = PackedInt32Array()
 var floor: PackedInt32Array = PackedInt32Array()
 ## NONE, WALL or DOOR.
 var structure: PackedInt32Array = PackedInt32Array()
-## WallDef id of a WALL cell.
+## WallDef id of a WALL cell, DoorDef id of a DOOR cell.
 var wall_type: PackedInt32Array = PackedInt32Array()
 ## Owning building's entity id; -1 = none. Below -1 is a footprint reserved for a building
 ## not yet born, a key into `pending`.
 var building_id: PackedInt32Array = PackedInt32Array()
-## Door, furniture or plant entity on the cell; -1 = none.
+## Door, furniture or plant entity on the cell; -1 = none, below -1 a reservation token.
 var object_id: PackedInt32Array = PackedInt32Array()
 ## Room the cell belongs to; -1 = not in a room.
 var room_id: PackedInt32Array = PackedInt32Array()
@@ -40,7 +42,7 @@ var roof: PackedInt32Array = PackedInt32Array()
 var wall_hp: Dictionary = {}
 ## Pending build commands, oldest first.
 var commands: Array[EcsBuildCommand] = []
-## Reserved footprints awaiting their building: token -> EcsSpawnRequest.
+## Reservations awaiting their entity — a building's footprint or a door's cell: token -> EcsSpawnRequest.
 var pending: Dictionary = {}
 ## Bumped whenever a building's own data changes (closing it), so views redraw without scanning.
 var building_revision: int = 0

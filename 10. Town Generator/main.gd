@@ -3,10 +3,11 @@ extends Node2D
 ## Module 10 entry point: the town grid on module 9's ECS, with build tools.
 ## 1-4 terrain and 5-8 floor brushes, 0 clears floor, [ and ] size them. B drags a
 ## building's footprint; W and E drag a wood or stone wall line, X a removal line;
-## C closes the building under the mouse. Middle-drag pans, the wheel zooms.
+## C closes the building under the mouse; D and F click a wood or stone door into a
+## straight wall, T opens or closes one. Middle-drag pans, the wheel zooms.
 ## Every tile layer is in the scene under World/TilemapGroup.
 
-enum Tool { BRUSH, BUILDING, WALL, REMOVE }
+enum Tool { BRUSH, BUILDING, WALL, REMOVE, DOOR, TOGGLE }
 
 @export var catalog: EcsTownCatalog
 @export var entity_catalog: EcsEntityCatalog
@@ -31,6 +32,7 @@ var _brush_kind: EcsBuildCommand.Kind = EcsBuildCommand.Kind.SET_TERRAIN
 var _brush_id: int = 2
 var _brush_size: int = 1
 var _wall_type: int = 1
+var _door_type: int = 1
 var _pressing: bool = false
 var _press_cell: Vector2i = Vector2i.ZERO
 
@@ -51,7 +53,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	_scheduler.run_all(_world, delta)
 	var refusal := "" if _build.refused == 0 else "   refused: %s" % _build.last_refusal
-	_status.text = "%s   [1-4 terrain, 5-8 floor, 0 clear, [ ] size | B building, W/E wall, X remove, C close]   tile sync %d tiles, %d µs%s" % [
+	_status.text = "%s   [1-4 terrain, 5-8 floor, 0 clear, [ ] size | B building, W/E wall, D/F door, T open, X remove, C close]   tile sync %d tiles, %d µs%s" % [
 		_tool_name(), _tile_sync.redrawn, _tile_sync.last_usec, refusal]
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -62,6 +64,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_press_cell = cell
 			if _tool == Tool.BRUSH:
 				_paint(cell)
+			elif _tool == Tool.DOOR or _tool == Tool.TOGGLE:
+				_click(cell)
+				_pressing = false
 			else:
 				_preview(cell)
 		elif _pressing:
@@ -98,6 +103,11 @@ func _pick(key: Key) -> void:
 		_tool = Tool.REMOVE
 	elif key == KEY_C:
 		_close_building_under_mouse()
+	elif key == KEY_D or key == KEY_F:
+		_tool = Tool.DOOR
+		_door_type = 1 if key == KEY_D else 2
+	elif key == KEY_T:
+		_tool = Tool.TOGGLE
 	elif key == KEY_BRACKETLEFT:
 		_brush_size = maxi(_brush_size - 1, 1)
 	elif key == KEY_BRACKETRIGHT:
@@ -136,6 +146,13 @@ func _finish(cell: Vector2i) -> void:
 	_overlay.preview.clear()
 	_overlay.preview_rect = Rect2i()
 	_overlay.queue_redraw()
+
+## Places or toggles a door on `cell`.
+func _click(cell: Vector2i) -> void:
+	if _tool == Tool.DOOR:
+		_grid().commands.append(EcsBuildCommand.make(EcsBuildCommand.Kind.PLACE_DOOR, cell, _door_type))
+	else:
+		_grid().commands.append(EcsBuildCommand.make(EcsBuildCommand.Kind.TOGGLE_DOOR, cell))
 
 func _close_building_under_mouse() -> void:
 	var cell := EcsTownGrid.cell_at(get_global_mouse_position())
@@ -178,7 +195,11 @@ func _tool_name() -> String:
 		Tool.WALL:
 			return "wall: %s" % catalog.wall(_wall_type).display_name
 		Tool.REMOVE:
-			return "remove wall"
+			return "remove wall or door"
+		Tool.DOOR:
+			return "door: %s" % catalog.door(_door_type).display_name
+		Tool.TOGGLE:
+			return "open/close door"
 	match _brush_kind:
 		EcsBuildCommand.Kind.SET_TERRAIN:
 			return "terrain: %s  brush %d" % [catalog.terrain(_brush_id).display_name, _brush_size]

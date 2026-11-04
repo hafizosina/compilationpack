@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="EcsEntityDef" format=3 uid="uid://vdke0f1b0q4m"]
+
+[ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="base"]
+[ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
+[ext_resource type="Script" uid="uid://bma8jlf1fnkmm" path="res://10. Town Generator/components/ecs_door_component.gd" id="s_door"]
+[ext_resource type="Script" uid="uid://dn2f5xd6hs8m4" path="res://10. Town Generator/components/ecs_grid_position_component.gd" id="s_grid"]
+
+[sub_resource type="Resource" id="c_grid"]
+script = ExtResource("s_grid")
+
+[sub_resource type="Resource" id="c_door"]
+script = ExtResource("s_door")
+
+[resource]
+script = ExtResource("def")
+id = &"door"
+display_name = "Door"
+components = Array[ExtResource("base")]([SubResource("c_grid"), SubResource("c_door")])

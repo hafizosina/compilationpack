@@ -17,6 +17,8 @@
 [ext_resource type="Texture2D" uid="uid://bt05cms1ggnac" path="res://10. Town Generator/art/placeholder/floor_rug.png" id="14_rug"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/entity_catalog.tres" id="15_entities"]
 [ext_resource type="Script" uid="uid://d278qmhu52iih" path="res://10. Town Generator/town_overlay.gd" id="16_overlay"]
+[ext_resource type="Texture2D" uid="uid://duanrqhv5h4tu" path="res://Global/Asset/Tilemap/BaseDoor.png" id="17_basedoor"]
+[ext_resource type="Texture2D" uid="uid://bgxb5df62mi43" path="res://10. Town Generator/art/placeholder/door_states.png" id="18_doorstates"]
 
 [sub_resource type="TileSetAtlasSource" id="Src_grass"]
 texture = ExtResource("7_grass")
@@ -461,6 +463,21 @@ texture_region_size = Vector2i(32, 32)
 4:2/0 = 0
 5:2/0 = 0
 
+[sub_resource type="TileSetAtlasSource" id="Src_doorstates"]
+texture = ExtResource("18_doorstates")
+texture_region_size = Vector2i(48, 48)
+0:0/0 = 0
+1:0/0 = 0
+2:0/0 = 0
+3:0/0 = 0
+
+[sub_resource type="TileSetAtlasSource" id="Src_basedoor"]
+texture = ExtResource("17_basedoor")
+margins = Vector2i(8, 8)
+texture_region_size = Vector2i(48, 48)
+0:0/0 = 0
+1:0/0 = 0
+
 [sub_resource type="TileSet" id="TileSet_w38ka"]
 tile_size = Vector2i(32, 32)
 physics_layer_0/collision_layer = 1
@@ -472,6 +489,8 @@ terrain_set_0/terrain_1/color = Color(0.5019608, 0, 0.2509804, 1)
 sources/1 = SubResource("TileSetAtlasSource_wd1mg")
 sources/2 = SubResource("TileSetAtlasSource_huc7e")
 sources/3 = SubResource("Src_basewall")
+sources/4 = SubResource("Src_doorstates")
+sources/5 = SubResource("Src_basedoor")
 
 [node name="Main" type="Node2D" unique_id=903953012]
 script = ExtResource("4_main")

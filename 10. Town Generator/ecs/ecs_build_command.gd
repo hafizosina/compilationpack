@@ -4,11 +4,11 @@ extends RefCounted
 ## One build request for EcsBuildCommandSystem. The player's tools and the
 ## generator both speak in these.
 
-enum Kind { SET_TERRAIN, SET_FLOOR, CLEAR_FLOOR, CREATE_BUILDING, CLOSE_BUILDING, PLACE_WALL, REMOVE_STRUCTURE }
+enum Kind { SET_TERRAIN, SET_FLOOR, CLEAR_FLOOR, CREATE_BUILDING, CLOSE_BUILDING, PLACE_WALL, PLACE_DOOR, TOGGLE_DOOR, REMOVE_STRUCTURE }
 
 var kind: Kind = Kind.SET_TERRAIN
 var cell: Vector2i = Vector2i.ZERO
-## Catalog id: terrain, floor or wall type.
+## Catalog id: terrain, floor, wall or door type.
 var value: int = 0
 ## CREATE_BUILDING's footprint.
 var rect: Rect2i = Rect2i()

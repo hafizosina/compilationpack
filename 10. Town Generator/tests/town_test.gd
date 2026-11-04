@@ -28,6 +28,8 @@ func _ready() -> void:
 	_a_building_owns_its_footprint()
 	_footprints_touch_but_never_overlap()
 	_walls_stay_inside_their_own_building()
+	_a_door_goes_into_a_straight_wall()
+	_a_door_toggles_and_is_removed()
 	_measure()
 	print("[town] %d/%d checks passed" % [_checks - _failures, _checks])
 	get_tree().quit(1 if _failures > 0 else 0)
@@ -337,6 +339,94 @@ func _walls_stay_inside_their_own_building() -> void:
 	_check("and the two walls along the shared edge don't join each other",
 		sync.wall_mask_at(Vector2i(4, 2)) == EcsDualGrid.TOP | EcsDualGrid.BOTTOM
 		and sync.wall_mask_at(Vector2i(5, 2)) == EcsDualGrid.TOP | EcsDualGrid.BOTTOM)
+	t.root.queue_free()
+
+## A building with a wall run along the top, x 2..8 at y 2, and down the left, y 2..7 at x 2.
+func _walled(t: Dictionary) -> EcsBuildCommand:
+	var create := EcsBuildCommand.create_building(Rect2i(2, 2, 7, 6))
+	var plan: Array[EcsBuildCommand] = [create]
+	for x in range(2, 9):
+		plan.append(_cmd(EcsBuildCommand.Kind.PLACE_WALL, Vector2i(x, 2), 1))
+	for y in range(3, 8):
+		plan.append(_cmd(EcsBuildCommand.Kind.PLACE_WALL, Vector2i(2, y), 1))
+	_send(t, plan)
+	return create
+
+## Doors go only into a straight run of their building's walls; the door is an entity
+## bound to its cell, a child of its building; it lies along its wall and the walls
+## beside it end in posts.
+func _a_door_goes_into_a_straight_wall() -> void:
+	var t := _setup(Vector2i(12, 10))
+	var grid := t.grid as EcsTownGridSingleton
+	var world := t.world as EcsWorld
+	var sync := t.sync as EcsTileSyncSystem
+	_walled(t)
+	var across := _cmd(EcsBuildCommand.Kind.PLACE_DOOR, Vector2i(5, 2), 1)
+	var down := _cmd(EcsBuildCommand.Kind.PLACE_DOOR, Vector2i(2, 5), 2)
+	var corner := _cmd(EcsBuildCommand.Kind.PLACE_DOOR, Vector2i(2, 2), 1)
+	var end := _cmd(EcsBuildCommand.Kind.PLACE_DOOR, Vector2i(8, 2), 1)
+	var floor_cell := _cmd(EcsBuildCommand.Kind.PLACE_DOOR, Vector2i(5, 5), 1)
+	var unknown := _cmd(EcsBuildCommand.Kind.PLACE_DOOR, Vector2i(6, 2), 99)
+	_send(t, [across, down, corner, end, floor_cell, unknown])
+	_check("a door goes into a straight wall, either way", across.result == &"ok" and down.result == &"ok")
+	_check("not into a corner or a wall's end", corner.result == &"not_a_straight_wall" and end.result == &"not_a_straight_wall")
+	_check("not where there is no wall, nor of an unknown type",
+		floor_cell.result == &"not_on_wall" and unknown.result == &"unknown_door")
+	var i := EcsTownGrid.index(grid, Vector2i(5, 2))
+	_check("its cell is a door at once, holding a token", grid.structure[i] == EcsTownGridSingleton.DOOR
+		and grid.object_id[i] < EcsTownGridSingleton.NO_ID)
+	_send(t, [])
+	var id := grid.object_id[i]
+	var place := world.get_component(id, EcsGridPositionComponent) as EcsGridPositionComponent if id > 0 else null
+	var building := world.get_component(grid.building_id[i], EcsBuildingComponent) as EcsBuildingComponent
+	_check("next tick the door is an entity on that cell, a child of its building",
+		place != null and place.cell == Vector2i(5, 2) and world.has(id, EcsDoorComponent)
+		and building.children.has(id))
+	_check("drawn closed, along its wall: your wood door across, the stone one down",
+		sync.door_tile_at(Vector2i(5, 2)) == [2, Vector2i(0, 0)] and sync.door_tile_at(Vector2i(2, 5)) == [5, Vector2i(1, 0)])
+	_check("and the walls beside it end in posts",
+		sync.wall_mask_at(Vector2i(4, 2)) == EcsDualGrid.LEFT and sync.wall_mask_at(Vector2i(6, 2)) == EcsDualGrid.RIGHT)
+	var over := _cmd(EcsBuildCommand.Kind.PLACE_WALL, Vector2i(5, 2), 1)
+	_send(t, [over])
+	_check("a wall can't be placed over a door", over.result == &"occupied")
+	t.root.queue_free()
+
+func _a_door_toggles_and_is_removed() -> void:
+	var t := _setup(Vector2i(12, 10))
+	var grid := t.grid as EcsTownGridSingleton
+	var world := t.world as EcsWorld
+	var sync := t.sync as EcsTileSyncSystem
+	_walled(t)
+	var early := _cmd(EcsBuildCommand.Kind.TOGGLE_DOOR, Vector2i(5, 2))
+	_send(t, [_cmd(EcsBuildCommand.Kind.PLACE_DOOR, Vector2i(5, 2), 1), early])
+	_check("a door not yet born can't be opened", early.result == &"not_built_yet")
+	_send(t, [])
+	var id := grid.object_id[EcsTownGrid.index(grid, Vector2i(5, 2))]
+	var door := world.get_component(id, EcsDoorComponent) as EcsDoorComponent
+	var wall := _cmd(EcsBuildCommand.Kind.TOGGLE_DOOR, Vector2i(4, 2))
+	_send(t, [_cmd(EcsBuildCommand.Kind.TOGGLE_DOOR, Vector2i(5, 2)), wall])
+	_check("toggling opens it: an open tile swapped in, one cell redrawn",
+		door.is_open and sync.door_tile_at(Vector2i(5, 2)) == [4, Vector2i(2, 0)] and sync.redrawn == 1)
+	_check("toggling a wall is refused", wall.result == &"not_a_door")
+	_send(t, [_cmd(EcsBuildCommand.Kind.TOGGLE_DOOR, Vector2i(5, 2))])
+	_check("and again closes it", not door.is_open and sync.door_tile_at(Vector2i(5, 2)) == [2, Vector2i(0, 0)])
+	_send(t, [_cmd(EcsBuildCommand.Kind.REMOVE_STRUCTURE, Vector2i(5, 2))])
+	var dying := world.get_component(id, EcsDyingFlag) as EcsDyingFlag
+	var building := world.get_component(grid.building_id[EcsTownGrid.index(grid, Vector2i(5, 2))], EcsBuildingComponent) as EcsBuildingComponent
+	_check("removing it frees the cell and the door dies, cause removed",
+		grid.object_id[EcsTownGrid.index(grid, Vector2i(5, 2))] == EcsTownGridSingleton.NO_ID
+		and dying != null and dying.cause == EcsDyingFlag.REMOVED and not building.children.has(id))
+	_send(t, [])
+	_check("next tick it is gone, and the walls either side end at the gap",
+		not world.is_alive(id) and sync.door_tile_at(Vector2i(5, 2)).is_empty()
+		and sync.wall_mask_at(Vector2i(4, 2)) == EcsDualGrid.LEFT)
+	_send(t, [_cmd(EcsBuildCommand.Kind.PLACE_WALL, Vector2i(5, 2), 1)])
+	var doors_before := world.query([EcsDoorComponent]).size()
+	_send(t, [_cmd(EcsBuildCommand.Kind.PLACE_DOOR, Vector2i(5, 2), 1), _cmd(EcsBuildCommand.Kind.REMOVE_STRUCTURE, Vector2i(5, 2))])
+	_send(t, [])
+	_send(t, [])
+	_check("a door removed before it was born doesn't outlive its cell",
+		world.query([EcsDoorComponent]).size() == doors_before and grid.pending.is_empty())
 	t.root.queue_free()
 
 func _check(what: String, passed: bool) -> void:

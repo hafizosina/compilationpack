@@ -23,6 +23,8 @@ var _floor_rank: Dictionary = {}
 var _wall_layer: TileMapLayer
 ## Wall type id -> [source id, side layout].
 var _wall_sources: Dictionary = {}
+## The world of the current run, for a door's open state.
+var _world: EcsWorld
 ## Tiles written on the last run, and the microseconds it took.
 var redrawn: int = 0
 var last_usec: int = 0
@@ -43,6 +45,7 @@ func run(world: EcsWorld, _delta: float) -> void:
 		return
 	var started := Time.get_ticks_usec()
 	redrawn = 0
+	_world = world
 	if not _built:
 		_build()
 		_draw_all(grid)
@@ -65,6 +68,14 @@ func mask_at(layer: TileMapLayer, at: Vector2i) -> int:
 	if layer.get_cell_source_id(at) == -1:
 		return 0
 	return EcsDualGrid.mask_of(_layouts[layer], layer.get_cell_atlas_coords(at))
+
+## The door tile at `cell` as [source id, atlas coords], or [] when there is none.
+func door_tile_at(cell: Vector2i) -> Array:
+	var source := _wall_layer.get_cell_source_id(cell)
+	for def in _catalog.doors:
+		if source == def.closed_source_id or source == def.open_source_id:
+			return [source, _wall_layer.get_cell_atlas_coords(cell)]
+	return []
 
 ## Which sides the wall at `cell` joins; -1 when there is none.
 func wall_mask_at(cell: Vector2i) -> int:
@@ -134,6 +145,8 @@ func _draw_dirty(grid: EcsTownGridSingleton) -> void:
 				terrain_tiles[cell + corner] = true
 			if bits & EcsTownGridSingleton.CHANGED_FLOOR:
 				floor_tiles[cell + corner] = true
+		if bits & EcsTownGridSingleton.CHANGED_OBJECT:
+			wall_cells[cell] = true
 		if bits & EcsTownGridSingleton.CHANGED_STRUCTURE:
 			wall_cells[cell] = true
 			for side in EcsDualGrid.SIDES:
@@ -192,11 +205,15 @@ func _put(layer: TileMapLayer, at: Vector2i, mask: int, erase: bool) -> void:
 	layer.set_cell(at, layer.tile_set.get_source_id(0), EcsDualGrid.atlas_for(_layouts[layer], mask, at))
 	redrawn += 1
 
-## A wall joins each neighbouring wall of its own building; a touching building's walls stay apart.
+## A wall joins each neighbouring wall of its own building — not a door, so a wall beside
+## a door ends in a post; a touching building's walls stay apart.
 func _draw_wall(grid: EcsTownGridSingleton, cell: Vector2i) -> void:
 	if _wall_layer == null:
 		return
 	var i := EcsTownGrid.index(grid, cell)
+	if grid.structure[i] == EcsTownGridSingleton.DOOR:
+		_draw_door(grid, cell, i)
+		return
 	var entry: Array = _wall_sources.get(grid.wall_type[i], [])
 	if grid.structure[i] != EcsTownGridSingleton.WALL or entry.is_empty():
 		if _wall_layer.get_cell_source_id(cell) != -1:
@@ -212,4 +229,27 @@ func _draw_wall(grid: EcsTownGridSingleton, cell: Vector2i) -> void:
 		if grid.structure[n] == EcsTownGridSingleton.WALL and grid.building_id[n] == grid.building_id[i]:
 			mask |= EcsDualGrid.SIDE_BITS[k]
 	_wall_layer.set_cell(cell, entry[0], EcsDualGrid.atlas_for(entry[1], mask, cell))
+	redrawn += 1
+
+## A door lies along its wall: horizontal when a wall or door of its building is beside it
+## left or right. Open or closed comes from its entity; until that is born, closed.
+func _draw_door(grid: EcsTownGridSingleton, cell: Vector2i, i: int) -> void:
+	var def := _catalog.door(grid.wall_type[i])
+	if def == null:
+		_wall_layer.erase_cell(cell)
+		return
+	var horizontal := false
+	for side in [Vector2i.LEFT, Vector2i.RIGHT]:
+		var next: Vector2i = cell + side
+		if EcsTownGrid.in_bounds(grid, next):
+			var n := EcsTownGrid.index(grid, next)
+			if grid.structure[n] != EcsTownGridSingleton.NONE and grid.building_id[n] == grid.building_id[i]:
+				horizontal = true
+	var id := grid.object_id[i]
+	var door := _world.get_component(id, EcsDoorComponent) as EcsDoorComponent \
+		if _world != null and id > EcsWorld.NO_ENTITY else null
+	if door != null and door.is_open:
+		_wall_layer.set_cell(cell, def.open_source_id, def.open_horizontal if horizontal else def.open_vertical)
+	else:
+		_wall_layer.set_cell(cell, def.closed_source_id, def.closed_horizontal if horizontal else def.closed_vertical)
 	redrawn += 1

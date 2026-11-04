@@ -25,7 +25,7 @@ func run(world: EcsWorld, _delta: float) -> void:
 	if grid == null:
 		return
 	if not grid.pending.is_empty():
-		_bind_born(grid)
+		_bind_born(world, grid)
 	if grid.commands.is_empty():
 		return
 	var started := Time.get_ticks_usec()
@@ -87,12 +87,80 @@ func _apply(world: EcsWorld, grid: EcsTownGridSingleton, command: EcsBuildComman
 				grid.structure[i] = EcsTownGridSingleton.WALL
 				grid.wall_type[i] = command.value
 				_mark(grid, i, EcsTownGridSingleton.CHANGED_STRUCTURE)
+		EcsBuildCommand.Kind.PLACE_DOOR:
+			return _place_door(world, grid, command, i)
+		EcsBuildCommand.Kind.TOGGLE_DOOR:
+			if grid.structure[i] != EcsTownGridSingleton.DOOR:
+				return &"not_a_door"
+			var door := world.get_component(grid.object_id[i], EcsDoorComponent) as EcsDoorComponent \
+				if grid.object_id[i] > EcsWorld.NO_ENTITY else null
+			if door == null:
+				return &"not_built_yet"
+			door.is_open = not door.is_open
+			_mark(grid, i, EcsTownGridSingleton.CHANGED_OBJECT)
 		EcsBuildCommand.Kind.REMOVE_STRUCTURE:
+			if grid.structure[i] == EcsTownGridSingleton.DOOR:
+				_remove_object(world, grid, i)
 			if grid.structure[i] != EcsTownGridSingleton.NONE:
 				grid.structure[i] = EcsTownGridSingleton.NONE
 				grid.wall_type[i] = 0
 				_mark(grid, i, EcsTownGridSingleton.CHANGED_STRUCTURE)
 	return &"ok"
+
+## Turns a wall cell in a straight run of its building's walls into a door, and asks
+## lifecycle for the door entity; the cell holds a token until it is born.
+func _place_door(world: EcsWorld, grid: EcsTownGridSingleton, command: EcsBuildCommand, i: int) -> StringName:
+	var def := _catalog.door(command.value)
+	if def == null:
+		return &"unknown_door"
+	if grid.structure[i] != EcsTownGridSingleton.WALL:
+		return &"not_on_wall"
+	if command.building != EcsTownGridSingleton.NO_ID and command.building != grid.building_id[i]:
+		return &"not_its_building"
+	var across := _joins(grid, command.cell, Vector2i.LEFT) and _joins(grid, command.cell, Vector2i.RIGHT)
+	var along := _joins(grid, command.cell, Vector2i.UP) and _joins(grid, command.cell, Vector2i.DOWN)
+	if across == along:
+		return &"not_a_straight_wall"
+	var inbox := world.get_singleton(EcsLifecycleSingleton) as EcsLifecycleSingleton
+	if inbox == null:
+		return &"no_lifecycle"
+	var token := grid.next_token
+	grid.next_token -= 1
+	grid.structure[i] = EcsTownGridSingleton.DOOR
+	grid.wall_type[i] = def.id
+	grid.object_id[i] = token
+	var note := EcsSpawnRequest.new()
+	note.type_id = def.blueprint
+	note.position = EcsTownGrid.centre_of(command.cell)
+	note.overrides = {"grid_position": {"cell": command.cell}}
+	inbox.spawn_requests.append(note)
+	grid.pending[token] = note
+	_mark(grid, i, EcsTownGridSingleton.CHANGED_STRUCTURE)
+	return &"ok"
+
+## Whether the cell beside `cell` towards `side` is a wall or door of the same building.
+func _joins(grid: EcsTownGridSingleton, cell: Vector2i, side: Vector2i) -> bool:
+	var next := cell + side
+	if not EcsTownGrid.in_bounds(grid, next):
+		return false
+	var n := EcsTownGrid.index(grid, next)
+	return grid.structure[n] != EcsTownGridSingleton.NONE \
+		and grid.building_id[n] == grid.building_id[EcsTownGrid.index(grid, cell)]
+
+## Lets go of the object on cell `i`: a born one dies (cause removed) and leaves its
+## building's children; an unborn one is killed when it binds.
+func _remove_object(world: EcsWorld, grid: EcsTownGridSingleton, i: int) -> void:
+	var id := grid.object_id[i]
+	grid.object_id[i] = EcsTownGridSingleton.NO_ID
+	if id <= EcsWorld.NO_ENTITY or not world.is_alive(id):
+		return
+	var dying := EcsDyingFlag.new()
+	dying.cause = EcsDyingFlag.REMOVED
+	world.add(id, dying)
+	var building := world.get_component(grid.building_id[i], EcsBuildingComponent) as EcsBuildingComponent \
+		if grid.building_id[i] > EcsWorld.NO_ENTITY else null
+	if building != null:
+		building.children.erase(id)
 
 ## Reserves the footprint under a new token and asks lifecycle for the building.
 ## Footprints may touch but never overlap.
@@ -119,15 +187,33 @@ func _create_building(world: EcsWorld, grid: EcsTownGridSingleton, command: EcsB
 	command.building = token
 	return &"ok"
 
-## Swaps each born building's token for its id; a failed spawn frees the footprint.
-func _bind_born(grid: EcsTownGridSingleton) -> void:
+## Swaps each born entity's token for its id: on a building's footprint, or on an
+## object's cell, adding the object to its building's children. A failed spawn frees the
+## reservation; an object whose cell was cleared before it was born is removed at once.
+func _bind_born(world: EcsWorld, grid: EcsTownGridSingleton) -> void:
 	for token: int in grid.pending.keys():
 		var note := grid.pending[token] as EcsSpawnRequest
 		if not note.fulfilled:
 			continue
-		var rect: Rect2i = (note.overrides["building"] as Dictionary)["footprint"]
-		_fill(grid, rect, token, note.born if note.born != EcsWorld.NO_ENTITY else EcsTownGridSingleton.NO_ID)
 		grid.pending.erase(token)
+		var born := note.born if note.born != EcsWorld.NO_ENTITY else EcsTownGridSingleton.NO_ID
+		if note.overrides.has("building"):
+			_fill(grid, (note.overrides["building"] as Dictionary)["footprint"], token, born)
+			continue
+		var cell: Vector2i = (note.overrides["grid_position"] as Dictionary)["cell"]
+		var i := EcsTownGrid.index(grid, cell)
+		if grid.object_id[i] != token:
+			if born != EcsTownGridSingleton.NO_ID:
+				var dying := EcsDyingFlag.new()
+				dying.cause = EcsDyingFlag.REMOVED
+				world.add(born, dying)
+			continue
+		grid.object_id[i] = born
+		var building := world.get_component(grid.building_id[i], EcsBuildingComponent) as EcsBuildingComponent \
+			if grid.building_id[i] > EcsWorld.NO_ENTITY else null
+		if building != null and born != EcsTownGridSingleton.NO_ID:
+			building.children.append(born)
+		_mark(grid, i, EcsTownGridSingleton.CHANGED_STRUCTURE)
 
 ## Sets `building_id` to `to` on every footprint cell holding `from`.
 func _fill(grid: EcsTownGridSingleton, rect: Rect2i, from: int, to: int) -> void:
