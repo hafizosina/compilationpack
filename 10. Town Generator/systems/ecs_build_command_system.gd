@@ -116,10 +116,10 @@ func _place_door(world: EcsWorld, grid: EcsTownGridSingleton, command: EcsBuildC
 ## Reserves every cell the piece covers and asks lifecycle for it.
 func _place_object(world: EcsWorld, grid: EcsTownGridSingleton, command: EcsBuildCommand) -> StringName:
 	var place := EcsBuildRules.template(_entities, command.blueprint, &"grid_position") as EcsGridPositionComponent
-	var rect := Rect2i(command.cell, place.size)
+	var rect := Rect2i(command.cell, EcsTownGrid.turned(place.size, command.value))
 	var owner := grid.building_id[EcsTownGrid.index(grid, command.cell)]
 	var token := _reserve(world, grid, command.blueprint, (Vector2(rect.position) + Vector2(rect.size) * 0.5) * EcsTownGrid.CELL,
-		{"grid_position": {"cell": command.cell, "size": place.size}})
+		{"grid_position": {"cell": command.cell, "size": rect.size, "turns": posmod(command.value, 4)}})
 	if token == EcsTownGridSingleton.NO_ID:
 		return &"no_lifecycle"
 	for cell in EcsBuildRules.cells(rect):
@@ -203,7 +203,7 @@ func _kill(world: EcsWorld, grid: EcsTownGridSingleton, id: int, owner: int) -> 
 func _create_building(world: EcsWorld, grid: EcsTownGridSingleton, command: EcsBuildCommand) -> StringName:
 	var rect := command.rect
 	var token := _reserve(world, grid, &"building", (Vector2(rect.position) + Vector2(rect.size) * 0.5) * EcsTownGrid.CELL,
-		{"building": {"footprint": rect}})
+		{"building": {"footprint": rect, "closed": command.value == 1}})
 	if token == EcsTownGridSingleton.NO_ID:
 		return &"no_lifecycle"
 	_fill(grid, rect, EcsTownGridSingleton.NO_ID, token)

@@ -3,6 +3,8 @@ extends Node2D
 ## Module 10 entry point: the town grid on module 9's ECS, with the build panel on the
 ## left. Shortcuts: 1-4 terrain, 5-8 floor, 0 clears floor, [ ] brush size; B building,
 ## C close one, W/E wood/stone wall, D/F wood/stone door, T open/close, X remove;
+## S save a building as a def, P stamp one; Q turns a piece or a stamp;
+## F5 save the town, F9 load it;
 ## R roofs, O room colours. Middle-drag pans, the wheel zooms.
 ## Every tile layer is in the scene under World/TilemapGroup.
 
@@ -11,6 +13,10 @@ const BRUSH_TOOLS: Array[StringName] = [&"terrain", &"floor"]
 const DRAG_RECT_TOOLS: Array[StringName] = [&"building"]
 const DRAG_LINE_TOOLS: Array[StringName] = [&"wall", &"remove"]
 const ICONS := "res://10. Town Generator/art/placeholder/icons/%s.png"
+## Building defs shipped with the module, and those saved with the copy tool.
+const BUILDING_DEFS := "res://10. Town Generator/defs/buildings/"
+const SAVED_BUILDINGS := "user://buildings/"
+const TOWN_FILE := EcsTownSave.SAVE_DIR + "town.tres"
 
 @export var catalog: EcsTownCatalog
 @export var entity_catalog: EcsEntityCatalog
@@ -27,6 +33,7 @@ const ICONS := "res://10. Town Generator/art/placeholder/icons/%s.png"
 @onready var _panel: EcsBuildPanel = $UI/Root/BuildPanel
 
 var _world: EcsWorld
+var _manager: EcsEntityManager
 var _scheduler: EcsScheduler
 var _build: EcsBuildCommandSystem
 var _tile_sync: EcsTileSyncSystem
@@ -43,35 +50,57 @@ var _blueprints: Dictionary = {}
 var _ghosts: Dictionary = {}
 ## What the hover last showed, so the overlay redraws only on a change.
 var _hover_key: Array = []
+## Building defs the stamp tool offers; a choice's id is its index + 1.
+var _stamps: Array[EcsBuildingDef] = []
+## Quarter turns clockwise for the next stamp.
+var _turns: int = 0
+## A short message for the status bar, and when it goes.
+var _notice: String = ""
+var _notice_until: int = 0
 
 func _ready() -> void:
 	catalog.number()
+	_manager = EcsEntityManager.new(_entities_root)
+	_start(EcsTownGrid.make(grid_size.x, grid_size.y, catalog.terrain_id(base_terrain)))
+	_camera.position = Vector2(grid_size * EcsTownGrid.CELL) * 0.5
+	_load_stamps()
+	_panel.setup(_panel_tools())
+	_panel.tool_picked.connect(_on_tool_picked)
+	_panel.brush_size_changed.connect(func(size: int) -> void: _brush_size = size)
+	_panel.view_toggled.connect(_on_view_toggled)
+	_panel.town_requested.connect(func(action: StringName) -> void: _save_town() if action == &"save" else _load_town())
+	_panel.select(_tool, _tool_id)
+	_panel.set_views((_layers_root.get_node("RoofLayer") as TileMapLayer).visible, _overlay.show_rooms)
+
+## A new world on `grid`, its nodes cleared, with `commands` waiting for the first tick.
+func _start(grid: EcsTownGridSingleton, commands: Array[EcsBuildCommand] = []) -> void:
+	_manager.clear()
 	_world = EcsWorld.new()
-	_world.add_singleton(EcsTownGrid.make(grid_size.x, grid_size.y, catalog.terrain_id(base_terrain)))
+	_world.add_singleton(grid)
 	_world.add_singleton(EcsLifecycleSingleton.new())
+	grid.commands.append_array(commands)
 	_build = EcsBuildCommandSystem.new(catalog, entity_catalog)
 	_tile_sync = EcsTileSyncSystem.new(_layers_root, catalog)
 	_scheduler = EcsScheduler.new()
 	_scheduler \
-		.add(EcsLifecycleSystem.new(EcsEntityManager.new(_entities_root), entity_catalog)) \
+		.add(EcsLifecycleSystem.new(_manager, entity_catalog)) \
 		.add(_build) \
 		.add(EcsRoomDetectionSystem.new(catalog)) \
 		.add(EcsRoofSystem.new(catalog)) \
 		.add(_tile_sync) \
 		.add(EcsTownOverlaySystem.new(_overlay))
-	_camera.position = Vector2(grid_size * EcsTownGrid.CELL) * 0.5
-	_panel.setup(_panel_tools())
-	_panel.tool_picked.connect(_on_tool_picked)
-	_panel.brush_size_changed.connect(func(size: int) -> void: _brush_size = size)
-	_panel.view_toggled.connect(_on_view_toggled)
-	_panel.select(_tool, _tool_id)
-	_panel.set_views((_layers_root.get_node("RoofLayer") as TileMapLayer).visible, _overlay.show_rooms)
+	_hover_key = []
 
 func _physics_process(delta: float) -> void:
 	_scheduler.run_all(_world, delta)
 	_hover()
 	var refusal := "" if _build.refused == 0 else "   refused: %s" % _build.last_refusal
-	_status.text = "%s%s   tile sync %d tiles, %d µs" % [_tool_name(), refusal, _tile_sync.redrawn, _tile_sync.last_usec]
+	var notice := "   " + _notice if Time.get_ticks_msec() < _notice_until else ""
+	_status.text = "%s%s%s   tile sync %d tiles, %d µs" % [_tool_name(), refusal, notice, _tile_sync.redrawn, _tile_sync.last_usec]
+
+func _tell(text: String) -> void:
+	_notice = text
+	_notice_until = Time.get_ticks_msec() + 4000
 
 ## The panel's tools, from the catalogs; each type's swatch is cut from the scene's own tiles.
 func _panel_tools() -> Array:
@@ -128,10 +157,10 @@ func _panel_tools() -> Array:
 		{"tool": &"door", "label": "Door", "keys": "D, F", "icon": load(ICONS % "door"),
 			"hint": "Click a straight wall to set a door in it.", "choices": doors},
 		{"tool": &"furniture", "label": "Furniture", "keys": "", "icon": load(ICONS % "furniture"),
-			"hint": "Click to place it, top-left on the cell. Not on walls; a room takes its type from what's in it.",
+			"hint": "Click to place it, top-left on the cell; Q turns it. Not on walls; a room takes its type from what's in it.",
 			"choices": furniture},
 		{"tool": &"plant", "label": "Plant", "keys": "", "icon": load(ICONS % "plant"),
-			"hint": "Click to plant on bare ground, never on a floor.", "choices": plants},
+			"hint": "Click to plant on bare ground, never on a floor; Q turns it.", "choices": plants},
 		{"tool": &"attach", "label": "Attach", "keys": "", "icon": load(ICONS % "attach"),
 			"hint": "Click a wall to hang it, or a table, stove or shelf to set it on.", "choices": attachments},
 		{"tool": &"toggle", "label": "Open / close", "keys": "T", "icon": load(ICONS % "toggle"),
@@ -140,6 +169,11 @@ func _panel_tools() -> Array:
 			"hint": "Click a building to mark it finished."},
 		{"tool": &"remove", "label": "Remove", "keys": "X", "icon": load(ICONS % "remove"),
 			"hint": "Drag to take out what is on top of each cell: an attachment, then furniture, then a wall or door."},
+		{"tool": &"copy", "label": "Save building", "keys": "S", "icon": load(ICONS % "copy"),
+			"hint": "Click a building to save it as a def; it joins the stamps."},
+		{"tool": &"stamp", "label": "Stamp", "keys": "P, Q", "icon": load(ICONS % "stamp"),
+			"hint": "Click to build the chosen building, top-left on the cell. Q turns it a quarter.",
+			"choices": _stamp_choices()},
 	]
 
 func _wall_layer() -> TileMapLayer:
@@ -180,13 +214,15 @@ func _ghost(tool: StringName, id: int, texture: Texture2D, size: Vector2i, down:
 func _hover() -> void:
 	var cell := EcsTownGrid.cell_at(get_global_mouse_position())
 	var over_panel := get_viewport().gui_get_hovered_control() != null
-	var key := [] if over_panel or _pressing else [cell, _tool, _tool_id, _brush_size, _build.applied, _grid().pending.size()]
+	var key := [] if over_panel or _pressing else [cell, _tool, _tool_id, _brush_size, _turns, _build.applied, _grid().pending.size()]
 	if key == _hover_key:
 		return
 	_hover_key = key
 	_overlay.ghost_cells = Rect2i()
 	_overlay.ghost_texture = null
 	_overlay.ghost_reason = ""
+	_overlay.ghost_marks.clear()
+	_overlay.ghost_turns = 0
 	if not key.is_empty() and EcsTownGrid.in_bounds(_grid(), cell):
 		_show_ghost(cell)
 	_overlay.queue_redraw()
@@ -200,8 +236,9 @@ func _show_ghost(cell: Vector2i) -> void:
 			size = Vector2i(_brush_size, _brush_size)
 			cell -= Vector2i(_brush_size / 2, _brush_size / 2)
 		&"furniture", &"plant":
-			command = EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, cell, _chosen_blueprint())
-			size = look.get("size", Vector2i.ONE)
+			command = EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, cell, _chosen_blueprint(), _turns)
+			size = EcsTownGrid.turned(look.get("size", Vector2i.ONE), _turns)
+			_overlay.ghost_turns = _turns
 		&"attach":
 			command = EcsBuildCommand.place(EcsBuildCommand.Kind.ATTACH, cell, _chosen_blueprint())
 		&"door":
@@ -216,6 +253,17 @@ func _show_ghost(cell: Vector2i) -> void:
 			command = EcsBuildCommand.new()
 			command.kind = EcsBuildCommand.Kind.CLOSE_BUILDING
 			command.building = _grid().building_id[EcsTownGrid.index(_grid(), cell)]
+		&"copy":
+			if _grid().building_id[EcsTownGrid.index(_grid(), cell)] <= EcsWorld.NO_ENTITY:
+				_overlay.ghost_reason = "no building"
+		&"stamp":
+			var def := _chosen_stamp()
+			if def == null:
+				return
+			size = EcsBuildingStamp.turned_size(def, _turns)
+			command = EcsBuildCommand.create_building(Rect2i(cell, size))
+			for at: Vector2i in def.walls.keys() + def.doors.keys():
+				_overlay.ghost_marks.append(cell + EcsTownGrid.turn(at, def.size, _turns))
 	_overlay.ghost_cells = Rect2i(cell, size)
 	if command != null:
 		var why := EcsBuildRules.refusal(_world, _grid(), catalog, entity_catalog, command)
@@ -289,6 +337,16 @@ func _shortcut(key: Key) -> void:
 		_use(&"toggle")
 	elif key == KEY_X:
 		_use(&"remove")
+	elif key == KEY_S:
+		_use(&"copy")
+	elif key == KEY_P:
+		_use(&"stamp")
+	elif key == KEY_Q:
+		_turns = (_turns + 1) % 4
+	elif key == KEY_F5:
+		_save_town()
+	elif key == KEY_F9:
+		_load_town()
 	elif key == KEY_R or key == KEY_O:
 		var roofs := _layers_root.get_node("RoofLayer") as TileMapLayer
 		if key == KEY_R:
@@ -373,7 +431,7 @@ func _chosen_blueprint() -> StringName:
 func _click(cell: Vector2i) -> void:
 	match _tool:
 		&"furniture", &"plant":
-			_grid().commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, cell, _chosen_blueprint()))
+			_grid().commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, cell, _chosen_blueprint(), _turns))
 		&"attach":
 			_grid().commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.ATTACH, cell, _chosen_blueprint()))
 		&"door":
@@ -386,6 +444,12 @@ func _click(cell: Vector2i) -> void:
 				command.kind = EcsBuildCommand.Kind.CLOSE_BUILDING
 				command.building = _grid().building_id[EcsTownGrid.index(_grid(), cell)]
 				_grid().commands.append(command)
+		&"copy":
+			if EcsTownGrid.in_bounds(_grid(), cell):
+				_save_building(_grid().building_id[EcsTownGrid.index(_grid(), cell)])
+		&"stamp":
+			if _chosen_stamp() != null:
+				_grid().commands.append_array(EcsBuildingStamp.commands(_chosen_stamp(), catalog, entity_catalog, cell, _turns))
 
 ## The rectangle from the press to `cell`, both corners included.
 func _drag_rect(cell: Vector2i) -> Rect2i:
@@ -424,6 +488,78 @@ func _tool_name() -> String:
 			return "Wall: %s" % catalog.wall(_tool_id).display_name
 		&"door":
 			return "Door: %s" % catalog.door(_tool_id).display_name
-		&"furniture", &"plant", &"attach":
+		&"furniture", &"plant":
+			return "%s: %s, turned %d°" % [String(_tool).capitalize(), entity_catalog.get_def(_chosen_blueprint()).display_name, _turns * 90]
+		&"attach":
 			return "%s: %s" % [String(_tool).capitalize(), entity_catalog.get_def(_chosen_blueprint()).display_name]
+		&"stamp":
+			if _chosen_stamp() != null:
+				return "Stamp: %s, turned %d°" % [_chosen_stamp().display_name, _turns * 90]
+		&"copy":
+			return "Save building"
 	return String(_tool).capitalize()
+
+func _chosen_stamp() -> EcsBuildingDef:
+	return _stamps[_tool_id - 1] if _tool == &"stamp" and _tool_id >= 1 and _tool_id <= _stamps.size() else null
+
+## The shipped building defs, then the ones saved with the copy tool.
+func _load_stamps() -> void:
+	for file in ResourceLoader.list_directory(BUILDING_DEFS):
+		var def := load(BUILDING_DEFS + file) as EcsBuildingDef
+		if def != null:
+			_stamps.append(def)
+	if not DirAccess.dir_exists_absolute(SAVED_BUILDINGS):
+		return
+	for file in DirAccess.get_files_at(SAVED_BUILDINGS):
+		var def := ResourceLoader.load(SAVED_BUILDINGS + file, "", ResourceLoader.CACHE_MODE_IGNORE) as EcsBuildingDef
+		if def != null:
+			_stamps.append(def)
+
+func _stamp_choices() -> Array:
+	var choices: Array = []
+	for k in _stamps.size():
+		choices.append({"id": k + 1, "label": _stamps[k].display_name, "icon": _plan_swatch(_stamps[k])})
+	return choices
+
+## A small plan of a def: floor, pieces, walls and doors, a few pixels a cell.
+func _plan_swatch(def: EcsBuildingDef) -> Texture2D:
+	const PX := 4
+	var image := Image.create_empty(def.size.x * PX, def.size.y * PX, false, Image.FORMAT_RGBA8)
+	var layers := [[def.floors, Color("#E7D6AC")], [def.objects, Color("#2F5E93")],
+		[def.walls, Color("#5F3F22")], [def.doors, Color("#B98A32")]]
+	for layer: Array in layers:
+		for cell: Vector2i in layer[0]:
+			image.fill_rect(Rect2i(cell * PX, Vector2i(PX, PX)), layer[1])
+	return ImageTexture.create_from_image(image)
+
+## Saves building `id` as a def under user://buildings/ and offers it as a stamp.
+func _save_building(id: int) -> void:
+	var n := _stamps.size() + 1
+	while FileAccess.file_exists(SAVED_BUILDINGS + "building_%d.tres" % n):
+		n += 1
+	var key := StringName("building_%d" % n)
+	var def := EcsBuildingStamp.capture(_world, _grid(), catalog, id, key)
+	if def == null:
+		return
+	DirAccess.make_dir_recursive_absolute(SAVED_BUILDINGS)
+	if ResourceSaver.save(def, SAVED_BUILDINGS + String(key) + ".tres") != OK:
+		_tell("could not save the building")
+		return
+	_stamps.append(def)
+	_panel.set_choices(&"stamp", _stamp_choices(), _stamps.size())
+	_tell("saved as %s" % def.display_name)
+
+func _save_town() -> void:
+	DirAccess.make_dir_recursive_absolute(EcsTownSave.SAVE_DIR)
+	var saved := ResourceSaver.save(EcsTownSave.capture(_world, _grid(), catalog), TOWN_FILE)
+	_tell("town saved" if saved == OK else "could not save the town")
+
+## Rebuilds the world from the saved town, by the same commands the tools send.
+func _load_town() -> void:
+	var save := ResourceLoader.load(TOWN_FILE, "", ResourceLoader.CACHE_MODE_IGNORE) as EcsTownSave
+	if save == null:
+		_tell("no saved town")
+		return
+	var base := catalog.terrain_id(base_terrain)
+	_start(EcsTownGrid.make(save.size.x, save.size.y, base), save.commands(catalog, entity_catalog, base))
+	_tell("town loaded")

@@ -127,3 +127,29 @@ button_pressed = true
 text = "Rooms"
 icon = ExtResource("3_rooms")
 expand_icon = true
+
+[node name="TownTitle" type="Label" parent="Box"]
+layout_mode = 2
+theme_type_variation = &"DockLabel"
+text = "Town"
+
+[node name="Town" type="HBoxContainer" parent="Box"]
+layout_mode = 2
+
+[node name="SaveTown" type="Button" parent="Box/Town"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"DockButton"
+tooltip_text = "Save the town (F5)"
+text = "Save"
+
+[node name="LoadTown" type="Button" parent="Box/Town"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"DockButton"
+tooltip_text = "Load the saved town (F9)"
+text = "Load"

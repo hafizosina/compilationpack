@@ -28,6 +28,10 @@ var ghost_texture: Texture2D
 var ghost_rect: Rect2 = Rect2()
 var ghost_cells: Rect2i = Rect2i()
 var ghost_reason: String = ""
+## Quarter turns clockwise the ghost's texture is drawn at, filling `ghost_rect` once turned.
+var ghost_turns: int = 0
+## Cells marked inside the ghost: a stamped building's walls and doors.
+var ghost_marks: Array[Vector2i] = []
 ## Cells of a dragged line that would be refused.
 var bad_cells: Array[Vector2i] = []
 ## Cells the tool would act on, and whether the drag would be refused.
@@ -75,9 +79,14 @@ func _draw_ghost(cell: float) -> void:
 		return
 	var refused := ghost_reason != ""
 	if ghost_texture != null:
-		draw_texture_rect(ghost_texture, ghost_rect, false, GHOST_REFUSED if refused else GHOST)
+		var drawn := ghost_rect.size if ghost_turns % 2 == 0 else Vector2(ghost_rect.size.y, ghost_rect.size.x)
+		draw_set_transform(ghost_rect.get_center(), ghost_turns * PI * 0.5)
+		draw_texture_rect(ghost_texture, Rect2(-drawn * 0.5, drawn), false, GHOST_REFUSED if refused else GHOST)
+		draw_set_transform(Vector2.ZERO)
 	var area := Rect2(Vector2(ghost_cells.position) * cell, Vector2(ghost_cells.size) * cell)
 	draw_rect(area, REFUSED if refused else PREVIEW, false, 2.0)
+	for at in ghost_marks:
+		draw_rect(Rect2(Vector2(at) * cell + Vector2(6, 6), Vector2(cell - 12, cell - 12)), GHOST_REFUSED if refused else GHOST, true)
 	if refused:
 		var font := ThemeDB.fallback_font
 		var at := area.position + Vector2(area.size.x + 6.0, LABEL_SIZE)

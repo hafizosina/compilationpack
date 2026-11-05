@@ -11,7 +11,8 @@ enum Kind {
 
 var kind: Kind = Kind.SET_TERRAIN
 var cell: Vector2i = Vector2i.ZERO
-## Catalog id: terrain, floor, wall or door type.
+## Catalog id: terrain, floor, wall or door type. CREATE_BUILDING: 1 = born closed.
+## PLACE_OBJECT: quarter turns clockwise.
 var value: int = 0
 ## Entity blueprint for PLACE_OBJECT and ATTACH.
 var blueprint: StringName = &""
@@ -30,13 +31,14 @@ static func make(kind: Kind, cell: Vector2i, value: int = 0) -> EcsBuildCommand:
 	command.value = value
 	return command
 
-static func place(kind: Kind, cell: Vector2i, blueprint: StringName) -> EcsBuildCommand:
-	var command := make(kind, cell)
+static func place(kind: Kind, cell: Vector2i, blueprint: StringName, turns: int = 0) -> EcsBuildCommand:
+	var command := make(kind, cell, turns)
 	command.blueprint = blueprint
 	return command
 
-static func create_building(rect: Rect2i) -> EcsBuildCommand:
+static func create_building(rect: Rect2i, closed: bool = false) -> EcsBuildCommand:
 	var command := EcsBuildCommand.new()
 	command.kind = Kind.CREATE_BUILDING
 	command.rect = rect
+	command.value = 1 if closed else 0
 	return command

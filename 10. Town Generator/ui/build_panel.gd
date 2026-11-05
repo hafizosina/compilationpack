@@ -2,14 +2,16 @@ class_name EcsBuildPanel
 extends PanelContainer
 
 ## The build HUD: a grid of tool icons, the tool's name and hint, swatches of its types
-## drawn from the real tiles, a brush size for the brushes, and view toggles. A dumb view:
-## main.gd fills it with `setup()` and hears it through its signals.
+## drawn from the real tiles, a brush size for the brushes, view toggles and town save/load.
+## A dumb view: main.gd fills it with `setup()` and hears it through its signals.
 
 ## A tool was picked, with the id of its chosen type (0 when it has none).
 signal tool_picked(tool: StringName, id: int)
 signal brush_size_changed(size: int)
 ## A view was switched: &"roofs" or &"rooms".
 signal view_toggled(view: StringName, on: bool)
+## &"save" or &"load" the town.
+signal town_requested(action: StringName)
 
 const MAX_BRUSH: int = 8
 const TOOL_SIZE := Vector2(52, 52)
@@ -35,6 +37,8 @@ var _brush_size: int = 1
 func _ready() -> void:
 	_roofs.toggled.connect(func(on: bool) -> void: view_toggled.emit(&"roofs", on))
 	_rooms.toggled.connect(func(on: bool) -> void: view_toggled.emit(&"rooms", on))
+	(%SaveTown as Button).pressed.connect(func() -> void: town_requested.emit(&"save"))
+	(%LoadTown as Button).pressed.connect(func() -> void: town_requested.emit(&"load"))
 	(%Smaller as Button).pressed.connect(func() -> void: _resize(-1))
 	(%Bigger as Button).pressed.connect(func() -> void: _resize(1))
 
@@ -68,6 +72,15 @@ func select(tool: StringName, id: int = -1) -> void:
 	for other: StringName in _specs:
 		(_specs[other]["button"] as Button).set_pressed_no_signal(other == tool)
 	_open(tool, false)
+
+## Replaces `tool`'s choices and picks `id` among them, redrawing them if it is open.
+func set_choices(tool: StringName, choices: Array, id: int) -> void:
+	if not _specs.has(tool):
+		return
+	_specs[tool]["choices"] = choices
+	_specs[tool]["id"] = id
+	if _open_tool == tool:
+		_open(tool, false)
 
 func set_brush_size(size: int) -> void:
 	_brush_size = size

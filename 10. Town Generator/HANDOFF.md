@@ -13,10 +13,11 @@ module 9's ECS core plus the town systems.
 # Tools: 1-4 terrain and 5-8 floor brushes, 0 clears floor, [ ] brush size; B drags a building,
 # W/E drag a wood/stone wall line, X a removal line, C closes the building under the mouse,
 # D/F click a wood/stone door into a straight wall, T opens or closes one; R shows/hides roofs,
-# O the room colours.
+# O the room colours; S saves the building clicked as a def, P stamps one; Q turns a piece or a stamp;
+# F5 saves the town, F9 loads it.
 "$GODOT" --path .   # main.tscn is the main scene
 
-# 94 checks; exit 0 only if all pass. Also prints tile sync and command costs.
+# 110 checks; exit 0 only if all pass. Also prints tile sync and command costs.
 "$GODOT" --headless --path . "res://10. Town Generator/tests/town_test.tscn"
 ```
 
@@ -31,11 +32,12 @@ module 9's ECS core plus the town systems.
 |---|---|
 | `singletons/` | `EcsTownGridSingleton` — the grid |
 | `components/` | `EcsBuildingComponent`, `EcsGridPositionComponent`, `EcsDoorComponent`, `EcsTileComponent`, `EcsFurnitureComponent`, `EcsPlantComponent`, `EcsAttachableComponent`, `EcsAttachedToComponent` |
-| `ecs/` | `EcsTownGrid` (cell maths, making a grid), `EcsDualGrid` (masks, layout, TileSet), `EcsBuildCommand`, `EcsBuildRules` (every check, changing nothing) |
+| `ecs/` | `EcsTownGrid` (cell maths, making a grid), `EcsDualGrid` (masks, layout, TileSet), `EcsBuildCommand`, `EcsBuildRules` (every check, changing nothing), `EcsBuildingStamp` (capture a building, stamp a def as commands) |
+| `save/` | `EcsTownSave`, a saved town by key |
 | `systems/` | `EcsBuildCommandSystem`, `EcsRoomDetectionSystem`, `EcsRoofSystem`, `EcsTileSyncSystem`, `EcsTownOverlaySystem` |
 | `ui/` | `build_panel.tscn` (`EcsBuildPanel`), the build HUD on the left |
 | `town_overlay.gd` | `EcsTownOverlay`, the view that draws footprints and drag previews |
-| `defs/` | `EcsTileDef` → `EcsTerrainDef`, `EcsFloorDef`; `EcsWallDef`; `EcsTownCatalog`; `town_catalog.tres` and one `.tres` per type; `entity_catalog.tres` (module 9's `EcsEntityCatalog`) and `blueprints/` |
+| `defs/` | `EcsTileDef` → `EcsTerrainDef`, `EcsFloorDef`; `EcsWallDef`; `EcsTownCatalog`; `town_catalog.tres` and one `.tres` per type; `EcsBuildingDef` and `buildings/` (cottage, workshop); `entity_catalog.tres` (module 9's `EcsEntityCatalog`) and `blueprints/` |
 | `art/placeholder/` | Generated placeholder sheets, `make_placeholders.py`, layout in its README |
 | `tests/` | `town_test.tscn` |
 
@@ -273,8 +275,16 @@ cell it covers**, and each cell draws its own 32 px slice (the bed is two tiles,
 no oversized tile or texture origin is needed. `PLACE_OBJECT(cell, blueprint)` puts the top-left on
 `cell`; every covered cell must be free of walls, doors and objects (`occupied`), all in one building
 or none (`straddles` — a sawmill in a field is fine, `building_id -1`), a plant on no floor
-(`plant_on_floor`). `REMOVE_OBJECT` by any of its cells frees all of them. Rotation waits for step 6,
-where stamps need it.
+(`plant_on_floor`). `REMOVE_OBJECT` by any of its cells frees all of them.
+
+**Pieces turn** (2026-11-05), in quarter turns clockwise: `PLACE_OBJECT`'s `value` is the turns, and
+the placed piece's `EcsGridPositionComponent` keeps them in `turns`, its `size` becoming the cells it
+covers once turned (a blueprint's `size` stays as drawn). The rules and the build system check and fill
+the turned rect. **No turned art is needed**: each covered cell draws the slice that turned onto it
+(`EcsTownGrid.turn` backwards), with the tile flags for the turn — transpose and flip, set on the cell
+through its alternative id (`EcsTileSyncSystem.TURN_FLAGS`). Q turns the piece in hand; the ghost turns
+with it. Art drawn with a light direction or a front will show its turn; a piece needing real turned
+art would want a per-turn atlas on its tile component.
 
 **Attachments** are entities too — `EcsAttachableComponent{on_wall, on_furniture}`,
 `EcsAttachedToComponent{host_kind, host_cell, host_id}` — six, on `attachments.png`. **One per cell
@@ -354,3 +364,56 @@ so the two can't drift, and a test sends a dozen mixed commands and checks each 
 the result. The hover is recomputed each physics frame but redrawn only when the cell, tool, choice,
 brush or grid changed, and hidden while the mouse is over the panel.
 
+---
+
+## 8. Step 6 — building defs, stamps, town saves (2026-11-04)
+
+**`EcsBuildingDef`** (`defs/ecs_building_def.gd`) is a building as data: `size`, `closed`, and typed
+dictionaries from a cell relative to the footprint's top-left to a key — `walls`, `doors` and `floors`
+to catalog keys, `objects` (a piece's top-left) and `attachments` (a slot) to blueprints. **Keys, never
+numbers**, so reordering a catalog list can't break one. The shipped ones are `defs/buildings/`
+(`cottage`: bedroom and kitchen through an inner door; `workshop`), each built by hand with commands
+and captured, not written by hand.
+
+**`EcsBuildingStamp`** (`ecs/`) is pure. `capture(world, grid, catalog, building_id)` reads a building
+off the grid; `commands(def, catalog, entities, at, turns)` gives back **the same commands the tools
+send**, so a stamp is checked by `EcsBuildRules` like anything else and every refusal is a result on its
+command. Order: building, floors, walls (one under each door, of a neighbouring wall's type, since a
+door goes into a wall), doors, pieces, attachments. `CREATE_BUILDING` gained one option, `closed`
+(`value` 1), because `CLOSE_BUILDING` needs a born building and a stamp is one batch.
+
+**Turning is in quarter turns clockwise.** Cells and rects turn round the footprint
+(`EcsTownGrid.turn`, `turn_rect`, `turned`). **Each piece turns with the building** — its own turns
+(`object_turns`, kept only when not 0) plus the stamp's — so every piece lands exactly on its turned
+cells and every attachment on a piece or wall turns with its cell. (Before pieces could turn, a stamp
+fitted unturned pieces near their turned place, and on a quarter turn the cottage's long table took its
+chair's cell; the test over every shipped def in every turn came from that.)
+
+**`EcsTownSave`** (`save/`) is a town by key: terrain as a palette plus an index per cell, floors,
+pieces and attachments outside buildings, and every building as an `EcsBuildingDef` with its top-left.
+**Loading is commands too** — a new world, the grid made empty, then `save.commands()` sent as one
+batch — so a load is checked exactly like building by hand and nothing restores ids. Saved as `.tres`
+under `user://towns/`. **Not kept:** whether a door is open (they come back closed), and anything
+still unborn when saved.
+
+**In the scene:** *Save building* (S) captures the clicked building into
+`user://buildings/building_N.tres` and adds it to the stamps; *Stamp* (P) lists the shipped and saved
+defs, each swatch a small plan of the building, places the chosen one top-left on the click, **Q turns
+it**; its ghost is the turned footprint with its walls and doors marked, red with the reason when the
+footprint would be refused. The panel's *Town* row (and F5 / F9) saves and loads `user://towns/town.tres`;
+`main.gd` rebuilds the world through `_start()`, which `_ready()` uses too.
+
+**Tests (16):** a turn moves cells round the footprint and four are none; **the brief's "done": a
+two-room house built by hand, captured, stamped ten times across all four turns, every command
+accepted, every copy with the same rooms of the same types and sizes and its lamp and candle**; a town
+of two buildings (one turned, one closed), water, a road and a tree saved to a file, read back and
+loaded into a fresh world: every cell's terrain, floor, structure, type and roof the same, every
+object, attachment, footprint and room where it was, and the buildings' footprints, closed flag, rooms
+and children intact (a turned table outside among them); both shipped defs stamp clean in every turn.
+Turned pieces: a bed turned once covers 2x1, draws its foot left and head right with the clockwise
+flags, each turn its own flags, refused when turned into a wall but fitting upright, removed whole.
+
+**Measured** (`town_test`, three runs): ten stamped cottages, 620 commands, apply in ~4.1 ms and their
+tile sync takes ~4.7–5.3 ms on the tick they're sent — about 0.4 + 0.5 ms a house, in line with step 2's
+hand-built building. (Re-run on 2026-11-05: 5.7 + 6.3 ms, with every older figure in the test ~1.5x up
+too — the machine, not the change.)

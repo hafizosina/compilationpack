@@ -8,6 +8,14 @@ extends EcsSystem
 ## layer's cell grid, one atlas source per wall type, joined to its building's neighbouring walls.
 ## The first run clears and draws all; after that only what changed is redrawn.
 
+## A tile's transform flags for 0-3 quarter turns clockwise.
+const TURN_FLAGS: Array[int] = [
+	0,
+	TileSetAtlasSource.TRANSFORM_TRANSPOSE | TileSetAtlasSource.TRANSFORM_FLIP_H,
+	TileSetAtlasSource.TRANSFORM_FLIP_H | TileSetAtlasSource.TRANSFORM_FLIP_V,
+	TileSetAtlasSource.TRANSFORM_TRANSPOSE | TileSetAtlasSource.TRANSFORM_FLIP_V,
+]
+
 var _layers_root: Node
 var _catalog: EcsTownCatalog
 var _built: bool = false
@@ -299,6 +307,10 @@ func _draw_entity_tile(layer: TileMapLayer, cell: Vector2i, id: int) -> void:
 			redrawn += 1
 		return
 	var place := _world.get_component(id, EcsGridPositionComponent) as EcsGridPositionComponent
-	var offset := cell - place.cell if place != null else Vector2i.ZERO
-	layer.set_cell(cell, tile.source_id, tile.atlas + offset)
+	if place == null:
+		layer.set_cell(cell, tile.source_id, tile.atlas)
+	else:
+		# A turned piece draws, on each cell, the slice that turned there, turned the same.
+		var offset := EcsTownGrid.turn(cell - place.cell, place.size, 4 - place.turns)
+		layer.set_cell(cell, tile.source_id, tile.atlas + offset, TURN_FLAGS[posmod(place.turns, 4)])
 	redrawn += 1

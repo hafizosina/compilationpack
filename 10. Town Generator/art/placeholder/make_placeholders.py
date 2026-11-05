@@ -209,6 +209,10 @@ def ui_icons():
     icon("plant", lambda d: (d.ellipse([7, 3, 25, 21], outline=ink, width=2), d.line([(16, 21), (16, 29)], fill=ink, width=3)))
     icon("attach", lambda d: (d.line([(16, 3), (16, 10)], fill=ink, width=2), d.ellipse([9, 10, 23, 24], outline=ink, width=2),
                               d.line([(12, 28), (20, 28)], fill=ink, width=2)))
+    icon("copy", lambda d: (d.polygon([(3, 14), (12, 6), (21, 14)], outline=ink, width=2), d.rectangle([5, 14, 19, 24], outline=ink, width=2),
+                            d.line([(22, 18), (29, 18), (29, 29), (14, 29), (14, 26)], fill=ink, width=2)))
+    icon("stamp", lambda d: (d.rectangle([11, 3, 21, 13], outline=ink, width=2), d.line([(16, 13), (16, 18)], fill=ink, width=3),
+                             d.rectangle([5, 18, 27, 23], outline=ink, width=2), d.line([(5, 28), (27, 28)], fill=ink, width=2)))
     icon("none", lambda d: (d.ellipse([5, 5, 27, 27], outline=ink, width=2), d.line([(9, 23), (23, 9)], fill=ink, width=2)))
 
 

@@ -28,7 +28,7 @@ There are no build scripts; the editor is the tool chain. The tests are module 9
 # carry vs graze, and ECS toggles with the life cycle. ~8 s with --fixed-fps.
 "$GODOT" --headless --fixed-fps 60 --path . "res://9. EcsSystem/tests/demo_worlds_test.tscn"
 
-# Module 10: the town grid, commands and dual-grid tile sync; prints their costs.
+# Module 10: the town grid, commands, dual-grid tile sync, rooms, stamps and town saves; prints costs.
 "$GODOT" --headless --path . "res://10. Town Generator/tests/town_test.tscn"
 
 # The hunt on its own: one dog in a bush, one rabbit — ambush, pounce, stun, bites.

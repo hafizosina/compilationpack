@@ -42,9 +42,14 @@ func _ready() -> void:
 	_roofs_cover_rooms_and_their_walls()
 	_furniture_covers_its_cells()
 	_attachments_need_a_host_with_a_free_slot()
+	_a_piece_turns_when_placed()
 	_rooms_take_their_type_from_their_furniture()
 	_a_house_built_by_hand()
 	_the_preview_predicts_the_build_system()
+	_a_turn_moves_cells_round_the_footprint()
+	_a_house_is_saved_and_stamped_ten_times()
+	_a_saved_town_reloads_intact()
+	_every_shipped_building_stamps_in_every_turn()
 	_measure()
 	_measure_rooms()
 	print("[town] %d/%d checks passed" % [_checks - _failures, _checks])
@@ -626,6 +631,49 @@ func _furniture_covers_its_cells() -> void:
 
 ## An attachment needs a host that takes it — a wall, or furniture that holds things —
 ## and a free slot; removing the host takes its attachments first.
+## A turned piece covers its turned cells and draws, on each, the slice that turned there,
+## with the tile flags for the turn; turned into a wall it is refused, and it is removed whole.
+func _a_piece_turns_when_placed() -> void:
+	var t := _setup(Vector2i(10, 10))
+	var world := t.world as EcsWorld
+	var grid := t.grid as EcsTownGridSingleton
+	var sync := t.sync as EcsTileSyncSystem
+	var bed := EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, Vector2i(2, 2), &"bed", 1)
+	_send(t, [bed])
+	_send(t, [])
+	var id := _object_at(t, Vector2i(2, 2))
+	var place := world.get_component(id, EcsGridPositionComponent) as EcsGridPositionComponent
+	_check("a bed (1x2) turned once lies across two cells, 2x1", bed.result == &"ok" and id > 0
+		and _object_at(t, Vector2i(3, 2)) == id and _object_at(t, Vector2i(2, 3)) == -1
+		and place.size == Vector2i(2, 1) and place.turns == 1)
+	var layer := sync.terrain_layers()[0].get_parent().get_node(NodePath(CATALOG.furniture_layer)) as TileMapLayer
+	var tile := world.get_component(id, EcsTileComponent) as EcsTileComponent
+	var cw := TileSetAtlasSource.TRANSFORM_TRANSPOSE | TileSetAtlasSource.TRANSFORM_FLIP_H
+	_check("its foot draws on the left, its head on the right, each tile turned clockwise",
+		layer.get_cell_atlas_coords(Vector2i(2, 2)) == tile.atlas + Vector2i(0, 1)
+		and layer.get_cell_atlas_coords(Vector2i(3, 2)) == tile.atlas
+		and layer.get_cell_alternative_tile(Vector2i(2, 2)) == cw and layer.get_cell_alternative_tile(Vector2i(3, 2)) == cw)
+	var flags := []
+	for turns in 4:
+		var chair := EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, Vector2i(6, 4 + turns), &"chair", turns)
+		_send(t, [chair])
+		_send(t, [])
+		flags.append(layer.get_cell_alternative_tile(Vector2i(6, 4 + turns)))
+	_check("each quarter turn draws with its own flags", flags == Array(EcsTileSyncSystem.TURN_FLAGS))
+	_send(t, [EcsBuildCommand.create_building(Rect2i(7, 0, 3, 3)), _cmd(EcsBuildCommand.Kind.PLACE_WALL, Vector2i(9, 0), 1)])
+	_send(t, [])
+	var into_wall := EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, Vector2i(8, 0), &"bed", 1)
+	var upright := EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, Vector2i(8, 0), &"bed", 0)
+	var why := EcsBuildRules.refusal(world, grid, CATALOG, ENTITIES, into_wall)
+	_send(t, [into_wall, upright])
+	_check("turned into a wall it is refused, upright it fits", why == &"occupied"
+		and into_wall.result == why and upright.result == &"ok")
+	_send(t, [_cmd(EcsBuildCommand.Kind.REMOVE_OBJECT, Vector2i(3, 2))])
+	_send(t, [])
+	_check("removed by either cell, both are freed and drawn empty", _object_at(t, Vector2i(2, 2)) == -1
+		and _object_at(t, Vector2i(3, 2)) == -1 and layer.get_cell_source_id(Vector2i(2, 2)) == -1)
+	t.root.queue_free()
+
 func _attachments_need_a_host_with_a_free_slot() -> void:
 	var t := _setup(Vector2i(16, 12))
 	var grid := t.grid as EcsTownGridSingleton
@@ -766,6 +814,166 @@ func _the_preview_predicts_the_build_system() -> void:
 			refused += 1
 	_check("for %d commands, %d refused, the preview's verdict is the result every time" % [tries.size(), refused], agree)
 	t.root.queue_free()
+
+## Two rooms through an inner door: a bedroom and a kitchen, a lamp on the wall, a candle on
+## the long table. Settled, so every entity is born and every room found.
+func _two_room_house(t: Dictionary, at: Vector2i) -> Array[EcsBuildCommand]:
+	var plan := _box(Rect2i(at, Vector2i(9, 6)), [at + Vector2i(2, 5)])
+	for y in range(1, 5):
+		plan.append(_cmd(EcsBuildCommand.Kind.PLACE_WALL, at + Vector2i(4, y), 1))
+		for x in range(1, 8):
+			if x != 4:
+				plan.append(_cmd(EcsBuildCommand.Kind.SET_FLOOR, at + Vector2i(x, y), WOOD))
+	plan.append(_cmd(EcsBuildCommand.Kind.PLACE_DOOR, at + Vector2i(4, 2), 1))
+	plan.append(_obj(at + Vector2i(1, 1), &"bed"))
+	plan.append(_obj(at + Vector2i(7, 1), &"stove"))
+	plan.append(_obj(at + Vector2i(5, 3), &"long_table"))
+	plan.append(_att(at + Vector2i(6, 3), &"candle"))
+	plan.append(_att(at + Vector2i(6, 0), &"wall_lamp"))
+	_settle(t, plan)
+	return plan
+
+func _settle(t: Dictionary, plan: Array[EcsBuildCommand]) -> void:
+	_send(t, plan)
+	_send(t, [])
+	_send(t, [])
+
+func _all_ok(plan: Array[EcsBuildCommand]) -> bool:
+	for command in plan:
+		if command.result != &"ok":
+			return false
+	return true
+
+## A building's rooms as comparable data: each room's type and size, sorted.
+func _rooms_of(t: Dictionary, building: EcsBuildingComponent) -> Array:
+	var out: Array = []
+	for room: Dictionary in building.rooms:
+		out.append("%s:%d:%d" % [room["type"], (room["cells"] as Array).size(), (room["door_cells"] as Array).size()])
+	out.sort()
+	return out
+
+## Four quarter turns are none; a turned cell keeps its place relative to the footprint.
+func _a_turn_moves_cells_round_the_footprint() -> void:
+	var size := Vector2i(3, 2)
+	_check("one turn clockwise takes the top-left to the top-right of the turned footprint",
+		EcsTownGrid.turn(Vector2i.ZERO, size, 1) == Vector2i(1, 0)
+		and EcsTownGrid.turn(Vector2i(2, 1), size, 1) == Vector2i(0, 2))
+	var back := true
+	for y in size.y:
+		for x in size.x:
+			back = back and EcsTownGrid.turn(Vector2i(x, y), size, 4) == Vector2i(x, y)
+	var rect := EcsTownGrid.turn_rect(Rect2i(0, 0, 2, 1), size, 1)
+	_check("four turns are none, and a 2x1 rect turns to 1x2", back and rect == Rect2i(1, 0, 1, 2))
+
+## The brief's test: one house built by hand, saved as a def, stamped ten times in all four
+## turns, every copy with the same rooms.
+func _a_house_is_saved_and_stamped_ten_times() -> void:
+	var t := _setup(Vector2i(64, 48))
+	var world := t.world as EcsWorld
+	var grid := t.grid as EcsTownGridSingleton
+	var by_hand := _two_room_house(t, Vector2i(1, 1))
+	var original := _building_at(t, Vector2i(1, 1))
+	var want := _rooms_of(t, original)
+	_check("the house by hand: every command accepted, a bedroom and a kitchen",
+		_all_ok(by_hand) and want.size() == 2 and str(want).contains("bedroom") and str(want).contains("kitchen"))
+	var def := EcsBuildingStamp.capture(world, grid, CATALOG, grid.building_id[EcsTownGrid.index(grid, Vector2i(1, 1))], &"cottage")
+	_check("its def holds its walls, door cells, floors, pieces and attachments by key",
+		def.size == Vector2i(9, 6) and def.walls.size() == 26 - 1 + 4 - 1 and def.doors.size() == 2
+		and def.floors.size() == 24 and def.objects.size() == 3 and def.attachments.size() == 2
+		and def.walls.values().has(&"wood") and def.objects.values().has(&"long_table"))
+	var plan: Array[EcsBuildCommand] = []
+	var spots: Array[Vector2i] = []
+	for k in 10:
+		var at := Vector2i(12 + (k % 5) * 10, 1 + (k / 5) * 11)
+		spots.append(at)
+		plan.append_array(EcsBuildingStamp.commands(def, CATALOG, ENTITIES, at, k))
+	_send(t, plan)
+	print("[town] measure: ten stamps, %d commands: applied in %d µs, tile sync %d µs, on the tick sent" % [plan.size(),
+		(t.build as EcsBuildCommandSystem).last_usec, (t.sync as EcsTileSyncSystem).last_usec])
+	_send(t, [])
+	_send(t, [])
+	var same := true
+	var failed: Array = []
+	for k in 10:
+		var copy := _building_at(t, spots[k])
+		if copy == null or _rooms_of(t, copy) != want or copy.footprint.size != EcsBuildingStamp.turned_size(def, k):
+			same = false
+			failed.append(k)
+	_check("stamped ten times, turned 0-3 quarter turns, every command accepted", _all_ok(plan))
+	_check("every copy has the same rooms, of the same types and sizes%s" % ("" if same else " (failed %s)" % [failed]), same)
+	var lamps := world.query([EcsAttachedToComponent]).size()
+	_check("and every copy kept its lamp and its candle", lamps == 2 * 11)
+	t.root.queue_free()
+
+## A saved world, loaded into a fresh one, has the same grid and the same buildings.
+func _a_saved_town_reloads_intact() -> void:
+	var t := _setup(Vector2i(40, 24))
+	var world := t.world as EcsWorld
+	var grid := t.grid as EcsTownGridSingleton
+	_two_room_house(t, Vector2i(2, 2))
+	var def := EcsBuildingStamp.capture(world, grid, CATALOG, grid.building_id[EcsTownGrid.index(grid, Vector2i(2, 2))])
+	var plan := EcsBuildingStamp.commands(def, CATALOG, ENTITIES, Vector2i(14, 2), 1)
+	plan.append(_cmd(EcsBuildCommand.Kind.SET_TERRAIN, Vector2i(30, 20), WATER))
+	plan.append(_cmd(EcsBuildCommand.Kind.SET_FLOOR, Vector2i(25, 18), CATALOG.floor_id(&"road")))
+	plan.append(_obj(Vector2i(32, 4), &"tree"))
+	plan.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, Vector2i(34, 8), &"long_table", 1))
+	var closed := EcsBuildCommand.new()
+	closed.kind = EcsBuildCommand.Kind.CLOSE_BUILDING
+	_settle(t, plan)
+	closed.building = grid.building_id[EcsTownGrid.index(grid, Vector2i(2, 2))]
+	_settle(t, [closed])
+	var path := EcsTownSave.SAVE_DIR + "town_test.tres"
+	DirAccess.make_dir_recursive_absolute(EcsTownSave.SAVE_DIR)
+	var saved := ResourceSaver.save(EcsTownSave.capture(world, grid, CATALOG), path)
+	var loaded := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as EcsTownSave
+	_check("the town is saved to a file and read back", saved == OK and loaded != null and loaded.buildings.size() == 2)
+	var u := _setup(loaded.size)
+	var load_plan := loaded.commands(CATALOG, ENTITIES, GRASS)
+	_settle(u, load_plan)
+	var grid2 := u.grid as EcsTownGridSingleton
+	var cells_same := grid2.terrain == grid.terrain and grid2.floor == grid.floor \
+		and grid2.structure == grid.structure and grid2.wall_type == grid.wall_type and grid2.roof == grid.roof
+	for i in grid.width * grid.height:
+		cells_same = cells_same and (grid.object_id[i] == -1) == (grid2.object_id[i] == -1) \
+			and (grid.attachment_id[i] == -1) == (grid2.attachment_id[i] == -1) \
+			and (grid.building_id[i] == -1) == (grid2.building_id[i] == -1) and (grid.room_id[i] == -1) == (grid2.room_id[i] == -1)
+	_check("reloaded, every command accepted, and every cell as it was", _all_ok(load_plan) and cells_same)
+	var intact := true
+	for at: Vector2i in [Vector2i(2, 2), Vector2i(14, 2)]:
+		var a := _building_at(t, at)
+		var b := _building_at(u, at)
+		intact = intact and b != null and a.footprint == b.footprint and a.closed == b.closed \
+			and _rooms_of(t, a) == _rooms_of(u, b) and a.children.size() == b.children.size()
+	_check("its buildings intact: footprints, closed, rooms and pieces", intact)
+	DirAccess.remove_absolute(path)
+	t.root.queue_free()
+	u.root.queue_free()
+
+## The defs in defs/buildings/ build clean in all four turns, with the same rooms each time:
+## a piece that can't keep its turned place finds another without taking a neighbour's.
+func _every_shipped_building_stamps_in_every_turn() -> void:
+	var dir := "res://10. Town Generator/defs/buildings/"
+	var files := ResourceLoader.list_directory(dir)
+	var clean := not files.is_empty()
+	var bad: Array = []
+	for file in files:
+		var def := load(dir + file) as EcsBuildingDef
+		var t := _setup(Vector2i(48, 16))
+		var plans: Array = []
+		for turns in 4:
+			var plan := EcsBuildingStamp.commands(def, CATALOG, ENTITIES, Vector2i(1 + turns * 12, 1), turns)
+			plans.append(plan)
+			_send(t, plan)
+		_send(t, [])
+		_send(t, [])
+		var want := _rooms_of(t, _building_at(t, Vector2i(1, 1)))
+		for turns in 4:
+			if not _all_ok(plans[turns]) or _rooms_of(t, _building_at(t, Vector2i(1 + turns * 12, 1))) != want:
+				clean = false
+				bad.append("%s turned %d" % [def.key, turns])
+		t.root.queue_free()
+	_check("%d shipped building defs stamp clean in all four turns, same rooms%s" % [files.size(),
+		"" if clean else " (not %s)" % [bad]], clean)
 
 func _check(what: String, passed: bool) -> void:
 	_checks += 1

@@ -88,7 +88,7 @@ static func _object_refusal(world: EcsWorld, grid: EcsTownGridSingleton, entitie
 	var place := template(entities, command.blueprint, &"grid_position") as EcsGridPositionComponent
 	if place == null or template(entities, command.blueprint, &"tile") == null:
 		return &"unknown_object"
-	var rect := Rect2i(command.cell, place.size)
+	var rect := Rect2i(command.cell, EcsTownGrid.turned(place.size, command.value))
 	if not Rect2i(0, 0, grid.width, grid.height).encloses(rect):
 		return &"out_of_bounds"
 	var plant := template(entities, command.blueprint, &"plant") != null

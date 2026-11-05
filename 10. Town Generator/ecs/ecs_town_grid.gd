@@ -34,6 +34,24 @@ static func index(grid: EcsTownGridSingleton, cell: Vector2i) -> int:
 static func cell_at(world_position: Vector2) -> Vector2i:
 	return Vector2i((world_position / CELL).floor())
 
+## A `size` footprint after `turns` quarter turns clockwise.
+static func turned(size: Vector2i, turns: int) -> Vector2i:
+	return size if posmod(turns, 2) == 0 else Vector2i(size.y, size.x)
+
+## `cell` of a `size` footprint after `turns` quarter turns clockwise.
+static func turn(cell: Vector2i, size: Vector2i, turns: int) -> Vector2i:
+	for k in posmod(turns, 4):
+		cell = Vector2i(size.y - 1 - cell.y, cell.x)
+		size = Vector2i(size.y, size.x)
+	return cell
+
+## `rect` inside a `size` footprint after `turns` quarter turns clockwise.
+static func turn_rect(rect: Rect2i, size: Vector2i, turns: int) -> Rect2i:
+	for k in posmod(turns, 4):
+		rect = Rect2i(Vector2i(size.y - rect.end.y, rect.position.x), Vector2i(rect.size.y, rect.size.x))
+		size = Vector2i(size.y, size.x)
+	return rect
+
 ## The world position of a cell's centre.
 static func centre_of(cell: Vector2i) -> Vector2:
 	return (Vector2(cell) + Vector2(0.5, 0.5)) * CELL
