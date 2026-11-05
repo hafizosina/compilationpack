@@ -1,9 +1,10 @@
-[gd_resource type="Resource" script_class="EcsWallDef" format=3]
+[gd_resource type="Resource" script_class="EcsWallDef" format=3 uid="uid://b6fx676kshdux"]
 
-[ext_resource type="Script" path="res://10. Town Generator/defs/ecs_wall_def.gd" id="1"]
+[ext_resource type="Script" uid="uid://cuh411fcskjqj" path="res://10. Town Generator/defs/ecs_wall_def.gd" id="1"]
+[ext_resource type="Texture2D" uid="uid://cgafes1yksdfo" path="res://Global/Asset/Tilemap/BaseWall.png" id="2_sheet"]
 
 [resource]
 script = ExtResource("1")
 key = &"stone"
 display_name = "stone"
-source_id = 3
+texture = ExtResource("2_sheet")

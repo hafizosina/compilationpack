@@ -39,6 +39,31 @@ var preview: Array[Vector2i] = []
 var preview_rect: Rect2i = Rect2i()
 var preview_bad: bool = false
 
+## Shows the hovered tool's ghost on `cells`: `texture` filling them (`fill`, turned `turns`
+## quarter turns) or centred on them at its own size; red with `reason` when it would be
+## refused; `marks` drawn inside it.
+func show_ghost(cells: Rect2i, texture: Texture2D, turns: int, fill: bool, reason: String,
+		marks: Array[Vector2i]) -> void:
+	var px := float(EcsTownGrid.CELL)
+	var area := Rect2(Vector2(cells.position) * px, Vector2(cells.size) * px)
+	ghost_cells = cells
+	ghost_texture = texture
+	ghost_turns = turns
+	ghost_reason = reason
+	ghost_marks = marks
+	if texture != null:
+		var drawn := area.size if fill else Vector2(texture.get_size())
+		ghost_rect = Rect2(area.position + (area.size - drawn) * 0.5, drawn)
+	queue_redraw()
+
+func clear_ghost() -> void:
+	ghost_cells = Rect2i()
+	ghost_texture = null
+	ghost_reason = ""
+	ghost_marks = []
+	ghost_turns = 0
+	queue_redraw()
+
 func _draw() -> void:
 	var cell := float(EcsTownGrid.CELL)
 	if show_rooms:

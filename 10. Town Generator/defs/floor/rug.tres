@@ -1,10 +1,10 @@
 [gd_resource type="Resource" script_class="EcsFloorDef" format=3 uid="uid://dqw7vxb7y48cb"]
 
 [ext_resource type="Script" uid="uid://cfhfq0d55ey50" path="res://10. Town Generator/defs/ecs_floor_def.gd" id="1"]
-[ext_resource type="TileSet" path="res://10. Town Generator/art/tilesets/rug.tres" id="2_tiles"]
+[ext_resource type="Texture2D" uid="uid://bt05cms1ggnac" path="res://10. Town Generator/art/placeholder/floor_rug.png" id="2_tiles"]
 
 [resource]
 script = ExtResource("1")
 key = &"rug"
 display_name = "rug"
-tile_set = ExtResource("2_tiles")
+texture = ExtResource("2_tiles")

@@ -7,6 +7,7 @@
 [ext_resource type="Resource" uid="uid://blqt4dne3iouc" path="res://10. Town Generator/defs/entity_catalog.tres" id="15_entities"]
 [ext_resource type="Script" uid="uid://d278qmhu52iih" path="res://10. Town Generator/town_overlay.gd" id="16_overlay"]
 [ext_resource type="PackedScene" path="res://10. Town Generator/ui/build_panel.tscn" id="20_panel"]
+[ext_resource type="Script" uid="uid://4e0dn720d5t5" path="res://10. Town Generator/ui/town_ui.gd" id="21_ui"]
 
 [node name="Main" type="Node2D" unique_id=903953012]
 script = ExtResource("4_main")
@@ -28,6 +29,7 @@ position = Vector2(449, 277)
 zoom_value = 2.0
 
 [node name="UI" type="CanvasLayer" parent="." unique_id=1875583330]
+script = ExtResource("21_ui")
 
 [node name="Root" type="Control" parent="UI" unique_id=625698028]
 layout_mode = 3
@@ -45,7 +47,6 @@ theme = ExtResource("6_theme")
 layout_mode = 0
 offset_left = 308.0
 offset_top = 8.0
-mouse_filter = 2
 theme_type_variation = &"TopBar"
 
 [node name="Status" type="Label" parent="UI/Root/StatusBar" unique_id=1215732029]

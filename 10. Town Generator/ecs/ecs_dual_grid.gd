@@ -44,6 +44,25 @@ const SIDE_ATLAS: Dictionary = {
 	TOP: [Vector2i(3, 2)], RIGHT | LEFT | TOP: [Vector2i(4, 2)], LEFT: [Vector2i(5, 2)],
 }
 
+## A TileSet of `texture` cut into `tile_size` tiles, every tile of the sheet in source 0.
+static func make_tile_set(texture: Texture2D, tile_size: int) -> TileSet:
+	var tile_set := TileSet.new()
+	tile_set.tile_size = Vector2i(tile_size, tile_size)
+	tile_set.add_source(make_source(texture, tile_size), 0)
+	return tile_set
+
+## An atlas source of `texture` cut into `tile_size` tiles after `margins`, every tile that fits.
+static func make_source(texture: Texture2D, tile_size: int, margins: Vector2i = Vector2i.ZERO) -> TileSetAtlasSource:
+	var source := TileSetAtlasSource.new()
+	source.texture = texture
+	source.margins = margins
+	source.texture_region_size = Vector2i(tile_size, tile_size)
+	var tiles := (Vector2i(texture.get_size()) - margins) / tile_size
+	for y in tiles.y:
+		for x in tiles.x:
+			source.create_tile(Vector2i(x, y))
+	return source
+
 ## Corner layout of `source`: from its terrain peering bits when the author painted them,
 ## else from transparency (a quarter counts when over half of it is opaque), else the fallback.
 static func corner_layout(source: TileSetAtlasSource) -> Dictionary:

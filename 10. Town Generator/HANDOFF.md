@@ -10,17 +10,17 @@ module 9 changes only through a hook the author approves first. The plan is the 
 module 9's ECS core plus the town systems.
 
 ```bash
-# Tools, types, brush size and views are on the build panel. Keys: S saves the building
-# clicked as a def, P stamps one, Q turns a piece or a stamp; F5 saves the town, F9 loads it.
+# Tools, types, brush size and views are on the build panel. Keys: Q turns a piece or a
+# stamp; F5 saves the town, F9 loads it. WASD or a middle-drag moves the camera, the wheel zooms.
 "$GODOT" --path .   # main.tscn is the main scene
 
-# 111 checks; exit 0 only if all pass. Also prints tile sync and command costs.
+# 113 checks; exit 0 only if all pass. Also prints tile sync and command costs.
 "$GODOT" --headless --path . "res://10. Town Generator/tests/town_test.tscn"
 ```
 
-`main.tscn` is the ECS scene (`main.gd`). **The tile layers are data**: each type's def names its
-TileSet (`art/tilesets/`), and `EcsTileSyncSystem` builds the layers from the catalog under the
-empty `World/TilemapGroup` (2026-11-05, §1 "The layers are built from data").
+`main.tscn` is the ECS scene (`main.gd`). **The tile layers are data**: every def and tile
+component is a sheet (a PNG) and a tile size; the TileSets are made from them at start, and
+`EcsTileSyncSystem` builds the layers from the catalog under the empty `World/TilemapGroup` (2026-11-05, §1 "The layers are built from data").
 
 ---
 
@@ -33,10 +33,9 @@ empty `World/TilemapGroup` (2026-11-05, §1 "The layers are built from data").
 | `ecs/` | `EcsTownGrid` (cell maths, making a grid), `EcsDualGrid` (masks, layout, TileSet), `EcsBuildCommand`, `EcsBuildRules` (every check, changing nothing), `EcsBuildingStamp` (capture a building, stamp a def as commands) |
 | `save/` | `EcsTownSave`, a saved town by key |
 | `systems/` | `EcsBuildCommandSystem`, `EcsRoomDetectionSystem`, `EcsRoofSystem`, `EcsTileSyncSystem`, `EcsTownOverlaySystem` |
-| `ui/` | `build_panel.tscn` (`EcsBuildPanel`), the build HUD on the left |
+| `ui/` | `town_ui.gd` (`EcsTownUI`, on main.tscn's `UI` CanvasLayer): the HUD's code; `build_panel.tscn` (`EcsBuildPanel`), the build panel on the left |
 | `town_overlay.gd` | `EcsTownOverlay`, the view that draws footprints and drag previews |
-| `defs/` | `EcsTileDef` → `EcsTerrainDef`, `EcsFloorDef`; `EcsWallDef`; `EcsTownCatalog`; `town_catalog.tres` and one `.tres` per type; `EcsBuildingDef` and `buildings/` (cottage, workshop); `entity_catalog.tres` (module 9's `EcsEntityCatalog`) and `blueprints/` |
-| `art/tilesets/` | One TileSet per terrain, floor and roof type, and the walls', furniture's and attachments' |
+| `defs/` | `EcsTileDef` (a sheet and a tile size) → `EcsTerrainDef`, `EcsFloorDef`, `EcsRoofDef`, `EcsWallDef` (+ hp, rubble); `EcsTownCatalog`; `town_catalog.tres` and one `.tres` per type; `EcsBuildingDef` and `buildings/` (cottage, workshop); `entity_catalog.tres` (module 9's `EcsEntityCatalog`) and `blueprints/` |
 | `art/placeholder/` | Generated placeholder sheets, `make_placeholders.py`, layout in its README |
 | `tests/` | `town_test.tscn` |
 
@@ -72,28 +71,46 @@ brief's "stable ids authored in each `.tres`" with stable names, which meets the
 and blueprints were already named.
 
 **The layers are built from data** (2026-11-05; from step 1 to step 6 they were nodes in
-`main.tscn`). Every terrain, floor and roof def names its own **TileSet** (`tile_set`); the catalog
-names the cell-grid ones (`wall_tiles`, `furniture_tiles`, `attachment_tiles`); a wall or door def
-names a source in `wall_tiles`. The TileSets are files in `art/tilesets/`, edited in Godot's TileSet
-editor as before (peering bits, sources) — they were moved out of the scene unchanged. **Draw order is
+`main.tscn`, then TileSet files in `art/tilesets/`, now gone). **Everything drawn is a sheet and a
+tile size, and no TileSet is stored.** A terrain, floor or roof def is `texture` and `tile_size`; its TileSet is made at start by `EcsDualGrid.make_tile_set` — every tile of the sheet in
+one source — and which tile is which corner shape is read from the pixels (`corner_layout`), so a new
+type is a def and a PNG, with no TileSet, peering bits or atlas to set up. `EcsTownCatalog.tiles(def)`
+makes it the first time it is asked for and keeps it for the run (the swatches and the tile sync share
+it). **Made at every start, never stored**: all nine take ~13 ms (measured in `town_test`, against an
+82 ms first draw of a 64x64 town), so a cache file regenerated when the data changes would save little and
+could go stale; revisit if a sheet gets large (the pixel scan is per pixel). Every sheet read from its
+pixels gives the same layout as the TileSets painted by hand before it (2026-11-05, checked for all
+nine and both wall sheets), WoodFloor's and WoodWall's peering bits included.
+
+On the cell grid: **a wall def** is `texture` and `tile_size`, its 16 shapes read from the pixels
+(`side_layout`); **a door def** is a sheet per state (`closed_texture`, `open_texture`), each with its
+`margins` (8 px on WoodenDoor and BaseDoor) and the tile for each direction, and one `tile_size` (48:
+door tiles are bigger than a cell and drawn centred). The catalog makes one walls-and-doors TileSet
+(`wall_tiles()`) when it numbers its defs, a source per sheet — a sheet two doors share is one source
+(`door_states.png`, the open doors) — and writes the source ids on the defs (`source_id`,
+`closed_source_id`, `open_source_id`, runtime, never authored). **Furniture, plants and attachments
+carry their sheet on their blueprint**: `EcsTileComponent{texture, tile_size, atlas}`; the tile sync
+gives their layers empty TileSets and adds a source for a sheet the first time a piece from it is
+drawn, so a blueprint with a new sheet needs nothing else (attachments are 16 px tiles, drawn centred
+in their cell). **Draw order is
 list order in the catalog**, the same order that numbers the types: terrains, then floors, then
 furniture, walls, attachments, then roofs. `EcsTileSyncSystem` owns `World/TilemapGroup`: its first run
 clears it and makes one `TileMapLayer` per type, scaled so a tile spans one 32 px cell (the 16 px grass
 at 2x, from its TileSet's tile size), dual-grid layers half a cell up and left; a load rebuilds them.
 Nothing about drawing is set on a node, so a generated or loaded town needs no scene edit, and a new
-type is a def and a TileSet. The author's art is used wherever it exists; placeholders fill only the
+type is a def and a PNG. The author's art is used wherever it exists; placeholders fill only the
 slots without any:
 
-| Layer, in draw order | Draws | TileSet (`art/tilesets/`) |
+| Layer, in draw order | Draws | Art |
 |---|---|---|
-| `Terrain_grass` | grass | `grass` — author's `grassTileset.png`, 16 px, drawn at 2x |
-| `Terrain_dirt`, `_sand`, `_water` | terrain | placeholders |
-| `Floor_wood` | wood | `floor_wood` — author's WoodFloor, peering bits painted |
-| `Floor_stone`, `_road`, `_rug` | floor | placeholders |
+| `Terrain_grass` | grass | sheet: author's `grassTileset.png`, 16 px, drawn at 2x |
+| `Terrain_dirt`, `_sand`, `_water` | terrain | sheets: placeholders |
+| `Floor_wood` | wood | sheet: author's `WoodFloor.png` |
+| `Floor_stone`, `_road`, `_rug` | floor | sheets: placeholders |
 | `Furniture` | furniture and plants, cell grid | `furniture` — placeholder `objects.png`, 32 px |
 | `Walls` | walls and doors | `walls` — author's: 1 WoodWall, 2 WoodenDoor, 3 `BaseWall` (stone wall), 5 `BaseDoor` (stone door); 4 `door_states.png` placeholder for open doors |
 | `Attachments` | attachments, cell grid | `attachments` — placeholder `attachments.png`, 16 px icons centred |
-| `Roof_thatch` (last) | roofs, dual grid, hidden by default | `roof` — placeholder `roof.png` |
+| `Roof_thatch` (last) | roofs, dual grid, hidden by default | sheet: placeholder `roof.png` |
 
 **The dual grid.** Terrain and floor are drawn on a grid offset half a cell, so each render tile
 sits on a cell corner and shows a quarter of each of its four cells; the 4-bit mask of which
@@ -273,8 +290,8 @@ the roof off.
 plant (`plant_here`).
 
 **Furniture and plants are entities on the grid**: blueprints in `defs/blueprints/` with
-`EcsGridPositionComponent{cell, size}`, `EcsTileComponent{source_id, atlas}` (the tile of its
-top-left cell) and `EcsFurnitureComponent{tags, holds}` or the `EcsPlantComponent` tag. 14 pieces and 3
+`EcsGridPositionComponent{cell, size}`, `EcsTileComponent{texture, tile_size, atlas}` (its sheet,
+and the tile of its top-left cell) and `EcsFurnitureComponent{tags, holds}` or the `EcsPlantComponent` tag. 14 pieces and 3
 plants, generated over `objects.png`'s 32 px grid. **A multi-cell piece fills `object_id` on every
 cell it covers**, and each cell draws its own 32 px slice (the bed is two tiles, the sawmill four), so
 no oversized tile or texture origin is needed. `PLACE_OBJECT(cell, blueprint)` puts the top-left on
@@ -312,8 +329,8 @@ room (storage, 1). Room detection gathers the tags of the furniture in each room
 highest-priority type any tag satisfies, else none; placing or removing furniture queues its building,
 so the type follows. The overlay prints each typed room's name at its centre.
 
-**Drawn** on two layers of their own: furniture under the walls, attachments above them; the
-catalog names both TileSets (`furniture_tiles`, `attachment_tiles`), as it names the walls'. A dirty
+**Drawn** on two layers of their own: furniture under the walls, attachments above them; each
+piece's sheet is on its blueprint (§1). A dirty
 `CHANGED_OBJECT` cell redraws its furniture slice and its attachment.
 
 **In the panel:** Furniture, Plant and Attach tools, their lists read from the entity catalog and
@@ -345,19 +362,30 @@ there is no art; a brush-size row for the brushes only; Roofs / Rooms view toggl
 status line is a `TopBar` strip right of the panel. Tool icons are generated parchment line icons,
 `art/placeholder/icons/`, from `make_placeholders.py`.
 
-**`ui/build_panel.tscn` (`EcsBuildPanel`) is a dumb view.** `main.gd` builds its tools and swatches
-from the catalogs and the scene with `setup()` — a new type in a catalog appears with no panel edit —
-and listens to its signals: `tool_picked(tool, id)`, `brush_size_changed`, `view_toggled`. They stay on
-the panel rather than on the global `EventBus`, so module 10 is self-contained.
+**All UI code is on the `UI` CanvasLayer** (`ui/town_ui.gd`, `EcsTownUI`; 2026-11-05, moved out of
+`main.gd`). It builds the panel's tools from the catalogs, each swatch cut from its sheet — a new type
+in a catalog appears with no panel edit — writes the status bar and its timed notices, and turns a
+panel choice back into what it means (`blueprint(tool, id)`, `ghost(tool, id)`). It never touches the
+world: `main.gd` keeps the world, map input, the ghost preview, commands and saving, hears the UI's
+signals (`tool_picked(tool, id)`, `brush_size_changed`, `view_toggled`, `town_requested`) and calls
+`setup()`, `set_stamps()`, `show_status()` and `tell()`. **`ui/build_panel.tscn`
+(`EcsBuildPanel`) is a dumb view** under it. The signals stay on the UI rather than the global
+`EventBus`, so module 10 is self-contained.
 
 **The panel is the only way to pick a tool, type, brush size or view** (2026-11-05: the keys from
-before it — 1–8, 0, `[ ]`, B, C, W/E, D/F, T, X, R, O — were removed). The keys left are those with
-no panel button or added with it: S, P, Q, F5, F9; a key that picks a tool shows it on the panel
-through `select()`, and `set_pressed_no_signal` skips a `ButtonGroup`, so `select()` releases the
-other tools itself. Tools are named (`&"terrain"`, `&"wall"`, …) and grouped by
+before it — 1–8, 0, `[ ]`, B, C, W/E, D/F, T, X, R, O — were removed). S and P (save building,
+stamp) went too, S because WASD moves the camera. The keys left have no panel button: Q (turn), F5,
+F9. `select()` shows the starting tool; `set_pressed_no_signal` skips a `ButtonGroup`, so it releases
+the other tools itself. Tools are named (`&"terrain"`, `&"wall"`, …) and grouped by
 how they use the mouse: brushes paint while held, building drags a rectangle, wall and remove drag a
-line, close/door/toggle act on a click. Clicks on the panel never reach the map: it stops the mouse and
-the map listens in `_unhandled_input`.
+line, close/door/toggle act on a click. **The HUD eats the mouse** (2026-11-05): the panel and the status bar
+stop it and `EcsTownUI` accepts every mouse event that lands on them, so a click, wheel or middle-drag
+over them never reaches the map (which listens in `_unhandled_input`) or the camera. The shared camera
+(`Global/Scene/camera_2d.tscn`) reads the wheel and **a pan's start** in `_unhandled_input` for the same
+reason — a pan started over the panel used to move the map — and the drag and release in `_input`, so a
+pan begun on the map follows the mouse anywhere. Checked by pushing real events at the panel's empty
+area, a tool button, a swatch, a label and the status bar: none zooms, pans or builds, the map still
+does all three, a tool button still picks its tool and the type list still scrolls.
 
 **Placement preview** (2026-11-04). With a tool picked, the cell under the mouse shows what a click
 would do before it is made: the piece's tiles across every cell it would cover (furniture, plants),
@@ -368,7 +396,11 @@ each refused cell red. **The preview asks the build system's own rules**: every 
 `EcsBuildRules.refusal(world, grid, catalog, entities, command)`, which changes nothing; the build
 system calls it before applying and applies only what it accepts, and `main.gd` calls it on hover —
 so the two can't drift, and a test sends a dozen mixed commands and checks each predicted verdict is
-the result. The hover is recomputed each physics frame but redrawn only when the cell, tool, choice,
+the result. **What a click would send is written once**: `main.gd`'s `_commands_at(cell)` turns the tool
+in hand into commands, `_click` sends them and the hover checks the first (2026-11-05; the two used to
+build their commands separately). How the ghost is drawn — a piece filling its turned cells, an icon or
+a door's oversized tile centred, the red reason, a stamp's walls marked — is the overlay's
+(`EcsTownOverlay.show_ghost()`); `main.gd` hands it cells, picture and verdict. The hover is recomputed each physics frame but redrawn only when the cell, tool, choice,
 brush or grid changed, and hidden while the mouse is over the panel.
 
 ---

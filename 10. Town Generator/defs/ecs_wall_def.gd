@@ -1,15 +1,12 @@
 class_name EcsWallDef
-extends Resource
+extends EcsTileDef
 
-## A wall type: drawn on the cell grid from one atlas source of the walls' TileSet.
+## A wall: a tile type like a terrain, but on the cell grid, its sheet holding the 16 side
+## shapes (ends, runs, corners, T-junctions, a cross, a lone post) in any arrangement, told
+## apart by their pixels.
 
-## Its name, unique among walls: what commands, saves and building defs refer to it by.
-@export var key: StringName = &""
-## The grid's number for it (`wall_type`), set by the catalog from its place in the list; 0 is none.
-var id: int = 0
-@export var display_name: String = ""
-## Source id in the wall layer's TileSet.
-@export var source_id: int = 1
+## Its source in the walls' TileSet, set by the catalog when it makes that TileSet.
+var source_id: int = -1
 ## Hit points of one wall cell.
 @export var max_hp: float = 100.0
 ## Blueprint left where a wall cell is destroyed, or empty for nothing.

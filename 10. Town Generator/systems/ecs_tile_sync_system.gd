@@ -4,7 +4,7 @@ extends EcsSystem
 ## Draws the grid, one way, onto TileMapLayers it builds from the catalog under its root:
 ## one per terrain, floor and roof type from the def's TileSet, half a cell up and left for
 ## the dual grid, in list order, a type's layer also filling under every later type so edges
-## blend; then furniture, walls and attachments on the cell grid. Walls use one atlas source
+## blend; then furniture, walls and attachments on the cell grid, their sheets added as sources. Walls use one atlas source
 ## per wall type, joined to their building's neighbouring walls. The root is its own: the
 ## first run clears it, builds and draws all; after that only what changed is redrawn.
 
@@ -36,6 +36,8 @@ var _furniture_layer: TileMapLayer
 var _attachment_layer: TileMapLayer
 ## Wall type id -> [source id, side layout].
 var _wall_sources: Dictionary = {}
+## [layer, texture, tile size] -> source id, for furniture and attachment sheets.
+var _sheet_sources: Dictionary = {}
 ## Whether the roof layers show.
 var roofs_visible: bool = true:
 	set(on):
@@ -120,9 +122,9 @@ func _build() -> void:
 		child.queue_free()
 	_collect(_catalog.terrains, _terrain_defs, _terrain_layers, _terrain_rank, "Terrain")
 	_collect(_catalog.floors, _floor_defs, _floor_layers, _floor_rank, "Floor")
-	_furniture_layer = _make_layer("Furniture", _catalog.furniture_tiles, false)
-	_wall_layer = _make_layer("Walls", _catalog.wall_tiles, false)
-	_attachment_layer = _make_layer("Attachments", _catalog.attachment_tiles, false)
+	_furniture_layer = _make_layer("Furniture", _cell_tile_set(), false)
+	_wall_layer = _make_layer("Walls", _catalog.wall_tiles(), false)
+	_attachment_layer = _make_layer("Attachments", _cell_tile_set(), false)
 	_collect(_catalog.roofs, _roof_defs, _roof_layers, _roof_rank, "Roof")
 	roofs_visible = roofs_visible
 	if _wall_layer != null:
@@ -130,16 +132,29 @@ func _build() -> void:
 			var source := _wall_layer.tile_set.get_source(def.source_id) as TileSetAtlasSource \
 				if _wall_layer.tile_set.has_source(def.source_id) else null
 			if source == null:
-				push_error("EcsTileSyncSystem: wall '%s' names source %d, not in the wall tiles" % [def.key, def.source_id])
+				push_error("EcsTileSyncSystem: wall '%s' has no sheet" % def.key)
 				continue
 			_wall_sources[def.id] = [def.source_id, EcsDualGrid.side_layout(source)]
 	_built = true
+
+## An empty TileSet on the cell grid; pieces add their sheets as they are first drawn.
+func _cell_tile_set() -> TileSet:
+	var tile_set := TileSet.new()
+	tile_set.tile_size = Vector2i(EcsTownGrid.CELL, EcsTownGrid.CELL)
+	return tile_set
+
+## The source on `layer` for `tile`'s sheet, added the first time that sheet is drawn.
+func _source_for(layer: TileMapLayer, tile: EcsTileComponent) -> int:
+	var key := [layer, tile.texture, tile.tile_size]
+	if not _sheet_sources.has(key):
+		_sheet_sources[key] = layer.tile_set.add_source(EcsDualGrid.make_source(tile.texture, tile.tile_size))
+	return _sheet_sources[key]
 
 ## A layer per def, in list order, and each one's corner layout.
 func _collect(defs: Array, out_defs: Array[EcsTileDef], out_layers: Array[TileMapLayer],
 		rank: Dictionary, group: String) -> void:
 	for def: EcsTileDef in defs:
-		var layer := _make_layer("%s_%s" % [group, def.key], def.tile_set, true)
+		var layer := _make_layer("%s_%s" % [group, def.key], _catalog.tiles(def), true)
 		if layer == null:
 			continue
 		rank[def.id] = out_defs.size()
@@ -315,16 +330,17 @@ func _draw_objects(grid: EcsTownGridSingleton, cell: Vector2i) -> void:
 func _draw_entity_tile(layer: TileMapLayer, cell: Vector2i, id: int) -> void:
 	var tile := _world.get_component(id, EcsTileComponent) as EcsTileComponent \
 		if _world != null and id > EcsWorld.NO_ENTITY else null
-	if tile == null:
+	if tile == null or tile.texture == null:
 		if layer.get_cell_source_id(cell) != -1:
 			layer.erase_cell(cell)
 			redrawn += 1
 		return
+	var source := _source_for(layer, tile)
 	var place := _world.get_component(id, EcsGridPositionComponent) as EcsGridPositionComponent
 	if place == null:
-		layer.set_cell(cell, tile.source_id, tile.atlas)
+		layer.set_cell(cell, source, tile.atlas)
 	else:
 		# A turned piece draws, on each cell, the slice that turned there, turned the same.
 		var offset := EcsTownGrid.turn(cell - place.cell, place.size, 4 - place.turns)
-		layer.set_cell(cell, tile.source_id, tile.atlas + offset, TURN_FLAGS[posmod(place.turns, 4)])
+		layer.set_cell(cell, source, tile.atlas + offset, TURN_FLAGS[posmod(place.turns, 4)])
 	redrawn += 1

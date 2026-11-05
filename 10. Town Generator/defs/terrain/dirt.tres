@@ -1,10 +1,10 @@
 [gd_resource type="Resource" script_class="EcsTerrainDef" format=3 uid="uid://bxijm35xmt1pd"]
 
 [ext_resource type="Script" uid="uid://bjrdpjs1inii4" path="res://10. Town Generator/defs/ecs_terrain_def.gd" id="1"]
-[ext_resource type="TileSet" path="res://10. Town Generator/art/tilesets/dirt.tres" id="2_tiles"]
+[ext_resource type="Texture2D" uid="uid://cois61few2rn2" path="res://10. Town Generator/art/placeholder/terrain_dirt.png" id="2_tiles"]
 
 [resource]
 script = ExtResource("1")
 key = &"dirt"
 display_name = "dirt"
-tile_set = ExtResource("2_tiles")
+texture = ExtResource("2_tiles")

@@ -2,8 +2,8 @@
 
 [ext_resource type="Script" uid="uid://cp8v6j8myi431" path="res://10. Town Generator/defs/ecs_town_catalog.gd" id="1"]
 [ext_resource type="Script" uid="uid://c6issvxyrmm1g" path="res://10. Town Generator/defs/ecs_door_def.gd" id="d"]
-[ext_resource type="Resource" path="res://10. Town Generator/defs/door/wood.tres" id="d1"]
-[ext_resource type="Resource" path="res://10. Town Generator/defs/door/stone.tres" id="d2"]
+[ext_resource type="Resource" uid="uid://bybsrxj5qjt0e" path="res://10. Town Generator/defs/door/wood.tres" id="d1"]
+[ext_resource type="Resource" uid="uid://4gvd8qsph26g" path="res://10. Town Generator/defs/door/stone.tres" id="d2"]
 [ext_resource type="Script" uid="uid://cfhfq0d55ey50" path="res://10. Town Generator/defs/ecs_floor_def.gd" id="f"]
 [ext_resource type="Resource" uid="uid://cgxfxuhuqmpsv" path="res://10. Town Generator/defs/floor/wood.tres" id="f1"]
 [ext_resource type="Resource" uid="uid://bpg1r0g0ybsr8" path="res://10. Town Generator/defs/floor/stone.tres" id="f2"]
@@ -12,8 +12,8 @@
 [ext_resource type="Script" uid="uid://f40hefedlc0f" path="res://10. Town Generator/defs/ecs_roof_def.gd" id="r"]
 [ext_resource type="Resource" uid="uid://c2g3qachks0e" path="res://10. Town Generator/defs/roof/thatch.tres" id="r1"]
 [ext_resource type="Script" uid="uid://r2c8hwr8jq2f" path="res://10. Town Generator/defs/ecs_room_type_def.gd" id="rt"]
-[ext_resource type="Resource" path="res://10. Town Generator/defs/room/bedroom.tres" id="rt_bedroom"]
-[ext_resource type="Resource" path="res://10. Town Generator/defs/room/dining.tres" id="rt_dining"]
+[ext_resource type="Resource" uid="uid://bhp4wp0ta4tjr" path="res://10. Town Generator/defs/room/bedroom.tres" id="rt_bedroom"]
+[ext_resource type="Resource" uid="uid://bab2cabn467mp" path="res://10. Town Generator/defs/room/dining.tres" id="rt_dining"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/room/kitchen.tres" id="rt_kitchen"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/room/store.tres" id="rt_store"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/room/workshop.tres" id="rt_workshop"]
@@ -22,12 +22,9 @@
 [ext_resource type="Resource" uid="uid://bxijm35xmt1pd" path="res://10. Town Generator/defs/terrain/dirt.tres" id="t2"]
 [ext_resource type="Resource" uid="uid://by6bit62sy8c3" path="res://10. Town Generator/defs/terrain/sand.tres" id="t3"]
 [ext_resource type="Resource" uid="uid://bfovdx53nqy1w" path="res://10. Town Generator/defs/terrain/water.tres" id="t4"]
-[ext_resource type="TileSet" path="res://10. Town Generator/art/tilesets/attachments.tres" id="ts_attachments"]
-[ext_resource type="TileSet" path="res://10. Town Generator/art/tilesets/furniture.tres" id="ts_furniture"]
-[ext_resource type="TileSet" path="res://10. Town Generator/art/tilesets/walls.tres" id="ts_walls"]
 [ext_resource type="Script" uid="uid://cuh411fcskjqj" path="res://10. Town Generator/defs/ecs_wall_def.gd" id="w"]
-[ext_resource type="Resource" path="res://10. Town Generator/defs/wall/wood.tres" id="w1"]
-[ext_resource type="Resource" path="res://10. Town Generator/defs/wall/stone.tres" id="w2"]
+[ext_resource type="Resource" uid="uid://du3o3361f2fqc" path="res://10. Town Generator/defs/wall/wood.tres" id="w1"]
+[ext_resource type="Resource" uid="uid://b6fx676kshdux" path="res://10. Town Generator/defs/wall/stone.tres" id="w2"]
 
 [resource]
 script = ExtResource("1")
@@ -37,6 +34,3 @@ walls = Array[ExtResource("w")]([ExtResource("w1"), ExtResource("w2")])
 doors = Array[ExtResource("d")]([ExtResource("d1"), ExtResource("d2")])
 roofs = Array[ExtResource("r")]([ExtResource("r1")])
 room_types = Array[ExtResource("rt")]([ExtResource("rt_bedroom"), ExtResource("rt_kitchen"), ExtResource("rt_workshop"), ExtResource("rt_dining"), ExtResource("rt_store")])
-wall_tiles = ExtResource("ts_walls")
-furniture_tiles = ExtResource("ts_furniture")
-attachment_tiles = ExtResource("ts_attachments")

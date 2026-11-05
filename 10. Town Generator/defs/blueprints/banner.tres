@@ -5,9 +5,12 @@
 [ext_resource type="Script" uid="uid://dgqirndtg2ib2" path="res://10. Town Generator/components/ecs_attachable_component.gd" id="s_att"]
 [ext_resource type="Script" uid="uid://bin24ox2e0o22" path="res://10. Town Generator/components/ecs_tile_component.gd" id="s_tile"]
 [ext_resource type="Script" uid="uid://cp3w6mj12e7wa" path="res://10. Town Generator/components/ecs_attached_to_component.gd" id="s_to"]
+[ext_resource type="Texture2D" uid="uid://bychhoff5qosq" path="res://10. Town Generator/art/placeholder/attachments.png" id="t_sheet"]
 
 [sub_resource type="Resource" id="c_tile"]
 script = ExtResource("s_tile")
+texture = ExtResource("t_sheet")
+tile_size = 16
 atlas = Vector2i(5, 0)
 
 [sub_resource type="Resource" id="c_att"]

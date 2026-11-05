@@ -18,14 +18,17 @@ var last_mouse_position: Vector2
 func _ready():
 	zoom = Vector2.ONE*zoom_value
 
+# A pan's drag and release are read here, so they follow the mouse anywhere once it started.
 func _input(event):
 	handle_panning(event)
 	save_camera_state()
 
-# The wheel is read here rather than in _input so that UI gets it first: a
-# scroll over a panel scrolls the panel and never reaches the camera.
+# The wheel and a pan's start are read here rather than in _input so that UI gets them
+# first: a scroll or middle-drag over a panel never reaches the camera.
 func _unhandled_input(event):
 	handle_zoom(event)
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_MIDDLE and event.pressed:
+		start_panning(event.position)
 	save_camera_state()
 	
 func _process(delta: float) -> void:
@@ -43,11 +46,8 @@ func handle_zoom(event):
 
 func handle_panning(event):
 	if event is InputEventMouseButton:
-		if event.button_index == MOUSE_BUTTON_MIDDLE:
-			if event.pressed:
-				start_panning(event.position)
-			else:
-				stop_panning()
+		if event.button_index == MOUSE_BUTTON_MIDDLE and not event.pressed:
+			stop_panning()
 	
 	elif event is InputEventMouseMotion and is_panning:
 		pan_camera(event.position)

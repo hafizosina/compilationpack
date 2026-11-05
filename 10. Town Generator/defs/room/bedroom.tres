@@ -1,6 +1,6 @@
-[gd_resource type="Resource" script_class="EcsRoomTypeDef" format=3]
+[gd_resource type="Resource" script_class="EcsRoomTypeDef" format=3 uid="uid://bhp4wp0ta4tjr"]
 
-[ext_resource type="Script" path="res://10. Town Generator/defs/ecs_room_type_def.gd" id="1"]
+[ext_resource type="Script" uid="uid://r2c8hwr8jq2f" path="res://10. Town Generator/defs/ecs_room_type_def.gd" id="1"]
 
 [resource]
 script = ExtResource("1")

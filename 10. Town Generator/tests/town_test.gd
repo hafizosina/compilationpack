@@ -249,7 +249,14 @@ func _the_authors_art_is_used_and_its_layout_read() -> void:
 	_check("every layer's layout reads complete, 15 masks", complete)
 	var wood_set := sync.floor_layers()[0].tile_set
 	var wood := EcsDualGrid.corner_layout(wood_set.get_source(wood_set.get_source_id(0)))
-	_check("WoodFloor's painted peering bits read as its table", _same_layout(wood, EcsDualGrid.CORNER_ATLAS))
+	_check("WoodFloor, a bare sheet, reads from its pixels as the table its painted peering bits gave",
+		_same_layout(wood, EcsDualGrid.CORNER_ATLAS))
+	var once := CATALOG.tiles(CATALOG.terrains[0]) == CATALOG.tiles(CATALOG.terrains[0])
+	var started := Time.get_ticks_usec()
+	for def in CATALOG.terrains + CATALOG.floors + CATALOG.roofs:
+		EcsDualGrid.corner_layout(EcsDualGrid.make_tile_set(def.texture, def.tile_size).get_source(0))
+	print("[town] measure: every dual-grid TileSet made from its sheet and read: %d µs" % (Time.get_ticks_usec() - started))
+	_check("a def's TileSet is made once a run, then reused", once)
 	var grass_set := sync.terrain_layers()[0].tile_set
 	var grass := EcsDualGrid.corner_layout(grass_set.get_source(grass_set.get_source_id(0)))
 	_check("the 16 px grass, read from transparency: diagonals at 3:2 and 4:2, 10 full variants",
@@ -258,9 +265,14 @@ func _the_authors_art_is_used_and_its_layout_read() -> void:
 		and (grass[EcsDualGrid.FULL] as Array).size() == 10)
 	_check("and draws it at 2x, from its 16 px tile size", sync.terrain_layers()[0].scale == Vector2(2, 2))
 	var walls := sync.wall_layer().tile_set
-	_check("WoodWall's peering bits and BaseWall's transparency both read all 16 wall shapes",
-		_same_layout(EcsDualGrid.side_layout(walls.get_source(1)), EcsDualGrid.SIDE_ATLAS)
-		and EcsDualGrid.side_layout(walls.get_source(3)).size() == 16)
+	_check("WoodWall and BaseWall, bare sheets, read all 16 wall shapes, WoodWall as its painted table did",
+		_same_layout(EcsDualGrid.side_layout(walls.get_source(CATALOG.wall(1).source_id)), EcsDualGrid.SIDE_ATLAS)
+		and EcsDualGrid.side_layout(walls.get_source(CATALOG.wall(2).source_id)).size() == 16)
+	var closed := walls.get_source(CATALOG.door(1).closed_source_id) as TileSetAtlasSource
+	_check("a door's 48 px tiles are cut after its 8 px margin, and both doors share the open sheet's one source",
+		closed.get_tile_texture_region(Vector2i(1, 0)) == Rect2i(56, 8, 48, 48) and closed.get_tiles_count() == 2
+		and CATALOG.door(1).open_source_id == CATALOG.door(2).open_source_id
+		and CATALOG.door(1).closed_source_id != CATALOG.door(2).closed_source_id)
 	t.root.queue_free()
 
 func _same_layout(a: Dictionary, b: Dictionary) -> bool:
@@ -301,7 +313,7 @@ func _walls_join_their_neighbours() -> void:
 	var blocked := _cmd(EcsBuildCommand.Kind.PLACE_WALL, Vector2i(1, 8), 1)
 	_send(t, [stone, unknown, blocked])
 	_check("a stone wall draws from its own source, a lone post",
-		sync.wall_layer().get_cell_source_id(Vector2i(8, 8)) == 3 and sync.wall_mask_at(Vector2i(8, 8)) == 0)
+		sync.wall_layer().get_cell_source_id(Vector2i(8, 8)) == CATALOG.wall(2).source_id and sync.wall_mask_at(Vector2i(8, 8)) == 0)
 	_check("an unknown wall type, or a cell with an object, is refused",
 		unknown.result == &"unknown_wall" and blocked.result == &"occupied")
 	t.root.queue_free()
@@ -427,7 +439,8 @@ func _a_door_goes_into_a_straight_wall() -> void:
 		place != null and place.cell == Vector2i(5, 2) and world.has(id, EcsDoorComponent)
 		and building.children.has(id))
 	_check("drawn closed, along its wall: your wood door across, the stone one down",
-		sync.door_tile_at(Vector2i(5, 2)) == [2, Vector2i(0, 0)] and sync.door_tile_at(Vector2i(2, 5)) == [5, Vector2i(1, 0)])
+		sync.door_tile_at(Vector2i(5, 2)) == [CATALOG.door(1).closed_source_id, Vector2i(0, 0)]
+		and sync.door_tile_at(Vector2i(2, 5)) == [CATALOG.door(2).closed_source_id, Vector2i(1, 0)])
 	_check("and the walls beside it end in posts",
 		sync.wall_mask_at(Vector2i(4, 2)) == EcsDualGrid.LEFT and sync.wall_mask_at(Vector2i(6, 2)) == EcsDualGrid.RIGHT)
 	var over := _cmd(EcsBuildCommand.Kind.PLACE_WALL, Vector2i(5, 2), 1)
@@ -450,10 +463,10 @@ func _a_door_toggles_and_is_removed() -> void:
 	var wall := _cmd(EcsBuildCommand.Kind.TOGGLE_DOOR, Vector2i(4, 2))
 	_send(t, [_cmd(EcsBuildCommand.Kind.TOGGLE_DOOR, Vector2i(5, 2)), wall])
 	_check("toggling opens it: an open tile swapped in, one cell redrawn",
-		door.is_open and sync.door_tile_at(Vector2i(5, 2)) == [4, Vector2i(2, 0)] and sync.redrawn == 1)
+		door.is_open and sync.door_tile_at(Vector2i(5, 2)) == [CATALOG.door(1).open_source_id, Vector2i(2, 0)] and sync.redrawn == 1)
 	_check("toggling a wall is refused", wall.result == &"not_a_door")
 	_send(t, [_cmd(EcsBuildCommand.Kind.TOGGLE_DOOR, Vector2i(5, 2))])
-	_check("and again closes it", not door.is_open and sync.door_tile_at(Vector2i(5, 2)) == [2, Vector2i(0, 0)])
+	_check("and again closes it", not door.is_open and sync.door_tile_at(Vector2i(5, 2)) == [CATALOG.door(1).closed_source_id, Vector2i(0, 0)])
 	_send(t, [_cmd(EcsBuildCommand.Kind.REMOVE_STRUCTURE, Vector2i(5, 2))])
 	var dying := world.get_component(id, EcsDyingFlag) as EcsDyingFlag
 	var building := world.get_component(grid.building_id[EcsTownGrid.index(grid, Vector2i(5, 2))], EcsBuildingComponent) as EcsBuildingComponent
