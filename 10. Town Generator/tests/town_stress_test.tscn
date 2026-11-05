@@ -1,0 +1,9 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://10. Town Generator/tests/town_stress_test.gd" id="1_test"]
+[ext_resource type="PackedScene" uid="uid://gctl0rjtf4op" path="res://Global/Scene/camera_2d.tscn" id="2_camera"]
+
+[node name="TownStressTest" type="Node2D"]
+script = ExtResource("1_test")
+
+[node name="Camera2D" parent="." instance=ExtResource("2_camera")]

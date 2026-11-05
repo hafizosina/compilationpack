@@ -36,6 +36,11 @@ There are no build scripts; the editor is the tool chain. The tests are module 9
 # seed same building. ~12 s. The viewer: "$GODOT" --path . "res://10. Town Generator/generator.tscn"
 "$GODOT" --headless --path . "res://10. Town Generator/tests/generator_test.tscn"
 
+# Module 10's stress scene (brief §5): 100, 500 and 1,000 generated buildings — load cost per
+# stage, idle tick (~23 µs at any size), then wandering villagers (~2 µs each). ~22 s.
+# `-- --n=500 --npcs=1000` for one size; without --headless (or F6) it runs 1,000 buildings and 2,000 villagers live, with FPS.
+"$GODOT" --headless --path . "res://10. Town Generator/tests/town_stress_test.tscn"
+
 # The hunt on its own: one dog in a bush, one rabbit — ambush, pounce, stun, bites.
 "$GODOT" --path . "res://9. EcsSystem/showcase/hunt_showcase.tscn"
 

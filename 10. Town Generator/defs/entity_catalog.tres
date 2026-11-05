@@ -25,10 +25,11 @@
 [ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/tree.tres" id="bp_tree"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/wall_lamp.tres" id="bp_wall_lamp"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/well.tres" id="bp_well"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/villager.tres" id="bp_villager"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/workbench.tres" id="bp_workbench"]
 [ext_resource type="Script" uid="uid://dj08sroj0ed18" path="res://9. EcsSystem/defs/ecs_entity_catalog.gd" id="cat"]
 [ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
 
 [resource]
 script = ExtResource("cat")
-defs = Array[ExtResource("def")]([ExtResource("bp_building"), ExtResource("bp_door"), ExtResource("bp_bed"), ExtResource("bp_double_bed"), ExtResource("bp_table"), ExtResource("bp_long_table"), ExtResource("bp_chair"), ExtResource("bp_stove"), ExtResource("bp_chest"), ExtResource("bp_workbench"), ExtResource("bp_shelf"), ExtResource("bp_barrel"), ExtResource("bp_sawmill"), ExtResource("bp_anvil"), ExtResource("bp_well"), ExtResource("bp_hearth"), ExtResource("bp_crop"), ExtResource("bp_tree"), ExtResource("bp_bush"), ExtResource("bp_wall_lamp"), ExtResource("bp_candle"), ExtResource("bp_plate"), ExtResource("bp_book"), ExtResource("bp_mug"), ExtResource("bp_banner"), ExtResource("bp_rubble")])
+defs = Array[ExtResource("def")]([ExtResource("bp_building"), ExtResource("bp_door"), ExtResource("bp_bed"), ExtResource("bp_double_bed"), ExtResource("bp_table"), ExtResource("bp_long_table"), ExtResource("bp_chair"), ExtResource("bp_stove"), ExtResource("bp_chest"), ExtResource("bp_workbench"), ExtResource("bp_shelf"), ExtResource("bp_barrel"), ExtResource("bp_sawmill"), ExtResource("bp_anvil"), ExtResource("bp_well"), ExtResource("bp_hearth"), ExtResource("bp_crop"), ExtResource("bp_tree"), ExtResource("bp_bush"), ExtResource("bp_wall_lamp"), ExtResource("bp_candle"), ExtResource("bp_plate"), ExtResource("bp_book"), ExtResource("bp_mug"), ExtResource("bp_banner"), ExtResource("bp_rubble"), ExtResource("bp_villager")])

@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="EcsEntityDef" format=3]
+
+[ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="base"]
+[ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
+[ext_resource type="Script" uid="uid://c62j1k5pdptjl" path="res://9. EcsSystem/components/ecs_movement_component.gd" id="s_move"]
+[ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
+[ext_resource type="Script" path="res://10. Town Generator/components/ecs_wander_component.gd" id="s_wander"]
+[ext_resource type="Texture2D" uid="uid://flw42i8l4ym5" path="res://Global/Asset/bald64.png" id="t_villager"]
+
+[sub_resource type="Resource" id="c_move"]
+script = ExtResource("s_move")
+speed = 40.0
+
+[sub_resource type="Resource" id="c_wander"]
+script = ExtResource("s_wander")
+
+[sub_resource type="Resource" id="c_sprite"]
+script = ExtResource("s_sprite")
+texture = ExtResource("t_villager")
+scale_factor = 0.4
+z_index = 5
+
+[resource]
+script = ExtResource("def")
+id = &"villager"
+display_name = "Villager"
+components = Array[ExtResource("base")]([SubResource("c_move"), SubResource("c_wander"), SubResource("c_sprite")])

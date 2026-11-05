@@ -20,6 +20,10 @@ module 9's ECS core plus the town systems.
 # The generator: 1,000 seeds per building type, 18 checks, ~12 s; and its viewer.
 "$GODOT" --headless --path . "res://10. Town Generator/tests/generator_test.tscn"
 "$GODOT" --path . "res://10. Town Generator/generator.tscn"
+
+# Brief §5's stress scene: 100, 500, 1,000 generated buildings; load, idle tick and villagers. ~22 s.
+# `-- --n=500 --npcs=1000` for one size; without --headless (or F6 in the editor) it runs 1,000 buildings and 2,000 villagers live, with FPS (§11).
+"$GODOT" --headless --path . "res://10. Town Generator/tests/town_stress_test.tscn"
 ```
 
 `main.tscn` is the ECS scene (`main.gd`). **The tile layers are data**: every def and tile
@@ -33,16 +37,16 @@ component is a sheet (a PNG) and a tile size; the TileSets are made from them at
 | Path | Role |
 |---|---|
 | `singletons/` | `EcsTownGridSingleton` — the grid |
-| `components/` | `EcsBuildingComponent`, `EcsGridPositionComponent`, `EcsDoorComponent`, `EcsTileComponent`, `EcsFurnitureComponent`, `EcsPlantComponent`, `EcsAttachableComponent`, `EcsAttachedToComponent` |
+| `components/` | `EcsWanderComponent` (stress villagers), `EcsBuildingComponent`, `EcsGridPositionComponent`, `EcsDoorComponent`, `EcsTileComponent`, `EcsFurnitureComponent`, `EcsPlantComponent`, `EcsAttachableComponent`, `EcsAttachedToComponent` |
 | `ecs/` | `EcsTownGrid` (cell maths, making a grid), `EcsDualGrid` (masks, layout, TileSet), `EcsBuildCommand`, `EcsBuildRules` (every check, changing nothing), `EcsBuildingStamp` (capture a building, stamp a def as commands), `EcsBuildingGenerator` (a building from a seed, as commands), `EcsBuildingCheck` (is a built building sound) |
 | `generator.tscn` | The generator's viewer (`generator_view.gd`) |
 | `save/` | `EcsTownSave`, a saved town by key |
-| `systems/` | `EcsBuildCommandSystem`, `EcsRoomDetectionSystem`, `EcsRoofSystem`, `EcsTileSyncSystem`, `EcsTownOverlaySystem` |
+| `systems/` | `EcsBuildCommandSystem`, `EcsRoomDetectionSystem`, `EcsRoofSystem`, `EcsTileSyncSystem`, `EcsTownOverlaySystem`, `EcsWanderSystem` (stress scene only) |
 | `ui/` | `town_ui.gd` (`EcsTownUI`, on main.tscn's `UI` CanvasLayer): the HUD's code; `build_panel.tscn` (`EcsBuildPanel`), the build panel on the left |
 | `town_overlay.gd` | `EcsTownOverlay`, the view that draws footprints and drag previews |
 | `defs/` | `EcsTileDef` (a sheet and a tile size) → `EcsTerrainDef`, `EcsFloorDef`, `EcsRoofDef`, `EcsWallDef` (+ hp, rubble); `EcsTownCatalog`; `town_catalog.tres` and one `.tres` per type; `EcsBuildingDef` and `buildings/` (cottage, workshop); `EcsBuildingTypeDef` and `building_type/` (house, workshop); `entity_catalog.tres` (module 9's `EcsEntityCatalog`) and `blueprints/` |
 | `art/placeholder/` | Generated placeholder sheets, `make_placeholders.py`, layout in its README |
-| `tests/` | `town_test.tscn` |
+| `tests/` | `town_test.tscn`, `generator_test.tscn`, `town_stress_test.tscn` |
 
 Pipeline (`main.gd`): `lifecycle > build > rooms > roof > tile_sync > overlay`. Lifecycle is module 9's, with its
 `EcsEntityManager` rooted at `World/Entities`; buildings declare no node, so it builds none.
@@ -568,7 +572,43 @@ gap; a damaged wall then removed forgets its damage. **The brief's "done": that 
 
 ---
 
-## 11. Open for discussion
+## 11. The stress scene (2026-11-05)
+
+Brief §5. `tests/town_stress_test.tscn` lays N generated buildings in a square, **all 10×8 and rich**
+(floored, two rooms, every optional piece) with **3 cells of street** between them; type, facing and
+seed come from the building's number, so every run is the same town. It sends the commands
+through the real pipeline — `lifecycle > build > rooms > roof > wander > movement > tile_sync >
+node_sync > overlay` — and times every stage every tick. Then it adds wandering villagers and times again.
+
+**Villagers are a stress load, not a feature.** The brief needs no creatures this phase; these exist
+to see how the town's systems behave with movers on top. A `villager` blueprint is module 9's
+`EcsMovementComponent` and `EcsSpriteComponent` plus module 10's `EcsWanderComponent`;
+`EcsWanderSystem` gives a standing villager a random point within its radius after a pause, and module
+9's `EcsMovementSystem` and `EcsNodeSyncSystem` walk and draw it. **Walls don't block them** (the brief
+allows it; decided 2026-11-05: no pathfinding yet). No body, no collision: villagers overlap. Only the
+stress scene runs these; `main.tscn` has no villagers.
+
+Measured 2026-11-05 (headless, every stage every tick):
+
+| Buildings | Grid | Commands | Rooms | Entities | Plan | Load (4 ticks) | of which tile sync | Idle tick |
+|---|---|---|---|---|---|---|---|---|
+| 100 | 133×113 | 9,000 | 200 | 1,000 | 123 ms | 0.54 s | 0.33 s | 23 µs |
+| 500 | 302×256 | 45,000 | 1,000 | 5,000 | 660 ms | 2.8 s | 1.7 s | 23 µs |
+| 1,000 | 419×355 | 90,000 | 2,000 | 10,000 | 1.4 s | 5.5 s | 3.3 s | 22 µs |
+
+- **Idle buildings cost nothing**: the idle tick is 23 µs at 100 buildings and at 1,000, every stage
+  under 7 µs. The brief's claim holds.
+- **Load is linear**, about 5.5 ms a building plus 1.4 ms to plan it; about 60% of it is the first tile
+  sync drawing every cell. Lifecycle (10 furniture births a building) is 1.0 s and build 0.8 s at 1,000.
+- **Villagers cost about 2 µs each a tick**, the same at any town size: 100 → 0.17 ms, 500 → 0.8 ms,
+  1,000 → 1.7 ms, 2,000 → 4.4 ms (worst ticks 7–8 ms). Movement is over half of it, node sync and
+  wander the rest. Nothing in the town's own stages grows with villagers.
+- **Live**: the scene run in a window (exports `watch_buildings` 1,000, `watch_villagers` 2,000, roofs
+  off) holds 60 FPS with dips to 54, tick about 4.9 ms, readout in the top-left corner.
+
+---
+
+## 12. Open for discussion
 
 - **What "closed" means** (flagged 2026-11-05). `CLOSE_BUILDING` sets `EcsBuildingComponent.closed`,
   one way; the only thing that reads it is the overlay (dashed outline open, solid with a fill closed),
