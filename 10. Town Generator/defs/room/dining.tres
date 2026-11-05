@@ -8,3 +8,5 @@ id = &"dining"
 display_name = "Dining room"
 needs = Array[StringName]([&"table"])
 priority = 2
+required = Array[StringName]([&"long_table"])
+optional = Array[StringName]([&"chair", &"chair"])

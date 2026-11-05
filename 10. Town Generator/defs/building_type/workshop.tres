@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="EcsBuildingTypeDef" format=3]
+
+[ext_resource type="Script" path="res://10. Town Generator/defs/ecs_building_type_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+key = &"workshop"
+display_name = "Workshop"
+min_size = Vector2i(7, 6)
+max_size = Vector2i(13, 10)
+min_room = Vector2i(3, 3)
+rooms = Array[int]([1, 2, 3])
+roles = Array[StringName]([&"workshop", &"store", &"kitchen"])
+walls = Array[StringName]([&"wood", &"stone", &"stone"])
+doors = Array[StringName]([&"wood", &"stone", &"stone"])
+floors = Array[StringName]([&"", &"stone", &"stone"])
+optional_chance = Array[float]([0.0, 0.5, 1.0])
+loop_chance = 0.2

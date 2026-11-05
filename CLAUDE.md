@@ -31,6 +31,11 @@ There are no build scripts; the editor is the tool chain. The tests are module 9
 # Module 10: the town grid, commands, dual-grid tile sync, rooms, stamps and town saves; prints costs.
 "$GODOT" --headless --path . "res://10. Town Generator/tests/town_test.tscn"
 
+# Module 10's generator: 1,000 seeds per building type through the real build system and
+# room detection — every room has a door and is reachable, no furniture blocks a door, same
+# seed same building. ~12 s. The viewer: "$GODOT" --path . "res://10. Town Generator/generator.tscn"
+"$GODOT" --headless --path . "res://10. Town Generator/tests/generator_test.tscn"
+
 # The hunt on its own: one dog in a bush, one rabbit — ambush, pounce, stun, bites.
 "$GODOT" --path . "res://9. EcsSystem/showcase/hunt_showcase.tscn"
 

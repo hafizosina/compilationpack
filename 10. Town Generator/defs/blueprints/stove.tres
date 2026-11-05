@@ -17,6 +17,7 @@ atlas = Vector2i(7, 0)
 
 [sub_resource type="Resource" id="c_furn"]
 script = ExtResource("s_furn")
+against_wall = true
 tags = Array[StringName]([&"stove"])
 holds = true
 

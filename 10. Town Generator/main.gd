@@ -1,7 +1,7 @@
 extends Node2D
 
 ## Module 10 entry point: the town grid on module 9's ECS, map input and the tools'
-## commands; the HUD is the UI node's (EcsTownUI). Keys: Q turns a piece or a stamp, F5
+## commands; the HUD is the UI node's (EcsTownUI). Right-click puts the tool down. Keys: Q turns a piece or a stamp, F5
 ## saves the town, F9 loads it; WASD or a middle-drag moves the camera, the wheel zooms.
 ## The tile layers are built from the catalog, under World/TilemapGroup, by EcsTileSyncSystem.
 
@@ -96,7 +96,7 @@ func _hover() -> void:
 		return
 	_hover_key = key
 	_overlay.clear_ghost()
-	if not key.is_empty() and EcsTownGrid.in_bounds(_grid(), cell):
+	if not key.is_empty() and _tool != &"" and EcsTownGrid.in_bounds(_grid(), cell):
 		_show_ghost(cell)
 
 ## The ghost at `cell`: the cells `_commands_at` would act on, the first command's verdict, and
@@ -143,7 +143,9 @@ func _on_view_toggled(view: StringName, on: bool) -> void:
 		_overlay.queue_redraw()
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+		_drop_tool()
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and _tool != &"":
 		var cell := EcsTownGrid.cell_at(get_global_mouse_position())
 		if event.pressed:
 			_pressing = true
@@ -167,6 +169,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			_preview(cell)
 	elif event is InputEventKey and event.pressed and not event.echo:
 		_shortcut(event.keycode)
+
+## Puts the tool in hand down: no tool, no drag, no ghost, until one is picked on the panel.
+func _drop_tool() -> void:
+	_tool = &""
+	_pressing = false
+	_overlay.preview.clear()
+	_overlay.bad_cells.clear()
+	_overlay.preview_rect = Rect2i()
+	_overlay.clear_ghost()
+	_ui.clear_tool()
 
 func _shortcut(key: Key) -> void:
 	match key:

@@ -206,6 +206,10 @@ func _draw_dirty(grid: EcsTownGridSingleton) -> void:
 			wall_cells[cell] = true
 			object_cells[cell] = true
 		if bits & EcsTownGridSingleton.CHANGED_STRUCTURE:
+			# A floor runs under walls, so a wall coming or going beside a floor redraws it.
+			if _floor_near(grid, cell):
+				for corner in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
+					floor_tiles[cell + corner] = true
 			wall_cells[cell] = true
 			for side in EcsDualGrid.SIDES:
 				wall_cells[cell + side] = true
@@ -231,7 +235,7 @@ func _draw_at(grid: EcsTownGridSingleton, at: Vector2i, terrain: bool, floors: b
 		for k in _terrain_layers.size():
 			_put(_terrain_layers[k], at, _mask(around, k), erase)
 	if floors:
-		var around := _around(grid, at, grid.floor, _floor_rank, false)
+		var around := _under_walls(grid, at, _around(grid, at, grid.floor, _floor_rank, false))
 		for k in _floor_layers.size():
 			_put(_floor_layers[k], at, _mask(around, k), erase)
 
@@ -251,6 +255,34 @@ func _around(grid: EcsTownGridSingleton, at: Vector2i, cells: PackedInt32Array,
 		var id := cells[EcsTownGrid.index(grid, cell)]
 		out[q] = int(rank.get(id, -1)) if id != 0 else -1
 	return out
+
+## A floor runs under its walls: a wall or door cell is drawn, in this render tile, with the
+## highest floor of the open cells beside it — never its own, which stays in the grid for when
+## the wall goes — so the floor's edge lies under the wall's middle: not short of it inside,
+## not past it outside.
+func _under_walls(grid: EcsTownGridSingleton, at: Vector2i, around: PackedInt32Array) -> PackedInt32Array:
+	var walled: Array[int] = []
+	var best := -1
+	for q in 4:
+		var cell: Vector2i = at + EcsDualGrid.CORNERS[q]
+		if not EcsTownGrid.in_bounds(grid, cell):
+			continue
+		if grid.structure[EcsTownGrid.index(grid, cell)] != EcsTownGridSingleton.NONE:
+			walled.append(q)
+		else:
+			best = maxi(best, around[q])
+	for q in walled:
+		around[q] = best
+	return around
+
+## Whether `cell` or any of its eight neighbours has a floor.
+func _floor_near(grid: EcsTownGridSingleton, cell: Vector2i) -> bool:
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			var next := cell + Vector2i(dx, dy)
+			if EcsTownGrid.in_bounds(grid, next) and grid.floor[EcsTownGrid.index(grid, next)] != 0:
+				return true
+	return false
 
 ## Quarters whose cell's type draws at or after layer `k`.
 func _mask(around: PackedInt32Array, k: int) -> int:

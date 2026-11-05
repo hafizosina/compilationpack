@@ -14,6 +14,8 @@ signal view_toggled(view: StringName, on: bool)
 signal town_requested(action: StringName)
 
 const ICONS := "res://10. Town Generator/art/placeholder/icons/%s.png"
+## Doors share the wall tool's type list; a door's choice id is this plus its door id.
+const DOOR_CHOICE: int = 100
 ## How long a notice stays on the status bar, in milliseconds.
 const NOTICE_MS: int = 4000
 
@@ -33,7 +35,7 @@ var _notice: String = ""
 var _notice_until: int = 0
 
 func _ready() -> void:
-	_panel.tool_picked.connect(func(tool: StringName, id: int) -> void: tool_picked.emit(tool, id))
+	_panel.tool_picked.connect(_on_tool_picked)
 	_panel.brush_size_changed.connect(func(size: int) -> void: brush_size_changed.emit(size))
 	_panel.view_toggled.connect(func(view: StringName, on: bool) -> void: view_toggled.emit(view, on))
 	_panel.town_requested.connect(func(action: StringName) -> void: town_requested.emit(action))
@@ -41,6 +43,13 @@ func _ready() -> void:
 	for surface: Control in [_panel, _status_bar]:
 		surface.mouse_filter = Control.MOUSE_FILTER_STOP
 		surface.gui_input.connect(_eat.bind(surface))
+
+## A door picked among the wall tool's types is the door tool to everyone else.
+func _on_tool_picked(tool: StringName, id: int) -> void:
+	if tool == &"wall" and id >= DOOR_CHOICE:
+		tool_picked.emit(&"door", id - DOOR_CHOICE)
+	else:
+		tool_picked.emit(tool, id)
 
 func _eat(event: InputEvent, surface: Control) -> void:
 	if event is InputEventMouse:
@@ -55,6 +64,10 @@ func setup(catalog: EcsTownCatalog, entities: EcsEntityCatalog, stamps: Array[Ec
 	_panel.setup(_tools())
 	_panel.select(tool, id)
 	_panel.set_views(roofs, rooms)
+
+## Shows no tool picked, as a right-click on the map put it down.
+func clear_tool() -> void:
+	_panel.clear_tool()
 
 ## Offers `stamps` on the stamp tool, with stamp `id` chosen.
 func set_stamps(stamps: Array[EcsBuildingDef], id: int) -> void:
@@ -101,6 +114,8 @@ func _tool_name(tool: StringName, id: int, brush: int, turns: int) -> String:
 				return "Stamp: %s, turned %d°" % [_stamps[id - 1].display_name, turns * 90]
 		&"copy":
 			return "Save building"
+		&"":
+			return "No tool"
 	return String(tool).capitalize()
 
 ## The panel's tools, from the catalogs; each type's swatch is cut from its sheet.
@@ -114,13 +129,12 @@ func _tools() -> Array:
 	floors.append({"id": 0, "label": "None", "icon": load(ICONS % "none")})
 	var walls: Array = []
 	for def in _catalog.walls:
-		walls.append({"id": def.id, "label": def.display_name.capitalize(),
+		walls.append({"id": def.id, "label": "%s wall" % def.display_name.capitalize(),
 			"icon": _wall_swatch(def, EcsDualGrid.RIGHT | EcsDualGrid.BOTTOM | EcsDualGrid.LEFT | EcsDualGrid.TOP)})
-	var doors: Array = []
 	for def in _catalog.doors:
 		var source := _catalog.wall_tiles().get_source(def.closed_source_id) as TileSetAtlasSource
 		var across := _cut(source, def.closed_horizontal)
-		doors.append({"id": def.id, "label": def.display_name.capitalize(), "icon": across})
+		walls.append({"id": DOOR_CHOICE + def.id, "label": "%s door" % def.display_name.capitalize(), "icon": across})
 		_add_ghost(&"door", def.id, across, Vector2i.ONE, _cut(source, def.closed_vertical))
 	var furniture: Array = []
 	var plants: Array = []
@@ -152,10 +166,9 @@ func _tools() -> Array:
 			"hint": "Drag to lay a floor. None takes it up.", "choices": floors, "sized": true},
 		{"tool": &"building", "label": "Building", "icon": load(ICONS % "building"),
 			"hint": "Drag a rectangle to claim a footprint. It turns red where it would overlap another."},
-		{"tool": &"wall", "label": "Wall", "icon": load(ICONS % "wall"),
-			"hint": "Drag a straight line of wall inside a building.", "choices": walls},
-		{"tool": &"door", "label": "Door", "icon": load(ICONS % "door"),
-			"hint": "Click a straight wall to set a door in it.", "choices": doors},
+		{"tool": &"wall", "label": "Walls and doors", "icon": load(ICONS % "wall"),
+			"hint": "A wall: drag a straight line inside a building. A door: click a straight wall to set it in.",
+			"choices": walls},
 		{"tool": &"furniture", "label": "Furniture", "icon": load(ICONS % "furniture"),
 			"hint": "Click to place it, top-left on the cell; Q turns it. Not on walls; a room takes its type from what's in it.",
 			"choices": furniture},

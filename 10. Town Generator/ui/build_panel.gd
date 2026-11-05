@@ -15,7 +15,7 @@ signal town_requested(action: StringName)
 
 const MAX_BRUSH: int = 8
 const TOOL_SIZE := Vector2(52, 52)
-const SWATCH_SIZE := Vector2(68, 68)
+const SWATCH_SIZE := Vector2(68, 84)
 
 @onready var _tools: GridContainer = %Tools
 @onready var _tool_name: Label = %ToolName
@@ -73,6 +73,20 @@ func select(tool: StringName, id: int = -1) -> void:
 		(_specs[other]["button"] as Button).set_pressed_no_signal(other == tool)
 	_open(tool, false)
 
+## Shows no tool picked: every tool released, no types or brush.
+func clear_tool() -> void:
+	for tool: StringName in _specs:
+		(_specs[tool]["button"] as Button).set_pressed_no_signal(false)
+	_open_tool = &""
+	_tool_name.text = "No tool"
+	_hint.text = "Pick a tool above. Right-click on the map puts the tool in hand down."
+	for child in _types.get_children():
+		child.queue_free()
+	_type_buttons.clear()
+	_types_title.visible = false
+	(_types.get_parent() as Control).visible = false
+	_brush.visible = false
+
 ## Replaces `tool`'s choices and picks `id` among them, redrawing them if it is open.
 func set_choices(tool: StringName, choices: Array, id: int) -> void:
 	if not _specs.has(tool):
@@ -114,6 +128,9 @@ func _open(tool: StringName, announce: bool) -> void:
 		swatch.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
 		swatch.text = choice["label"]
 		swatch.custom_minimum_size = SWATCH_SIZE
+		# A long name wraps rather than widening the panel.
+		swatch.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		swatch.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		swatch.tooltip_text = choice["label"]
 		swatch.set_pressed_no_signal(int(choice["id"]) == int(spec["id"]))
 		swatch.pressed.connect(_choose.bind(tool, int(choice["id"])))

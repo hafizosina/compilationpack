@@ -1,0 +1,166 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" uid="uid://gctl0rjtf4op" path="res://Global/Scene/camera_2d.tscn" id="1_camera"]
+[ext_resource type="Script" path="res://10. Town Generator/generator_view.gd" id="2_view"]
+[ext_resource type="Resource" uid="uid://dy1yfvp8f74dp" path="res://10. Town Generator/defs/town_catalog.tres" id="3_catalog"]
+[ext_resource type="Resource" uid="uid://blqt4dne3iouc" path="res://10. Town Generator/defs/entity_catalog.tres" id="4_entities"]
+[ext_resource type="Theme" uid="uid://ctheme0mainx7" path="res://Global/Theme/main_theme.tres" id="5_theme"]
+[ext_resource type="Script" uid="uid://d278qmhu52iih" path="res://10. Town Generator/town_overlay.gd" id="6_overlay"]
+
+[node name="GeneratorView" type="Node2D"]
+script = ExtResource("2_view")
+catalog = ExtResource("3_catalog")
+entity_catalog = ExtResource("4_entities")
+
+[node name="World" type="Node2D" parent="."]
+
+[node name="TilemapGroup" type="Node" parent="World"]
+
+[node name="Entities" type="Node2D" parent="World"]
+
+[node name="Overlay" type="Node2D" parent="World"]
+z_index = 10
+script = ExtResource("6_overlay")
+
+[node name="Camera2D" parent="." instance=ExtResource("1_camera")]
+zoom_value = 2.0
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Root" type="Control" parent="UI"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme = ExtResource("5_theme")
+
+[node name="Panel" type="PanelContainer" parent="UI/Root"]
+layout_mode = 1
+anchors_preset = 9
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 264.0
+offset_bottom = -8.0
+grow_vertical = 2
+theme_type_variation = &"DockPanel"
+
+[node name="Box" type="VBoxContainer" parent="UI/Root/Panel"]
+layout_mode = 2
+theme_type_variation = &"DockVBox"
+
+[node name="Title" type="Label" parent="UI/Root/Panel/Box"]
+layout_mode = 2
+theme_type_variation = &"DockTitle"
+text = "Building generator"
+
+[node name="Hint" type="Label" parent="UI/Root/Panel/Box"]
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+theme_type_variation = &"DockHint"
+text = "Every change regenerates. The same inputs always give the same building."
+autowrap_mode = 3
+
+[node name="Inputs" type="GridContainer" parent="UI/Root/Panel/Box"]
+layout_mode = 2
+columns = 2
+
+[node name="TypeLabel" type="Label" parent="UI/Root/Panel/Box/Inputs"]
+layout_mode = 2
+theme_type_variation = &"DockLabel"
+text = "Type"
+
+[node name="Type" type="OptionButton" parent="UI/Root/Panel/Box/Inputs"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="WealthLabel" type="Label" parent="UI/Root/Panel/Box/Inputs"]
+layout_mode = 2
+theme_type_variation = &"DockLabel"
+text = "Wealth"
+
+[node name="Wealth" type="OptionButton" parent="UI/Root/Panel/Box/Inputs"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="FacingLabel" type="Label" parent="UI/Root/Panel/Box/Inputs"]
+layout_mode = 2
+theme_type_variation = &"DockLabel"
+text = "Facing"
+
+[node name="Facing" type="OptionButton" parent="UI/Root/Panel/Box/Inputs"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="WidthLabel" type="Label" parent="UI/Root/Panel/Box/Inputs"]
+layout_mode = 2
+theme_type_variation = &"DockLabel"
+text = "Width"
+
+[node name="Width" type="SpinBox" parent="UI/Root/Panel/Box/Inputs"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 5.0
+max_value = 40.0
+value = 9.0
+
+[node name="HeightLabel" type="Label" parent="UI/Root/Panel/Box/Inputs"]
+layout_mode = 2
+theme_type_variation = &"DockLabel"
+text = "Height"
+
+[node name="Height" type="SpinBox" parent="UI/Root/Panel/Box/Inputs"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 5.0
+max_value = 40.0
+value = 9.0
+
+[node name="SeedLabel" type="Label" parent="UI/Root/Panel/Box/Inputs"]
+layout_mode = 2
+theme_type_variation = &"DockLabel"
+text = "Seed"
+
+[node name="Seed" type="SpinBox" parent="UI/Root/Panel/Box/Inputs"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 100000.0
+value = 1.0
+
+[node name="Buttons" type="HBoxContainer" parent="UI/Root/Panel/Box"]
+layout_mode = 2
+
+[node name="Next" type="Button" parent="UI/Root/Panel/Box/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"DockButton"
+text = "Regenerate"
+
+[node name="Random" type="Button" parent="UI/Root/Panel/Box/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"DockButton"
+text = "Random seed"
+
+[node name="Sep" type="HSeparator" parent="UI/Root/Panel/Box"]
+layout_mode = 2
+
+[node name="Info" type="Label" parent="UI/Root/Panel/Box"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+theme_type_variation = &"DockHint"
+autowrap_mode = 3

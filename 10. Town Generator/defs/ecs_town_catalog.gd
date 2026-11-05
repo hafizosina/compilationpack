@@ -12,6 +12,8 @@ extends Resource
 @export var doors: Array[EcsDoorDef] = []
 @export var roofs: Array[EcsRoofDef] = []
 @export var room_types: Array[EcsRoomTypeDef] = []
+## Kinds of building the generator makes.
+@export var building_types: Array[EcsBuildingTypeDef] = []
 
 var _numbered: bool = false
 ## Dual-grid TileSets made from defs' sheets this run: def -> TileSet.
@@ -63,6 +65,13 @@ func wall_tiles() -> TileSet:
 		def.closed_source_id = add.call(def.closed_texture, def.tile_size, def.closed_margins)
 		def.open_source_id = add.call(def.open_texture, def.tile_size, def.open_margins)
 	return _wall_tile_set
+
+## The room type with id `key`, or null.
+func room_type(key: StringName) -> EcsRoomTypeDef:
+	for def in room_types:
+		if def.id == key:
+			return def
+	return null
 
 func terrain(id: int) -> EcsTerrainDef:
 	return _by_id(terrains, id)

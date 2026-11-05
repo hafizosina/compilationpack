@@ -10,12 +10,16 @@ module 9 changes only through a hook the author approves first. The plan is the 
 module 9's ECS core plus the town systems.
 
 ```bash
-# Tools, types, brush size and views are on the build panel. Keys: Q turns a piece or a
-# stamp; F5 saves the town, F9 loads it. WASD or a middle-drag moves the camera, the wheel zooms.
+# Tools, types, brush size and views are on the build panel; right-click puts the tool down.
+# Keys: Q turns a piece or a stamp; F5 saves the town, F9 loads it. WASD or a middle-drag moves the camera, the wheel zooms.
 "$GODOT" --path .   # main.tscn is the main scene
 
 # 113 checks; exit 0 only if all pass. Also prints tile sync and command costs.
 "$GODOT" --headless --path . "res://10. Town Generator/tests/town_test.tscn"
+
+# The generator: 1,000 seeds per building type, 18 checks, ~12 s; and its viewer.
+"$GODOT" --headless --path . "res://10. Town Generator/tests/generator_test.tscn"
+"$GODOT" --path . "res://10. Town Generator/generator.tscn"
 ```
 
 `main.tscn` is the ECS scene (`main.gd`). **The tile layers are data**: every def and tile
@@ -30,12 +34,13 @@ component is a sheet (a PNG) and a tile size; the TileSets are made from them at
 |---|---|
 | `singletons/` | `EcsTownGridSingleton` — the grid |
 | `components/` | `EcsBuildingComponent`, `EcsGridPositionComponent`, `EcsDoorComponent`, `EcsTileComponent`, `EcsFurnitureComponent`, `EcsPlantComponent`, `EcsAttachableComponent`, `EcsAttachedToComponent` |
-| `ecs/` | `EcsTownGrid` (cell maths, making a grid), `EcsDualGrid` (masks, layout, TileSet), `EcsBuildCommand`, `EcsBuildRules` (every check, changing nothing), `EcsBuildingStamp` (capture a building, stamp a def as commands) |
+| `ecs/` | `EcsTownGrid` (cell maths, making a grid), `EcsDualGrid` (masks, layout, TileSet), `EcsBuildCommand`, `EcsBuildRules` (every check, changing nothing), `EcsBuildingStamp` (capture a building, stamp a def as commands), `EcsBuildingGenerator` (a building from a seed, as commands), `EcsBuildingCheck` (is a built building sound) |
+| `generator.tscn` | The generator's viewer (`generator_view.gd`) |
 | `save/` | `EcsTownSave`, a saved town by key |
 | `systems/` | `EcsBuildCommandSystem`, `EcsRoomDetectionSystem`, `EcsRoofSystem`, `EcsTileSyncSystem`, `EcsTownOverlaySystem` |
 | `ui/` | `town_ui.gd` (`EcsTownUI`, on main.tscn's `UI` CanvasLayer): the HUD's code; `build_panel.tscn` (`EcsBuildPanel`), the build panel on the left |
 | `town_overlay.gd` | `EcsTownOverlay`, the view that draws footprints and drag previews |
-| `defs/` | `EcsTileDef` (a sheet and a tile size) → `EcsTerrainDef`, `EcsFloorDef`, `EcsRoofDef`, `EcsWallDef` (+ hp, rubble); `EcsTownCatalog`; `town_catalog.tres` and one `.tres` per type; `EcsBuildingDef` and `buildings/` (cottage, workshop); `entity_catalog.tres` (module 9's `EcsEntityCatalog`) and `blueprints/` |
+| `defs/` | `EcsTileDef` (a sheet and a tile size) → `EcsTerrainDef`, `EcsFloorDef`, `EcsRoofDef`, `EcsWallDef` (+ hp, rubble); `EcsTownCatalog`; `town_catalog.tres` and one `.tres` per type; `EcsBuildingDef` and `buildings/` (cottage, workshop); `EcsBuildingTypeDef` and `building_type/` (house, workshop); `entity_catalog.tres` (module 9's `EcsEntityCatalog`) and `blueprints/` |
 | `art/placeholder/` | Generated placeholder sheets, `make_placeholders.py`, layout in its README |
 | `tests/` | `town_test.tscn` |
 
@@ -116,7 +121,15 @@ slots without any:
 sits on a cell corner and shows a quarter of each of its four cells; the 4-bit mask of which
 quarters are filled picks the tile. **A type's layer also fills under every later type** (bit set
 when the cell's type draws at or after the layer), so a higher type's rounded edge never shows a
-hole. Terrain off the map repeats the edge cell; floor off the map is none. Full tiles have
+hole. Terrain off the map repeats the edge cell; floor off the map is none. **A floor runs under its walls**
+(2026-11-05): when floors are drawn, a wall or door cell is drawn, in each render tile, with the
+highest floor among the open cells beside it — never its own — so a floor fills right to the wall's
+middle, where the wall's art covers its edge, instead of stopping short and showing ground between floor
+and wall; on the wall's outer side the tile has no floor beside it and stays bare. A floor laid before
+the wall went up behaves the same: it stays in the grid under the wall (and shows again if the wall is
+removed) but is not drawn past the wall's middle. Only the drawing does this: the grid's `floor` is
+unchanged. A wall placed or removed next to a floor redraws the floor's four
+corner tiles there too (not on bare ground, so a wall alone still redraws five cells at most). Full tiles have
 variants, picked by a hash of the position so a redraw never flickers.
 
 **Layouts are read from the TileSet.** `EcsDualGrid.corner_layout` / `side_layout` use the
@@ -375,10 +388,18 @@ signals (`tool_picked(tool, id)`, `brush_size_changed`, `view_toggled`, `town_re
 **The panel is the only way to pick a tool, type, brush size or view** (2026-11-05: the keys from
 before it — 1–8, 0, `[ ]`, B, C, W/E, D/F, T, X, R, O — were removed). S and P (save building,
 stamp) went too, S because WASD moves the camera. The keys left have no panel button: Q (turn), F5,
-F9. `select()` shows the starting tool; `set_pressed_no_signal` skips a `ButtonGroup`, so it releases
+F9. **Right-click on the map puts the tool in hand down** (2026-11-05): no tool picked on the panel
+(`clear_tool()`), no ghost, any drag dropped, and left clicks do nothing until a tool is picked again; a
+right-click over the panel is the panel's and changes nothing. `select()` shows the starting tool; `set_pressed_no_signal` skips a `ButtonGroup`, so it releases
 the other tools itself. Tools are named (`&"terrain"`, `&"wall"`, …) and grouped by
 how they use the mouse: brushes paint while held, building drags a rectangle, wall and remove drag a
-line, close/door/toggle act on a click. **The HUD eats the mouse** (2026-11-05): the panel and the status bar
+line, close/door/toggle act on a click. **Walls and doors are one tool on the panel** (2026-11-05):
+its types are the walls then the doors, each labelled "Wood wall", "Wood door"…; a door's choice id is
+`EcsTownUI.DOOR_CHOICE` (100) plus its door id, and the UI hands `main.gd` a door choice as the door tool,
+so placing doors, their ghost and their refusals are as before — a wall type drags a line, a door type
+clicks. The defs stay apart: a door has two sheets, fixed tiles and a blueprint, so it does not share
+`EcsTileDef`'s promise that a type's shapes are read from its sheet. Swatch labels wrap to two lines
+(swatches 68x84) rather than widen the panel. **The HUD eats the mouse** (2026-11-05): the panel and the status bar
 stop it and `EcsTownUI` accepts every mouse event that lands on them, so a click, wheel or middle-drag
 over them never reaches the map (which listens in `_unhandled_input`) or the camera. The shared camera
 (`Global/Scene/camera_2d.tscn`) reads the wheel and **a pan's start** in `_unhandled_input` for the same
@@ -459,7 +480,70 @@ too — the machine, not the change.)
 
 ---
 
-## 9. Open for discussion
+## 9. Step 7 — the building generator (2026-11-05)
+
+**`EcsBuildingGenerator`** (`ecs/`) is pure and seeded, not a system: `generate(type, size, wealth,
+facing, seed, catalog, entities, at)` gives back the commands the player's tools send, so the build
+system checks a generated building exactly as a hand-built one; `plan(...)` is the same with the
+layout beside it (rooms and their roles, the entrance, the doors, pieces that found no place), for
+checks and the viewer. All randomness is one `RandomNumberGenerator` seeded once, so the same inputs
+give the same commands.
+
+1. **Rooms**: binary space partition of the footprint inside its walls — the largest room that can
+   still split is split across its longer side (a square one by a coin), never leaving a room smaller
+   than the type's `min_room` (3x3 inside), until the type's room count for the wealth.
+2. **Walls**: the perimeter and each split's line, wall to wall.
+3. **Doors**: the entrance on a perimeter cell of the facing side with a room right inside it (never a
+   corner or where a split meets it); inner doors along a random spanning tree grown from the entrance
+   room over pairs of rooms that share a straight stretch of wall, one door per tree edge on a cell with
+   wall on both sides along it and a room on each side across; by `loop_chance` one more on a pair the
+   tree skipped.
+4. **Roles** from the type's list, largest room first (the first is the main room; past the end, the
+   last repeats).
+5. **Floor** on every room cell, by wealth; the poorest's floor key is empty, so it stays bare ground.
+6. **Furniture**: a room's type (`EcsRoomTypeDef`) now lists `required` and `optional` blueprints; all
+   required ones go in, each optional one by the type's `optional_chance` for the wealth. A piece that
+   stands **against a wall** says so on its own furniture component (`against_wall`: beds, stove, hearth,
+   chest, shelf, barrel, workbench), and goes with its back — its top edge as drawn — on the room's edge,
+   turned as needed (pieces turn, §6); others prefer the middle and touch an edge only when nothing
+   else fits. A door's inside neighbour is never furnished, and **a piece is never placed where it would
+   cut the room's free cells in two** — so every door stays reachable inside its room. Candidates are
+   drawn at random and only the drawn one is flood-filled, re-drawing if it would split the room
+   (checking every candidate cost 17 ms a building; this 1.4 ms).
+
+**`EcsBuildingTypeDef`** (`defs/building_type/`, listed in the catalog as `building_types`): size range,
+`min_room`, room count, wall, door and floor keys and optional chance **by wealth** (one entry per level,
+poorest first: poor, middling, rich), roles, loop chance. **house**: 1/3/4 rooms, bedroom, kitchen,
+store, bedroom; wood, wood, stone; no floor, wood, wood. **workshop**: 1/2/3 rooms, workshop, store,
+kitchen; wood then stone, stone floors. Two types at three wealths cover the brief's "a poor house, a rich
+house and a workshop".
+
+**`EcsBuildingCheck.problems(world, grid, building, entrance)`** (`ecs/`) reads a built building and
+says what is wrong, changing nothing: a sealed area (a room with no door), a room or a door that can't be
+walked to from the entrance (walking through doors and cells with no wall and no object), furniture on a
+door's inside neighbour, no entrance.
+
+**The viewer** (`generator.tscn`): type, wealth, facing, width, height and seed on the left; every change
+regenerates into a new world through the real pipeline, with rooms coloured and named by room detection;
+Regenerate takes the next seed. It frames the building, and once it has settled reports the rooms and
+roles, commands and refusals, the generator's time, pieces with no room, and the check — "Sound" or the
+problems.
+
+**Tests** (`tests/generator_test.tscn`, separate because it takes ~12 s): for each type, 1,000 seeds,
+each drawing its size from the type's range, wealth from `seed % 3` and facing from the seed; generated,
+sent through lifecycle, the build system and room detection on its own grid, and checked. **The brief's
+"done": every command accepted, no sealed area, every room and every door reachable from the entrance,
+no furniture on a door's inside neighbour, an entrance on the facing side, and the same seed giving the
+same commands — for 2,000 buildings; also every room typed by room detection as the role it was given**
+(3,701 rooms, none mistyped). 18 checks.
+
+**Measured** (`generator_test`): 1.4 ms a house and 1.3 ms a workshop on average, 5 ms at worst (a
+14x11 rich house); 7 optional pieces in 1,000 houses found no room. The viewer's first generation plus
+pipeline is a few ms.
+
+---
+
+## 10. Open for discussion
 
 - **What "closed" means** (flagged 2026-11-05). `CLOSE_BUILDING` sets `EcsBuildingComponent.closed`,
   one way; the only thing that reads it is the overlay (dashed outline open, solid with a fill closed),

@@ -8,3 +8,5 @@ id = &"workshop"
 display_name = "Workshop"
 needs = Array[StringName]([&"workbench"])
 priority = 3
+required = Array[StringName]([&"workbench"])
+optional = Array[StringName]([&"anvil", &"barrel", &"shelf"])

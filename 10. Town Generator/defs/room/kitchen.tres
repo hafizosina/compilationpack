@@ -8,3 +8,5 @@ id = &"kitchen"
 display_name = "Kitchen"
 needs = Array[StringName]([&"stove", &"hearth"])
 priority = 4
+required = Array[StringName]([&"stove"])
+optional = Array[StringName]([&"table", &"barrel", &"chair"])

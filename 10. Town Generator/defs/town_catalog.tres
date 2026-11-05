@@ -26,6 +26,10 @@
 [ext_resource type="Resource" uid="uid://du3o3361f2fqc" path="res://10. Town Generator/defs/wall/wood.tres" id="w1"]
 [ext_resource type="Resource" uid="uid://b6fx676kshdux" path="res://10. Town Generator/defs/wall/stone.tres" id="w2"]
 
+[ext_resource type="Script" path="res://10. Town Generator/defs/ecs_building_type_def.gd" id="bt"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/house.tres" id="bt_house"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/workshop.tres" id="bt_workshop"]
+
 [resource]
 script = ExtResource("1")
 terrains = Array[ExtResource("t")]([ExtResource("t1"), ExtResource("t2"), ExtResource("t3"), ExtResource("t4")])
@@ -34,3 +38,4 @@ walls = Array[ExtResource("w")]([ExtResource("w1"), ExtResource("w2")])
 doors = Array[ExtResource("d")]([ExtResource("d1"), ExtResource("d2")])
 roofs = Array[ExtResource("r")]([ExtResource("r1")])
 room_types = Array[ExtResource("rt")]([ExtResource("rt_bedroom"), ExtResource("rt_kitchen"), ExtResource("rt_workshop"), ExtResource("rt_dining"), ExtResource("rt_store")])
+building_types = Array[ExtResource("bt")]([ExtResource("bt_house"), ExtResource("bt_workshop")])

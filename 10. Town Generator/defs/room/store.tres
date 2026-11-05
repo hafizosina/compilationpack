@@ -8,3 +8,5 @@ id = &"store"
 display_name = "Store room"
 needs = Array[StringName]([&"storage"])
 priority = 1
+required = Array[StringName]([&"chest"])
+optional = Array[StringName]([&"barrel", &"shelf"])

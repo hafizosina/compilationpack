@@ -31,6 +31,7 @@ func _ready() -> void:
 	_terrain_blends_and_lower_types_fill_under()
 	_a_floor_never_bleeds_past_its_cells()
 	_walls_join_their_neighbours()
+	_a_floor_runs_under_its_walls()
 	_a_building_owns_its_footprint()
 	_footprints_touch_but_never_overlap()
 	_walls_stay_inside_their_own_building()
@@ -288,6 +289,34 @@ func _same_layout(a: Dictionary, b: Dictionary) -> bool:
 
 ## Walls join every neighbouring wall; placing or removing one redraws it and its four
 ## neighbours only.
+## A floor runs under its walls to their middle, so no ground shows between floor and wall;
+## outside the walls it stops; a wall going redraws the floor around it.
+func _a_floor_runs_under_its_walls() -> void:
+	var t := _setup(Vector2i(10, 8))
+	var sync := t.sync as EcsTileSyncSystem
+	var plan := _box(Rect2i(2, 2, 5, 4), [Vector2i(4, 5)])
+	for y in range(3, 5):
+		for x in range(3, 6):
+			plan.append(_cmd(EcsBuildCommand.Kind.SET_FLOOR, Vector2i(x, y), WOOD))
+	_send(t, plan)
+	_send(t, [])
+	var wood := sync.floor_layers()[0]
+	# Render tile (3, 3) is on wall (2, 2)'s corner and floor (3, 3); (4, 5) on the door's inner side.
+	_check("by a wall the floor fills whole tiles: the wall's quarters take the floor beside them",
+		sync.mask_at(wood, Vector2i(3, 3)) == EcsDualGrid.FULL and sync.mask_at(wood, Vector2i(6, 3)) == EcsDualGrid.FULL
+		and sync.mask_at(wood, Vector2i(4, 5)) == EcsDualGrid.FULL)
+	_check("and outside the walls, past their middle, it stops", sync.mask_at(wood, Vector2i(2, 2)) == 0
+		and sync.mask_at(wood, Vector2i(7, 4)) == 0 and sync.mask_at(wood, Vector2i(4, 6)) == 0)
+	# Floor laid first, then the wall built over it: the floor still stops at the wall's middle.
+	_send(t, [_cmd(EcsBuildCommand.Kind.SET_FLOOR, Vector2i(2, 3), WOOD), _cmd(EcsBuildCommand.Kind.SET_FLOOR, Vector2i(2, 4), WOOD)])
+	_check("floored before the wall went up, it still stops at the wall's middle, not past it outside",
+		sync.mask_at(wood, Vector2i(2, 4)) == 0 and sync.mask_at(wood, Vector2i(3, 4)) == EcsDualGrid.FULL)
+	_send(t, [_cmd(EcsBuildCommand.Kind.REMOVE_STRUCTURE, Vector2i(6, 3))])
+	# The gap is bare ground now; the wall below it still takes the floor beside it.
+	_check("a wall taken out redraws the floor's edge where it stood",
+		sync.mask_at(wood, Vector2i(6, 4)) == EcsDualGrid.TL | EcsDualGrid.BL | EcsDualGrid.BR)
+	t.root.queue_free()
+
 func _walls_join_their_neighbours() -> void:
 	var t := _setup(Vector2i(10, 10))
 	var grid := t.grid as EcsTownGridSingleton
