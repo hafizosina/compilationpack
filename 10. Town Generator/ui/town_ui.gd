@@ -142,7 +142,9 @@ func _tools() -> Array:
 	for def in _entities.defs:
 		var place := def.template(&"grid_position") as EcsGridPositionComponent
 		var tile := def.template(&"tile") as EcsTileComponent
-		if tile == null:
+		var offered := def.template(&"furniture") != null or def.template(&"plant") != null \
+			or def.template(&"attachable") != null
+		if tile == null or not offered:
 			continue
 		var tool: StringName = &"furniture"
 		var into := furniture

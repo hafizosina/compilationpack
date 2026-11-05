@@ -48,6 +48,7 @@ func _ready() -> void:
 	_a_house_built_by_hand()
 	_the_preview_predicts_the_build_system()
 	_a_turn_moves_cells_round_the_footprint()
+	_a_wall_can_be_hit()
 	_a_house_is_saved_and_stamped_ten_times()
 	_a_saved_town_reloads_intact()
 	_every_shipped_building_stamps_in_every_turn()
@@ -1019,6 +1020,57 @@ func _every_shipped_building_stamps_in_every_turn() -> void:
 		t.root.queue_free()
 	_check("%d shipped building defs stamp clean in all four turns, same rooms%s" % [files.size(),
 		"" if clean else " (not %s)" % [bad]], clean)
+
+## Step 8: hits wear a wall's hp down; at 0 the cell clears, what hangs on it goes, its rubble
+## is left where it stood and the rooms are found again. A hit on anything but a wall does nothing.
+func _a_wall_can_be_hit() -> void:
+	var t := _setup(Vector2i(14, 10))
+	var world := t.world as EcsWorld
+	var grid := t.grid as EcsTownGridSingleton
+	var build := t.build as EcsBuildCommandSystem
+	# Two rooms side by side, a door in each outer wall, split by the wall at x = 6, a lamp on it.
+	var plan := _box(Rect2i(2, 2, 9, 6), [Vector2i(4, 7), Vector2i(8, 7)])
+	for y in range(3, 7):
+		plan.append(_cmd(EcsBuildCommand.Kind.PLACE_WALL, Vector2i(6, y), 1))
+	plan.append(_att(Vector2i(6, 4), &"wall_lamp"))
+	_send(t, plan)
+	_send(t, [])
+	_send(t, [])
+	var target := Vector2i(6, 4)
+	var i := EcsTownGrid.index(grid, target)
+	var max_hp := CATALOG.wall(1).max_hp
+	_check("two rooms either side of the wall, a lamp on it", _building_at(t, target).rooms.size() == 2
+		and grid.attachment_id[i] > 0)
+	grid.wall_hits.append({"cell": target, "amount": max_hp * 0.4})
+	grid.wall_hits.append({"cell": Vector2i(4, 4), "amount": 50.0})
+	grid.wall_hits.append({"cell": Vector2i(4, 7), "amount": 50.0})
+	_send(t, [])
+	_check("a hit wears its hp down and the wall stands; hits on a floor or a door do nothing",
+		build.hits_applied == 1 and is_equal_approx(grid.wall_hp[i], max_hp * 0.6)
+		and grid.structure[i] == EcsTownGridSingleton.WALL and build.walls_broken == 0
+		and grid.structure[EcsTownGrid.index(grid, Vector2i(4, 7))] == EcsTownGridSingleton.DOOR)
+	var lamp := grid.attachment_id[i]
+	grid.wall_hits.append({"cell": target, "amount": max_hp * 0.6})
+	_send(t, [])
+	_check("the hit that takes it to 0 clears the cell and forgets its hp", build.walls_broken == 1
+		and grid.structure[i] == EcsTownGridSingleton.NONE and grid.wall_type[i] == 0 and not grid.wall_hp.has(i))
+	_check("and what hung on it goes with it", grid.attachment_id[i] == -1 and world.has(lamp, EcsDyingFlag))
+	_send(t, [])
+	_send(t, [])
+	var rubble := grid.object_id[i]
+	var named := world.get_component(rubble, EcsNameComponent) as EcsNameComponent if rubble > 0 else null
+	_check("its type's rubble lies where it stood, drawn there", named != null and named.type_id == CATALOG.wall(1).rubble
+		and (t.sync as EcsTileSyncSystem).furniture_layer().get_cell_source_id(target) != -1)
+	var rooms: Array = _building_at(t, Vector2i(2, 2)).rooms
+	_check("and the rooms are found again: the two are one now, through the gap", rooms.size() == 1
+		and _room_at(t, Vector2i(3, 3)) == _room_at(t, Vector2i(9, 6)) and _room_at(t, Vector2i(3, 3)) != -1)
+	var other := EcsTownGrid.index(grid, Vector2i(6, 3))
+	grid.wall_hits.append({"cell": Vector2i(6, 3), "amount": 30.0})
+	_send(t, [])
+	var damaged := grid.wall_hp.has(other)
+	_send(t, [_cmd(EcsBuildCommand.Kind.REMOVE_STRUCTURE, Vector2i(6, 3))])
+	_check("a damaged wall removed forgets its damage", damaged and not grid.wall_hp.has(other))
+	t.root.queue_free()
 
 func _check(what: String, passed: bool) -> void:
 	_checks += 1

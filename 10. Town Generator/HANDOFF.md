@@ -14,7 +14,7 @@ module 9's ECS core plus the town systems.
 # Keys: Q turns a piece or a stamp; F5 saves the town, F9 loads it. WASD or a middle-drag moves the camera, the wheel zooms.
 "$GODOT" --path .   # main.tscn is the main scene
 
-# 113 checks; exit 0 only if all pass. Also prints tile sync and command costs.
+# 124 checks; exit 0 only if all pass. Also prints tile sync and command costs.
 "$GODOT" --headless --path . "res://10. Town Generator/tests/town_test.tscn"
 
 # The generator: 1,000 seeds per building type, 18 checks, ~12 s; and its viewer.
@@ -543,7 +543,32 @@ pipeline is a few ms.
 
 ---
 
-## 10. Open for discussion
+## 10. Step 8 — a wall can be hit (2026-11-05)
+
+A proof of concept; real wall combat is module 11. **`EcsTownGridSingleton.wall_hits`** is a queue of
+`{cell, amount}`, and **the build command system applies it**, after the tick's commands — it stays the
+only writer of cells. Each hit on a WALL cell takes its amount off the cell's hp, kept in `wall_hp`
+(cell index -> hp, damaged walls only; a wall not in it is at its type's `max_hp`). Above 0 the wall
+stands. **At 0**: the hp entry goes, whatever hangs on the wall goes with it (cause removed), the cell
+clears exactly as a removal does — so its neighbours redraw as ends and posts, and its building is queued
+for room detection, which finds the rooms again (a broken split wall merges two rooms; a hole in an outer
+wall leaves the area open) — and **the wall type's `rubble`** (`EcsWallDef.rubble`, both types:
+`&"rubble"`) is asked of lifecycle on that cell, reserved by token like any piece, so it is born at the
+next lifecycle and drawn on the furniture layer. Rubble is an object with a grid position and a tile and
+nothing else: it blocks building on the cell until removed (Remove takes it like furniture), and it is
+not offered on the panel — the panel offers only furniture, plants and attachments. A hit on anything but
+a wall (a door, a floor, off the map) does nothing. Placing or removing a wall, or setting a door in it,
+forgets the cell's damage. The system counts `hits_applied` and `walls_broken` for the last run with hits.
+Nothing raises hits yet but tests, as the brief asks: no brain, no tool.
+
+**Tests:** two rooms split by a wall with a lamp on it; a hit for 40% leaves the wall standing at 60% hp
+while hits on a floor and a door do nothing; the hit that takes it to 0 clears the cell and forgets its
+hp, the lamp dies with it, rubble lies where it stood and is drawn, and the two rooms are one through the
+gap; a damaged wall then removed forgets its damage. **The brief's "done": that test passes.**
+
+---
+
+## 11. Open for discussion
 
 - **What "closed" means** (flagged 2026-11-05). `CLOSE_BUILDING` sets `EcsBuildingComponent.closed`,
   one way; the only thing that reads it is the overlay (dashed outline open, solid with a fill closed),

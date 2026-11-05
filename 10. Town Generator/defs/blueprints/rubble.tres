@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="EcsEntityDef" format=3]
+
+[ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="base"]
+[ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
+[ext_resource type="Script" uid="uid://dn2f5xd6hs8m4" path="res://10. Town Generator/components/ecs_grid_position_component.gd" id="s_grid"]
+[ext_resource type="Script" uid="uid://bin24ox2e0o22" path="res://10. Town Generator/components/ecs_tile_component.gd" id="s_tile"]
+[ext_resource type="Texture2D" uid="uid://dnkwxks8nnlod" path="res://10. Town Generator/art/placeholder/objects.png" id="t_sheet"]
+
+[sub_resource type="Resource" id="c_grid"]
+script = ExtResource("s_grid")
+
+[sub_resource type="Resource" id="c_tile"]
+script = ExtResource("s_tile")
+texture = ExtResource("t_sheet")
+atlas = Vector2i(2, 3)
+
+[resource]
+script = ExtResource("def")
+id = &"rubble"
+display_name = "Rubble"
+components = Array[ExtResource("base")]([SubResource("c_grid"), SubResource("c_tile")])

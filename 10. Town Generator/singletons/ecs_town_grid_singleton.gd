@@ -42,8 +42,10 @@ var attachment_id: PackedInt32Array = PackedInt32Array()
 var room_id: PackedInt32Array = PackedInt32Array()
 ## Roof catalog id; 0 = none.
 var roof: PackedInt32Array = PackedInt32Array()
-## Damaged walls only: cell index -> hp.
+## Damaged walls only: cell index -> hp. A wall missing here is at its type's `max_hp`.
 var wall_hp: Dictionary = {}
+## Hits on wall cells waiting for the build system, oldest first: {cell: Vector2i, amount: float}.
+var wall_hits: Array[Dictionary] = []
 ## Pending build commands, oldest first.
 var commands: Array[EcsBuildCommand] = []
 ## Reservations awaiting their entity — a building's footprint or a door's cell: token -> EcsSpawnRequest.

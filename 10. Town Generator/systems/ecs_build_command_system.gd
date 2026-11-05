@@ -6,6 +6,7 @@ extends EcsSystem
 ## Buildings, doors, furniture, plants and attachments are entities born at the next
 ## lifecycle stage; until then their cells hold a reservation token, so commands in the
 ## same batch can build on them. Runs after lifecycle, so it binds what was born there first.
+## It also applies the hits on walls in `wall_hits`, after the commands.
 
 var _catalog: EcsTownCatalog
 var _entities: EcsEntityCatalog
@@ -14,6 +15,9 @@ var applied: int = 0
 var refused: int = 0
 var last_refusal: StringName = &""
 var last_usec: int = 0
+## Hits applied on the last run that had any, and walls they brought down.
+var hits_applied: int = 0
+var walls_broken: int = 0
 
 func _init(catalog: EcsTownCatalog, entities: EcsEntityCatalog = null) -> void:
 	_catalog = catalog
@@ -28,8 +32,12 @@ func run(world: EcsWorld, _delta: float) -> void:
 		return
 	if not grid.pending.is_empty():
 		_bind_born(world, grid)
-	if grid.commands.is_empty():
-		return
+	if not grid.commands.is_empty():
+		_apply_commands(world, grid)
+	if not grid.wall_hits.is_empty():
+		_apply_hits(world, grid)
+
+func _apply_commands(world: EcsWorld, grid: EcsTownGridSingleton) -> void:
 	var started := Time.get_ticks_usec()
 	applied = 0
 	refused = 0
@@ -73,6 +81,7 @@ func _apply(world: EcsWorld, grid: EcsTownGridSingleton, command: EcsBuildComman
 				grid.floor[i] = 0
 				_mark(grid, i, EcsTownGridSingleton.CHANGED_FLOOR)
 		EcsBuildCommand.Kind.PLACE_WALL:
+			grid.wall_hp.erase(i)
 			if grid.structure[i] != EcsTownGridSingleton.WALL or grid.wall_type[i] != command.value:
 				grid.structure[i] = EcsTownGridSingleton.WALL
 				grid.wall_type[i] = command.value
@@ -87,6 +96,7 @@ func _apply(world: EcsWorld, grid: EcsTownGridSingleton, command: EcsBuildComman
 			_free_attachment(world, grid, i)
 			if grid.structure[i] == EcsTownGridSingleton.DOOR:
 				_free_object(world, grid, command.cell)
+			grid.wall_hp.erase(i)
 			if grid.structure[i] != EcsTownGridSingleton.NONE:
 				grid.structure[i] = EcsTownGridSingleton.NONE
 				grid.wall_type[i] = 0
@@ -99,6 +109,39 @@ func _apply(world: EcsWorld, grid: EcsTownGridSingleton, command: EcsBuildComman
 			_free_attachment(world, grid, i)
 	return &"ok"
 
+## Each hit takes its amount off a wall cell's hp; at 0 the cell clears — what hangs on it with
+## it — its type's rubble is asked for where it stood, and its building's rooms are queued.
+## A hit on anything but a wall does nothing.
+func _apply_hits(world: EcsWorld, grid: EcsTownGridSingleton) -> void:
+	hits_applied = 0
+	walls_broken = 0
+	for hit in grid.wall_hits:
+		var cell: Vector2i = hit["cell"]
+		if not EcsTownGrid.in_bounds(grid, cell):
+			continue
+		var i := EcsTownGrid.index(grid, cell)
+		var def: EcsWallDef = _catalog.wall(grid.wall_type[i]) if grid.structure[i] == EcsTownGridSingleton.WALL else null
+		if def == null:
+			continue
+		hits_applied += 1
+		var hp: float = grid.wall_hp.get(i, def.max_hp) - float(hit["amount"])
+		if hp > 0.0:
+			grid.wall_hp[i] = hp
+			continue
+		walls_broken += 1
+		grid.wall_hp.erase(i)
+		_free_attachment(world, grid, i)
+		grid.structure[i] = EcsTownGridSingleton.NONE
+		grid.wall_type[i] = 0
+		_mark(grid, i, EcsTownGridSingleton.CHANGED_STRUCTURE)
+		if def.rubble != &"" and grid.object_id[i] == EcsTownGridSingleton.NO_ID:
+			var token := _reserve(world, grid, def.rubble, EcsTownGrid.centre_of(cell),
+				{"grid_position": {"cell": cell, "size": Vector2i.ONE}})
+			if token != EcsTownGridSingleton.NO_ID:
+				grid.object_id[i] = token
+				_mark(grid, i, EcsTownGridSingleton.CHANGED_OBJECT)
+	grid.wall_hits.clear()
+
 ## Turns the wall cell into a door and asks lifecycle for the door entity.
 func _place_door(world: EcsWorld, grid: EcsTownGridSingleton, command: EcsBuildCommand, i: int) -> StringName:
 	var def := _catalog.door(command.value)
@@ -107,6 +150,7 @@ func _place_door(world: EcsWorld, grid: EcsTownGridSingleton, command: EcsBuildC
 	if token == EcsTownGridSingleton.NO_ID:
 		return &"no_lifecycle"
 	_free_attachment(world, grid, i)
+	grid.wall_hp.erase(i)
 	grid.structure[i] = EcsTownGridSingleton.DOOR
 	grid.wall_type[i] = def.id
 	grid.object_id[i] = token
