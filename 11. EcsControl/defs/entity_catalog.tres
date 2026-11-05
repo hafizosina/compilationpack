@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="EcsEntityCatalog" format=3]
+
+[ext_resource type="Script" uid="uid://dj08sroj0ed18" path="res://9. EcsSystem/defs/ecs_entity_catalog.gd" id="cat"]
+[ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
+[ext_resource type="Resource" path="res://11. EcsControl/defs/blueprints/player.tres" id="bp_player"]
+[ext_resource type="Resource" path="res://11. EcsControl/defs/blueprints/dummy.tres" id="bp_dummy"]
+[ext_resource type="Resource" path="res://11. EcsControl/defs/blueprints/dummy_wreck.tres" id="bp_wreck"]
+
+[resource]
+script = ExtResource("cat")
+defs = Array[ExtResource("def")]([ExtResource("bp_player"), ExtResource("bp_dummy"), ExtResource("bp_wreck")])

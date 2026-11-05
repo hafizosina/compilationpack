@@ -1740,3 +1740,17 @@ bump that count or the view won't follow. Measured, 3,600 bushes and 400 rabbits
 naming the detail; a static entity drawn on change and not every tick. The reach test moved its
 berry by writing the component; it now does it as a live edit.
 
+
+---
+
+## 30. A hook for module 11: steering (2026-11-05)
+
+Approved by the author for module 11's player. `EcsMovementComponent.steer` is a runtime
+`Vector2`: a direction whose length is the fraction of `speed`. **Non-zero**, `EcsMovementSystem`
+moves by `steer × speed` (times `EcsDashingFlag.speed_scale` while dashing), writes `velocity`, and
+leaves the destination and its trip clock untouched. **Zero**, which every module 9 entity always
+is, behaviour is exactly as before. It knows nothing about players: whoever decides writes it,
+and movement stays the only writer of position, so collision and node sync are unchanged.
+
+**Tests:** steer moves by steer × speed and ignores a live destination meanwhile; a dash scales
+it; zero steer walks to the destination as before (472 checks).

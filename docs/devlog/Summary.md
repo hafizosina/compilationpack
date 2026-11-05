@@ -156,6 +156,21 @@ A **hand-rolled ECS** and the only live simulation — the main scene. It shares
 
 ---
 
+### 11. EcsControl
+**Module 7's touch controls on module 9's ECS.** The player is an ECS entity whose brain is the player: `main.gd` records the sticks and buttons on `EcsPlayerInputSingleton`, and `EcsPlayerControlSystem` turns them into what module 9's brain writes — movement and intent flags — so module 9's attack, skill, health and remains systems fight for the player unchanged. The state of the build is `11. EcsControl/HANDOFF.md`.
+
+**One tick from input to hit.** Control runs right after lifecycle and before skill, attack and movement, so an attack or cast lands in the tick its input arrives. Intent flags hand the work to the executor that owns it; cooldown, reach, crits and stun stay module 9's.
+
+**Movement through one hook.** Module 9's `EcsMovementComponent` gained `steer` (approved): non-zero, movement moves by it and ignores destinations. Analog stick speed, sprint and the dash (module 9's dash skill with the player's values) all go through it, and movement stays the only writer of position.
+
+**Training dummies** break into a wreck through module 9's remains and come back after 3 s.
+
+**Tests:** `tests/control_test.tscn` — 26 checks.
+
+**Controls:** left stick or WASD moves · Sprint (or Shift) runs, double-tap dashes · Basic Attack stick: aim and let go, or tap for the nearest · four skill sticks cast dash, scan, hide · hold the switch for the interact wheel (not wired yet) · **F1** overlay.
+
+---
+
 
 ## Shared Infrastructure
 
@@ -239,3 +254,4 @@ All widget styling goes through the single theme `Global/Theme/main_theme.tres`,
 | 8. SimpleAiSystem | **Design archive — the code is deleted.** Complete for its milestone when it was removed; its five `.md` docs stay as the reasoning module 9 is built against. Restore with `git checkout 3346b6e -- "8. SimpleAiSystem"` |
 | 9. EcsSystem | **Active, and the only live simulation.** Hand-rolled ECS, twenty-five stages, main scene. Plan steps 0–7 done; combat rebuilt without weapons (attack intents, armour, crits), with corpses, looting, rot, diet and a hunting crocodile; bushes are harvested; step 7 is a pure A* planner under utility goal choice, replanning on events under a budget, with danger and fleeing. Components / flags / singletons as three kinds, intent flags, items as records, fullness / energy / health. 261 lifecycle checks plus a population ramp; cached views took the ceiling past 9,600 entities. The data-structure argument (`HANDOFF.md` §15) is open and the author's to settle |
 | 10. Town Generator | **Active, the main scene.** Town building on module 9's ECS: grid and dual-grid tiles, build commands, rooms and roofs, furniture, stamps and saves, a seeded building generator, breakable walls; the brief's steps 1–8 and its stress measurements done. What a building's `closed` flag is for is open, for the author |
+| 11. EcsControl | **Started.** Module 7's HUD copied onto a player entity in module 9's ECS: moving, sprint, dash, aimed and tapped attacks, skill slots, training dummies. Interact wheel, inventory and animals next |

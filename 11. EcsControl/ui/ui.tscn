@@ -1,0 +1,309 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://11. EcsControl/ui/ui.gd" id="3_ui"]
+[ext_resource type="PackedScene" uid="uid://cxjjlu2hooaco" path="res://7. JoyStick/status_bar.tscn" id="12_statusbar"]
+[ext_resource type="Script" uid="uid://bb8gfgbb0ipya" path="res://Global/Scene/r_box_container.gd" id="13_rbox"]
+[ext_resource type="Theme" uid="uid://ctheme0mainx7" path="res://Global/Theme/main_theme.tres" id="14_thm"]
+[ext_resource type="Texture2D" uid="uid://3i5blhttg0sl" path="res://Global/Asset/Icon/switch_refresh.png" id="15_switch"]
+[ext_resource type="Texture2D" uid="uid://diqisfqytp5vd" path="res://Global/Asset/Icon/inventory_backpack.png" id="16_inv"]
+[ext_resource type="Texture2D" uid="uid://cd4peko5fm460" path="res://Global/Asset/Icon/sprint_boots.png" id="17_sprint"]
+[ext_resource type="Script" uid="uid://bw2hjtgagk6si" path="res://7. JoyStick/hold_ring.gd" id="18_holdring"]
+[ext_resource type="PackedScene" path="res://7. JoyStick/inventory_panel.tscn" id="19_invpanel"]
+
+[node name="UI" type="CanvasLayer" unique_id=856290764]
+script = ExtResource("3_ui")
+
+[node name="MarginContainer" type="MarginContainer" parent="." unique_id=125601888]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -3.0
+offset_bottom = -3.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme = ExtResource("14_thm")
+theme_override_constants/margin_left = 50
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 50
+theme_override_constants/margin_bottom = 10
+metadata/_edit_lock_ = true
+
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer" unique_id=1238301244]
+layout_mode = 2
+
+[node name="LeftGroup" type="Control" parent="MarginContainer/HBoxContainer" unique_id=1853108437]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="StatusBar" parent="MarginContainer/HBoxContainer/LeftGroup" unique_id=1104696372 instance=ExtResource("12_statusbar")]
+layout_mode = 1
+
+[node name="MovementStick" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/LeftGroup" unique_id=824251211]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_top = -340.0
+offset_right = 480.0
+grow_vertical = 0
+joystick_mode = 1
+joystick_size = 200.0
+tip_size = 100.0
+
+[node name="RightGroupAttack" type="Control" parent="MarginContainer/HBoxContainer" unique_id=310421975]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="BasicAttack" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroupAttack" unique_id=714671740]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -350.0
+offset_top = -300.0
+offset_right = 50.0
+grow_horizontal = 0
+grow_vertical = 0
+joystick_size = 160.0
+tip_size = 80.0
+action_left = &"aim_left"
+action_right = &"aim_right"
+action_up = &"aim_up"
+action_down = &"aim_down"
+metadata/_edit_group_ = true
+
+[node name="RBoxContainer" type="Container" parent="MarginContainer/HBoxContainer/RightGroupAttack/BasicAttack" unique_id=1247497934]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -210.0
+offset_top = -210.0
+offset_right = 210.0
+offset_bottom = 210.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("13_rbox")
+radius = 180.0
+start_angle = 160.0
+arc = 120.0
+metadata/_custom_type_script = "uid://bb8gfgbb0ipya"
+
+[node name="Skill1" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroupAttack/BasicAttack/RBoxContainer" unique_id=189177511]
+unique_name_in_owner = true
+layout_mode = 2
+action_left = &"aim_left"
+action_right = &"aim_right"
+action_up = &"aim_up"
+action_down = &"aim_down"
+
+[node name="Skill2" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroupAttack/BasicAttack/RBoxContainer" unique_id=705925593]
+unique_name_in_owner = true
+layout_mode = 2
+action_left = &"aim_left"
+action_right = &"aim_right"
+action_up = &"aim_up"
+action_down = &"aim_down"
+
+[node name="Skill3" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroupAttack/BasicAttack/RBoxContainer" unique_id=1608809900]
+unique_name_in_owner = true
+layout_mode = 2
+action_left = &"aim_left"
+action_right = &"aim_right"
+action_up = &"aim_up"
+action_down = &"aim_down"
+
+[node name="Skill4" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroupAttack/BasicAttack/RBoxContainer" unique_id=465941057]
+unique_name_in_owner = true
+layout_mode = 2
+action_left = &"aim_left"
+action_right = &"aim_right"
+action_up = &"aim_up"
+action_down = &"aim_down"
+
+[node name="Interact" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroupAttack" unique_id=2016697775]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -350.0
+offset_top = -300.0
+offset_right = 50.0
+grow_horizontal = 0
+grow_vertical = 0
+joystick_size = 160.0
+tip_size = 80.0
+action_left = &"aim_left"
+action_right = &"aim_right"
+action_up = &"aim_up"
+action_down = &"aim_down"
+metadata/_edit_group_ = true
+
+[node name="RBoxContainer" type="Container" parent="MarginContainer/HBoxContainer/RightGroupAttack/Interact" unique_id=566563193]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -210.0
+offset_top = -210.0
+offset_right = 210.0
+offset_bottom = 210.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("13_rbox")
+radius = 180.0
+start_angle = 160.0
+arc = 120.0
+metadata/_custom_type_script = "uid://bb8gfgbb0ipya"
+
+[node name="PickUpItem" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroupAttack/Interact/RBoxContainer" unique_id=528490128]
+unique_name_in_owner = true
+layout_mode = 2
+action_left = &"aim_left"
+action_right = &"aim_right"
+action_up = &"aim_up"
+action_down = &"aim_down"
+
+[node name="PlaceItem" type="VirtualJoystick" parent="MarginContainer/HBoxContainer/RightGroupAttack/Interact/RBoxContainer" unique_id=432577172]
+unique_name_in_owner = true
+layout_mode = 2
+action_left = &"aim_left"
+action_right = &"aim_right"
+action_up = &"aim_up"
+action_down = &"aim_down"
+
+[node name="Craft" type="Button" parent="MarginContainer/HBoxContainer/RightGroupAttack/Interact/RBoxContainer" unique_id=624015189]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(85, 85)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+focus_mode = 0
+theme_type_variation = &"RoundButton"
+expand_icon = true
+
+[node name="Button1" type="Button" parent="MarginContainer/HBoxContainer/RightGroupAttack/Interact/RBoxContainer" unique_id=483711722]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(85, 85)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+focus_mode = 0
+theme_type_variation = &"RoundButton"
+expand_icon = true
+
+[node name="Addons" type="HBoxContainer" parent="MarginContainer/HBoxContainer/RightGroupAttack" unique_id=2135895230]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -592.0
+offset_top = -70.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_constants/separation = 16
+alignment = 2
+
+[node name="Potion1" type="Button" parent="MarginContainer/HBoxContainer/RightGroupAttack/Addons" unique_id=1362364995]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_vertical = 4
+focus_mode = 0
+theme_type_variation = &"RoundButton"
+expand_icon = true
+
+[node name="Potion2" type="Button" parent="MarginContainer/HBoxContainer/RightGroupAttack/Addons" unique_id=1292730638]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_vertical = 4
+focus_mode = 0
+theme_type_variation = &"RoundButton"
+expand_icon = true
+
+[node name="Sprint" type="Button" parent="MarginContainer/HBoxContainer/RightGroupAttack/Addons" unique_id=1689508772]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_vertical = 4
+focus_mode = 0
+theme_type_variation = &"RoundButton"
+icon = ExtResource("17_sprint")
+expand_icon = true
+
+[node name="Spacer" type="Control" parent="MarginContainer/HBoxContainer/RightGroupAttack/Addons" unique_id=1357924680]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Switch" type="Button" parent="MarginContainer/HBoxContainer/RightGroupAttack/Addons" unique_id=189574999]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_vertical = 4
+focus_mode = 0
+theme_type_variation = &"RoundButton"
+icon = ExtResource("15_switch")
+expand_icon = true
+
+[node name="HoldRing" type="Control" parent="MarginContainer/HBoxContainer/RightGroupAttack/Addons/Switch" unique_id=190000001]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("18_holdring")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer/HBoxContainer/RightGroupAttack" unique_id=1233446417]
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -64.0
+offset_top = -524.0
+grow_horizontal = 0
+grow_vertical = 0
+mouse_filter = 2
+alignment = 2
+
+[node name="Inventory" type="Button" parent="MarginContainer/HBoxContainer/RightGroupAttack/VBoxContainer" unique_id=1889024811]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_vertical = 4
+focus_mode = 0
+theme_type_variation = &"RoundButton"
+icon = ExtResource("16_inv")
+expand_icon = true
+
+[node name="Spacer" type="Control" parent="MarginContainer/HBoxContainer/RightGroupAttack/VBoxContainer" unique_id=1991729118]
+custom_minimum_size = Vector2(0, 380)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="InventoryPanel" parent="." unique_id=456212390 instance=ExtResource("19_invpanel")]
+unique_name_in_owner = true
+anchors_preset = 11

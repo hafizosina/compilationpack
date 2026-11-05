@@ -20,6 +20,8 @@ var has_destination: bool = false
 var velocity: Vector2 = Vector2.ZERO
 ## Seconds left on the trip. Zero with a live destination means not yet priced.
 var time_left: float = 0.0
+## Direct steering, length = fraction of `speed`. Non-zero overrides the destination.
+var steer: Vector2 = Vector2.ZERO
 
 func key() -> StringName:
 	return &"movement"

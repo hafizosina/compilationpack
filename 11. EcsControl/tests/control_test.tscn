@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://11. EcsControl/tests/control_test.gd" id="1_test"]
+
+[node name="ControlTest" type="Node2D"]
+script = ExtResource("1_test")

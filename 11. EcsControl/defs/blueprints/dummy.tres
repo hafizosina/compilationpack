@@ -1,0 +1,33 @@
+[gd_resource type="Resource" script_class="EcsEntityDef" format=3]
+
+[ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="base"]
+[ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
+[ext_resource type="Script" uid="uid://occbigie8rhc" path="res://9. EcsSystem/components/ecs_body_component.gd" id="s_body"]
+[ext_resource type="Script" uid="uid://b0cqwu7rlda2j" path="res://9. EcsSystem/components/ecs_health_component.gd" id="s_health"]
+[ext_resource type="Script" uid="uid://bohokd74mhp07" path="res://9. EcsSystem/components/ecs_remains_component.gd" id="s_remains"]
+[ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
+[ext_resource type="Texture2D" path="res://11. EcsControl/art/dummy.png" id="t_dummy"]
+
+[sub_resource type="Resource" id="c_body"]
+script = ExtResource("s_body")
+radius = 22.0
+
+[sub_resource type="Resource" id="c_health"]
+script = ExtResource("s_health")
+power = 1.0
+
+[sub_resource type="Resource" id="c_remains"]
+script = ExtResource("s_remains")
+leaves = Dictionary[StringName, StringName]({&"health": &"dummy_wreck"})
+darken = 0.4
+
+[sub_resource type="Resource" id="c_sprite"]
+script = ExtResource("s_sprite")
+texture = ExtResource("t_dummy")
+scale_factor = 0.75
+
+[resource]
+script = ExtResource("def")
+id = &"dummy"
+display_name = "Dummy"
+components = Array[ExtResource("base")]([SubResource("c_body"), SubResource("c_health"), SubResource("c_remains"), SubResource("c_sprite")])

@@ -7,10 +7,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **CompilationPack** — a Godot **4.7** (GDScript) project that collects self-contained game-system demos in numbered folders. Mobile renderer, 1612×720 viewport, `sensor_landscape`, Android export target. Main scene is `res://10. Town Generator/main.tscn` (the town builder). Module 8's code has been deleted; its folder is a design archive of five `.md` files, and module 9 is the only live creature simulation.
 
 There are no build scripts; the editor is the tool chain. The tests are module 9's, in
-`9. EcsSystem/tests/`, and module 10's, in `10. Town Generator/tests/`:
+`9. EcsSystem/tests/`, module 10's, in `10. Town Generator/tests/`, and module 11's control test:
 
 ```bash
-# 468 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 472 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments, the hunger/health/energy loop,
 # intent flags, items as records, the drop on death, views, combat, corpses,
 # looting, rot, diet, hunting, harvesting, the planner, utility, fleeing,
@@ -18,7 +18,7 @@ There are no build scripts; the editor is the tool chain. The tests are module 9
 # save/load snapshots, placing while paused, composed blueprints, multi-select,
 # live edits, selecting by id, the entity list, deleting a save,
 # removing an entity, switching a component off, health only visiting what changes,
-# what a death leaves by its cause, and static entities drawn only on change.
+# what a death leaves by its cause, static entities drawn only on change, and steering.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
@@ -40,6 +40,11 @@ There are no build scripts; the editor is the tool chain. The tests are module 9
 # stage, idle tick (~23 µs at any size), then wandering villagers (~2 µs each). ~22 s.
 # `-- --n=500 --npcs=1000` for one size; without --headless (or F6) it runs 1,000 buildings and 2,000 villagers live, with FPS.
 "$GODOT" --headless --path . "res://10. Town Generator/tests/town_stress_test.tscn"
+
+# Module 11: module 7's touch controls driving a player entity in module 9's ECS — moving,
+# sprint, the dash, stun, attacks aimed and tapped, cooldown, dummies broken and back,
+# skill slots. 26 checks, exit 0 only if all pass. Play it: "$GODOT" --path . "res://11. EcsControl/main.tscn"
+"$GODOT" --headless --path . "res://11. EcsControl/tests/control_test.tscn"
 
 # The hunt on its own: one dog in a bush, one rabbit — ambush, pounce, stun, bites.
 "$GODOT" --path . "res://9. EcsSystem/showcase/hunt_showcase.tscn"
@@ -85,6 +90,7 @@ Hand-edited scene/resource files are the main breakage risk in this repo: `.tscn
 | `9. EcsSystem/*.md` | Module 9 likewise — `HANDOFF.md` is its state-of-the-build, `ECS_GOAP_REPORT.md` a short overview of where the ECS and planner stand, `PSEUDOCODE.md` the core logic of every component and system, `ECS_REFACTOR_PLAN.md` the roadmap it follows; `HANDOFF.md` §3 covers the entity-lifecycle model. Plans for finished work are deleted once folded into `HANDOFF.md` (the fetch-time job is in §14) |
 | `9. EcsSystem/tests/` | Module 9's lifecycle acceptance test and its population stress test |
 | `10. Town Generator/` | Town building on module 9's borrowed ECS, aimed at procedural generation. `HANDOFF.md` is its state of the build; `main.tscn` (`main.gd`) is the ECS scene and the project's main scene; `tests/` holds the town test, the generator test and the stress scene. The brief's steps 1–8 and its §5 measurements are done. Read its HANDOFF before touching it |
+| `11. EcsControl/` | Module 7's touch HUD on module 9's ECS: the player is an entity whose brain is `EcsPlayerControlSystem`, turning input into `steer` and module 9's intent flags. `HANDOFF.md` is its state of the build. Read it before touching it |
 
 Keep feature work inside the module folder it belongs to; promote something to `Global/` or `System/` only when a second module needs it.
 

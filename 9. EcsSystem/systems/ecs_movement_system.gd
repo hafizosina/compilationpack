@@ -1,7 +1,7 @@
 class_name EcsMovementSystem
 extends EcsSystem
 
-## Moves entities toward their destination. Each trip gets a time budget
+## Moves entities toward their destination, or by `steer` when it is set. Each trip gets a time budget
 ## (distance / speed * `timeout_slack` + `timeout_grace`); when it runs out the
 ## destination is dropped as if reached, so stuck entities decide again. Speed is
 ## scaled by EcsDashingFlag while it is present.
@@ -16,6 +16,14 @@ func run(world: EcsWorld, delta: float) -> void:
 	for k in view.ids.size():
 		var id := view.ids[k]
 		var move := moves[k] as EcsMovementComponent
+		if move.steer != Vector2.ZERO:
+			var rate := 1.0
+			var boost := world.get_component(view.ids[k], EcsDashingFlag) as EcsDashingFlag
+			if boost != null:
+				rate = boost.speed_scale
+			move.velocity = move.steer * move.speed * rate
+			(places[k] as EcsPositionComponent).position += move.velocity * delta
+			continue
 		if not move.has_destination:
 			move.velocity = Vector2.ZERO
 			continue

@@ -58,6 +58,7 @@ func _run() -> void:
 	await _a_ground_item_is_walked_over_not_bumped_into()
 	await _it_walks_to_what_it_sees_and_takes_it()
 	await _a_trip_it_cannot_finish_is_given_up_on()
+	_steer_moves_by_it_and_zero_changes_nothing()
 	await _a_stolen_target_is_dropped_the_tick_it_vanishes()
 	await _hunger_climbs_and_gates_the_food_rung()
 	await _eating_empties_the_bag_and_ends_the_berry()
@@ -451,6 +452,37 @@ func _it_walks_to_what_it_sees_and_takes_it() -> void:
 
 ## A destination it can never reach (the centre of a solid bush) times out
 ## instead of leaving the walker stuck.
+## Module 11's hook: a non-zero `steer` moves by steer × speed (× dash) and ignores the
+## destination; zero leaves the destination walk exactly as it was.
+func _steer_moves_by_it_and_zero_changes_nothing() -> void:
+	var moving := EcsScheduler.new()
+	moving.add(EcsMovementSystem.new())
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", Vector2(-2600.0, -1400.0))
+	var at := _world.get_component(rabbit, EcsPositionComponent) as EcsPositionComponent
+	var move := _world.get_component(rabbit, EcsMovementComponent) as EcsMovementComponent
+	var started := at.position
+	move.destination = started + Vector2(0.0, 200.0)
+	move.has_destination = true
+	move.steer = Vector2(0.5, 0.0)
+	for i in 60:
+		moving.run_all(_world, TICK)
+	_check("steer moves by steer × speed (%.1f px of %.1f)" % [at.position.x - started.x, move.speed * 0.5],
+		absf(at.position.x - started.x - move.speed * 0.5) < 0.5)
+	_check("and ignores the destination meanwhile", is_equal_approx(at.position.y, started.y) and move.has_destination)
+	var dash := EcsDashingFlag.new()
+	dash.speed_scale = 3.0
+	_world.add(rabbit, dash)
+	var from := at.position.x
+	moving.run_all(_world, TICK)
+	_check("a dash scales the steer", is_equal_approx(at.position.x - from, move.speed * 0.5 * 3.0 * TICK))
+	_world.remove(rabbit, EcsDashingFlag)
+	move.steer = Vector2.ZERO
+	var before := at.position
+	moving.run_all(_world, TICK)
+	_check("zero steer walks to the destination as before",
+		is_equal_approx(at.position.distance_to(move.destination), before.distance_to(move.destination) - move.speed * TICK))
+	_manager.kill(_world, rabbit)
+
 func _a_trip_it_cannot_finish_is_given_up_on() -> void:
 	var blocked := EcsScheduler.new()
 	blocked \
