@@ -6,6 +6,8 @@ scheduler and systems are **borrowed, never copied**; everything new lives in th
 module 9 changes only through a hook the author approves first. The plan is the brief
 (`MODULE10_BRIEF.md`, kept outside the repo); started from tag `ecs-baseline`.
 
+**Status (2026-11-05):** the brief's steps 1–8 are done (§2–§10), and so is its §5 stress scene (§11). Open: §12.
+
 **Not in this module, by decision:** live edit, the inspector, selection HUD. Its pipeline is
 module 9's ECS core plus the town systems.
 

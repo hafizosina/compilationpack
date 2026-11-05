@@ -4,10 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**CompilationPack** — a Godot **4.7** (GDScript) project that collects self-contained game-system demos in numbered folders. Mobile renderer, 1612×720 viewport, `sensor_landscape`, Android export target. Main scene is `res://9. EcsSystem/main.tscn`. Module 8's code has been deleted; its folder is a design archive of five `.md` files, and module 9 is the only live simulation.
+**CompilationPack** — a Godot **4.7** (GDScript) project that collects self-contained game-system demos in numbered folders. Mobile renderer, 1612×720 viewport, `sensor_landscape`, Android export target. Main scene is `res://10. Town Generator/main.tscn` (the town builder). Module 8's code has been deleted; its folder is a design archive of five `.md` files, and module 9 is the only live creature simulation.
 
 There are no build scripts; the editor is the tool chain. The tests are module 9's, in
-`9. EcsSystem/tests/`, and module 10's town test:
+`9. EcsSystem/tests/`, and module 10's, in `10. Town Generator/tests/`:
 
 ```bash
 # 468 checks over the entity lifecycle, the sensor/action layer, solidity, the
@@ -83,8 +83,8 @@ Hand-edited scene/resource files are the main breakage risk in this repo: `.tscn
 | `docs/devlog/Summary.md` | Longer per-module write-up, one section per module |
 | `8. SimpleAiSystem/*.md` | **Design archive — the code is deleted.** Five docs kept for the reasoning module 9 is built against |
 | `9. EcsSystem/*.md` | Module 9 likewise — `HANDOFF.md` is its state-of-the-build, `ECS_GOAP_REPORT.md` a short overview of where the ECS and planner stand, `PSEUDOCODE.md` the core logic of every component and system, `ECS_REFACTOR_PLAN.md` the roadmap it follows; `HANDOFF.md` §3 covers the entity-lifecycle model. Plans for finished work are deleted once folded into `HANDOFF.md` (the fetch-time job is in §14) |
-| `9. EcsSystem/tests/` | The repo's only tests — module 9's lifecycle acceptance test and its population stress test |
-| `10. Town Generator/` | Town building on module 9's borrowed ECS, aimed at procedural generation. `HANDOFF.md` is its state of the build; `main.tscn` (`main.gd`) is the ECS scene and the project's main scene. Read its HANDOFF before touching it |
+| `9. EcsSystem/tests/` | Module 9's lifecycle acceptance test and its population stress test |
+| `10. Town Generator/` | Town building on module 9's borrowed ECS, aimed at procedural generation. `HANDOFF.md` is its state of the build; `main.tscn` (`main.gd`) is the ECS scene and the project's main scene; `tests/` holds the town test, the generator test and the stress scene. The brief's steps 1–8 and its §5 measurements are done. Read its HANDOFF before touching it |
 
 Keep feature work inside the module folder it belongs to; promote something to `Global/` or `System/` only when a second module needs it.
 
@@ -498,8 +498,8 @@ appends an `EcsSpawnRequest` to the lifecycle inbox. The composer (the Compose t
 `EcsEntityDef` from components and saves it to `user://blueprints/`. `main.gd` runs a runtime copy
 of the catalog that holds these, and never changes `catalog.tres`.
 
-Read `9. EcsSystem/HANDOFF.md` before touching that folder. Module 9 is the main scene,
-ahead of the plan, which held that switch until step 6, and now the only simulation in the
+Read `9. EcsSystem/HANDOFF.md` before touching that folder. Module 9 was the main scene until
+module 10 took it, and is the only creature simulation in the
 repo — module 8's behaviour survives as documentation, not as something to run and compare
 against.
 

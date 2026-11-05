@@ -2,7 +2,7 @@
 
 **Engine:** Godot 4.7 | **Renderer:** Mobile | **Viewport:** 1612 × 720 | **Target:** Android
 
-**Main scene:** `9. EcsSystem/main.tscn`. Module 8's code has been deleted and its folder is now a design archive of five `.md` files; module 9 is the only live simulation.
+**Main scene:** `10. Town Generator/main.tscn`. Module 8's code has been deleted and its folder is now a design archive of five `.md` files; module 9 is the only live creature simulation, and module 10 builds towns on its ECS.
 
 A numbered collection of self-contained game-system demos written in GDScript. Each folder is an isolated experiment; shared infrastructure lives in `System/` and `Global/`.
 
@@ -135,6 +135,27 @@ A **hand-rolled ECS** and the only live simulation — the main scene. It shares
 
 ---
 
+### 10. Town Generator
+**Town building on module 9's ECS, aimed at procedural generation**, and the main scene. Module 9's world, scheduler, lifecycle and movement are borrowed, never copied; module 9 is untouched. The plan is a brief kept outside the repo; the state of the build is `10. Town Generator/HANDOFF.md`.
+
+**The grid is the truth.** `EcsTownGridSingleton` holds flat arrays per cell (terrain, floor, structure, wall type, building, room, roof, object). **Only `EcsBuildCommandSystem` writes cells**, and only from build commands; a player's tool, a stamped building and the generator all speak in the same commands, checked by one rule set (`EcsBuildRules`). Doors, furniture, plants and rubble are entities with a grid position, born through lifecycle.
+
+**Data first.** Every tile type is a sheet and a tile size; the TileSets are made at start, and `EcsTileSyncSystem` builds its layers under an empty node. Terrain and floors are on a **dual grid**; walls and doors on the cell grid, with turned pieces. A floor runs under walls.
+
+**Pipeline:** `lifecycle > build > rooms > roof > tile_sync > overlay`. Room detection floods each building's inside into rooms and types them by their furniture; roofs follow rooms.
+
+**Buildings.** Drag a footprint, draw walls, set doors, lay floors, place and turn furniture, hang attachments. A finished building can be saved as a def and **stamped** in any of four turns; a whole town saves and loads. **The generator** (`EcsBuildingGenerator`) turns a type, size, wealth, facing and seed into commands: a BSP split into rooms, an entrance, a door tree with loops, roles by size, floors by wealth, and furniture against walls without blocking a door. Walls take hits and break into rubble.
+
+**Measured.** 1,000 seeds per building type are all sound (`tests/generator_test.tscn`). The stress scene builds 1,000 furnished buildings in 5.5 s; idle, a tick costs about 22 µs at any town size. With 2,000 wandering villagers (stress load only; walls don't stop them) the tick is about 4.4 ms and a window holds 60 FPS.
+
+**Tests:** `tests/town_test.tscn` — 124 checks; `tests/generator_test.tscn` — 18 checks over 2,000 buildings; `tests/town_stress_test.tscn` — load, idle and villager costs, or the live town without `--headless`.
+
+**Key files:** `10. Town Generator/main.gd`, `systems/ecs_build_command_system.gd`, `systems/ecs_tile_sync_system.gd`, `ecs/ecs_building_generator.gd`, `ui/town_ui.gd`
+
+**Controls:** the build panel on the left picks tools, types and brush size · right-click drops the tool · **Q** turns a piece · **F5** saves the town, **F9** loads it · WASD or middle-drag pans, wheel zooms.
+
+---
+
 
 ## Shared Infrastructure
 
@@ -165,7 +186,7 @@ This is modules 1–7 only. Module 8 had its own `Sim`-prefixed entity/component
 
 Reusable Camera2D scene with:
 - **Scroll-wheel zoom** — clamped between `min_zoom` and `max_zoom`
-- **Middle-click drag** — pan the view
+- **Middle-click drag** — pan the view (starts only on unhandled input, so a HUD that takes the mouse keeps it)
 - **WASD / arrow keys** — keyboard pan (zoom-compensated speed)
 - **State sync** — writes `Global.camera_position` + `Global.camera_zoom` every frame
 
@@ -204,7 +225,7 @@ All widget styling goes through the single theme `Global/Theme/main_theme.tres`,
 
 ---
 
-## Development Status (as of 2026-09-20)
+## Development Status (as of 2026-11-05)
 
 | Module | Status |
 |--------|--------|
@@ -217,3 +238,4 @@ All widget styling goes through the single theme `Global/Theme/main_theme.tres`,
 | 7. JoyStick | Complete — mobile HUD, inventory, item resources |
 | 8. SimpleAiSystem | **Design archive — the code is deleted.** Complete for its milestone when it was removed; its five `.md` docs stay as the reasoning module 9 is built against. Restore with `git checkout 3346b6e -- "8. SimpleAiSystem"` |
 | 9. EcsSystem | **Active, and the only live simulation.** Hand-rolled ECS, twenty-five stages, main scene. Plan steps 0–7 done; combat rebuilt without weapons (attack intents, armour, crits), with corpses, looting, rot, diet and a hunting crocodile; bushes are harvested; step 7 is a pure A* planner under utility goal choice, replanning on events under a budget, with danger and fleeing. Components / flags / singletons as three kinds, intent flags, items as records, fullness / energy / health. 261 lifecycle checks plus a population ramp; cached views took the ceiling past 9,600 entities. The data-structure argument (`HANDOFF.md` §15) is open and the author's to settle |
+| 10. Town Generator | **Active, the main scene.** Town building on module 9's ECS: grid and dual-grid tiles, build commands, rooms and roofs, furniture, stamps and saves, a seeded building generator, breakable walls; the brief's steps 1–8 and its stress measurements done. What a building's `closed` flag is for is open, for the author |
