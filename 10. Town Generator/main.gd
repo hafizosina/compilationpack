@@ -1,12 +1,9 @@
 extends Node2D
 
 ## Module 10 entry point: the town grid on module 9's ECS, with the build panel on the
-## left. Shortcuts: 1-4 terrain, 5-8 floor, 0 clears floor, [ ] brush size; B building,
-## C close one, W/E wood/stone wall, D/F wood/stone door, T open/close, X remove;
-## S save a building as a def, P stamp one; Q turns a piece or a stamp;
-## F5 save the town, F9 load it;
-## R roofs, O room colours. Middle-drag pans, the wheel zooms.
-## Every tile layer is in the scene under World/TilemapGroup.
+## left. Shortcuts: S save a building as a def, P stamp one, Q turns a piece or a stamp;
+## F5 save the town, F9 load it. Middle-drag pans, the wheel zooms.
+## The tile layers are built from the catalog, under World/TilemapGroup, by EcsTileSyncSystem.
 
 ## What a tool does with the mouse.
 const BRUSH_TOOLS: Array[StringName] = [&"terrain", &"floor"]
@@ -50,6 +47,8 @@ var _blueprints: Dictionary = {}
 var _ghosts: Dictionary = {}
 ## What the hover last showed, so the overlay redraws only on a change.
 var _hover_key: Array = []
+## Roofs start hidden.
+var _show_roofs: bool = false
 ## Building defs the stamp tool offers; a choice's id is its index + 1.
 var _stamps: Array[EcsBuildingDef] = []
 ## Quarter turns clockwise for the next stamp.
@@ -70,7 +69,7 @@ func _ready() -> void:
 	_panel.view_toggled.connect(_on_view_toggled)
 	_panel.town_requested.connect(func(action: StringName) -> void: _save_town() if action == &"save" else _load_town())
 	_panel.select(_tool, _tool_id)
-	_panel.set_views((_layers_root.get_node("RoofLayer") as TileMapLayer).visible, _overlay.show_rooms)
+	_panel.set_views(_show_roofs, _overlay.show_rooms)
 
 ## A new world on `grid`, its nodes cleared, with `commands` waiting for the first tick.
 func _start(grid: EcsTownGridSingleton, commands: Array[EcsBuildCommand] = []) -> void:
@@ -81,6 +80,7 @@ func _start(grid: EcsTownGridSingleton, commands: Array[EcsBuildCommand] = []) -
 	grid.commands.append_array(commands)
 	_build = EcsBuildCommandSystem.new(catalog, entity_catalog)
 	_tile_sync = EcsTileSyncSystem.new(_layers_root, catalog)
+	_tile_sync.roofs_visible = _show_roofs
 	_scheduler = EcsScheduler.new()
 	_scheduler \
 		.add(EcsLifecycleSystem.new(_manager, entity_catalog)) \
@@ -102,14 +102,14 @@ func _tell(text: String) -> void:
 	_notice = text
 	_notice_until = Time.get_ticks_msec() + 4000
 
-## The panel's tools, from the catalogs; each type's swatch is cut from the scene's own tiles.
+## The panel's tools, from the catalogs; each type's swatch is cut from its tiles.
 func _panel_tools() -> Array:
 	var terrains: Array = []
 	for def in catalog.terrains:
-		terrains.append({"id": def.id, "label": def.display_name.capitalize(), "icon": _dual_swatch(def.layer)})
+		terrains.append({"id": def.id, "label": def.display_name.capitalize(), "icon": _dual_swatch(def.tile_set)})
 	var floors: Array = []
 	for def in catalog.floors:
-		floors.append({"id": def.id, "label": def.display_name.capitalize(), "icon": _dual_swatch(def.layer)})
+		floors.append({"id": def.id, "label": def.display_name.capitalize(), "icon": _dual_swatch(def.tile_set)})
 	floors.append({"id": 0, "label": "None", "icon": load(ICONS % "none")})
 	var walls: Array = []
 	for def in catalog.walls:
@@ -117,7 +117,7 @@ func _panel_tools() -> Array:
 			"icon": _wall_swatch(def.source_id, EcsDualGrid.RIGHT | EcsDualGrid.BOTTOM | EcsDualGrid.LEFT | EcsDualGrid.TOP)})
 	var doors: Array = []
 	for def in catalog.doors:
-		var source := _wall_layer().tile_set.get_source(def.closed_source_id) as TileSetAtlasSource
+		var source := catalog.wall_tiles.get_source(def.closed_source_id) as TileSetAtlasSource
 		var across := _cut(source, def.closed_horizontal)
 		doors.append({"id": def.id, "label": def.display_name.capitalize(), "icon": across})
 		_ghost(&"door", def.id, across, Vector2i.ONE, _cut(source, def.closed_vertical))
@@ -140,54 +140,50 @@ func _panel_tools() -> Array:
 		if not _blueprints.has(tool):
 			_blueprints[tool] = []
 		(_blueprints[tool] as Array).append(def.id)
-		var layer := _layers_root.get_node(NodePath(catalog.attachment_layer if tool == &"attach" else catalog.furniture_layer)) as TileMapLayer
+		var tiles := catalog.attachment_tiles if tool == &"attach" else catalog.furniture_tiles
 		var size := place.size if place != null else Vector2i.ONE
-		var swatch := _cut_piece(layer.tile_set.get_source(tile.source_id) as TileSetAtlasSource, tile.atlas, size)
+		var swatch := _cut_piece(tiles.get_source(tile.source_id) as TileSetAtlasSource, tile.atlas, size)
 		into.append({"id": (_blueprints[tool] as Array).size(), "label": def.display_name, "icon": swatch})
 		_ghost(tool, (_blueprints[tool] as Array).size(), swatch, size)
 	return [
-		{"tool": &"terrain", "label": "Terrain", "keys": "1-4", "icon": load(ICONS % "terrain"),
+		{"tool": &"terrain", "label": "Terrain", "icon": load(ICONS % "terrain"),
 			"hint": "Drag to paint the ground.", "choices": terrains, "sized": true},
-		{"tool": &"floor", "label": "Floor", "keys": "5-8, 0", "icon": load(ICONS % "floor"),
+		{"tool": &"floor", "label": "Floor", "icon": load(ICONS % "floor"),
 			"hint": "Drag to lay a floor. None takes it up.", "choices": floors, "sized": true},
-		{"tool": &"building", "label": "Building", "keys": "B", "icon": load(ICONS % "building"),
+		{"tool": &"building", "label": "Building", "icon": load(ICONS % "building"),
 			"hint": "Drag a rectangle to claim a footprint. It turns red where it would overlap another."},
-		{"tool": &"wall", "label": "Wall", "keys": "W, E", "icon": load(ICONS % "wall"),
+		{"tool": &"wall", "label": "Wall", "icon": load(ICONS % "wall"),
 			"hint": "Drag a straight line of wall inside a building.", "choices": walls},
-		{"tool": &"door", "label": "Door", "keys": "D, F", "icon": load(ICONS % "door"),
+		{"tool": &"door", "label": "Door", "icon": load(ICONS % "door"),
 			"hint": "Click a straight wall to set a door in it.", "choices": doors},
-		{"tool": &"furniture", "label": "Furniture", "keys": "", "icon": load(ICONS % "furniture"),
+		{"tool": &"furniture", "label": "Furniture", "icon": load(ICONS % "furniture"),
 			"hint": "Click to place it, top-left on the cell; Q turns it. Not on walls; a room takes its type from what's in it.",
 			"choices": furniture},
-		{"tool": &"plant", "label": "Plant", "keys": "", "icon": load(ICONS % "plant"),
+		{"tool": &"plant", "label": "Plant", "icon": load(ICONS % "plant"),
 			"hint": "Click to plant on bare ground, never on a floor; Q turns it.", "choices": plants},
-		{"tool": &"attach", "label": "Attach", "keys": "", "icon": load(ICONS % "attach"),
+		{"tool": &"attach", "label": "Attach", "icon": load(ICONS % "attach"),
 			"hint": "Click a wall to hang it, or a table, stove or shelf to set it on.", "choices": attachments},
-		{"tool": &"toggle", "label": "Open / close", "keys": "T", "icon": load(ICONS % "toggle"),
+		{"tool": &"toggle", "label": "Open / close", "icon": load(ICONS % "toggle"),
 			"hint": "Click a door to open or close it."},
-		{"tool": &"close", "label": "Close building", "keys": "C", "icon": load(ICONS % "close"),
+		{"tool": &"close", "label": "Close building", "icon": load(ICONS % "close"),
 			"hint": "Click a building to mark it finished."},
-		{"tool": &"remove", "label": "Remove", "keys": "X", "icon": load(ICONS % "remove"),
+		{"tool": &"remove", "label": "Remove", "icon": load(ICONS % "remove"),
 			"hint": "Drag to take out what is on top of each cell: an attachment, then furniture, then a wall or door."},
 		{"tool": &"copy", "label": "Save building", "keys": "S", "icon": load(ICONS % "copy"),
 			"hint": "Click a building to save it as a def; it joins the stamps."},
-		{"tool": &"stamp", "label": "Stamp", "keys": "P, Q", "icon": load(ICONS % "stamp"),
+		{"tool": &"stamp", "label": "Stamp", "keys": "P, Q turns", "icon": load(ICONS % "stamp"),
 			"hint": "Click to build the chosen building, top-left on the cell. Q turns it a quarter.",
 			"choices": _stamp_choices()},
 	]
 
-func _wall_layer() -> TileMapLayer:
-	return _layers_root.get_node(NodePath(catalog.wall_layer)) as TileMapLayer
-
-## A full tile of the dual-grid layer `layer_name`, as it is drawn.
-func _dual_swatch(layer_name: StringName) -> Texture2D:
-	var layer := _layers_root.get_node(NodePath(layer_name)) as TileMapLayer
-	var source := layer.tile_set.get_source(layer.tile_set.get_source_id(0)) as TileSetAtlasSource
+## A full tile of a dual-grid type's tiles, as it is drawn.
+func _dual_swatch(tiles: TileSet) -> Texture2D:
+	var source := tiles.get_source(tiles.get_source_id(0)) as TileSetAtlasSource
 	return _cut(source, (EcsDualGrid.corner_layout(source)[EcsDualGrid.FULL] as Array)[0])
 
 ## A wall tile of `source_id` joined on `mask`'s sides.
 func _wall_swatch(source_id: int, mask: int) -> Texture2D:
-	var source := _wall_layer().tile_set.get_source(source_id) as TileSetAtlasSource
+	var source := catalog.wall_tiles.get_source(source_id) as TileSetAtlasSource
 	return _cut(source, (EcsDualGrid.side_layout(source)[mask] as Array)[0])
 
 ## The tiles of a piece `size` cells big whose top-left tile is `coords`.
@@ -287,7 +283,8 @@ func _on_tool_picked(tool: StringName, id: int) -> void:
 
 func _on_view_toggled(view: StringName, on: bool) -> void:
 	if view == &"roofs":
-		(_layers_root.get_node("RoofLayer") as TileMapLayer).visible = on
+		_show_roofs = on
+		_tile_sync.roofs_visible = on
 	else:
 		_overlay.show_rooms = on
 		_overlay.queue_redraw()
@@ -319,44 +316,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		_shortcut(event.keycode)
 
 func _shortcut(key: Key) -> void:
-	if key >= KEY_1 and key <= KEY_4:
-		_use(&"terrain", key - KEY_0)
-	elif key >= KEY_5 and key <= KEY_8:
-		_use(&"floor", key - KEY_4)
-	elif key == KEY_0:
-		_use(&"floor", 0)
-	elif key == KEY_B:
-		_use(&"building")
-	elif key == KEY_C:
-		_use(&"close")
-	elif key == KEY_W or key == KEY_E:
-		_use(&"wall", 1 if key == KEY_W else 2)
-	elif key == KEY_D or key == KEY_F:
-		_use(&"door", 1 if key == KEY_D else 2)
-	elif key == KEY_T:
-		_use(&"toggle")
-	elif key == KEY_X:
-		_use(&"remove")
-	elif key == KEY_S:
-		_use(&"copy")
-	elif key == KEY_P:
-		_use(&"stamp")
-	elif key == KEY_Q:
-		_turns = (_turns + 1) % 4
-	elif key == KEY_F5:
-		_save_town()
-	elif key == KEY_F9:
-		_load_town()
-	elif key == KEY_R or key == KEY_O:
-		var roofs := _layers_root.get_node("RoofLayer") as TileMapLayer
-		if key == KEY_R:
-			_on_view_toggled(&"roofs", not roofs.visible)
-		else:
-			_on_view_toggled(&"rooms", not _overlay.show_rooms)
-		_panel.set_views(roofs.visible, _overlay.show_rooms)
-	elif key == KEY_BRACKETLEFT or key == KEY_BRACKETRIGHT:
-		_brush_size = clampi(_brush_size + (1 if key == KEY_BRACKETRIGHT else -1), 1, EcsBuildPanel.MAX_BRUSH)
-		_panel.set_brush_size(_brush_size)
+	match key:
+		KEY_S:
+			_use(&"copy")
+		KEY_P:
+			_use(&"stamp")
+		KEY_Q:
+			_turns = (_turns + 1) % 4
+		KEY_F5:
+			_save_town()
+		KEY_F9:
+			_load_town()
 
 ## Picks a tool from a shortcut and shows it on the panel.
 func _use(tool: StringName, id: int = -1) -> void:

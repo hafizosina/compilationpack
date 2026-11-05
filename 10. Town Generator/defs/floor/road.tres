@@ -1,9 +1,10 @@
-[gd_resource type="Resource" script_class="EcsFloorDef" format=3]
+[gd_resource type="Resource" script_class="EcsFloorDef" format=3 uid="uid://de2akwhsnei3j"]
 
-[ext_resource type="Script" path="res://10. Town Generator/defs/ecs_floor_def.gd" id="1"]
+[ext_resource type="Script" uid="uid://cfhfq0d55ey50" path="res://10. Town Generator/defs/ecs_floor_def.gd" id="1"]
+[ext_resource type="TileSet" path="res://10. Town Generator/art/tilesets/road.tres" id="2_tiles"]
 
 [resource]
 script = ExtResource("1")
 key = &"road"
 display_name = "road"
-layer = &"RoadLayer"
+tile_set = ExtResource("2_tiles")

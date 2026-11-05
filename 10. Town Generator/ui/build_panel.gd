@@ -53,7 +53,7 @@ func setup(tools: Array) -> void:
 		button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		button.expand_icon = true
 		button.custom_minimum_size = TOOL_SIZE
-		button.tooltip_text = "%s  (%s)" % [spec["label"], spec.get("keys", "")]
+		button.tooltip_text = spec["label"] if spec.get("keys", "") == "" else "%s  (%s)" % [spec["label"], spec["keys"]]
 		button.pressed.connect(_open.bind(spec["tool"], true))
 		_tools.add_child(button)
 		var entry := spec.duplicate()

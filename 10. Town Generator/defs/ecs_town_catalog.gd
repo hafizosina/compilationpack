@@ -11,11 +11,11 @@ extends Resource
 @export var doors: Array[EcsDoorDef] = []
 @export var roofs: Array[EcsRoofDef] = []
 @export var room_types: Array[EcsRoomTypeDef] = []
-## Name of the TileMapLayer that draws walls and doors, on the cell grid.
-@export var wall_layer: StringName = &"ObjectLayer"
-## TileMapLayers for furniture and plants, and for attachments, both on the cell grid.
-@export var furniture_layer: StringName = &"FurnitureLayer"
-@export var attachment_layer: StringName = &"AttachmentLayer"
+## Tiles of walls and doors, on the cell grid: one atlas source per wall and door type.
+@export var wall_tiles: TileSet
+## Tiles of furniture and plants, and of attachments, on the cell grid.
+@export var furniture_tiles: TileSet
+@export var attachment_tiles: TileSet
 
 var _numbered: bool = false
 

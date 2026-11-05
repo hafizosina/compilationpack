@@ -60,16 +60,14 @@ func _setup(size: Vector2i) -> Dictionary:
 	var world := EcsWorld.new()
 	world.add_singleton(EcsTownGrid.make(size.x, size.y, GRASS))
 	world.add_singleton(EcsLifecycleSingleton.new())
-	# The scene's own tile layers, taken out of main.tscn: nothing is built in code.
-	var main := MAIN.instantiate()
-	var root := main.get_node("World/TilemapGroup")
-	root.get_parent().remove_child(root)
-	main.free()
+	var root := Node.new()
 	add_child(root)
+	var tiles := Node.new()
+	root.add_child(tiles)
 	var entities := Node2D.new()
 	root.add_child(entities)
 	var build := EcsBuildCommandSystem.new(CATALOG, ENTITIES)
-	var sync := EcsTileSyncSystem.new(root, CATALOG)
+	var sync := EcsTileSyncSystem.new(tiles, CATALOG)
 	var scheduler := EcsScheduler.new()
 	# As main.gd: lifecycle first, so a building asked for last tick is born before build binds it.
 	var rooms := EcsRoomDetectionSystem.new(CATALOG)
@@ -234,8 +232,13 @@ func _the_authors_art_is_used_and_its_layout_read() -> void:
 	var names: Array[String] = []
 	for layer in sync.terrain_layers() + sync.floor_layers():
 		names.append(String(layer.name))
-	_check("it fills the scene's layers, in scene order",
-		names == ["GroundLayer", "DirtLayer", "SandLayer", "WaterLayer", "FloorLayer", "StoneLayer", "RoadLayer", "RugLayer"])
+	_check("it builds a layer per type from its def's tiles, in catalog order",
+		names == ["Terrain_grass", "Terrain_dirt", "Terrain_sand", "Terrain_water",
+			"Floor_wood", "Floor_stone", "Floor_road", "Floor_rug"])
+	var main := MAIN.instantiate()
+	_check("and the scene holds none: main.tscn's TilemapGroup is empty",
+		main.get_node("World/TilemapGroup").get_child_count() == 0)
+	main.free()
 	_check("grass is the author's sheet", sheet.call(sync.terrain_layers()[0]).ends_with("Tilemap/grassTileset.png"))
 	_check("wood is the author's WoodFloor", sheet.call(sync.floor_layers()[0]).ends_with("Tilemap/WoodFloor.png"))
 	_check("dirt, with no art given, is the placeholder", sheet.call(sync.terrain_layers()[1]).ends_with("placeholder/terrain_dirt.png"))
@@ -253,7 +256,7 @@ func _the_authors_art_is_used_and_its_layout_read() -> void:
 		grass[EcsDualGrid.TL | EcsDualGrid.BR] == [Vector2i(3, 2)]
 		and grass[EcsDualGrid.TR | EcsDualGrid.BL] == [Vector2i(4, 2)]
 		and (grass[EcsDualGrid.FULL] as Array).size() == 10)
-	_check("and the scene draws it at 2x", sync.terrain_layers()[0].scale == Vector2(2, 2))
+	_check("and draws it at 2x, from its 16 px tile size", sync.terrain_layers()[0].scale == Vector2(2, 2))
 	var walls := sync.wall_layer().tile_set
 	_check("WoodWall's peering bits and BaseWall's transparency both read all 16 wall shapes",
 		_same_layout(EcsDualGrid.side_layout(walls.get_source(1)), EcsDualGrid.SIDE_ATLAS)
@@ -616,7 +619,7 @@ func _furniture_covers_its_cells() -> void:
 	_check("a bed is one entity on both its cells, a child of its building",
 		id > 0 and _object_at(t, Vector2i(2, 3)) == id and world.has(id, EcsFurnitureComponent)
 		and _building_at(t, Vector2i(1, 1)).children.has(id))
-	var layer: TileMapLayer = (t.root as Node).get_node(NodePath(CATALOG.furniture_layer))
+	var layer := (t.sync as EcsTileSyncSystem).furniture_layer()
 	_check("each cell draws its slice: the bed's top and foot, the sawmill's four",
 		layer.get_cell_atlas_coords(Vector2i(2, 2)) == Vector2i(0, 0) and layer.get_cell_atlas_coords(Vector2i(2, 3)) == Vector2i(0, 1)
 		and layer.get_cell_atlas_coords(Vector2i(13, 4)) == Vector2i(1, 3))
@@ -646,7 +649,7 @@ func _a_piece_turns_when_placed() -> void:
 	_check("a bed (1x2) turned once lies across two cells, 2x1", bed.result == &"ok" and id > 0
 		and _object_at(t, Vector2i(3, 2)) == id and _object_at(t, Vector2i(2, 3)) == -1
 		and place.size == Vector2i(2, 1) and place.turns == 1)
-	var layer := sync.terrain_layers()[0].get_parent().get_node(NodePath(CATALOG.furniture_layer)) as TileMapLayer
+	var layer := sync.furniture_layer()
 	var tile := world.get_component(id, EcsTileComponent) as EcsTileComponent
 	var cw := TileSetAtlasSource.TRANSFORM_TRANSPOSE | TileSetAtlasSource.TRANSFORM_FLIP_H
 	_check("its foot draws on the left, its head on the right, each tile turned clockwise",
@@ -702,7 +705,7 @@ func _attachments_need_a_host_with_a_free_slot() -> void:
 	var on := world.get_component(candle_id, EcsAttachedToComponent) as EcsAttachedToComponent
 	_check("the candle knows its table", on != null and on.host_kind == EcsAttachedToComponent.HostKind.ENTITY
 		and on.host_id == _object_at(t, Vector2i(4, 3)))
-	var layer: TileMapLayer = (t.root as Node).get_node(NodePath(CATALOG.attachment_layer))
+	var layer := (t.sync as EcsTileSyncSystem).attachment_layer()
 	_check("both are drawn", layer.get_cell_atlas_coords(Vector2i(4, 3)) == Vector2i(1, 0)
 		and layer.get_cell_atlas_coords(Vector2i(1, 3)) == Vector2i(0, 0))
 	var lamp_id := grid.attachment_id[EcsTownGrid.index(grid, Vector2i(1, 3))]

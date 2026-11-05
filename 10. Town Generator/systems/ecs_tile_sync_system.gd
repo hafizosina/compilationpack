@@ -1,12 +1,12 @@
 class_name EcsTileSyncSystem
 extends EcsSystem
 
-## Draws the grid onto the scene's TileMapLayers, one way; it never creates a layer.
-## Each terrain and floor def names its layer, configured in the scene with its TileSet,
-## half-cell offset and scale; a layer's place among its siblings is its draw order, and
-## a type's layer also fills under every later type so edges blend. Walls go on the wall
-## layer's cell grid, one atlas source per wall type, joined to its building's neighbouring walls.
-## The first run clears and draws all; after that only what changed is redrawn.
+## Draws the grid, one way, onto TileMapLayers it builds from the catalog under its root:
+## one per terrain, floor and roof type from the def's TileSet, half a cell up and left for
+## the dual grid, in list order, a type's layer also filling under every later type so edges
+## blend; then furniture, walls and attachments on the cell grid. Walls use one atlas source
+## per wall type, joined to their building's neighbouring walls. The root is its own: the
+## first run clears it, builds and draws all; after that only what changed is redrawn.
 
 ## A tile's transform flags for 0-3 quarter turns clockwise.
 const TURN_FLAGS: Array[int] = [
@@ -36,6 +36,12 @@ var _furniture_layer: TileMapLayer
 var _attachment_layer: TileMapLayer
 ## Wall type id -> [source id, side layout].
 var _wall_sources: Dictionary = {}
+## Whether the roof layers show.
+var roofs_visible: bool = true:
+	set(on):
+		roofs_visible = on
+		for layer in _roof_layers:
+			layer.visible = on
 ## The world of the current run, for a door's open state.
 var _world: EcsWorld
 ## Tiles written on the last run, and the microseconds it took.
@@ -79,6 +85,12 @@ func roof_layers() -> Array[TileMapLayer]:
 func wall_layer() -> TileMapLayer:
 	return _wall_layer
 
+func furniture_layer() -> TileMapLayer:
+	return _furniture_layer
+
+func attachment_layer() -> TileMapLayer:
+	return _attachment_layer
+
 ## Which quarters the tile at `at` on a terrain or floor layer fills; 0 when empty.
 func mask_at(layer: TileMapLayer, at: Vector2i) -> int:
 	if layer.get_cell_source_id(at) == -1:
@@ -103,50 +115,52 @@ func wall_mask_at(cell: Vector2i) -> int:
 
 func _build() -> void:
 	_catalog.number()
-	_collect(_catalog.terrains, _terrain_defs, _terrain_layers, _terrain_rank)
-	_collect(_catalog.floors, _floor_defs, _floor_layers, _floor_rank)
-	_collect(_catalog.roofs, _roof_defs, _roof_layers, _roof_rank)
-	_furniture_layer = _layers_root.get_node_or_null(NodePath(_catalog.furniture_layer)) as TileMapLayer
-	_attachment_layer = _layers_root.get_node_or_null(NodePath(_catalog.attachment_layer)) as TileMapLayer
-	for layer in [_furniture_layer, _attachment_layer]:
-		if layer != null:
-			(layer as TileMapLayer).clear()
-	_wall_layer = _layers_root.get_node_or_null(NodePath(_catalog.wall_layer)) as TileMapLayer
-	if _wall_layer == null:
-		push_error("EcsTileSyncSystem: no wall layer '%s' in the scene" % _catalog.wall_layer)
-	else:
-		_wall_layer.clear()
+	for child in _layers_root.get_children():
+		_layers_root.remove_child(child)
+		child.queue_free()
+	_collect(_catalog.terrains, _terrain_defs, _terrain_layers, _terrain_rank, "Terrain")
+	_collect(_catalog.floors, _floor_defs, _floor_layers, _floor_rank, "Floor")
+	_furniture_layer = _make_layer("Furniture", _catalog.furniture_tiles, false)
+	_wall_layer = _make_layer("Walls", _catalog.wall_tiles, false)
+	_attachment_layer = _make_layer("Attachments", _catalog.attachment_tiles, false)
+	_collect(_catalog.roofs, _roof_defs, _roof_layers, _roof_rank, "Roof")
+	roofs_visible = roofs_visible
+	if _wall_layer != null:
 		for def in _catalog.walls:
 			var source := _wall_layer.tile_set.get_source(def.source_id) as TileSetAtlasSource \
 				if _wall_layer.tile_set.has_source(def.source_id) else null
 			if source == null:
-				push_error("EcsTileSyncSystem: wall '%s' names source %d, not in %s's TileSet"
-					% [def.display_name, def.source_id, _wall_layer.name])
+				push_error("EcsTileSyncSystem: wall '%s' names source %d, not in the wall tiles" % [def.key, def.source_id])
 				continue
 			_wall_sources[def.id] = [def.source_id, EcsDualGrid.side_layout(source)]
 	_built = true
 
-## Finds each def's layer in the scene, orders them as the scene does, and reads layouts.
+## A layer per def, in list order, and each one's corner layout.
 func _collect(defs: Array, out_defs: Array[EcsTileDef], out_layers: Array[TileMapLayer],
-		rank: Dictionary) -> void:
-	var found: Array = []
+		rank: Dictionary, group: String) -> void:
 	for def: EcsTileDef in defs:
-		var layer := _layers_root.get_node_or_null(NodePath(def.layer)) as TileMapLayer
+		var layer := _make_layer("%s_%s" % [group, def.key], def.tile_set, true)
 		if layer == null:
-			push_error("EcsTileSyncSystem: no TileMapLayer '%s' for '%s'" % [def.layer, def.display_name])
 			continue
-		if not layer.position.is_equal_approx(-Vector2.ONE * EcsTownGrid.CELL * 0.5):
-			push_warning("EcsTileSyncSystem: %s should sit at (-16, -16), half a cell, for the dual grid" % layer.name)
-		found.append([layer.get_index(), def, layer])
-	found.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
-	for entry: Array in found:
-		var def := entry[1] as EcsTileDef
-		var layer := entry[2] as TileMapLayer
 		rank[def.id] = out_defs.size()
 		out_defs.append(def)
 		out_layers.append(layer)
-		layer.clear()
 		_layouts[layer] = EcsDualGrid.corner_layout(layer.tile_set.get_source(layer.tile_set.get_source_id(0)))
+
+## A layer drawing `tile_set`, scaled so a tile spans one cell; on the dual grid, half a cell
+## up and left, so render tile (x, y) is centred on the corner its four cells share.
+func _make_layer(layer_name: String, tile_set: TileSet, dual: bool) -> TileMapLayer:
+	if tile_set == null:
+		push_error("EcsTileSyncSystem: no tiles for %s" % layer_name)
+		return null
+	var layer := TileMapLayer.new()
+	layer.name = layer_name
+	layer.tile_set = tile_set
+	layer.scale = Vector2.ONE * EcsTownGrid.CELL / Vector2(tile_set.tile_size)
+	if dual:
+		layer.position = -Vector2.ONE * EcsTownGrid.CELL * 0.5
+	_layers_root.add_child(layer)
+	return layer
 
 func _draw_all(grid: EcsTownGridSingleton) -> void:
 	for y in grid.height + 1:

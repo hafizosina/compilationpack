@@ -84,6 +84,7 @@ theme_type_variation = &"DockButton"
 text = "+"
 
 [node name="TypesScroll" type="ScrollContainer" parent="Box"]
+custom_minimum_size = Vector2(0, 148)
 layout_mode = 2
 size_flags_vertical = 3
 horizontal_scroll_mode = 0

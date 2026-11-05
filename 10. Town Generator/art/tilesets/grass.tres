@@ -1,0 +1,33 @@
+[gd_resource type="TileSet" format=3 uid="uid://dlicfrjpf3q1q"]
+
+[ext_resource type="Texture2D" uid="uid://cujkmtrbgvsmt" path="res://Global/Asset/Tilemap/grassTileset.png" id="1_rhhuj"]
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_3t3se"]
+texture = ExtResource("1_rhhuj")
+0:0/0 = 0
+1:0/0 = 0
+2:0/0 = 0
+3:0/0 = 0
+4:0/0 = 0
+5:0/0 = 0
+6:0/0 = 0
+7:0/0 = 0
+0:1/0 = 0
+1:1/0 = 0
+2:1/0 = 0
+3:1/0 = 0
+4:1/0 = 0
+5:1/0 = 0
+6:1/0 = 0
+7:1/0 = 0
+0:2/0 = 0
+1:2/0 = 0
+2:2/0 = 0
+3:2/0 = 0
+4:2/0 = 0
+5:2/0 = 0
+6:2/0 = 0
+7:2/0 = 0
+
+[resource]
+sources/0 = SubResource("TileSetAtlasSource_3t3se")

@@ -10,19 +10,17 @@ module 9 changes only through a hook the author approves first. The plan is the 
 module 9's ECS core plus the town systems.
 
 ```bash
-# Tools: 1-4 terrain and 5-8 floor brushes, 0 clears floor, [ ] brush size; B drags a building,
-# W/E drag a wood/stone wall line, X a removal line, C closes the building under the mouse,
-# D/F click a wood/stone door into a straight wall, T opens or closes one; R shows/hides roofs,
-# O the room colours; S saves the building clicked as a def, P stamps one; Q turns a piece or a stamp;
-# F5 saves the town, F9 loads it.
+# Tools, types, brush size and views are on the build panel. Keys: S saves the building
+# clicked as a def, P stamps one, Q turns a piece or a stamp; F5 saves the town, F9 loads it.
 "$GODOT" --path .   # main.tscn is the main scene
 
-# 110 checks; exit 0 only if all pass. Also prints tile sync and command costs.
+# 111 checks; exit 0 only if all pass. Also prints tile sync and command costs.
 "$GODOT" --headless --path . "res://10. Town Generator/tests/town_test.tscn"
 ```
 
-`main.tscn` is the ECS scene (`main.gd`). **Every TileMapLayer is in the scene**, under
-`World/TilemapGroup`, with its TileSet configured there; code fills them and never creates one.
+`main.tscn` is the ECS scene (`main.gd`). **The tile layers are data**: each type's def names its
+TileSet (`art/tilesets/`), and `EcsTileSyncSystem` builds the layers from the catalog under the
+empty `World/TilemapGroup` (2026-11-05, §1 "The layers are built from data").
 
 ---
 
@@ -38,6 +36,7 @@ module 9's ECS core plus the town systems.
 | `ui/` | `build_panel.tscn` (`EcsBuildPanel`), the build HUD on the left |
 | `town_overlay.gd` | `EcsTownOverlay`, the view that draws footprints and drag previews |
 | `defs/` | `EcsTileDef` → `EcsTerrainDef`, `EcsFloorDef`; `EcsWallDef`; `EcsTownCatalog`; `town_catalog.tres` and one `.tres` per type; `EcsBuildingDef` and `buildings/` (cottage, workshop); `entity_catalog.tres` (module 9's `EcsEntityCatalog`) and `blueprints/` |
+| `art/tilesets/` | One TileSet per terrain, floor and roof type, and the walls', furniture's and attachments' |
 | `art/placeholder/` | Generated placeholder sheets, `make_placeholders.py`, layout in its README |
 | `tests/` | `town_test.tscn` |
 
@@ -72,23 +71,29 @@ building defs (step 6) will write `&"dirt"`, so reordering a list can't break th
 brief's "stable ids authored in each `.tres`" with stable names, which meets the same need. Room types
 and blueprints were already named.
 
-**The layers are the scene's.** A terrain or floor def names its TileMapLayer (`layer`); a wall
-def names a source in the wall layer's TileSet (`source_id`). The art, tile size, half-cell offset
-and scale are all set on the layer in `main.tscn`, and **draw order is the layers' order among
-their siblings** — the one place it is set. The tile sync finds the layers by name, clears them,
-and fills them. A missing layer is an error, a terrain or floor layer not at (-16, -16) a warning.
-The author's art is used wherever it exists; placeholders fill only the slots without any:
+**The layers are built from data** (2026-11-05; from step 1 to step 6 they were nodes in
+`main.tscn`). Every terrain, floor and roof def names its own **TileSet** (`tile_set`); the catalog
+names the cell-grid ones (`wall_tiles`, `furniture_tiles`, `attachment_tiles`); a wall or door def
+names a source in `wall_tiles`. The TileSets are files in `art/tilesets/`, edited in Godot's TileSet
+editor as before (peering bits, sources) — they were moved out of the scene unchanged. **Draw order is
+list order in the catalog**, the same order that numbers the types: terrains, then floors, then
+furniture, walls, attachments, then roofs. `EcsTileSyncSystem` owns `World/TilemapGroup`: its first run
+clears it and makes one `TileMapLayer` per type, scaled so a tile spans one 32 px cell (the 16 px grass
+at 2x, from its TileSet's tile size), dual-grid layers half a cell up and left; a load rebuilds them.
+Nothing about drawing is set on a node, so a generated or loaded town needs no scene edit, and a new
+type is a def and a TileSet. The author's art is used wherever it exists; placeholders fill only the
+slots without any:
 
-| Layer, in draw order | Draws | TileSet |
+| Layer, in draw order | Draws | TileSet (`art/tilesets/`) |
 |---|---|---|
-| `GroundLayer` | grass | author's `grassTileset.png`, 16 px, layer scale 2 |
-| `DirtLayer`, `SandLayer`, `WaterLayer` | terrain | placeholders |
-| `FloorLayer` | wood | author's WoodFloor TileSet, peering bits painted |
-| `StoneLayer`, `RoadLayer`, `RugLayer` | floor | placeholders |
-| `AttachmentLayer` (after `ObjectLayer`) | attachments, cell grid | placeholder `attachments.png`, 16 px icons centred |
-| `RoofLayer` (last) | roofs, dual grid, hidden by default | placeholder `roof.png` |
-| `FurnitureLayer` (before `ObjectLayer`) | furniture and plants, cell grid | placeholder `objects.png`, 32 px |
-| `ObjectLayer` | walls and doors | author's: 1 WoodWall, 2 WoodenDoor, 3 `BaseWall` (stone wall), 5 `BaseDoor` (stone door); 4 `door_states.png` placeholder for open doors |
+| `Terrain_grass` | grass | `grass` — author's `grassTileset.png`, 16 px, drawn at 2x |
+| `Terrain_dirt`, `_sand`, `_water` | terrain | placeholders |
+| `Floor_wood` | wood | `floor_wood` — author's WoodFloor, peering bits painted |
+| `Floor_stone`, `_road`, `_rug` | floor | placeholders |
+| `Furniture` | furniture and plants, cell grid | `furniture` — placeholder `objects.png`, 32 px |
+| `Walls` | walls and doors | `walls` — author's: 1 WoodWall, 2 WoodenDoor, 3 `BaseWall` (stone wall), 5 `BaseDoor` (stone door); 4 `door_states.png` placeholder for open doors |
+| `Attachments` | attachments, cell grid | `attachments` — placeholder `attachments.png`, 16 px icons centred |
+| `Roof_thatch` (last) | roofs, dual grid, hidden by default | `roof` — placeholder `roof.png` |
 
 **The dual grid.** Terrain and floor are drawn on a grid offset half a cell, so each render tile
 sits on a cell corner and shows a quarter of each of its four cells; the 4-bit mask of which
@@ -126,7 +131,7 @@ A change costs the same at any size; the first draw is linear in cells × layers
 one `set_cell` per filled render tile). If load time matters, skip layers a cell can't reach
 (a grass-only map draws only the grass layer's full tiles) or draw the first frame in chunks.
 
-**Tests** (on `main.tscn`'s own layers): the scene's layers filled in scene order; the author's
+**Tests**: a layer per type built from its def's TileSet in catalog order, and none in `main.tscn`; the author's
 sheets used and placeholders only without one; every layout complete; WoodFloor's peering bits read
 as its table; the grass's diagonals and variants; both wall sheets read 16 shapes; walls join,
 removing one ends its neighbours and redraws five cells at most, the stone type uses its source,
@@ -164,9 +169,9 @@ last reason is shown in the status line.
 **Walls join only their own building's walls.** Two touching buildings keep a wall each along
 the shared edge — walls are never shared, every cell has one owner.
 
-**Tools** (`main.gd`): B drags a footprint (preview red when it would overlap), W/E drag a
-straight wall line along the axis moved more, X drags a removal line, C closes the building under
-the mouse. `EcsTownOverlay` draws footprints — **dashed while open, solid with a light fill once closed** —
+**Tools** (`main.gd`): Building drags a footprint (preview red when it would overlap), Wall drags a
+straight wall line along the axis moved more, Remove drags a removal line, Close building closes the
+building clicked. `EcsTownOverlay` draws footprints — **dashed while open, solid with a light fill once closed** —
 and the drag preview. `EcsTownOverlaySystem` hands it footprints only when buildings come or go
 or `grid.building_revision` moves; the build system bumps that when it closes one, so a change
 redraws without scanning every building each tick. The overlay sits at `z_index` 10, since the tile layers'
@@ -244,7 +249,7 @@ room or sealed, plus the building's walls and doors around it, and clears the re
 changed cells are marked `CHANGED_ROOF`. One roof type for now (`EcsRoofDef` thatch, id 1); per
 building type when the generator picks roofs.
 
-**Roofs are drawn on the dual grid**, on `RoofLayer` above the walls, like a floor — a deviation from
+**Roofs are drawn on the dual grid**, on the roof layer above the walls, like a floor — a deviation from
 the brief's cell grid, for rounded, joined edges. Two touching roofed buildings therefore read as one
 roof. **R** hides or shows the layer (hiding around the ruler comes later); **O** the room colours.
 The overlay tints each room by its id and sealed areas red.
@@ -307,8 +312,8 @@ room (storage, 1). Room detection gathers the tags of the furniture in each room
 highest-priority type any tag satisfies, else none; placing or removing furniture queues its building,
 so the type follows. The overlay prints each typed room's name at its centre.
 
-**Drawn** on two new scene layers: `FurnitureLayer` under the walls and `AttachmentLayer` above them;
-the catalog names both (`furniture_layer`, `attachment_layer`), as it names the wall layer. A dirty
+**Drawn** on two layers of their own: furniture under the walls, attachments above them; the
+catalog names both TileSets (`furniture_tiles`, `attachment_tiles`), as it names the walls'. A dirty
 `CHANGED_OBJECT` cell redraws its furniture slice and its attachment.
 
 **In the panel:** Furniture, Plant and Attach tools, their lists read from the entity catalog and
@@ -333,10 +338,10 @@ dressed in module 9's HUD styles from `main_theme` — `DockPanel`, `DockButton`
 `DockLabel`, `DockHint`, `DockChip`, `TopBar` — as type variations, never per-node overrides.
 
 **Layout, top to bottom:** a 4-wide grid of tool icons (tooltips give the name and shortcut); the
-tool's name and a one-line hint; **swatches of its types cut from the scene's own tiles** —
-`AtlasTexture` regions of each layer's TileSet, so the author's grass, WoodFloor, WoodWall/BaseWall
+tool's name and a one-line hint; **swatches of its types cut from their own tiles** —
+`AtlasTexture` regions of each type's TileSet, so the author's grass, WoodFloor, WoodWall/BaseWall
 (the cross tile, which reads best) and closed doors show as they draw, and a placeholder only where
-there is no art; a brush-size row for the brushes only; Roofs / Rooms view toggles at the foot (roofs start hidden: `RoofLayer` is off in the scene). The
+there is no art; a brush-size row for the brushes only; Roofs / Rooms view toggles at the foot (roofs start hidden: `main.gd` sets the tile sync's `roofs_visible`). The
 status line is a `TopBar` strip right of the panel. Tool icons are generated parchment line icons,
 `art/placeholder/icons/`, from `make_placeholders.py`.
 
@@ -345,9 +350,11 @@ from the catalogs and the scene with `setup()` — a new type in a catalog appea
 and listens to its signals: `tool_picked(tool, id)`, `brush_size_changed`, `view_toggled`. They stay on
 the panel rather than on the global `EventBus`, so module 10 is self-contained.
 
-**Shortcuts stay** (1–4, 5–8, 0, `[ ]`, B, C, W/E, D/F, T, X, R, O) and keep the panel in step through
-`select()`, `set_brush_size()` and `set_views()`; `set_pressed_no_signal` skips a `ButtonGroup`, so
-`select()` releases the other tools itself. Tools are named (`&"terrain"`, `&"wall"`, …) and grouped by
+**The panel is the only way to pick a tool, type, brush size or view** (2026-11-05: the keys from
+before it — 1–8, 0, `[ ]`, B, C, W/E, D/F, T, X, R, O — were removed). The keys left are those with
+no panel button or added with it: S, P, Q, F5, F9; a key that picks a tool shows it on the panel
+through `select()`, and `set_pressed_no_signal` skips a `ButtonGroup`, so `select()` releases the
+other tools itself. Tools are named (`&"terrain"`, `&"wall"`, …) and grouped by
 how they use the mouse: brushes paint while held, building drags a rectangle, wall and remove drag a
 line, close/door/toggle act on a click. Clicks on the panel never reach the map: it stops the mouse and
 the map listens in `_unhandled_input`.
