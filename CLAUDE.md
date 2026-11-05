@@ -44,7 +44,7 @@ There are no build scripts; the editor is the tool chain. The tests are module 9
 # Module 11: module 7's touch controls driving a player entity in module 9's ECS — moving,
 # sprint, the dash, stun, attacks aimed and tapped, cooldown, dummies broken and back,
 # skill slots, the weapon's swing as data, cleave, whirlwind, fireball, block, stamina and mana,
-# thorns, and the player falling and coming back. 59 checks, exit 0 only if all pass. Play it: "$GODOT" --path . "res://11. EcsControl/main.tscn"
+# thorns, and the player falling and coming back. 65 checks, exit 0 only if all pass. Play it: "$GODOT" --path . "res://11. EcsControl/main.tscn"
 "$GODOT" --headless --path . "res://11. EcsControl/tests/control_test.tscn"
 
 # The hunt on its own: one dog in a bush, one rabbit — ambush, pounce, stun, bites.

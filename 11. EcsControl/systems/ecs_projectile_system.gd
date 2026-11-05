@@ -1,8 +1,9 @@
 class_name EcsProjectileSystem
 extends EcsSystem
 
-## Steers each projectile along its direction, and when it reaches something with health that
-## isn't its owner, hits it and ends (cause removed, detail &"impact", so its remains can burst).
+## Steers each projectile along its direction, and when it reaches something with health, hits
+## it and ends (cause removed, detail &"impact", so its remains can burst). The hit is the
+## projectile's own: it comes from where the projectile is.
 
 func label() -> StringName:
 	return &"projectile"
@@ -15,10 +16,10 @@ func run(world: EcsWorld, _delta: float) -> void:
 		var shot := world.get_component(id, EcsProjectileComponent) as EcsProjectileComponent
 		(world.get_component(id, EcsMovementComponent) as EcsMovementComponent).steer = shot.direction
 		for other in (world.get_component(id, EcsActionComponent) as EcsActionComponent).reached:
-			if other == shot.owner or not world.has(other, EcsHealthComponent) or world.has(other, EcsDyingFlag):
+			if not world.has(other, EcsHealthComponent) or world.has(other, EcsDyingFlag):
 				continue
 			var hit := EcsHit.new()
-			hit.from = shot.owner if world.is_alive(shot.owner) else id
+			hit.from = id
 			hit.to = other
 			hit.amount = shot.damage
 			combat.hits.append(hit)

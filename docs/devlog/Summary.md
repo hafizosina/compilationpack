@@ -165,11 +165,11 @@ A **hand-rolled ECS** and the only live simulation — the main scene. It shares
 
 **Training dummies** break into a wreck through module 9's remains and come back after 3 s.
 
-**A weapon, animated as data.** The player holds a longsword (`Global/Asset/Items/`). A swing is a flag (`EcsSwingFlag`) that `EcsWeaponSystem` advances into a pose on `EcsWeaponComponent`; the view only copies the pose and draws the trail. Two attack skills are module 9 skill defs with a module 11 strike executor: **cleave** (2×, 160° in front) and **whirlwind** (1.5×, all around, a full spin). **Block** softens hits from in front on the combat inbox before module 9's health applies them. **Fireball** launches a real entity that module 9's movement flies and remains turn into a burst.
+**A weapon, animated as data.** The player holds a longsword (`Global/Asset/Items/`). A swing is a flag (`EcsSwingFlag`) that `EcsWeaponSystem` advances into a pose on `EcsWeaponComponent`; the view only copies the pose and draws the trail. Two attack skills are module 9 skill defs with a module 11 strike executor: **cleave** (2×, 160° in front) and **whirlwind** (1.5×, all around, a full spin). **Block** softens hits from in front on the combat inbox before module 9's health applies them. **Fireball** launches an independent entity — it keeps nothing of its caster, and its hit is its own — that module 9's movement flies and remains turn into a burst.
 
 **Stamina and mana** fill the HUD's energy and mana bars: one pool system writes them, control asks to spend, skills and sprint cost them. **Thorn bushes** hurt to stand in, and a fallen player comes back after 3 s, as the dummies do.
 
-**Tests:** `tests/control_test.tscn` — 59 checks.
+**Tests:** `tests/control_test.tscn` — 65 checks.
 
 **Controls:** left stick or WASD moves · Sprint (or Shift) runs, double-tap dashes · Basic Attack stick: aim and let go, or tap for the nearest · four skill sticks cast block, cleave, whirlwind, fireball · hold the switch for the interact wheel (not wired yet) · **F1** overlay.
 

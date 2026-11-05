@@ -9,7 +9,7 @@ only by one approved hook (`steer`, module 9 HANDOFF §30). Module 7 is untouche
 
 ```bash
 "$GODOT" --path . "res://11. EcsControl/main.tscn"   # play; F1 toggles the overlay
-# 59 checks; exit 0 only if all pass.
+# 65 checks; exit 0 only if all pass.
 "$GODOT" --headless --path . "res://11. EcsControl/tests/control_test.tscn"
 ```
 
@@ -96,8 +96,10 @@ removes the flag when the swing is done. The view only copies the pose onto `Ecs
 keeps no clock and no tween — so a swing can be tested, paused or saved like any data.
 
 Who starts a swing raises the flag: **control**, when an attack is let go while the attack is
-ready (a miss swings too; module 9 starts the attack cooldown only on a hit, so a miss can swing
-again at once, one swing at a time); **strike**, for an attack skill, replacing any swing running;
+ready — a miss swings too. **One swing per attack `interval`, hit or miss**: module 9 starts the
+attack's cooldown only on a hit, so control keeps its own `EcsPlayerComponent.since_swing` and
+won't swing again until a full interval has passed. Without it a miss was the fastest attack
+(capped only by `swing_time`), and spamming at nothing beat landing hits; **strike**, for an attack skill, replacing any swing running;
 **launch**, a short thrust for a spell.
 `EcsWeaponSystem` is the only one that ends it.
 
@@ -127,12 +129,17 @@ weapon across the body (`guard_angle`) and writes the guarded arc into the pose,
 draws. Dash stays on the Sprint double-tap.
 
 **Fireball** (stick 4) is `EcsProjectileSkill`: its effect `EcsLaunchFlag` makes
-**`EcsLaunchSystem`** ask lifecycle, once, for a `fireball` just ahead of the caster with
-`EcsProjectileComponent {direction: facing, owner, damage: caster's damage × 1.75}` as overrides,
-and start a short thrust. A fireball is an ordinary entity: module 9's movement flies it (its
-**`EcsProjectileSystem`** sets `steer` to its direction — the projectile's brain), module 9's
-sensor fills its reach, and the first entity with health it reaches that isn't its owner takes the
-hit, through the combat inbox, as the owner's. It then dies with detail `impact`, and module 9's
+**`EcsLaunchSystem`** ask lifecycle, once, for a `fireball` just clear of the caster's body
+(body radius + 18 px) with `EcsProjectileComponent {direction: facing, damage: caster's damage ×
+1.75}` as overrides, and start a short thrust. **A fireball is an independent entity**: everything
+it needs is set at birth, and it never refers back to its caster, so the caster can die or
+respawn as a new entity while it flies and nothing later looks up a dead id. Module 9's movement
+flies it (its **`EcsProjectileSystem`** sets `steer` to its direction — the projectile's brain),
+module 9's sensor fills its reach, and the first entity with health it reaches takes the hit,
+through the combat inbox, **as the fireball's own** (`hit.from` is the fireball, alive as the hit
+lands): module 9's hurt names it, and block judges direction from where the fireball is. The price
+of having no owner: it hits its caster too if the caster catches it, which only a dash (720 px/s
+against 420) can. It then dies with detail `impact`, and module 9's
 remains leave a `fireball_burst` (`leaves {impact: fireball_burst}`). **`EcsLifetimeSystem`** ends
 what has lived its `seconds`: a fireball at its range (1.2 s, ~500 px) with no burst, a burst after
 0.3 s.
@@ -157,6 +164,11 @@ everything with health its reach touches when its attack is ready; module 9's at
 cooldown down. Nothing in module 9 hurts by touch — its attack fires only at a target a brain named.
 A thorn's hit comes from the bush, so blocking toward it softens it.
 
+**Known limit:** a bush's cooldown is per bush, not per victim. Two entities in one bush share its
+timer, and stepping in just after it fired gets a free window. Fine while thorns are a test
+hazard; if hazards become a mechanic, give each victim its own tick (a per-target timer on the
+bush, or a "pricked" flag with its own countdown on the victim).
+
 **The player can fall.** It carries `EcsRemainsComponent {health: player_grave}`; the grave carries
 `EcsRespawnComponent {player, 3 s}`, as a dummy's wreck does. It comes back where it fell, with
 full pools; the camera and HUD follow the new player.
@@ -172,9 +184,11 @@ Turning the sprite is the one per-tick node write outside node sync; it is the p
 animals; potions; the player's hunger and thirst; damage numbers; the bow (the fireball's
 projectile is the way). Hit feedback is the swing and the target's health bar on the overlay.
 
-**Tests** (`control_test.tscn`, 59) — also: a fireball costs its mana in its tick, flies out as an
+**Tests** (`control_test.tscn`, 65) — also: a fireball costs its mana in its tick, flies out as an
 entity, hits a dummy for 1.75×, is gone leaving a burst that fades; one that hits nothing ends at
-its range without a burst; without the mana it isn't cast, and mana refills after its delay;
+its range without a burst; a miss can't swing again before the attack's interval, and can after;
+it is born clear of its caster and doesn't hit it, flies on when its
+caster is gone, still hits for the damage set at launch, and the hit is the fireball's own; without the mana it isn't cast, and mana refills after its delay;
 sprinting drains stamina at `sprint_drain`, with none left it can't sprint, and stamina refills;
 block raises a guard and holds the weapon across the body, a hit from in front loses 80%, one from
 behind lands in full, blocking slows, the guard ends; standing in thorns hurts, at 0 the player

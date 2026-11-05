@@ -1,14 +1,12 @@
 class_name EcsProjectileComponent
 extends EcsComponent
 
-## Flies straight and hits the first thing with health it reaches, then is gone. Set by its
-## launcher at birth.
+## Flies straight and hits the first thing with health it reaches, then is gone. Independent:
+## set at birth and never refers back to whoever launched it, so its caster may die meanwhile.
 
 ## Unit direction of flight.
 var direction: Vector2 = Vector2.RIGHT
-## Who launched it; never hit, and the hit is theirs.
-var owner: int = EcsWorld.NO_ENTITY
-## Damage on a hit, before armour.
+## Damage on a hit, before armour, worked out at launch.
 var damage: float = 10.0
 
 func key() -> StringName:

@@ -175,7 +175,9 @@ func _fireball() -> void:
 	await _ticks(100)
 	_check("a fireball that hits nothing ends at its range, without a burst",
 		_count(&"fireball") == 0 and _count(&"fireball_burst") == 0)
-	await _ticks(120)
+	await _fireball_outlives_its_caster()
+	await _setup([])
+	mana = _world.get_component(_player, EcsManaComponent) as EcsManaComponent
 	mana.value = cost.y - 1.0
 	_slot(3)
 	await _ticks(1)
@@ -183,6 +185,39 @@ func _fireball() -> void:
 	var low := mana.value
 	await _ticks(roundi(mana.regen_delay / TICK) + 30)
 	_check("mana refills after its delay", mana.value > low)
+
+## The fireball keeps nothing of its caster: born clear of it, it flies on and hits after the
+## caster is gone, and the hit is the fireball's.
+func _fireball_outlives_its_caster() -> void:
+	await _setup([Vector2(300, 0)])
+	var dummy := _dummy_at(Vector2(300, 0))
+	var caster := _player
+	_player_of().facing = Vector2.RIGHT
+	_slot(3)
+	await _ticks(2)
+	var shots := _world.query([EcsProjectileComponent])
+	_check("a fireball is born clear of its caster and doesn't hit it",
+		shots.size() == 1 and is_equal_approx(_health(caster), 100.0))
+	var shot: int = shots[0] if shots.size() == 1 else EcsWorld.NO_ENTITY
+	var dying := EcsDyingFlag.new()
+	dying.cause = EcsDyingFlag.REMOVED
+	_world.add(caster, dying)
+	await _ticks(2)
+	_check("its caster is gone and it flies on", not _world.is_alive(caster) and _world.is_alive(shot))
+	var combat := _world.get_singleton(EcsCombatSingleton) as EcsCombatSingleton
+	var from := EcsWorld.NO_ENTITY
+	for i in 60:
+		_scheduler.systems()[0].run(_world, TICK)
+		for k in range(1, _scheduler.systems().size()):
+			var system: EcsSystem = _scheduler.systems()[k]
+			if system is EcsHealthSystem and not combat.hits.is_empty():
+				from = combat.hits[0].from
+			system.run(_world, TICK)
+		await get_tree().physics_frame
+		if _health(dummy) < 100.0:
+			break
+	_check("it still hits for the damage set at launch", is_equal_approx(_health(dummy), 100.0 - 20.0 * 1.75))
+	_check("and the hit is the fireball's own, alive as it lands", from == shot)
 
 func _stamina() -> void:
 	await _setup([])
@@ -266,6 +301,14 @@ func _a_swing_is_data() -> void:
 		not _world.has(_player, EcsSwingFlag) and is_equal_approx(weapon.angle, start + deg_to_rad(weapon.swing_arc)))
 	await _ticks(1)
 	_check("then it is back at rest", weapon.progress < 0.0)
+	_press(Vector2.UP)
+	await _ticks(1)
+	_check("a miss doesn't let it swing again before the attack's interval", not _world.has(_player, EcsSwingFlag))
+	await _cool()
+	_press(Vector2.UP)
+	await _ticks(1)
+	_check("after the interval it swings again", _world.has(_player, EcsSwingFlag))
+	await _cool()
 	_press(Vector2.RIGHT)
 	await _ticks(ceili(weapon.swing_time / TICK) + 1)
 	_check("a hit swings too, and starts the attack's cooldown",

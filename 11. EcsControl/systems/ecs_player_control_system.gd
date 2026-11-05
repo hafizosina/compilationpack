@@ -24,6 +24,7 @@ func run(world: EcsWorld, delta: float) -> void:
 		var player := world.get_component(id, EcsPlayerComponent) as EcsPlayerComponent
 		var move := world.get_component(id, EcsMovementComponent) as EcsMovementComponent
 		player.since_sprint += delta
+		player.since_swing += delta
 		if world.has(id, EcsStunnedFlag) or world.has(id, EcsCollapsedFlag):
 			move.steer = Vector2.ZERO
 			continue
@@ -65,8 +66,10 @@ func _act(world: EcsWorld, id: int, player: EcsPlayerComponent, action: Dictiona
 	var ability: StringName = action.ability
 	if ability == EcsPlayerInputSingleton.ATTACK:
 		var attack := world.get_component(id, EcsDamageComponent) as EcsDamageComponent
-		if attack == null or attack.cooldown > 0.0:
+		# Hit or miss, one swing per attack interval; the attack's own cooldown starts only on a hit.
+		if attack == null or attack.cooldown > 0.0 or player.since_swing < attack.interval:
 			return
+		player.since_swing = 0.0
 		var target := _target(world, id, player, aim, action.tapped or aim == Vector2.ZERO)
 		if target != EcsWorld.NO_ENTITY:
 			if aim == Vector2.ZERO:

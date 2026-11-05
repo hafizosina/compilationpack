@@ -30,6 +30,8 @@ extends EcsComponent
 var facing: Vector2 = Vector2.RIGHT
 ## Seconds since sprint was last pressed.
 var since_sprint: float = 1000.0
+## Seconds since it last swung, hit or miss; a new swing needs the attack's interval.
+var since_swing: float = 1000.0
 
 func key() -> StringName:
 	return &"player"
