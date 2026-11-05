@@ -456,3 +456,16 @@ flags, each turn its own flags, refused when turned into a wall but fitting upri
 tile sync takes ~4.7–5.3 ms on the tick they're sent — about 0.4 + 0.5 ms a house, in line with step 2's
 hand-built building. (Re-run on 2026-11-05: 5.7 + 6.3 ms, with every older figure in the test ~1.5x up
 too — the machine, not the change.)
+
+---
+
+## 9. Open for discussion
+
+- **What "closed" means** (flagged 2026-11-05). `CLOSE_BUILDING` sets `EcsBuildingComponent.closed`,
+  one way; the only thing that reads it is the overlay (dashed outline open, solid with a fill closed),
+  and building defs and saves keep it. Nothing else changes: a closed building can still be edited, and
+  it is unrelated to rooms or `sealed`. The brief gives it no purpose — it lists the field and the
+  command and says only "no room required" — and `owner_id`, `quality` and `builder_id` beside it are
+  likewise unused. The author has a plan for it, to be discussed. Mind the brief's limits for this phase
+  when it is: placement is instant with no construction by workers, and no ownership, economy or
+  workers (§1, §2). Until then the tool stays as it is.
