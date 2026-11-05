@@ -3,7 +3,7 @@ extends EcsSystem
 
 ## The player's brain. Reads EcsPlayerInputSingleton and writes what a brain would: the
 ## movement's `steer`, the facing, and the intent flags module 9's executors carry out in this
-## same tick. An attack intent lasts one tick; a timed skill's cast too; a held skill's cast
+## same tick. Skills and sprint are paid for from stamina and mana. An attack let go while ready raises a swing, hit or not; its intent lasts one tick; a timed skill's cast too; a held skill's cast
 ## stays until its stick is used again. Stunned or collapsed, it does nothing.
 
 func label() -> StringName:
@@ -27,7 +27,14 @@ func run(world: EcsWorld, delta: float) -> void:
 		if world.has(id, EcsStunnedFlag) or world.has(id, EcsCollapsedFlag):
 			move.steer = Vector2.ZERO
 			continue
-		move.steer = _steer(player, input)
+		var stamina := world.get_component(id, EcsStaminaComponent) as EcsStaminaComponent
+		var sprinting := input.sprint and input.move != Vector2.ZERO \
+			and (stamina == null or stamina.value - stamina.spent > 0.0)
+		if sprinting and stamina != null:
+			stamina.spent += player.sprint_drain * delta
+		move.steer = _steer(player, input, sprinting)
+		if world.has(id, EcsBlockingFlag):
+			move.steer *= player.block_move_scale
 		if input.aim != Vector2.ZERO:
 			player.facing = input.aim.normalized()
 		elif input.move != Vector2.ZERO:
@@ -44,10 +51,10 @@ func run(world: EcsWorld, delta: float) -> void:
 
 ## Stick to steer, as module 7 moved: speed by stick distance, or full speed times the
 ## multiplier while sprinting.
-func _steer(player: EcsPlayerComponent, input: EcsPlayerInputSingleton) -> Vector2:
+func _steer(player: EcsPlayerComponent, input: EcsPlayerInputSingleton, sprinting: bool) -> Vector2:
 	if input.move == Vector2.ZERO:
 		return Vector2.ZERO
-	if input.sprint:
+	if sprinting:
 		return input.move.normalized() * player.sprint_multiplier
 	return input.move.normalized() * pow(minf(input.move.length(), 1.0), player.speed_curve)
 
@@ -57,11 +64,24 @@ func _act(world: EcsWorld, id: int, player: EcsPlayerComponent, action: Dictiona
 		player.facing = aim.normalized()
 	var ability: StringName = action.ability
 	if ability == EcsPlayerInputSingleton.ATTACK:
+		var attack := world.get_component(id, EcsDamageComponent) as EcsDamageComponent
+		if attack == null or attack.cooldown > 0.0:
+			return
 		var target := _target(world, id, player, aim, action.tapped or aim == Vector2.ZERO)
 		if target != EcsWorld.NO_ENTITY:
+			if aim == Vector2.ZERO:
+				player.facing = ((world.get_component(target, EcsPositionComponent) as EcsPositionComponent).position
+					- (world.get_component(id, EcsPositionComponent) as EcsPositionComponent).position).normalized()
 			var intent := EcsAttackIntentFlag.new()
 			intent.target_id = target
 			world.add(id, intent)
+		var weapon := world.get_component(id, EcsWeaponComponent) as EcsWeaponComponent
+		if weapon != null and not world.has(id, EcsSwingFlag):
+			var swing := EcsSwingFlag.new()
+			swing.direction = player.facing.angle()
+			swing.arc = weapon.swing_arc
+			swing.duration = weapon.swing_time
+			world.add(id, swing)
 		return
 	var slot := EcsPlayerInputSingleton.SKILLS.find(ability)
 	if slot >= 0 and slot < player.skill_slots.size() and player.skill_slots[slot] != &"":
@@ -87,13 +107,30 @@ func _target(world: EcsWorld, id: int, player: EcsPlayerComponent, aim: Vector2,
 			best = other
 	return best
 
-## Asks for `skill`; using a held skill that is running asks for it to stop.
+## Asks for `skill` if it would start now and can be paid for, and pays; using a held skill
+## that is running asks for it to stop.
 func _cast(world: EcsWorld, id: int, skill: StringName) -> void:
 	if world.has(id, EcsCastIntentFlag):
 		var was := (world.get_component(id, EcsCastIntentFlag) as EcsCastIntentFlag).skill
 		world.remove(id, EcsCastIntentFlag)
 		if was == skill and _held(world, id, skill):
 			return
+	var known := world.get_component(id, EcsSkillsComponent) as EcsSkillsComponent
+	var def := EcsSkillDef.find(known.skills, skill) if known != null else null
+	if def == null or known.active_left.has(skill) or known.cooldown_left.has(skill) or not def.can_start(world, id):
+		return
+	var player := world.get_component(id, EcsPlayerComponent) as EcsPlayerComponent
+	var cost: Vector2 = player.skill_costs.get(skill, Vector2.ZERO)
+	var stamina := world.get_component(id, EcsStaminaComponent) as EcsStaminaComponent
+	var mana := world.get_component(id, EcsManaComponent) as EcsManaComponent
+	if cost.x > 0.0 and (stamina == null or stamina.value - stamina.spent < cost.x):
+		return
+	if cost.y > 0.0 and (mana == null or mana.value - mana.spent < cost.y):
+		return
+	if cost.x > 0.0:
+		stamina.spent += cost.x
+	if cost.y > 0.0:
+		mana.spent += cost.y
 	var cast := EcsCastIntentFlag.new()
 	cast.skill = skill
 	world.add(id, cast)

@@ -13,7 +13,16 @@ extends EcsComponent
 ## Two sprint presses within this many seconds cast the dash skill.
 @export var double_tap_window: float = 0.3
 ## Skill id per skill stick, 1 to 4; empty means the stick does nothing.
-@export var skill_slots: Array[StringName] = [&"dash", &"scan", &"hide", &""]
+@export var skill_slots: Array[StringName] = [&"block", &"cleave", &"whirlwind", &"fireball"]
+## What each skill costs it: x stamina, y mana. A skill it can't pay for doesn't start.
+@export var skill_costs: Dictionary[StringName, Vector2] = {
+	&"dash": Vector2(25, 0), &"block": Vector2(15, 0), &"cleave": Vector2(20, 0),
+	&"whirlwind": Vector2(35, 0), &"fireball": Vector2(0, 30),
+}
+## Stamina per second sprinting costs; with none left it can't sprint.
+@export var sprint_drain: float = 18.0
+## Speed multiplier while blocking.
+@export var block_move_scale: float = 0.4
 ## The skill a double-tap of sprint casts.
 @export var dash_skill: StringName = &"dash"
 

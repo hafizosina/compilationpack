@@ -5,7 +5,11 @@
 [ext_resource type="Resource" path="res://11. EcsControl/defs/blueprints/player.tres" id="bp_player"]
 [ext_resource type="Resource" path="res://11. EcsControl/defs/blueprints/dummy.tres" id="bp_dummy"]
 [ext_resource type="Resource" path="res://11. EcsControl/defs/blueprints/dummy_wreck.tres" id="bp_wreck"]
+[ext_resource type="Resource" path="res://11. EcsControl/defs/blueprints/fireball.tres" id="bp_fireball"]
+[ext_resource type="Resource" path="res://11. EcsControl/defs/blueprints/fireball_burst.tres" id="bp_fireball_burst"]
+[ext_resource type="Resource" path="res://11. EcsControl/defs/blueprints/thorns.tres" id="bp_thorns"]
+[ext_resource type="Resource" path="res://11. EcsControl/defs/blueprints/player_grave.tres" id="bp_player_grave"]
 
 [resource]
 script = ExtResource("cat")
-defs = Array[ExtResource("def")]([ExtResource("bp_player"), ExtResource("bp_dummy"), ExtResource("bp_wreck")])
+defs = Array[ExtResource("def")]([ExtResource("bp_player"), ExtResource("bp_dummy"), ExtResource("bp_wreck"), ExtResource("bp_fireball"), ExtResource("bp_fireball_burst"), ExtResource("bp_thorns"), ExtResource("bp_player_grave")])

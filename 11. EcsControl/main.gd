@@ -13,11 +13,14 @@ const GRID: float = 64.0
 ## Training dummies in a ring around the player.
 @export var dummies: int = 6
 @export var ring_radius: float = 260.0
+## Where thorn bushes grow, to walk into and get hurt.
+@export var thorns: Array[Vector2] = [Vector2(-420, -160), Vector2(-300, 240), Vector2(160, -420)]
 
 @onready var _entities_root: Node2D = $World/Entities
 @onready var _overlay: EcsDebugOverlay = $World/DebugOverlay
 @onready var _camera: EcsFollowCamera = $Camera2D
 @onready var _hud: EcsControlHud = $UI
+@onready var _weapon_view: EcsWeaponView = $World/Weapon
 
 var _world: EcsWorld
 var _scheduler: EcsScheduler
@@ -46,7 +49,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _record(ability: StringName, aim: Vector2, tapped: bool) -> void:
 	_input.actions.append({"ability": ability, "aim": aim, "tapped": tapped})
 
-## A new world: the player in the middle, dummies around it, and the pipeline.
+## A new world: the player in the middle, dummies around it, thorn bushes, and the pipeline.
 func _build() -> void:
 	_manager.clear()
 	_world = EcsWorld.new()
@@ -59,12 +62,20 @@ func _build() -> void:
 	_ask(inbox, &"player", Vector2.ZERO)
 	for k in dummies:
 		_ask(inbox, &"dummy", Vector2.RIGHT.rotated(TAU * k / dummies) * ring_radius)
+	for at in thorns:
+		_ask(inbox, &"thorns", at)
 	_scheduler = EcsScheduler.new()
 	_scheduler \
 		.add(EcsLifecycleSystem.new(_manager, catalog)) \
 		.add(EcsPlayerControlSystem.new()) \
+		.add(EcsPoolSystem.new()) \
 		.add(EcsSkillSystem.new()) \
+		.add(EcsStrikeSystem.new()) \
+		.add(EcsLaunchSystem.new()) \
+		.add(EcsProjectileSystem.new()) \
+		.add(EcsThornsSystem.new()) \
 		.add(EcsAttackSystem.new()) \
+		.add(EcsBlockSystem.new()) \
 		.add(EcsHealthSystem.new()) \
 		.add(EcsDangerSystem.new()) \
 		.add(EcsMovementSystem.new()) \
@@ -72,9 +83,11 @@ func _build() -> void:
 		.add(EcsSensorSystem.new(_manager)) \
 		.add(EcsRemainsSystem.new()) \
 		.add(EcsRespawnSystem.new()) \
+		.add(EcsLifetimeSystem.new()) \
+		.add(EcsWeaponSystem.new()) \
 		.add(EcsNodeSyncSystem.new(_manager)) \
 		.add(EcsDebugSystem.new(_overlay)) \
-		.add(EcsPlayerViewSystem.new(_manager, _camera, _hud))
+		.add(EcsPlayerViewSystem.new(_manager, _camera, _hud, _weapon_view))
 
 func _ask(inbox: EcsLifecycleSingleton, type_id: StringName, at: Vector2) -> void:
 	var note := EcsSpawnRequest.new()

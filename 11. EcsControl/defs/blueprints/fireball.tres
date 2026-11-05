@@ -1,0 +1,43 @@
+[gd_resource type="Resource" script_class="EcsEntityDef" format=3]
+
+[ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="base"]
+[ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
+[ext_resource type="Script" uid="uid://c62j1k5pdptjl" path="res://9. EcsSystem/components/ecs_movement_component.gd" id="s_move"]
+[ext_resource type="Script" uid="uid://dyejv2wq5luep" path="res://9. EcsSystem/components/ecs_action_component.gd" id="s_action"]
+[ext_resource type="Script" uid="uid://bohokd74mhp07" path="res://9. EcsSystem/components/ecs_remains_component.gd" id="s_remains"]
+[ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
+[ext_resource type="Script" path="res://11. EcsControl/components/ecs_projectile_component.gd" id="s_projectile"]
+[ext_resource type="Script" path="res://11. EcsControl/components/ecs_lifetime_component.gd" id="s_lifetime"]
+[ext_resource type="Texture2D" path="res://11. EcsControl/art/fireball.png" id="t_fire"]
+
+[sub_resource type="Resource" id="c_move"]
+script = ExtResource("s_move")
+speed = 420.0
+
+[sub_resource type="Resource" id="c_action"]
+script = ExtResource("s_action")
+radius = 12.0
+
+[sub_resource type="Resource" id="c_projectile"]
+script = ExtResource("s_projectile")
+
+[sub_resource type="Resource" id="c_lifetime"]
+script = ExtResource("s_lifetime")
+seconds = 1.2
+
+[sub_resource type="Resource" id="c_remains"]
+script = ExtResource("s_remains")
+leaves = Dictionary[StringName, StringName]({&"impact": &"fireball_burst"})
+darken = -1.0
+
+[sub_resource type="Resource" id="c_sprite"]
+script = ExtResource("s_sprite")
+texture = ExtResource("t_fire")
+scale_factor = 0.9
+z_index = 4
+
+[resource]
+script = ExtResource("def")
+id = &"fireball"
+display_name = "Fireball"
+components = Array[ExtResource("base")]([SubResource("c_move"), SubResource("c_action"), SubResource("c_projectile"), SubResource("c_lifetime"), SubResource("c_remains"), SubResource("c_sprite")])

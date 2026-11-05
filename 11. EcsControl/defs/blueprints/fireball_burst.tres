@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="EcsEntityDef" format=3]
+
+[ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="base"]
+[ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
+[ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
+[ext_resource type="Script" path="res://11. EcsControl/components/ecs_lifetime_component.gd" id="s_lifetime"]
+[ext_resource type="Texture2D" path="res://11. EcsControl/art/burst.png" id="t_burst"]
+
+[sub_resource type="Resource" id="c_sprite"]
+script = ExtResource("s_sprite")
+texture = ExtResource("t_burst")
+scale_factor = 1.0
+z_index = 4
+
+[sub_resource type="Resource" id="c_lifetime"]
+script = ExtResource("s_lifetime")
+seconds = 0.3
+
+[resource]
+script = ExtResource("def")
+id = &"fireball_burst"
+display_name = "Burst"
+components = Array[ExtResource("base")]([SubResource("c_sprite"), SubResource("c_lifetime")])

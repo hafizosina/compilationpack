@@ -12,6 +12,15 @@
 [ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
 [ext_resource type="Script" path="res://11. EcsControl/components/ecs_player_component.gd" id="s_player"]
 [ext_resource type="Resource" path="res://11. EcsControl/defs/skills/player_dash.tres" id="k_dash"]
+[ext_resource type="Resource" path="res://11. EcsControl/defs/skills/cleave.tres" id="k_cleave"]
+[ext_resource type="Resource" path="res://11. EcsControl/defs/skills/whirlwind.tres" id="k_whirlwind"]
+[ext_resource type="Resource" path="res://11. EcsControl/defs/skills/block.tres" id="k_block"]
+[ext_resource type="Resource" path="res://11. EcsControl/defs/skills/fireball.tres" id="k_fireball"]
+[ext_resource type="Script" path="res://11. EcsControl/components/ecs_stamina_component.gd" id="s_stamina"]
+[ext_resource type="Script" path="res://11. EcsControl/components/ecs_mana_component.gd" id="s_mana"]
+[ext_resource type="Script" uid="uid://bohokd74mhp07" path="res://9. EcsSystem/components/ecs_remains_component.gd" id="s_remains"]
+[ext_resource type="Script" path="res://11. EcsControl/components/ecs_weapon_component.gd" id="s_weapon"]
+[ext_resource type="Texture2D" uid="uid://5aeikqce6fo4" path="res://Global/Asset/Items/weapon_longsword.png" id="t_sword"]
 [ext_resource type="Texture2D" uid="uid://bae16lxpt5p5x" path="res://Global/Asset/character.png" id="t_player"]
 
 [sub_resource type="Resource" id="c_player"]
@@ -41,7 +50,24 @@ power = 20.0
 
 [sub_resource type="Resource" id="c_skills"]
 script = ExtResource("s_skills")
-swaps = Array[ExtResource("s_skill_def")]([ExtResource("k_dash")])
+swaps = Array[ExtResource("s_skill_def")]([ExtResource("k_dash"), ExtResource("k_cleave"), ExtResource("k_whirlwind"), ExtResource("k_block"), ExtResource("k_fireball")])
+
+[sub_resource type="Resource" id="c_weapon"]
+script = ExtResource("s_weapon")
+texture = ExtResource("t_sword")
+
+[sub_resource type="Resource" id="c_stamina"]
+script = ExtResource("s_stamina")
+
+[sub_resource type="Resource" id="c_mana"]
+script = ExtResource("s_mana")
+regen = 8.0
+regen_delay = 1.5
+
+[sub_resource type="Resource" id="c_remains"]
+script = ExtResource("s_remains")
+leaves = Dictionary[StringName, StringName]({&"health": &"player_grave"})
+darken = 0.5
 
 [sub_resource type="Resource" id="c_sprite"]
 script = ExtResource("s_sprite")
@@ -53,4 +79,4 @@ z_index = 2
 script = ExtResource("def")
 id = &"player"
 display_name = "Player"
-components = Array[ExtResource("base")]([SubResource("c_player"), SubResource("c_move"), SubResource("c_body"), SubResource("c_action"), SubResource("c_damage"), SubResource("c_health"), SubResource("c_skills"), SubResource("c_sprite")])
+components = Array[ExtResource("base")]([SubResource("c_player"), SubResource("c_move"), SubResource("c_body"), SubResource("c_action"), SubResource("c_damage"), SubResource("c_health"), SubResource("c_skills"), SubResource("c_weapon"), SubResource("c_stamina"), SubResource("c_mana"), SubResource("c_remains"), SubResource("c_sprite")])

@@ -1,19 +1,24 @@
 class_name EcsPlayerViewSystem
 extends EcsSystem
 
-## Read only. Shows the player: the camera follows it, its sprite turns to its facing, the
-## status bar gets its health and dash readiness, the HUD each skill slot's cooldown.
+## Read only. Shows the player: the camera follows it, its sprite turns to its facing, its
+## weapon takes the pose EcsWeaponSystem wrote, the status bar gets its health, stamina (the
+## energy bar) and mana, the HUD each skill slot's cooldown.
 
 var _manager: EcsEntityManager
 var _camera: EcsFollowCamera
 var _hud: EcsControlHud
+var _weapon_view: EcsWeaponView
 var _health_sent: float = -1.0
 var _stamina_sent: float = -1.0
+var _mana_sent: float = -1.0
 
-func _init(manager: EcsEntityManager, camera: EcsFollowCamera, hud: EcsControlHud) -> void:
+func _init(manager: EcsEntityManager, camera: EcsFollowCamera, hud: EcsControlHud,
+		weapon_view: EcsWeaponView = null) -> void:
 	_manager = manager
 	_camera = camera
 	_hud = hud
+	_weapon_view = weapon_view
 
 func label() -> StringName:
 	return &"player_view"
@@ -30,14 +35,22 @@ func run(world: EcsWorld, _delta: float) -> void:
 	var sprite := _manager.node_for(id, EcsConst.NODE_SPRITE) if _manager != null else null
 	if sprite != null:
 		sprite.rotation = player.facing.angle()
+	var weapon := world.get_component(id, EcsWeaponComponent) as EcsWeaponComponent
+	if _weapon_view != null and weapon != null:
+		_weapon_view.show_pose(place.position, weapon)
 
 	var health := world.get_component(id, EcsHealthComponent) as EcsHealthComponent
 	if health != null:
 		_send_health(100.0 * health.value / maxf(health.max_health, 0.01))
+	var stamina := world.get_component(id, EcsStaminaComponent) as EcsStaminaComponent
+	if stamina != null:
+		_send_stamina(100.0 * stamina.value / maxf(stamina.max_value, 0.01))
+	var mana := world.get_component(id, EcsManaComponent) as EcsManaComponent
+	if mana != null:
+		_send_mana(100.0 * mana.value / maxf(mana.max_value, 0.01))
 	var known := world.get_component(id, EcsSkillsComponent) as EcsSkillsComponent
 	if known == null:
 		return
-	_send_stamina(100.0 * (1.0 - _cooling(known, player.dash_skill)))
 	if _hud != null:
 		var ratios: Array[float] = []
 		for skill in player.skill_slots:
@@ -57,6 +70,11 @@ func _send_health(value: float) -> void:
 	if not is_equal_approx(value, _health_sent):
 		_health_sent = value
 		EventBus.health_change.emit(value)
+
+func _send_mana(value: float) -> void:
+	if not is_equal_approx(value, _mana_sent):
+		_mana_sent = value
+		EventBus.mana_change.emit(value)
 
 func _send_stamina(value: float) -> void:
 	if not is_equal_approx(value, _stamina_sent):

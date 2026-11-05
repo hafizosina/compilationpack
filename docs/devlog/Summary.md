@@ -165,9 +165,13 @@ A **hand-rolled ECS** and the only live simulation — the main scene. It shares
 
 **Training dummies** break into a wreck through module 9's remains and come back after 3 s.
 
-**Tests:** `tests/control_test.tscn` — 26 checks.
+**A weapon, animated as data.** The player holds a longsword (`Global/Asset/Items/`). A swing is a flag (`EcsSwingFlag`) that `EcsWeaponSystem` advances into a pose on `EcsWeaponComponent`; the view only copies the pose and draws the trail. Two attack skills are module 9 skill defs with a module 11 strike executor: **cleave** (2×, 160° in front) and **whirlwind** (1.5×, all around, a full spin). **Block** softens hits from in front on the combat inbox before module 9's health applies them. **Fireball** launches a real entity that module 9's movement flies and remains turn into a burst.
 
-**Controls:** left stick or WASD moves · Sprint (or Shift) runs, double-tap dashes · Basic Attack stick: aim and let go, or tap for the nearest · four skill sticks cast dash, scan, hide · hold the switch for the interact wheel (not wired yet) · **F1** overlay.
+**Stamina and mana** fill the HUD's energy and mana bars: one pool system writes them, control asks to spend, skills and sprint cost them. **Thorn bushes** hurt to stand in, and a fallen player comes back after 3 s, as the dummies do.
+
+**Tests:** `tests/control_test.tscn` — 59 checks.
+
+**Controls:** left stick or WASD moves · Sprint (or Shift) runs, double-tap dashes · Basic Attack stick: aim and let go, or tap for the nearest · four skill sticks cast block, cleave, whirlwind, fireball · hold the switch for the interact wheel (not wired yet) · **F1** overlay.
 
 ---
 
@@ -254,4 +258,4 @@ All widget styling goes through the single theme `Global/Theme/main_theme.tres`,
 | 8. SimpleAiSystem | **Design archive — the code is deleted.** Complete for its milestone when it was removed; its five `.md` docs stay as the reasoning module 9 is built against. Restore with `git checkout 3346b6e -- "8. SimpleAiSystem"` |
 | 9. EcsSystem | **Active, and the only live simulation.** Hand-rolled ECS, twenty-five stages, main scene. Plan steps 0–7 done; combat rebuilt without weapons (attack intents, armour, crits), with corpses, looting, rot, diet and a hunting crocodile; bushes are harvested; step 7 is a pure A* planner under utility goal choice, replanning on events under a budget, with danger and fleeing. Components / flags / singletons as three kinds, intent flags, items as records, fullness / energy / health. 261 lifecycle checks plus a population ramp; cached views took the ceiling past 9,600 entities. The data-structure argument (`HANDOFF.md` §15) is open and the author's to settle |
 | 10. Town Generator | **Active, the main scene.** Town building on module 9's ECS: grid and dual-grid tiles, build commands, rooms and roofs, furniture, stamps and saves, a seeded building generator, breakable walls; the brief's steps 1–8 and its stress measurements done. What a building's `closed` flag is for is open, for the author |
-| 11. EcsControl | **Started.** Module 7's HUD copied onto a player entity in module 9's ECS: moving, sprint, dash, aimed and tapped attacks, skill slots, training dummies. Interact wheel, inventory and animals next |
+| 11. EcsControl | **Started.** Module 7's HUD copied onto a player entity in module 9's ECS: moving, sprint, dash, aimed and tapped attacks, a sword with animated swings, block, cleave, whirlwind, fireball, stamina and mana, thorns, training dummies. Interact wheel, inventory and animals next |

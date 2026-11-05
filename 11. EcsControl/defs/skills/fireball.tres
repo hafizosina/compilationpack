@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="EcsProjectileSkill" format=3]
+
+[ext_resource type="Script" path="res://11. EcsControl/skills/ecs_projectile_skill.gd" id="def"]
+
+[resource]
+script = ExtResource("def")
+id = &"fireball"
+cooldown = 1.2
+duration = 0.1
+blueprint = &"fireball"
+damage_scale = 1.75

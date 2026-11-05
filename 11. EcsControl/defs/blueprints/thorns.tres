@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="EcsEntityDef" format=3]
+
+[ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="base"]
+[ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]
+[ext_resource type="Script" uid="uid://occbigie8rhc" path="res://9. EcsSystem/components/ecs_body_component.gd" id="s_body"]
+[ext_resource type="Script" uid="uid://dyejv2wq5luep" path="res://9. EcsSystem/components/ecs_action_component.gd" id="s_action"]
+[ext_resource type="Script" uid="uid://dggyv3jo4spyn" path="res://9. EcsSystem/components/ecs_damage_component.gd" id="s_damage"]
+[ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
+[ext_resource type="Script" path="res://11. EcsControl/components/ecs_thorns_component.gd" id="s_thorns"]
+[ext_resource type="Texture2D" path="res://11. EcsControl/art/thorns.png" id="t_thorns"]
+
+[sub_resource type="Resource" id="c_body"]
+script = ExtResource("s_body")
+radius = 30.0
+is_solid = false
+
+[sub_resource type="Resource" id="c_action"]
+script = ExtResource("s_action")
+radius = 34.0
+
+[sub_resource type="Resource" id="c_damage"]
+script = ExtResource("s_damage")
+damage = 8.0
+interval = 0.7
+
+[sub_resource type="Resource" id="c_thorns"]
+script = ExtResource("s_thorns")
+
+[sub_resource type="Resource" id="c_sprite"]
+script = ExtResource("s_sprite")
+texture = ExtResource("t_thorns")
+scale_factor = 1.1
+
+[resource]
+script = ExtResource("def")
+id = &"thorns"
+display_name = "Thorns"
+components = Array[ExtResource("base")]([SubResource("c_body"), SubResource("c_action"), SubResource("c_damage"), SubResource("c_thorns"), SubResource("c_sprite")])
