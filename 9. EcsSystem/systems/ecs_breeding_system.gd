@@ -26,7 +26,7 @@ func run(world: EcsWorld, delta: float) -> void:
 		var id := named.ids[k]
 		var breeding := breeders[k] as EcsBreedingComponent
 		if not breeding.rolled:
-			breeding.cooldown_left = randf_range(0.0, breeding.cooldown)
+			breeding.cooldown_left = EcsRandomSingleton.of(world).randf_range(0.0, breeding.cooldown)
 			breeding.rolled = true
 		breeding.cooldown_left = maxf(breeding.cooldown_left - delta, 0.0)
 		var ready: bool = breeding.cooldown_left <= 0.0 \

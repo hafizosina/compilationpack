@@ -30,7 +30,7 @@ func run(world: EcsWorld, _delta: float) -> void:
 			hit.from = id
 			hit.to = other
 			hit.amount = attack.damage * strike.damage_scale
-			if randf() < attack.crit_chance:
+			if EcsRandomSingleton.of(world).randf() < attack.crit_chance:
 				hit.amount *= attack.crit_multiplier
 				hit.critical = true
 			combat.hits.append(hit)

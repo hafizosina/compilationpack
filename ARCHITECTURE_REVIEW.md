@@ -279,6 +279,42 @@ cache if long paths prove expensive.
   5 (saves) later. 6 (navigation and sight through walls) is module 10's next plan, later.
   7 (stable room ids) later, after pathfinding.
 
+# Part 4 — Point-by-point (2026-11-06)
+
+**GOAP refactor — todo, later.** GOAP 1 and 2 are one job.
+
+- **GOAP 1, actions that execute themselves.** The def answers,
+  the brain applies, as with skills: an `EcsActionDef` subclass gives `bind(world, id) -> int`
+  (chooses a target, writes nothing), `done`, `failed`, `make_intent(target) -> EcsFlag` and where to
+  walk; the brain writes only target, destination and the flag. `State`, `_serves` and `_flag_for`
+  go; brain state becomes the current step id plus its target. Facts (`_facts()`) and needs
+  (`score()`) stay in code for now.
+- **GOAP 2, retire the ladder.** The `_try_*` rungs become the step executors and their `gated`
+  branches go. A creature with no plan yet, or no planner, wanders. Ladder tests (`_ladder_rabbit`)
+  move to planned creatures or are dropped where planner tests already cover them;
+  `_utility_picks_what_the_ladder_would` becomes a fixed table of expected goals.
+
+- **GOAP 3, A\* cost — undecided.** Proposed: separate from the refactor and first in line (only
+  `ecs_planner.gd` changes; the current planner is the reference to test against); measure the
+  `_facts()` vs search split before starting; drop the plan cache unless numbers ask for it.
+- **GOAP 4–6** (threat by diet, fact-name validation, shared action set) — not yet discussed.
+
+**ECS core**
+
+- **ECS 1, pipelines — by design; revisit at the merge.** A separate pipeline per module is the
+  point of a prototype pack. Within module 9, `stress_test.gd` copies `main.gd`'s list by hand (it
+  lacks `edit`, and runs every stage every tick unless `--every=` is passed). Left as is: one shared
+  pipeline and a stress test that runs it come when the modules are combined into one base game.
+- **ECS 2, module 9 as a library — stays in module 9 for now.** The ECS and GOAP aren't final (the
+  GOAP refactor is still to come), so the core is promoted only once it settles: at the merge,
+  before saves matter (`EcsSnapshot` stores script paths, so a move breaks old saves). Until then,
+  run all three modules' tests after touching module 9's core.
+- **ECS 3, seeded randomness — done 2026-11-06.** `EcsRandomSingleton` holds the world's one
+  `RandomNumberGenerator`; every roll in modules 9 and 11 goes through `EcsRandomSingleton.of(world)`
+  (13 calls, `EcsConst.random_point_near` included), and a save keeps its state. `main.gd`'s
+  `random_seed` export sets it (0 = new each build) and the seed is printed. Module 10's wander
+  is left on the global RNG. Replays hold only while the order of rolls does.
+
 ---
 
 # Appendix — planner benchmark

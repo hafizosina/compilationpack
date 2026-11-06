@@ -33,7 +33,7 @@ func run(world: EcsWorld, _delta: float) -> void:
 		return
 	_refresh(world)
 	_sync()
-	_resolve()
+	_resolve(EcsRandomSingleton.of(world))
 
 ## Rebuilds the working set if a body was born or died, or gained or lost movement.
 func _refresh(world: EcsWorld) -> void:
@@ -86,7 +86,7 @@ func _sync() -> void:
 
 ## Moves each movable solid body half the overlap away from each solid body it
 ## touches. Each pair is reported from both sides, so the push is symmetric.
-func _resolve() -> void:
+func _resolve(rng: RandomNumberGenerator) -> void:
 	for i in _ids.size():
 		if not _movable[i] or not _solid[i]:
 			continue
@@ -104,7 +104,7 @@ func _resolve() -> void:
 				continue
 
 			# Exactly stacked: pick a random direction.
-			var push := apart / gap if gap > 0.01 else Vector2.RIGHT.rotated(randf() * TAU)
+			var push := apart / gap if gap > 0.01 else Vector2.RIGHT.rotated(rng.randf() * TAU)
 			mine.position += push * (touching - gap) * 0.5
 
 ## Clears the working set; the next run rebuilds it.

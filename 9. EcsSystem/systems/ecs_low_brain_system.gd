@@ -450,7 +450,7 @@ func _try_ambush(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		var pond := brain.target
 		var away := place.position - _position_of(world, pond) if world.is_alive(pond) else Vector2.ZERO
 		if away.is_zero_approx():
-			away = Vector2.RIGHT.rotated(randf() * TAU)
+			away = Vector2.RIGHT.rotated(EcsRandomSingleton.of(world).randf() * TAU)
 		_set_state(world, id, brain, EcsLowBrainComponent.State.WANDER, pond)
 		_set_trip(move, EcsConst.inside(place.position + away.normalized() * brain.radius))
 		return true
@@ -564,7 +564,7 @@ func _run_from(world: EcsWorld, id: int, move: EcsMovementComponent,
 	var brain := world.get_component(id, EcsLowBrainComponent) as EcsLowBrainComponent
 	var away := place.position - danger.threat_at
 	if away.is_zero_approx():
-		away = Vector2.RIGHT.rotated(randf() * TAU)
+		away = Vector2.RIGHT.rotated(EcsRandomSingleton.of(world).randf() * TAU)
 	_set_trip(move, EcsConst.inside(place.position + away.normalized() * brain.radius))
 
 ## Does `state` carry out plan step `step`? IDLE has nothing to drop.
@@ -884,9 +884,10 @@ func _wander(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	brain.pause_left -= delta
 	if brain.pause_left > 0.0:
 		return
-	brain.pause_left = randf_range(brain.pause_min, brain.pause_max)
+	var rng := EcsRandomSingleton.of(world)
+	brain.pause_left = rng.randf_range(brain.pause_min, brain.pause_max)
 	_set_state(world, id, brain, EcsLowBrainComponent.State.WANDER)
-	_set_trip(move, EcsConst.random_point_near(place.position, brain.radius, 0.25))
+	_set_trip(move, EcsConst.random_point_near(rng, place.position, brain.radius, 0.25))
 
 ## Is `id` currently food on the ground?
 func _is_food(id: int) -> bool:

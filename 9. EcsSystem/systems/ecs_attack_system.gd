@@ -36,7 +36,7 @@ func run(world: EcsWorld, delta: float) -> void:
 		hit.bleed_for = attack.bleed_for
 		hit.poison_rate = attack.poison_rate
 		hit.poison_for = attack.poison_for
-		if randf() < attack.crit_chance:
+		if EcsRandomSingleton.of(world).randf() < attack.crit_chance:
 			hit.amount *= attack.crit_multiplier
 			hit.critical = true
 		if world.has(id, EcsDashingFlag):

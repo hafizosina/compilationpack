@@ -34,7 +34,7 @@ func run(world: EcsWorld, delta: float) -> void:
 		var here := world.get_component(id, EcsPositionComponent) as EcsPositionComponent
 		var note := EcsSpawnRequest.new()
 		note.type_id = crop.yields
-		note.position = here.position + Vector2.RIGHT.rotated(randf() * TAU) * action.radius * 0.5
+		note.position = here.position + Vector2.RIGHT.rotated(EcsRandomSingleton.of(world).randf() * TAU) * action.radius * 0.5
 		inbox.spawn_requests.append(note)
 
 func _regrow(crop: EcsHarvestableComponent, delta: float) -> void:

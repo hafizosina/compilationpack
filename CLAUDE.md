@@ -10,7 +10,7 @@ There are no build scripts; the editor is the tool chain. The tests are module 9
 `9. EcsSystem/tests/`, module 10's, in `10. Town Generator/tests/`, and module 11's control test:
 
 ```bash
-# 472 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 476 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments, the hunger/health/energy loop,
 # intent flags, items as records, the drop on death, views, combat, corpses,
 # looting, rot, diet, hunting, harvesting, the planner, utility, fleeing,
@@ -18,7 +18,7 @@ There are no build scripts; the editor is the tool chain. The tests are module 9
 # save/load snapshots, placing while paused, composed blueprints, multi-select,
 # live edits, selecting by id, the entity list, deleting a save,
 # removing an entity, switching a component off, health only visiting what changes,
-# what a death leaves by its cause, static entities drawn only on change, and steering.
+# what a death leaves by its cause, static entities drawn only on change, steering, and seeded random rolls.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
@@ -87,6 +87,7 @@ Hand-edited scene/resource files are the main breakage risk in this repo: `.tscn
 | `Global/Asset/`, `Global/Theme/` | Shared art and the single UI theme |
 | `<N>. <Name>/` | One isolated demo module per folder |
 | `docs/devlog/Summary.md` | Longer per-module write-up, one section per module |
+| `ARCHITECTURE_REVIEW.md` | Cross-module review of modules 9, 10 and 11 (2026-11-05): GOAP, ECS, data-driven design, scalability, and the decisions taken on them |
 | `8. SimpleAiSystem/*.md` | **Design archive — the code is deleted.** Five docs kept for the reasoning module 9 is built against |
 | `9. EcsSystem/*.md` | Module 9 likewise — `HANDOFF.md` is its state-of-the-build, `ECS_GOAP_REPORT.md` a short overview of where the ECS and planner stand, `PSEUDOCODE.md` the core logic of every component and system, `ECS_REFACTOR_PLAN.md` the roadmap it follows; `HANDOFF.md` §3 covers the entity-lifecycle model. Plans for finished work are deleted once folded into `HANDOFF.md` (the fetch-time job is in §14) |
 | `9. EcsSystem/tests/` | Module 9's lifecycle acceptance test and its population stress test |
@@ -416,7 +417,7 @@ been crossed.
 berry dies and becomes a record, so freeing a node is kill and only kill, and every live
 entity has a position to draw.
 
-**It is deliberately kept to a small core**: 29 components, 23 flags, 5
+**It is deliberately kept to a small core**: 29 components, 23 flags, 6
 singletons, 29 systems
 (`lifecycle > edit > spawner > hunger > energy > thirst > danger > sensor > breeding > memory > planning > low_brain > skill > consume > drink > harvest > attack > health > movement > collision > pickup > rot > remains > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
 rank in the plan's decision ladder — the planner sits *above* it — and not for the

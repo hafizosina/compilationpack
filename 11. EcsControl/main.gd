@@ -58,6 +58,7 @@ func _build() -> void:
 	var inbox := EcsLifecycleSingleton.new()
 	_world.add_singleton(inbox)
 	_world.add_singleton(EcsCombatSingleton.new())
+	_world.add_singleton(EcsRandomSingleton.new())
 	_world.add_singleton(EcsHealthSingleton.new())
 	_ask(inbox, &"player", Vector2.ZERO)
 	for k in dummies:

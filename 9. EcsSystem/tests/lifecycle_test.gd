@@ -121,6 +121,7 @@ func _run() -> void:
 	await _a_ready_pair_meets_and_a_third_is_born()
 	_parched_outranks_a_committed_hunt()
 	_the_snapshot_codec_keeps_shared_and_typed_data()
+	_a_save_keeps_the_random_rolls()
 	await _a_saved_world_loads_as_it_was_and_runs_on()
 	await _placing_while_paused_builds_the_entity()
 	_a_composed_blueprint_saves_loads_and_spawns()
@@ -3689,6 +3690,35 @@ func _the_snapshot_codec_keeps_shared_and_typed_data() -> void:
 	_check("the request it shares with the inbox is still one object",
 		back_inbox != null and back_inbox.spawn_requests[0] == back.pending[0])
 	_check("typed arrays stay typed", back.spawned.is_typed() and back.spawned == [7])
+
+## The world's generator is what systems roll on, and a save picks up its rolls
+## where they left off.
+func _a_save_keeps_the_random_rolls() -> void:
+	var world := EcsWorld.new()
+	var random := world.add_singleton(EcsRandomSingleton.new()) as EcsRandomSingleton
+	random.rng.seed = 1234
+	_check("systems roll on the world's generator", EcsRandomSingleton.of(world) == random.rng)
+	for i in 5:
+		random.rng.randf()
+	var data: Dictionary = str_to_var(var_to_str(EcsSnapshot.capture(world)))
+	var expected: Array[float] = []
+	for i in 5:
+		expected.append(random.rng.randf())
+	var back: EcsRandomSingleton = null
+	for singleton in EcsSnapshot.decode(data)["singletons"]:
+		if singleton is EcsRandomSingleton:
+			back = singleton
+	var rolled: Array[float] = []
+	if back != null:
+		for i in 5:
+			rolled.append(back.rng.randf())
+	_check("a loaded save rolls what the saved world would have", back != null and rolled == expected)
+	var twin := RandomNumberGenerator.new()
+	twin.seed = 1234
+	for i in 5:
+		twin.randf()
+	_check("the same seed rolls the same", twin.randf() == expected[0])
+	_check("a world without one still rolls", EcsRandomSingleton.of(EcsWorld.new()) != null)
 
 ## A saved world loads with the same ids and every field equal, its nodes rebuilt,
 ## and keeps running.

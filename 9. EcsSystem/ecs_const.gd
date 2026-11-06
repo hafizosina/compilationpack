@@ -27,9 +27,10 @@ static var world_bounds: Rect2 = Rect2(-3200.0, -1680.0, 6400.0, 3360.0)
 
 ## A random point within `radius` of `origin`, inside the arena. `min_ratio`
 ## excludes an inner disc, as a fraction of `radius`.
-static func random_point_near(origin: Vector2, radius: float, min_ratio: float = 0.0) -> Vector2:
-	var distance := radius * sqrt(randf_range(min_ratio * min_ratio, 1.0))
-	return inside(origin + Vector2.RIGHT.rotated(randf() * TAU) * distance)
+static func random_point_near(rng: RandomNumberGenerator, origin: Vector2, radius: float,
+		min_ratio: float = 0.0) -> Vector2:
+	var distance := radius * sqrt(rng.randf_range(min_ratio * min_ratio, 1.0))
+	return inside(origin + Vector2.RIGHT.rotated(rng.randf() * TAU) * distance)
 
 ## `point`, moved inside the arena if it is outside.
 static func inside(point: Vector2) -> Vector2:

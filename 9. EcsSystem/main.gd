@@ -31,6 +31,8 @@ const DRAG_PIXELS: float = 8.0
 @export var world_def: EcsWorldDef
 ## Playable area in global pixels; also the wander bounds.
 @export var arena: Rect2 = Rect2(-3200.0, -1680.0, 6400.0, 3360.0)
+## Seed for the world's random rolls; 0 picks a new one each build. A loaded save keeps its own.
+@export var random_seed: int = 0
 
 @onready var _entities_root: Node2D = $World/Entities
 @onready var _debug_overlay: EcsDebugOverlay = $World/DebugOverlay
@@ -231,6 +233,9 @@ func _build(snapshot: Dictionary = {}) -> void:
 	_world.add_singleton(EcsLifecycleSingleton.new())
 	_world.add_singleton(EcsCombatSingleton.new())
 	_world.add_singleton(EcsHealthSingleton.new())
+	var random := _world.add_singleton(EcsRandomSingleton.new()) as EcsRandomSingleton
+	random.rng.seed = random_seed if random_seed != 0 else randi()
+	print("[ecs] seed %d" % random.rng.seed)
 	if snapshot.is_empty() or not _manager.load_snapshot(_world, snapshot):
 		if world_def != null:
 			_manager.spawn_world(_world, _catalog, world_def)

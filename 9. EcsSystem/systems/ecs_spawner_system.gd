@@ -35,7 +35,7 @@ func run(world: EcsWorld, delta: float) -> void:
 		var here := world.get_component(id, EcsPositionComponent) as EcsPositionComponent
 		var note := EcsSpawnRequest.new()
 		note.type_id = spawner.spawns
-		note.position = EcsConst.random_point_near(here.position, spawner.radius)
+		note.position = EcsConst.random_point_near(EcsRandomSingleton.of(world), here.position, spawner.radius)
 		inbox.spawn_requests.append(note)
 		spawner.pending.append(note)
 
