@@ -10,7 +10,7 @@ There are no build scripts; the editor is the tool chain. The tests are module 9
 `9. EcsSystem/tests/`, module 10's, in `10. Town Generator/tests/`, and module 11's control test:
 
 ```bash
-# 490 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 500 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments, the hunger/health/energy loop,
 # intent flags, items as records, the drop on death, views, combat, corpses,
 # looting, rot, diet, hunting, harvesting, the planner, utility, fleeing,
@@ -18,7 +18,7 @@ There are no build scripts; the editor is the tool chain. The tests are module 9
 # save/load snapshots, placing while paused, composed blueprints, multi-select,
 # live edits, selecting by id, the entity list, deleting a save,
 # removing an entity, switching a component off, health only visiting what changes,
-# what a death leaves by its cause, static entities drawn only on change, steering, seeded random rolls, and skill costs paid from any bar.
+# what a death leaves by its cause, static entities drawn only on change, steering, seeded random rolls, skill costs paid from any bar, and the shared world index.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
@@ -311,6 +311,11 @@ ranking changed, at most `MAX_REPLANS` per run. A step is an action id, never an
 while a threat is seen and jumps on a hit (`EcsHurtFlag`, raised by damage); `flee` wins only
 by score, and collapse is still the only forced override.
 
+**One shared world index** (HANDOFF §31): what is food, a crop, water, cover, a lure, a ready
+mate or a hunter is filed once in `EcsWorldIndexSingleton`, kept by `EcsWorldIndex.of(world)` — a
+cache refreshed when read, like `view()` — and read by planning, the brain, memory and danger. Add
+a shared lookup there rather than a table in one system.
+
 **Bushes are harvested, not spawners.** A berry exists only once something harvests one:
 `EcsHarvestIntentFlag` from the brain, `EcsHarvestSystem` as executor, the yield dropped
 inside the harvester's reach so the existing eat and take rungs finish the job. Keep bushes at
@@ -420,7 +425,7 @@ been crossed.
 berry dies and becomes a record, so freeing a node is kill and only kill, and every live
 entity has a position to draw.
 
-**It is deliberately kept to a small core**: 30 components, 24 flags, 6
+**It is deliberately kept to a small core**: 30 components, 24 flags, 7
 singletons, 30 systems
 (`lifecycle > edit > spawner > hunger > energy > thirst > danger > sensor > breeding > memory > planning > low_brain > skill_cost > skill > consume > drink > harvest > attack > health > movement > collision > pickup > rot > remains > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
 rank in the plan's decision ladder — the planner sits *above* it — and not for the

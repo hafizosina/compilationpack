@@ -9,13 +9,18 @@ static func power_of(world: EcsWorld, id: int) -> float:
 	var health := world.get_component(id, EcsHealthComponent) as EcsHealthComponent
 	return health.power if health != null else 0.0
 
-## Can `hunter` hunt `prey`? It eats meat and can attack; the prey is alive,
-## somewhere, not dying and weaker.
-static func can_hunt(world: EcsWorld, hunter: int, prey: int) -> bool:
-	if hunter == prey or not world.has(hunter, EcsDamageComponent):
+## Is `id` a hunter: it can attack and eats meat? The one definition; the world index
+## files hunters by it.
+static func is_hunter(world: EcsWorld, id: int) -> bool:
+	if not world.has(id, EcsDamageComponent):
 		return false
-	var hunger := world.get_component(hunter, EcsHungerComponent) as EcsHungerComponent
-	if hunger == null or hunger.eats != &"meat":
+	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+	return hunger != null and hunger.eats == &"meat"
+
+## Can `hunter` hunt `prey`? It is a hunter; the prey is alive, somewhere, not dying and
+## weaker.
+static func can_hunt(world: EcsWorld, hunter: int, prey: int) -> bool:
+	if hunter == prey or not is_hunter(world, hunter):
 		return false
 	if not world.has(prey, EcsHealthComponent) or not world.has(prey, EcsPositionComponent) \
 			or world.has(prey, EcsDyingFlag):

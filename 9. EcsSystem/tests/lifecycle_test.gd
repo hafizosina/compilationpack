@@ -126,6 +126,7 @@ func _run() -> void:
 	await _a_shaped_wall_pushes_and_a_shaped_sensor_sees_by_its_shape()
 	_a_look_scene_is_built_as_authored()
 	_a_skill_can_cost_health_or_fullness()
+	_the_world_index_sorts_the_world_once()
 	await _a_saved_world_loads_as_it_was_and_runs_on()
 	await _placing_while_paused_builds_the_entity()
 	_a_composed_blueprint_saves_loads_and_spawns()
@@ -3739,6 +3740,55 @@ func _a_shaped_wall_pushes_and_a_shaped_sensor_sees_by_its_shape() -> void:
 		sensor.perceived.has(berry) and place.position.distance_to(spot + Vector2(550.0, -30.0)) > sensor.radius)
 	_check("and not beside it, though within its radius",
 		not sensor.perceived.has(beside) and place.position.distance_to(spot + Vector2(120.0, -120.0)) < sensor.radius)
+	manager.clear()
+	root.queue_free()
+
+## One shared index files food, crops, water, cover, lures, ready mates and hunters; its
+## tables hold live components, leave the dying out, rebuild only on change and aren't saved.
+func _the_world_index_sorts_the_world_once() -> void:
+	var root := Node2D.new()
+	add_child(root)
+	var manager := EcsEntityManager.new(root)
+	var world := _snapshot_world()
+	var spot := Vector2(-190000.0, 0.0)
+	var berry := manager.spawn(world, _catalog, &"berry", spot)
+	var bush := manager.spawn(world, _catalog, &"berry_bush", spot + Vector2(200.0, 0.0))
+	var pond := manager.spawn(world, _catalog, &"water", spot + Vector2(400.0, 0.0))
+	var croc := manager.spawn(world, _catalog, &"crocodile", spot + Vector2(600.0, 0.0))
+	var rabbit := manager.spawn(world, _catalog, &"rabbit", spot + Vector2(800.0, 0.0))
+	var mate := manager.spawn(world, _catalog, &"rabbit", spot + Vector2(900.0, 0.0))
+	world.add(rabbit, EcsReadyFlag.new())
+	world.add(mate, EcsReadyFlag.new())
+
+	var index := EcsWorldIndex.of(world)
+	_check("the berry is food, with its position", index.food.has(berry) and index.food_at.has(berry)
+		and not index.food.has(bush))
+	_check("the bush is a crop, cover and a lure", index.crops.has(bush) and index.crop_at.has(bush)
+		and index.covers.has(bush) and index.lures.has(bush))
+	_check("the pond is water, cover and a lure", index.water.has(pond) and index.covers.has(pond)
+		and index.lures.has(pond))
+	_check("the crocodile hunts and the rabbit doesn't", index.hunters.has(croc)
+		and not index.hunters.has(rabbit))
+	_check("the ready pair is filed by kind", index.ready.get(rabbit) == &"rabbit"
+		and index.ready.get(mate) == &"rabbit")
+	_check("the diets on offer are the plants' only", index.diets.keys() == [&"plant"])
+
+	var food_table := index.food
+	var crop := index.crops[bush] as EcsHarvestableComponent
+	crop.stock = 0
+	(world.get_component(berry, EcsConsumableComponent) as EcsConsumableComponent).diet = &"meat"
+	index = EcsWorldIndex.of(world)
+	_check("nothing changed hands, so nothing was rebuilt", index.food == food_table)
+	_check("and live values show through", (index.crops[bush] as EcsHarvestableComponent).stock == 0
+		and (index.food[berry] as EcsConsumableComponent).diet == &"meat")
+
+	world.add(croc, EcsDyingFlag.new())
+	_check("a dying hunter drops out on the next read", not EcsWorldIndex.of(world).hunters.has(croc))
+	var saved_index := false
+	for value in EcsSnapshot.decode(str_to_var(var_to_str(EcsSnapshot.capture(world))))["singletons"]:
+		if value is EcsWorldIndexSingleton:
+			saved_index = true
+	_check("a save leaves the index out", not saved_index)
 	manager.clear()
 	root.queue_free()
 

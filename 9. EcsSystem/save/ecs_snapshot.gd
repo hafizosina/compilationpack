@@ -25,7 +25,7 @@ static func capture(world: EcsWorld) -> Dictionary:
 	var singletons: Array = []
 	for singleton in world.singletons():
 		if singleton is EcsSelectionSingleton or singleton is EcsEditSingleton \
-				or singleton is EcsHealthSingleton:
+				or singleton is EcsHealthSingleton or singleton is EcsWorldIndexSingleton:
 			continue
 		singletons.append(_encode(singleton, ctx))
 	return {

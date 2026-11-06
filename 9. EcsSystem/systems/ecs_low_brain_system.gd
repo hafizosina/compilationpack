@@ -24,25 +24,14 @@ const SCAN_SKILL: StringName = &"scan"
 ## How near a cover's middle, as a share of its radius, a hider settles.
 const MIDDLE_SHARE: float = 0.5
 
-## The view `_food` was built from.
-var _food_view: EcsView
-## Current food: id -> EcsPositionComponent.
-var _food: Dictionary = {}
-## Current food: id -> its diet.
-var _diet: Dictionary = {}
-## The view `_bushes` was built from.
-var _bush_view: EcsView
-## Current harvestables: id -> EcsHarvestableComponent.
-var _bushes: Dictionary = {}
-## Current harvestables: id -> EcsPositionComponent.
-var _bush_at: Dictionary = {}
+## The world index, as of this run.
+var _index: EcsWorldIndexSingleton
 
 func label() -> StringName:
 	return &"low_brain"
 
 func run(world: EcsWorld, delta: float) -> void:
-	_refresh_food(world)
-	_refresh_bushes(world)
+	_index = EcsWorldIndex.of(world)
 	# Hunger, energy, bag, reach and sensor are optional, so they are looked up.
 	var stunned := {}
 	for id in world.query([EcsStunnedFlag]):
@@ -718,7 +707,7 @@ func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	var best := EcsWorld.NO_ENTITY
 	var best_distance := INF
 	for seen in sensor.perceived:
-		var there: EcsPositionComponent = _food.get(seen)
+		var there: EcsPositionComponent = _index.food_at.get(seen)
 		if there == null or not _edible(seen, hunger):
 			continue
 		var distance := here.distance_squared_to(there.position)
@@ -729,13 +718,13 @@ func _try_seek_food(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		return false
 
 	_set_state(world, id, brain, EcsLowBrainComponent.State.SEEK_FOOD, best)
-	_set_trip(move, (_food[best] as EcsPositionComponent).position)
+	_set_trip(move, (_index.food_at[best] as EcsPositionComponent).position)
 	return true
 
 ## Harvest a plant in reach, or walk to the nearest one in sight, if foraging.
 func _try_harvest(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		move: EcsMovementComponent, place: EcsPositionComponent, gated: bool = true) -> bool:
-	if _bushes.is_empty():
+	if _index.crops.is_empty():
 		return false
 	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
 	if not _foraging(world, id, hunger, gated):
@@ -756,7 +745,7 @@ func _try_harvest(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	for seen in sensor.perceived:
 		if not _harvestable(seen, hunger):
 			continue
-		var there := (_bush_at[seen] as EcsPositionComponent).position
+		var there := (_index.crop_at[seen] as EcsPositionComponent).position
 		var distance := place.position.distance_squared_to(there)
 		if distance < best_distance:
 			best_distance = distance
@@ -765,18 +754,18 @@ func _try_harvest(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 		return false
 
 	_set_state(world, id, brain, EcsLowBrainComponent.State.SEEK_FOOD, best)
-	_set_trip(move, (_bush_at[best] as EcsPositionComponent).position)
+	_set_trip(move, (_index.crop_at[best] as EcsPositionComponent).position)
 	return true
 
 ## Is `id` a plant with stock left?
 func _has_stock(id: int) -> bool:
-	var crop: EcsHarvestableComponent = _bushes.get(id)
+	var crop: EcsHarvestableComponent = _index.crops.get(id)
 	return crop != null and crop.stock > 0
 
 ## Is `id` a plant with stock whose yield this hunger eats? Without hunger, any.
 func _harvestable(id: int, hunger: EcsHungerComponent) -> bool:
 	return _has_stock(id) and (hunger == null
-		or (_bushes[id] as EcsHarvestableComponent).diet == hunger.eats)
+		or (_index.crops[id] as EcsHarvestableComponent).diet == hunger.eats)
 
 ## Chase the nearest prey in sight, if it can attack and is hungry enough.
 ## Prey is whatever EcsHunting.can_hunt allows: weaker, alive, not dying.
@@ -891,39 +880,12 @@ func _wander(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 
 ## Is `id` currently food on the ground?
 func _is_food(id: int) -> bool:
-	return _food.has(id)
+	return _index.food.has(id)
 
 ## Is `id` food on the ground that this hunger eats? Without hunger, any food.
 func _edible(id: int, hunger: EcsHungerComponent) -> bool:
-	return _food.has(id) and (hunger == null or _diet[id] == hunger.eats)
-
-## Rebuilds `_food` when the food view changes.
-func _refresh_food(world: EcsWorld) -> void:
-	var food := world.view([EcsConsumableComponent, EcsPositionComponent], [EcsDyingFlag])
-	if food == _food_view:
-		return
-	_food_view = food
-	_food = {}
-	_diet = {}
-	var places := food.column(EcsPositionComponent)
-	var foods := food.column(EcsConsumableComponent)
-	for k in food.ids.size():
-		_food[food.ids[k]] = places[k]
-		_diet[food.ids[k]] = (foods[k] as EcsConsumableComponent).diet
-
-## Rebuilds `_bushes` when the harvestable view changes.
-func _refresh_bushes(world: EcsWorld) -> void:
-	var plants := world.view([EcsHarvestableComponent, EcsPositionComponent], [EcsDyingFlag])
-	if plants == _bush_view:
-		return
-	_bush_view = plants
-	_bushes = {}
-	_bush_at = {}
-	var crops := plants.column(EcsHarvestableComponent)
-	var places := plants.column(EcsPositionComponent)
-	for k in plants.ids.size():
-		_bushes[plants.ids[k]] = crops[k]
-		_bush_at[plants.ids[k]] = places[k]
+	return _index.food.has(id) \
+		and (hunger == null or (_index.food[id] as EcsConsumableComponent).diet == hunger.eats)
 
 ## Back to IDLE. Does not touch the trip.
 func _release(world: EcsWorld, id: int, brain: EcsLowBrainComponent) -> void:

@@ -359,8 +359,11 @@ cache if long paths prove expensive.
   hides the stutter of the tick planning lands on. Proposed when it's picked up: budget a frame
   (16.7 ms, or a simulation share), report and stop on the worst tick, keep 250 ms as a
   "slideshow" line. ~400 entities at real density is the 60 FPS limit today.
-- **Scalability 1** goes with GOAP 3 (undecided); **2 and 3** (shared index, perception lists)
-  stand as agreed on 11-05, not scheduled; **4** (navigation) is module 10's later plan; **5**
+- **Scalability 2, one shared world index — done 2026-11-06** (HANDOFF §31), as a lazy cache
+  (`EcsWorldIndex.of`) rather than a pipeline stage, so no pipeline changed. Speed within noise
+  (51 ms either way at 400); the gain is one definition per concept.
+- **Scalability 1** goes with GOAP 3 (undecided); **3** (perception lists) stands as agreed on
+  11-05, not scheduled; **4** (navigation) is module 10's later plan; **5**
   needs nothing.
 
 - **Memory knows deaths it never saw — to discuss later.** Not in the review. Memory itself is

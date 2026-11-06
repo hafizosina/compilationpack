@@ -6,35 +6,14 @@ extends EcsSystem
 ## unseen, and one whose spot is in sight without its thing is forgotten at once. A pond
 ## where a threat was met is feared; a lure where prey or a kill was seen gains traffic.
 
-var _water_view: EcsView
-var _cover_view: EcsView
-var _crop_view: EcsView
-var _food_view: EcsView
-var _hunter_view: EcsView
-## Current drinkable water: id -> true.
-var _water: Dictionary = {}
-## Current lures, cover prey must visit: id -> its cover kind.
-var _lures: Dictionary = {}
-## Current harvestables: id -> EcsHarvestableComponent.
-var _crops: Dictionary = {}
-## Current food: id -> its diet.
-var _food: Dictionary = {}
-## Current meat-eaters that can attack: id -> true.
-var _hunters: Dictionary = {}
-## Diets some current food or harvestable yields: diet -> true.
-var _diets: Dictionary = {}
-var _ready_view: EcsView
-## Current animals ready to breed: id -> their kind.
-var _ready: Dictionary = {}
-var _eater_view: EcsView
-## Current eaters: id -> what they eat.
-var _eats: Dictionary = {}
+## The world index, as of this run.
+var _index: EcsWorldIndexSingleton
 
 func label() -> StringName:
 	return &"memory"
 
 func run(world: EcsWorld, delta: float) -> void:
-	_refresh(world)
+	_index = EcsWorldIndex.of(world)
 	var minds := world.view([EcsMemoryComponent, EcsSensorComponent, EcsPositionComponent], [EcsDyingFlag])
 	var memories := minds.column(EcsMemoryComponent)
 	var sensors := minds.column(EcsSensorComponent)
@@ -68,17 +47,18 @@ func run(world: EcsWorld, delta: float) -> void:
 				if fact.is_a(EcsMemoryFact.WATER) and _near(fact, danger.threat_at, memory.near):
 					fact.fear = 1.0
 
-		var drinks := not _water.is_empty() and world.has(id, EcsThirstComponent)
-		var eats: StringName = _eats.get(id, &"")
-		if not _diets.has(eats):
+		var drinks := not _index.water.is_empty() and world.has(id, EcsThirstComponent)
+		var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+		var eats: StringName = hunger.eats if hunger != null else &""
+		if not _index.diets.has(eats):
 			eats = &""
-		var hunts := _hunters.has(id)
+		var hunts := _index.hunters.has(id)
 		var kinds: Array[StringName] = []
-		if hunts and not _lures.is_empty():
+		if hunts and not _index.lures.is_empty():
 			kinds = EcsHunting.kinds_in(world.get_component(id, EcsSkillsComponent) as EcsSkillsComponent)
 		# Nothing it could learn by looking around: skip the walk.
 		var kind := &""
-		if not _ready.is_empty():
+		if not _index.ready.is_empty():
 			kind = (world.get_component(id, EcsNameComponent) as EcsNameComponent).type_id
 		if drinks or eats != &"" or hunts or kind != &"":
 			_learn(world, id, here, sensor, memory, lures, drinks, eats, hunts, kinds, kind, delta)
@@ -98,19 +78,19 @@ func _learn(world: EcsWorld, id: int, here: Vector2, sensor: EcsSensorComponent,
 		if not lures.is_empty():
 			_count_traffic(world, id, here, seen, lures, memory, delta)
 		var bits := 0
-		if drinks and _water.has(seen):
+		if drinks and _index.water.has(seen):
 			bits |= EcsMemoryFact.WATER
-		if not kinds.is_empty() and _lures.has(seen) and kinds.has(_lures[seen]):
+		if not kinds.is_empty() and _index.lures.has(seen) and kinds.has((_index.lures[seen] as EcsCoverComponent).kind):
 			bits |= EcsMemoryFact.LURE
 		if eats != &"":
-			if _food.get(seen, &"") == eats:
+			if _index.food.has(seen) and (_index.food[seen] as EcsConsumableComponent).diet == eats:
 				bits |= EcsMemoryFact.FOOD
-			var crop: EcsHarvestableComponent = _crops.get(seen)
+			var crop: EcsHarvestableComponent = _index.crops.get(seen)
 			if crop != null and crop.diet == eats and crop.stock > 0:
 				bits |= EcsMemoryFact.BUSH
 		if hunts and _is_prey(world, id, seen, here):
 			bits |= EcsMemoryFact.PREY
-		if kind != &"" and seen != id and _ready.get(seen, &"") == kind:
+		if kind != &"" and seen != id and _index.ready.get(seen, &"") == kind:
 			bits |= EcsMemoryFact.MATE
 		# Threats are danger's to judge; the walk keeps the bit.
 		var old := memory.facts.get(seen) as EcsMemoryFact
@@ -184,59 +164,3 @@ func _count_traffic(world: EcsWorld, id: int, here: Vector2, seen: int, lures: A
 static func _near(fact: EcsMemoryFact, point: Vector2, near: float) -> bool:
 	var reach := fact.radius + near
 	return fact.position.distance_squared_to(point) <= reach * reach
-
-func _refresh(world: EcsWorld) -> void:
-	var ready := world.view([EcsReadyFlag, EcsNameComponent], [EcsDyingFlag])
-	if ready != _ready_view:
-		_ready_view = ready
-		_ready = {}
-		var names := ready.column(EcsNameComponent)
-		for k in ready.ids.size():
-			_ready[ready.ids[k]] = (names[k] as EcsNameComponent).type_id
-	var eaters := world.view([EcsHungerComponent])
-	if eaters != _eater_view:
-		_eater_view = eaters
-		_eats = {}
-		var hungers := eaters.column(EcsHungerComponent)
-		for k in eaters.ids.size():
-			_eats[eaters.ids[k]] = (hungers[k] as EcsHungerComponent).eats
-	var food := world.view([EcsConsumableComponent, EcsPositionComponent], [EcsDyingFlag])
-	var crops := world.view([EcsHarvestableComponent], [EcsDyingFlag])
-	if food != _food_view or crops != _crop_view:
-		_food_view = food
-		_food = {}
-		_diets = {}
-		var foods := food.column(EcsConsumableComponent)
-		for k in food.ids.size():
-			_food[food.ids[k]] = (foods[k] as EcsConsumableComponent).diet
-			_diets[_food[food.ids[k]]] = true
-		for crop in crops.column(EcsHarvestableComponent):
-			_diets[(crop as EcsHarvestableComponent).diet] = true
-	var hunters := world.view([EcsDamageComponent, EcsHungerComponent], [EcsDyingFlag])
-	if hunters != _hunter_view:
-		_hunter_view = hunters
-		_hunters = {}
-		var hungers := hunters.column(EcsHungerComponent)
-		for k in hunters.ids.size():
-			if (hungers[k] as EcsHungerComponent).eats == &"meat":
-				_hunters[hunters.ids[k]] = true
-	var water := world.view([EcsDrinkableComponent], [EcsDyingFlag])
-	var covers := world.view([EcsCoverComponent], [EcsDyingFlag])
-	if water == _water_view and covers == _cover_view and crops == _crop_view:
-		return
-	_water_view = water
-	_cover_view = covers
-	_crop_view = crops
-	_water = {}
-	for id in water.ids:
-		_water[id] = true
-	_crops = {}
-	var found_crops := crops.column(EcsHarvestableComponent)
-	for k in crops.ids.size():
-		_crops[crops.ids[k]] = found_crops[k]
-	_lures = {}
-	var found := covers.column(EcsCoverComponent)
-	for k in covers.ids.size():
-		var id := covers.ids[k]
-		if _water.has(id) or _crops.has(id):
-			_lures[id] = (found[k] as EcsCoverComponent).kind

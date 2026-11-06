@@ -141,9 +141,10 @@ effects — base `EcsHealthOverTimeFlag{rate, left}` and `EcsStarvingFlag`, `Ecs
 bite; §28) — plus `EcsDyingFlag` (§3). A flag may carry data — an intent names its target
 — but nothing about a flag is decided before the game starts.
 
-**5 singletons** — `EcsLifecycleSingleton` (spawn notes), `EcsSelectionSingleton` (the
+**7 singletons** — `EcsLifecycleSingleton` (spawn notes), `EcsSelectionSingleton` (the
 pending click), `EcsCombatSingleton` (this tick's hits, §17), `EcsEditSingleton` (live edits
-and removals, §23) and `EcsHealthSingleton` (one-off health changes, §28).
+and removals, §23), `EcsHealthSingleton` (one-off health changes, §28), `EcsRandomSingleton`
+(the world's seeded generator) and `EcsWorldIndexSingleton` (the shared world index, §31).
 
 **The one method a component may have is `describe()`**, for display only (§10). It reads the
 component's own fields and changes nothing. Anything that computes, decides or writes still
@@ -1772,3 +1773,35 @@ and movement stays the only writer of position, so collision and node sync are u
 
 **Tests:** steer moves by steer × speed and ignores a live destination meanwhile; a dash scales
 it; zero steer walks to the destination as before (472 checks).
+
+---
+
+## 31. One shared world index (2026-11-06)
+
+Planning, the brain, memory and danger each built their own tables of what in the world is food,
+a crop, water, cover, a lure, a ready mate or a hunter: seven kinds of table built fourteen times,
+and the copies had drifted (danger counted dying hunters, memory didn't; memory's crops needed no
+position; "lure" and "hunter" were each written more than once). **`EcsWorldIndexSingleton`** now
+holds them once: `food` / `food_at`, `crops` / `crop_at`, `water`, `covers`, `lures` (cover that
+`EcsHunting.is_lure`), `diets` (diets some food or crop serves), `ready` (id → kind) and `hunters`
+(`EcsHunting.is_hunter`, which `can_hunt` also uses). Every table leaves the dying out and holds
+**component references**, so a crop's `stock` or a live edit of `diet` shows without a rebuild.
+
+**It is a cache, refreshed when read, like `EcsWorld.view()`.** `EcsWorldIndex.of(world)` adds the
+singleton if missing, rebuilds only the groups whose view changed, and returns it; each reader
+calls it once per run. That a helper, not a system, writes this singleton is deliberate: it is
+derived from views and decides nothing, and as a pipeline stage it would have had to be added to
+every hand-built test pipeline and run before every direct `run()` call, where a missed one reads
+stale data silently. Saves leave it out (`EcsSnapshot.capture`).
+
+Two one-tick edges changed: danger no longer fears a hunter already flagged dying in the same
+tick, and memory's crops need a position like everyone else's.
+
+**Measured** (stress test, 400 entities, game rates, 40 hunters, two runs each): average tick
+50.4 / 51.7 ms before, 51.0 / 51.0 after; planning, memory and the brain unchanged, danger ~0.4 ms
+lower, replans/s identical. The speed change is noise; the gain is one definition per concept. A
+change to who counts as a hunter (review GOAP 4) is now `EcsHunting.is_hunter` alone.
+
+**Tests:** the index files a berry, a bush, a pond, a crocodile and a ready pair correctly; a
+change that adds or removes nothing rebuilds nothing and live values show through; a dying hunter
+drops out on the next read; a save leaves the index out (500 checks).

@@ -7,9 +7,7 @@ extends EcsSystem
 ## EcsHurtFlag, and decays it otherwise. Clears every EcsHurtFlag it has read, and
 ## those on entities with no danger to raise.
 
-## The view `_hunters` was built from.
-var _hunter_view: EcsView
-## Ids that could hunt anything: they attack and eat meat.
+## Hunters (EcsHunting.is_hunter) from the world index, as of this run.
 var _hunters: Dictionary = {}
 ## Visibility of the most visible threat `_nearest_threat` saw.
 var _seen: float = 0.0
@@ -18,7 +16,7 @@ func label() -> StringName:
 	return &"danger"
 
 func run(world: EcsWorld, delta: float) -> void:
-	_refresh_hunters(world)
+	_hunters = EcsWorldIndex.of(world).hunters
 	var wary := world.view([EcsDangerComponent, EcsPositionComponent], [EcsDyingFlag])
 	var dangers := wary.column(EcsDangerComponent)
 	var places := wary.column(EcsPositionComponent)
@@ -60,17 +58,6 @@ func _nearest_threat(world: EcsWorld, id: int, here: Vector2) -> int:
 			best_distance = distance
 			best = seen
 	return best
-
-func _refresh_hunters(world: EcsWorld) -> void:
-	var armed := world.view([EcsDamageComponent, EcsHungerComponent])
-	if armed == _hunter_view:
-		return
-	_hunter_view = armed
-	_hunters = {}
-	var hungers := armed.column(EcsHungerComponent)
-	for k in armed.ids.size():
-		if (hungers[k] as EcsHungerComponent).eats == &"meat":
-			_hunters[armed.ids[k]] = true
 
 func _remember(world: EcsWorld, danger: EcsDangerComponent, threat: int) -> void:
 	danger.threat = threat
