@@ -342,13 +342,26 @@ cache if long paths prove expensive.
   and applies the difference (snapshot and load only, no system changes). Splitting tuning into
   shared resources was rejected as too invasive and tied to the open storage argument.
 
-- **Data 2, skill costs — done 2026-11-06 (option a, inside module 11).** Cost moved from
+- **Data 2, skill costs — done 2026-11-06.** Cost moved from
   `EcsPlayerComponent.skill_costs` to `EcsSkillDef.cost` (by pool key, in each skill's `.tres`);
   the player brain only asks, and `EcsSkillCostSystem` pays when the skill starts or drops the
   cast. Then widened: a cost may come from **any bar** — health, fullness, energy, hydration,
   stamina, mana — through a small contract (`const BAR_VALUE` + `spent`, applied by each bar's own
   system), so the cost system moved to module 9 and animals pay the same as the player. A planner
   fact for "can afford" waits for the merge.
+
+- **Data 3, room ids** — as decided 2026-11-05: stable ids after pathfinding, when something
+  first points at a room.
+
+**Scalability**
+
+- **Headline, stress test budget — skipped for now.** `BUDGET_MS = 250` is 4 FPS, and the average
+  hides the stutter of the tick planning lands on. Proposed when it's picked up: budget a frame
+  (16.7 ms, or a simulation share), report and stop on the worst tick, keep 250 ms as a
+  "slideshow" line. ~400 entities at real density is the 60 FPS limit today.
+- **Scalability 1** goes with GOAP 3 (undecided); **2 and 3** (shared index, perception lists)
+  stand as agreed on 11-05, not scheduled; **4** (navigation) is module 10's later plan; **5**
+  needs nothing.
 
 - **Memory knows deaths it never saw — to discuss later.** Not in the review. Memory itself is
   right (copied positions; a fact goes when it fades or its spot is in sight without its thing),
