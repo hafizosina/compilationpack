@@ -314,6 +314,18 @@ cache if long paths prove expensive.
   (13 calls, `EcsConst.random_point_near` included), and a save keeps its state. `main.gd`'s
   `random_seed` export sets it (0 = new each build) and the seed is printed. Module 10's wander
   is left on the global RNG. Replays hold only while the order of rolls does.
+- **ECS 4, the sensor's node cache — done 2026-11-06.** `EcsSensorSystem` now iterates cached
+  views, and when one changes (a birth, a death, a sensor switched off) prunes the cached nodes of
+  ids that no longer have the component. Living entries stay; a quiet tick costs one comparison.
+- **ECS 5, storage (HANDOFF §15) — undecided.** Proposed: not yet; it isn't the bottleneck
+  (planning and memory/danger are algorithm costs), the GOAP refactor reshapes what the brain stores,
+  and the API is the same either way. Revisit after the GOAP refactor's perf work or at the merge.
+- **Memory knows deaths it never saw — to discuss later.** Not in the review. Memory itself is
+  right (copied positions; a fact goes when it fades or its spot is in sight without its thing),
+  but the brain peeks: `ecs_low_brain_system.gd:151` drops a RECALL trip the instant the remembered
+  entity dies anywhere, and `:420` skips remembered lures that are gone. Proposed: remove both
+  `is_alive` checks so a creature learns by seeing the spot empty. Being told (gossip, relations)
+  is the later relations plan.
 
 ---
 

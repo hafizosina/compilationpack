@@ -122,6 +122,7 @@ func _run() -> void:
 	_parched_outranks_a_committed_hunt()
 	_the_snapshot_codec_keeps_shared_and_typed_data()
 	_a_save_keeps_the_random_rolls()
+	_the_sensor_forgets_the_nodes_of_the_dead()
 	await _a_saved_world_loads_as_it_was_and_runs_on()
 	await _placing_while_paused_builds_the_entity()
 	_a_composed_blueprint_saves_loads_and_spawns()
@@ -3690,6 +3691,25 @@ func _the_snapshot_codec_keeps_shared_and_typed_data() -> void:
 	_check("the request it shares with the inbox is still one object",
 		back_inbox != null and back_inbox.spawn_requests[0] == back.pending[0])
 	_check("typed arrays stay typed", back.spawned.is_typed() and back.spawned == [7])
+
+## The sensor caches each entity's area nodes and drops them once it dies.
+func _the_sensor_forgets_the_nodes_of_the_dead() -> void:
+	var root := Node2D.new()
+	add_child(root)
+	var manager := EcsEntityManager.new(root)
+	var world := _snapshot_world()
+	var sensor := EcsSensorSystem.new(manager)
+	var spot := Vector2(-90000.0, 90000.0)
+	var rabbit := manager.spawn(world, _catalog, &"rabbit", spot)
+	var monkey := manager.spawn(world, _catalog, &"monkey", spot + Vector2(500.0, 0.0))
+	sensor.run(world, TICK)
+	_check("the sensor caches both creatures' nodes", sensor.cached() == Vector2i(2, 2))
+	manager.kill(world, rabbit)
+	sensor.run(world, TICK)
+	_check("and drops the dead one's", sensor.cached() == Vector2i(1, 1))
+	manager.kill(world, monkey)
+	manager.clear()
+	root.queue_free()
 
 ## The world's generator is what systems roll on, and a save picks up its rolls
 ## where they left off.

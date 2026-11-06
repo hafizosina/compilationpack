@@ -10,7 +10,7 @@ There are no build scripts; the editor is the tool chain. The tests are module 9
 `9. EcsSystem/tests/`, module 10's, in `10. Town Generator/tests/`, and module 11's control test:
 
 ```bash
-# 476 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 478 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments, the hunger/health/energy loop,
 # intent flags, items as records, the drop on death, views, combat, corpses,
 # looting, rot, diet, hunting, harvesting, the planner, utility, fleeing,
