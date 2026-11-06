@@ -123,6 +123,8 @@ func _run() -> void:
 	_the_snapshot_codec_keeps_shared_and_typed_data()
 	_a_save_keeps_the_random_rolls()
 	_the_sensor_forgets_the_nodes_of_the_dead()
+	await _a_shaped_wall_pushes_and_a_shaped_sensor_sees_by_its_shape()
+	_a_look_scene_is_built_as_authored()
 	await _a_saved_world_loads_as_it_was_and_runs_on()
 	await _placing_while_paused_builds_the_entity()
 	_a_composed_blueprint_saves_loads_and_spawns()
@@ -3691,6 +3693,83 @@ func _the_snapshot_codec_keeps_shared_and_typed_data() -> void:
 	_check("the request it shares with the inbox is still one object",
 		back_inbox != null and back_inbox.spawn_requests[0] == back.pending[0])
 	_check("typed arrays stay typed", back.spawned.is_typed() and back.spawned == [7])
+
+## A body, sensor or action may carry a shape instead of its circle: a rectangular wall
+## pushes a creature out of it, and a rectangular sensor sees what is inside the rectangle.
+func _a_shaped_wall_pushes_and_a_shaped_sensor_sees_by_its_shape() -> void:
+	var root := Node2D.new()
+	add_child(root)
+	var manager := EcsEntityManager.new(root)
+	var world := _snapshot_world()
+	var living := EcsScheduler.new()
+	var sensing := EcsSensorSystem.new(manager)
+	living.add(sensing).add(EcsCollisionSystem.new(manager))
+	var spot := Vector2(-150000.0, 0.0)
+
+	var wall_body := EcsBodyComponent.new()
+	var slab := RectangleShape2D.new()
+	slab.size = Vector2(400.0, 40.0)
+	wall_body.shape = slab
+	wall_body.radius = 200.0
+	var wall_record := EcsItemRecord.new()
+	wall_record.components.append(wall_body)
+	var wall := manager.restore(world, wall_record, spot)
+	# Its centre 10 px above the slab's top edge, so it overlaps by about 14.
+	var rabbit := manager.spawn(world, _catalog, &"rabbit", spot + Vector2(120.0, -30.0))
+	var sensor := world.get_component(rabbit, EcsSensorComponent) as EcsSensorComponent
+	var strip := RectangleShape2D.new()
+	strip.size = Vector2(1200.0, 20.0)
+	sensor.shape = strip
+	var berry := manager.spawn(world, _catalog, &"berry", spot + Vector2(550.0, -30.0))
+	var beside := manager.spawn(world, _catalog, &"berry", spot + Vector2(120.0, -120.0))
+	for i in 20:
+		living.run_all(world, TICK)
+		await get_tree().physics_frame
+
+	var place := world.get_component(rabbit, EcsPositionComponent) as EcsPositionComponent
+	var radius := (world.get_component(rabbit, EcsBodyComponent) as EcsBodyComponent).radius
+	var wall_at := (world.get_component(wall, EcsPositionComponent) as EcsPositionComponent).position
+	_check("a rectangular wall pushes a creature out of it, straight up (y %.1f)" % (place.position.y - spot.y),
+		place.position.y <= spot.y - 20.0 - radius + 1.0 and is_equal_approx(place.position.x, spot.x + 120.0))
+	_check("and is not moved itself", wall_at == spot)
+	_check("the wall's area is its rectangle",
+		(manager.node_for(wall, EcsConst.NODE_BODY).get_node(^"Collider") as CollisionShape2D).shape == slab)
+	_check("a strip-shaped sensor sees along the strip, past its radius",
+		sensor.perceived.has(berry) and place.position.distance_to(spot + Vector2(550.0, -30.0)) > sensor.radius)
+	_check("and not beside it, though within its radius",
+		not sensor.perceived.has(beside) and place.position.distance_to(spot + Vector2(120.0, -120.0)) < sensor.radius)
+	manager.clear()
+	root.queue_free()
+
+## A component's `node_scene` is instanced as its node, with no manager edit per node type.
+func _a_look_scene_is_built_as_authored() -> void:
+	var root := Node2D.new()
+	add_child(root)
+	var manager := EcsEntityManager.new(root)
+	var world := _snapshot_world()
+	var authored := AnimatedSprite2D.new()
+	var effect := Sprite2D.new()
+	effect.name = "Effect"
+	authored.add_child(effect)
+	effect.owner = authored
+	var scene := PackedScene.new()
+	scene.pack(authored)
+	authored.free()
+	var look := EcsLookComponent.new()
+	look.node_scene = scene
+	var record := EcsItemRecord.new()
+	record.components.append(look)
+	record.components.append(EcsSpriteComponent.new())
+	var id := manager.restore(world, record, Vector2(-120000.0, 0.0))
+	var node := manager.node_for(id, EcsConst.NODE_LOOK)
+	_check("a look is its scene, under the container", node is AnimatedSprite2D
+		and node.get_parent() == manager.container_for(id) and node.name == EcsConst.NODE_LOOK)
+	_check("with everything authored in it", node != null and node.get_node_or_null(^"Effect") is Sprite2D)
+	_check("a sprite still comes from its NODE_CLASS",
+		manager.node_for(id, EcsConst.NODE_SPRITE) is Sprite2D)
+	manager.kill(world, id)
+	manager.clear()
+	root.queue_free()
 
 ## The sensor caches each entity's area nodes and drops them once it dies.
 func _the_sensor_forgets_the_nodes_of_the_dead() -> void:

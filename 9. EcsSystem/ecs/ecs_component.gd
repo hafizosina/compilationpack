@@ -10,7 +10,9 @@ extends Resource
 ##   "bars"?: [{label, value, max, tone}]}` for the inspector. "entity" lines go to the
 ##   summary, "own" lines into the component's card. Without it the card lists every field.
 ## - `const NODE_KIND`: optional. Names a node kind from EcsConst that
-##   EcsEntityManager builds for the entity.
+##   EcsEntityManager builds for the entity: the `node_scene` field's scene if the
+##   component has one set, else a `const NODE_CLASS` engine class, else an area on
+##   `NODE_LAYER` / `NODE_MASK`.
 
 ## Off means the entity is treated as not having it: queries, `has()` and
 ## `get_component()` skip it, so no system sees it. It stays on the entity, shown

@@ -152,13 +152,11 @@ func clear() -> void:
 
 ## Builds the nodes the entity's components declare through `NODE_KIND`.
 func _build_nodes(world: EcsWorld, id: int, pos: Vector2) -> void:
-	var wanted: Dictionary = {}  # kind -> Vector2i(layer, mask)
+	var wanted: Dictionary = {}  # kind -> the component that declared it
 	for component in world.components_of(id):
 		var kind := node_kind_of(component)
 		if kind != &"" and not wanted.has(kind):
-			wanted[kind] = Vector2i(
-				declared(component, "NODE_LAYER", EcsConst.LAYER_NONE),
-				declared(component, "NODE_MASK", EcsConst.LAYER_NONE))
+			wanted[kind] = component
 	if wanted.is_empty():
 		return
 
@@ -183,8 +181,8 @@ static func declared(component: EcsComponent, name: String, fallback: Variant) -
 		return fallback
 	return script.get_script_constant_map().get(name, fallback)
 
-func _attach(id: int, container: Node2D, kind: StringName, layers: Vector2i) -> void:
-	var node := _make_node(kind, id, layers)
+func _attach(id: int, container: Node2D, kind: StringName, component: EcsComponent) -> void:
+	var node := _make_node(kind, id, component)
 	if node == null:
 		return
 	node.position = Vector2.ZERO
@@ -193,14 +191,29 @@ func _attach(id: int, container: Node2D, kind: StringName, layers: Vector2i) -> 
 	owned[kind] = node
 	_nodes[id] = owned
 
-## A bare sprite, or a circular area for any other kind. Values are set later
-## by the systems that own them.
-func _make_node(kind: StringName, id: int, layers: Vector2i) -> Node2D:
-	if kind == EcsConst.NODE_SPRITE:
-		var sprite := Sprite2D.new()
-		sprite.name = kind
-		return sprite
-	return _make_area(kind, id, layers.x, layers.y)
+## The node `component` declares, by the first that applies: its `node_scene` field
+## instanced, its `NODE_CLASS` constructed, or a circular area on its `NODE_LAYER` and
+## `NODE_MASK`. Values are set later by the systems that own them.
+func _make_node(kind: StringName, id: int, component: EcsComponent) -> Node2D:
+	var node: Node2D = null
+	var scene := component.get(&"node_scene") as PackedScene
+	var type: StringName = declared(component, "NODE_CLASS", &"")
+	if scene != null:
+		node = scene.instantiate() as Node2D
+		if node == null:
+			push_error("EcsEntityManager: %s's node_scene root is not a Node2D" % component.key())
+			return null
+	elif type != &"":
+		node = ClassDB.instantiate(type) as Node2D if ClassDB.can_instantiate(type) else null
+		if node == null:
+			push_error("EcsEntityManager: %s's NODE_CLASS %s is not a Node2D" % [component.key(), type])
+			return null
+	else:
+		return _make_area(kind, id,
+			declared(component, "NODE_LAYER", EcsConst.LAYER_NONE),
+			declared(component, "NODE_MASK", EcsConst.LAYER_NONE))
+	node.name = kind
+	return node
 
 ## A circular area with radius 0. `layer` makes it detectable, `mask` makes it detect.
 func _make_area(kind: StringName, id: int, layer: int, mask: int) -> EcsEntityArea:

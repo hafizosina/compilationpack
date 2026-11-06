@@ -10,7 +10,7 @@ There are no build scripts; the editor is the tool chain. The tests are module 9
 `9. EcsSystem/tests/`, module 10's, in `10. Town Generator/tests/`, and module 11's control test:
 
 ```bash
-# 478 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 486 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments, the hunger/health/energy loop,
 # intent flags, items as records, the drop on death, views, combat, corpses,
 # looting, rot, diet, hunting, harvesting, the planner, utility, fleeing,
@@ -121,7 +121,10 @@ the rest on a birth, death or edit, HANDOFF §29) and
 `EcsCollisionSystem` (bodies). Keep that line — it is what stops the manager becoming a
 god object. A component says it needs a node by declaring `const NODE_KIND` naming a kind
 from `EcsConst`; the manager reads the constant and builds one, never switching on
-component type. A constant and not a method, because components stay method-free.
+component type or node type: a `node_scene` field set on the component is instanced
+(`EcsLookComponent`, for authored animation and effects), else a `const NODE_CLASS` is
+constructed (the sprite), else it is an area. A constant and not a method, because
+components stay method-free.
 
 **Perception and reach are physics, not arithmetic.** `EcsSensorComponent` (what it can
 see) and `EcsActionComponent` (what it can touch) each declare an area under the entity's
@@ -417,7 +420,7 @@ been crossed.
 berry dies and becomes a record, so freeing a node is kill and only kill, and every live
 entity has a position to draw.
 
-**It is deliberately kept to a small core**: 29 components, 23 flags, 6
+**It is deliberately kept to a small core**: 30 components, 23 flags, 6
 singletons, 29 systems
 (`lifecycle > edit > spawner > hunger > energy > thirst > danger > sensor > breeding > memory > planning > low_brain > skill > consume > drink > harvest > attack > health > movement > collision > pickup > rot > remains > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
 rank in the plan's decision ladder — the planner sits *above* it — and not for the
@@ -437,7 +440,9 @@ nothing the picture did not, and the exact numbers live in the inspector for whi
 entity you click. The system sends **ratios and counts, never text or pixels**; what shape
 that makes is the view's business, and a sentinel (`-1`) means the entity has no such
 reading, so a berry draws no bars and an empty-handed creature no badge.
-`EcsBodyComponent` is the entity's body — a radius and `is_solid`, **data not a
+`EcsBodyComponent` is the entity's body — a radius and `is_solid`, optionally a `shape`
+(sensor and action take one too; circle pairs keep the fast maths, any other pair is
+pushed by the physics shapes' contacts), **data not a
 CollisionShape2D**, so the sim still runs with no scene tree. Collision is **soft**:
 `EcsCollisionSystem` runs after movement and pushes overlapping pairs apart rather than
 vetoing the move, which is what lets any future position-writer be corrected for free.

@@ -113,8 +113,8 @@ break it for a good reason and write the reason down where it breaks.
 A wall that gains movement is no longer a wall — that is a kill and a spawn, not an `add()`.
 Nothing today adds or removes a component after spawn.
 
-**29 components** — `name`, `position` (both added by the manager from the placement, not the
-blueprint), `sprite`, `body`, `movement`, `low_brain`, `sensor`, `action`, `hunger`, `health`,
+**30 components** — `name`, `position` (both added by the manager from the placement, not the
+blueprint), `sprite`, `look`, `body`, `movement`, `low_brain`, `sensor`, `action`, `hunger`, `health`,
 `energy`, `inventory`, `consumable`, `pickable`, `spawner`, `harvestable`, for combat and
 corpses `damage` (crit, bleed and poison ride on it, §28), `armor`, `lootable`, `rot`, for
 planning `planner` and `danger` (§18), for skills and cover `skills`, `cover`, `drinkable` (§19),
@@ -142,7 +142,16 @@ belongs in a system — module 8's `describe()` is back for this and nothing els
 
 **Components declare what they imply rather than being switched on.** `const NODE_KIND`
 names the node a component needs, `NODE_LAYER` / `NODE_MASK` its physics layer policy
-(§4), and `describe()` how it reads. `EcsEntityManager` and `EcsInspectSystem` read those
+(§4), and `describe()` how it reads. What the node is comes from the component, in order: a
+`node_scene` field it has set is instanced (`EcsLookComponent` — an authored view, animation
+or effects, holding no game state), a `const NODE_CLASS` is constructed (`Sprite2D` for the
+sprite), and otherwise it is an area. The manager reads that one field as well as constants,
+because a scene differs per blueprint and a constant is per script. An area is built as a
+circle; `EcsBodyComponent`, `EcsSensorComponent` and `EcsActionComponent` may carry a `shape`
+(axis-aligned, centred) that the system owning the area puts on it — collision and sensor,
+not the manager. `radius` stays their reach from the centre for every distance check. Soft
+collision keeps circle maths for two circles and otherwise pushes by the deepest of
+`Shape2D.collide_and_get_contacts`. `EcsEntityManager` and `EcsInspectSystem` read those
 and never name a component type; a new node-backed or newly-displayed component edits
 neither.
 

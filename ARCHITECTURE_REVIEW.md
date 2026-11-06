@@ -320,6 +320,20 @@ cache if long paths prove expensive.
 - **ECS 5, storage (HANDOFF §15) — undecided.** Proposed: not yet; it isn't the bottleneck
   (planning and memory/danger are algorithm costs), the GOAP refactor reshapes what the brain stores,
   and the API is the same either way. Revisit after the GOAP refactor's perf work or at the merge.
+- **ECS 6b, one global class-name list — at the merge.** No duplicates today; modules 10 and 11
+  prefix their own classes. Sort core vs feature names when the core moves to `Global/` (ECS 2).
+- **ECS 6a, node types — done 2026-11-06, as the foundation for skill animation.**
+  `_make_node` no longer names a node type: a component's `node_scene` field is instanced, else
+  its `const NODE_CLASS` is constructed, else it gets an area; an unknown class is an error, not a
+  silent area. New `EcsLookComponent` (`node_scene`, kind `Look`) holds an authored scene —
+  frames, an `AnimationPlayer`, several sprites — so pain points 1, 2, 4 and 5 are covered.
+  Pain point 3 too: body, sensor and action take an optional `shape` (rectangle, capsule,
+  polygon), set on the area by collision and sensor; soft collision pushes any non-circle pair by
+  the physics shapes' contacts. Shapes are axis-aligned (no facing yet, so no vision cone), and
+  `radius` still drives the distance checks (memory's sight, scan, `prey_close`). Still to decide
+  when animation starts: who plays animations (a view system reading flags, joining node sync and
+  collision as node writers), animation names on `EcsSkillDef`, effects as short-lived entities,
+  and the sim drives hit timing while the animation follows.
 - **Memory knows deaths it never saw — to discuss later.** Not in the review. Memory itself is
   right (copied positions; a fact goes when it fades or its spot is in sight without its thing),
   but the brain peeks: `ecs_low_brain_system.gd:151` drops a RECALL trip the instant the remembered

@@ -4,6 +4,7 @@ extends EcsComponent
 ## How the entity looks. EcsNodeSyncSystem copies it onto the Sprite2D.
 
 const NODE_KIND: StringName = EcsConst.NODE_SPRITE
+const NODE_CLASS: StringName = &"Sprite2D"
 
 @export var texture: Texture2D
 ## Uniform scale for the texture.

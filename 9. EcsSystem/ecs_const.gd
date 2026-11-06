@@ -14,6 +14,7 @@ const NODE_SPRITE: StringName = &"Sprite2D"
 const NODE_BODY: StringName = &"Area2dForBody"
 const NODE_SENSOR: StringName = &"Area2dForSensor"
 const NODE_ACTION: StringName = &"Area2dForAction"
+const NODE_LOOK: StringName = &"Look"
 
 ## Physics layer bits. Only bodies have a layer, so sensors never see each other.
 const LAYER_NONE: int = 0

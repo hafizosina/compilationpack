@@ -10,6 +10,9 @@ const NODE_MASK: int = EcsConst.LAYER_BODY
 
 ## Reach radius in pixels, from the entity's position.
 @export var radius: float = 34.0
+## Optional; replaces the circle of `radius` with this shape, centred on the entity and
+## axis-aligned. Keep `radius` as its reach from the centre: distance checks still use it.
+@export var shape: Shape2D
 
 ## Ids of bodies in reach as of the last tick, written by EcsSensorSystem.
 ## Never contains the entity itself.
