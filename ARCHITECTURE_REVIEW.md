@@ -334,6 +334,22 @@ cache if long paths prove expensive.
   when animation starts: who plays animations (a view system reading flags, joining node sync and
   collision as node writers), animation names on `EcsSkillDef`, effects as short-lived entities,
   and the sim drives hit timing while the animation follows.
+**Data-driven design**
+
+- **Data 1, tuning and live state share one Resource — after the merge, for real gameplay.**
+  Saves keep every tuning field, so a rebalance never reaches a saved creature. Chosen fix then:
+  save `type_id` plus only fields that differ from the blueprint; load spawns from the blueprint
+  and applies the difference (snapshot and load only, no system changes). Splitting tuning into
+  shared resources was rejected as too invasive and tied to the open storage argument.
+
+- **Data 2, skill costs — done 2026-11-06 (option a, inside module 11).** Cost moved from
+  `EcsPlayerComponent.skill_costs` to `EcsSkillDef.cost` (by pool key, in each skill's `.tres`);
+  the player brain only asks, and `EcsSkillCostSystem` pays when the skill starts or drops the
+  cast. Then widened: a cost may come from **any bar** — health, fullness, energy, hydration,
+  stamina, mana — through a small contract (`const BAR_VALUE` + `spent`, applied by each bar's own
+  system), so the cost system moved to module 9 and animals pay the same as the player. A planner
+  fact for "can afford" waits for the merge.
+
 - **Memory knows deaths it never saw — to discuss later.** Not in the review. Memory itself is
   right (copied positions; a fact goes when it fades or its spot is in sight without its thing),
   but the brain peeks: `ecs_low_brain_system.gd:151` drops a RECALL trip the instant the remembered

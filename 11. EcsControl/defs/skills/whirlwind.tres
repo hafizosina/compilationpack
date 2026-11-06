@@ -7,6 +7,9 @@ script = ExtResource("def")
 id = &"whirlwind"
 cooldown = 5.0
 duration = 0.4
+cost = Dictionary[StringName, float]({
+&"stamina": 35.0
+})
 damage_scale = 1.5
 arc = 360.0
 swing_time = 0.4

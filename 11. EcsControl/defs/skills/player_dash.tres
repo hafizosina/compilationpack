@@ -7,5 +7,8 @@ script = ExtResource("def")
 id = &"dash"
 cooldown = 0.6
 duration = 0.15
+cost = Dictionary[StringName, float]({
+&"stamina": 25.0
+})
 speed_scale = 4.0
 stun = 1.0

@@ -27,6 +27,7 @@ func run(world: EcsWorld, delta: float) -> void:
 	_count_stuns(world, delta)
 	_effects(world, delta, loss, gain, worst)
 	_hits(world, loss, worst)
+	_spending(world, loss, worst)
 	var inbox := world.get_singleton(EcsHealthSingleton) as EcsHealthSingleton
 	if inbox != null:
 		for change in inbox.changes:
@@ -51,6 +52,16 @@ func run(world: EcsWorld, delta: float) -> void:
 			world.add(id, dying)
 			continue
 		health.value = minf(health.value + float(gain.get(id, 0.0)), health.max_health)
+
+## Health a skill's cost spent, on entities flagged as having spent.
+func _spending(world: EcsWorld, loss: Dictionary, worst: Dictionary) -> void:
+	var spenders := world.view([EcsHealthComponent, EcsSpentFlag])
+	var healths := spenders.column(EcsHealthComponent)
+	for k in spenders.ids.size():
+		var health := healths[k] as EcsHealthComponent
+		if health.spent > 0.0:
+			_lose(loss, worst, spenders.ids[k], health.spent, &"spent")
+			health.spent = 0.0
 
 func _count_stuns(world: EcsWorld, delta: float) -> void:
 	for id in world.query([EcsStunnedFlag]):

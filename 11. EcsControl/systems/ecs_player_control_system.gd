@@ -110,8 +110,8 @@ func _target(world: EcsWorld, id: int, player: EcsPlayerComponent, aim: Vector2,
 			best = other
 	return best
 
-## Asks for `skill` if it would start now and can be paid for, and pays; using a held skill
-## that is running asks for it to stop.
+## Asks for `skill` if it would start now; using a held skill that is running asks for it
+## to stop. EcsSkillCostSystem pays for it, or drops the ask.
 func _cast(world: EcsWorld, id: int, skill: StringName) -> void:
 	if world.has(id, EcsCastIntentFlag):
 		var was := (world.get_component(id, EcsCastIntentFlag) as EcsCastIntentFlag).skill
@@ -122,18 +122,6 @@ func _cast(world: EcsWorld, id: int, skill: StringName) -> void:
 	var def := EcsSkillDef.find(known.skills, skill) if known != null else null
 	if def == null or known.active_left.has(skill) or known.cooldown_left.has(skill) or not def.can_start(world, id):
 		return
-	var player := world.get_component(id, EcsPlayerComponent) as EcsPlayerComponent
-	var cost: Vector2 = player.skill_costs.get(skill, Vector2.ZERO)
-	var stamina := world.get_component(id, EcsStaminaComponent) as EcsStaminaComponent
-	var mana := world.get_component(id, EcsManaComponent) as EcsManaComponent
-	if cost.x > 0.0 and (stamina == null or stamina.value - stamina.spent < cost.x):
-		return
-	if cost.y > 0.0 and (mana == null or mana.value - mana.spent < cost.y):
-		return
-	if cost.x > 0.0:
-		stamina.spent += cost.x
-	if cost.y > 0.0:
-		mana.spent += cost.y
 	var cast := EcsCastIntentFlag.new()
 	cast.skill = skill
 	world.add(id, cast)

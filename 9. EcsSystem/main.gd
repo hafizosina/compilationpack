@@ -210,6 +210,7 @@ func _build(snapshot: Dictionary = {}) -> void:
 		.add(EcsMemorySystem.new(), SLOW, 1) \
 		.add(EcsPlanningSystem.new(), SLOW, 2) \
 		.add(EcsLowBrainSystem.new(), SLOW, 1) \
+		.add(EcsSkillCostSystem.new()) \
 		.add(EcsSkillSystem.new()) \
 		.add(EcsConsumeSystem.new()) \
 		.add(EcsDrinkSystem.new()) \

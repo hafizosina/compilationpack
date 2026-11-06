@@ -120,7 +120,16 @@ corpses `damage` (crit, bleed and poison ride on it, §28), `armor`, `lootable`,
 planning `planner` and `danger` (§18), for skills and cover `skills`, `cover`, `drinkable` (§19),
 `thirst` (§8), `memory` (§20), `breeding` (§21) and `remains` (§29).
 
-**23 flags** — `EcsSelectedFlag` (selection owns it), `EcsCollapsedFlag` (energy), eight
+**Skill costs come from bars** (2026-11-06). `EcsSkillDef.cost` names bars by key —
+`{&"health": 10, &"hunger": 15}` — and `EcsSkillCostSystem`, just before `EcsSkillSystem`, pays it
+in the tick the skill would start or drops the cast. A **bar** is any component declaring
+`const BAR_VALUE` (the field holding its amount) with a `spent` field: health, hunger
+(`fullness`), energy, thirst (`hydration`), and module 11's stamina and mana. The cost system
+only adds to `spent`; each bar's own system applies it (health as a loss with detail `spent`, so
+it can kill), and health, which visits only what changed, finds spenders by `EcsSpentFlag`. A
+new bar is a component with the constant and the field.
+
+**24 flags** — `EcsSelectedFlag` (selection owns it), `EcsSpentFlag` (skill cost), `EcsCollapsedFlag` (energy), eight
 brain instructions — `EcsEatIntentFlag{target_id | record_uid}`, `EcsTakeIntentFlag{target_id,
 record_uid}`, `EcsAttackIntentFlag{target_id}`, `EcsHarvestIntentFlag{target_id, progress}`,
 `EcsDrinkIntentFlag{target_id}`, `EcsCastIntentFlag{skill}`, `EcsMateIntentFlag{target_id}` and

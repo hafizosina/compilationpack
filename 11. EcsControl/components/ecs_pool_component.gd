@@ -4,6 +4,9 @@ extends EcsComponent
 ## A reserve that is spent and refills. Only EcsPoolSystem writes `value`; others ask by
 ## adding to `spent`.
 
+## The field that is this bar's current amount; a skill cost reads it.
+const BAR_VALUE: StringName = &"value"
+
 @export var max_value: float = 100.0
 @export var value: float = 100.0
 ## Refill per second.

@@ -20,6 +20,9 @@ func run(world: EcsWorld, delta: float) -> void:
 			# Roll the starting energy on first sight.
 			energy.value = energy.max_energy * EcsRandomSingleton.of(world).randf_range(energy.start_min, energy.start_max)
 			energy.rolled = true
+		if energy.spent > 0.0:
+			energy.value = maxf(energy.value - energy.spent, 0.0)
+			energy.spent = 0.0
 		var collapsed := world.has(id, EcsCollapsedFlag)
 		var resting := collapsed or world.has(id, EcsAsleepFlag)
 

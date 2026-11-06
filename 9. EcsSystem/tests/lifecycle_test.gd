@@ -125,6 +125,7 @@ func _run() -> void:
 	_the_sensor_forgets_the_nodes_of_the_dead()
 	await _a_shaped_wall_pushes_and_a_shaped_sensor_sees_by_its_shape()
 	_a_look_scene_is_built_as_authored()
+	_a_skill_can_cost_health_or_fullness()
 	await _a_saved_world_loads_as_it_was_and_runs_on()
 	await _placing_while_paused_builds_the_entity()
 	_a_composed_blueprint_saves_loads_and_spawns()
@@ -3738,6 +3739,47 @@ func _a_shaped_wall_pushes_and_a_shaped_sensor_sees_by_its_shape() -> void:
 		sensor.perceived.has(berry) and place.position.distance_to(spot + Vector2(550.0, -30.0)) > sensor.radius)
 	_check("and not beside it, though within its radius",
 		not sensor.perceived.has(beside) and place.position.distance_to(spot + Vector2(120.0, -120.0)) < sensor.radius)
+	manager.clear()
+	root.queue_free()
+
+## A skill's cost may come from any bar: an animal pays health and fullness when it starts,
+## each bar's own system applies it, and one it can't afford doesn't start.
+func _a_skill_can_cost_health_or_fullness() -> void:
+	var root := Node2D.new()
+	add_child(root)
+	var manager := EcsEntityManager.new(root)
+	var world := _snapshot_world()
+	var living := EcsScheduler.new()
+	living.add(EcsSkillCostSystem.new()).add(EcsSkillSystem.new()) \
+		.add(EcsHungerSystem.new()).add(EcsHealthSystem.new())
+	var howl := (load("res://9. EcsSystem/defs/skills/scan.tres") as EcsSkillDef).duplicate() as EcsSkillDef
+	howl.cost = {&"health": 10.0, &"hunger": 15.0}
+	var rabbit := manager.spawn(world, _catalog, &"rabbit", Vector2(-170000.0, 0.0))
+	var known := world.get_component(rabbit, EcsSkillsComponent) as EcsSkillsComponent
+	known.swaps.append(howl)
+	var health := world.get_component(rabbit, EcsHealthComponent) as EcsHealthComponent
+	var hunger := world.get_component(rabbit, EcsHungerComponent) as EcsHungerComponent
+	var full := hunger.fullness
+	var cast := EcsCastIntentFlag.new()
+	cast.skill = &"scan"
+	world.add(rabbit, cast)
+	living.run_all(world, TICK)
+	_check("a skill can cost health: paid by health itself (%.0f left)" % health.value,
+		is_equal_approx(health.value, health.max_health - 10.0) and health.spent == 0.0)
+	_check("and fullness, paid by hunger (%.1f -> %.1f)" % [full, hunger.fullness],
+		absf(full - 15.0 - hunger.fullness) < 0.1 and hunger.spent == 0.0)
+	_check("and it starts", known.active_left.has(&"scan"))
+	world.remove(rabbit, EcsCastIntentFlag)
+	known.active_left.clear()
+	known.cooldown_left.clear()
+	health.value = 5.0
+	var poor := EcsCastIntentFlag.new()
+	poor.skill = &"scan"
+	world.add(rabbit, poor)
+	living.run_all(world, TICK)
+	_check("with too little health it doesn't start, and costs nothing (%.2f, mending)" % health.value,
+		not known.active_left.has(&"scan") and health.value >= 5.0 and health.spent == 0.0
+		and not world.has(rabbit, EcsCastIntentFlag))
 	manager.clear()
 	root.queue_free()
 

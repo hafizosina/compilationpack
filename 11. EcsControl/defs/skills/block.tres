@@ -7,5 +7,8 @@ script = ExtResource("def")
 id = &"block"
 cooldown = 1.0
 duration = 1.2
+cost = Dictionary[StringName, float]({
+&"stamina": 15.0
+})
 reduction = 0.8
 arc = 140.0

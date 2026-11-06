@@ -10,7 +10,7 @@ There are no build scripts; the editor is the tool chain. The tests are module 9
 `9. EcsSystem/tests/`, module 10's, in `10. Town Generator/tests/`, and module 11's control test:
 
 ```bash
-# 486 checks over the entity lifecycle, the sensor/action layer, solidity, the
+# 490 checks over the entity lifecycle, the sensor/action layer, solidity, the
 # movement trip clock, the brain's commitments, the hunger/health/energy loop,
 # intent flags, items as records, the drop on death, views, combat, corpses,
 # looting, rot, diet, hunting, harvesting, the planner, utility, fleeing,
@@ -18,7 +18,7 @@ There are no build scripts; the editor is the tool chain. The tests are module 9
 # save/load snapshots, placing while paused, composed blueprints, multi-select,
 # live edits, selecting by id, the entity list, deleting a save,
 # removing an entity, switching a component off, health only visiting what changes,
-# what a death leaves by its cause, static entities drawn only on change, steering, and seeded random rolls.
+# what a death leaves by its cause, static entities drawn only on change, steering, seeded random rolls, and skill costs paid from any bar.
 # Exit code 0 only if all pass — run it after touching module 9's manager,
 # collision, pickup, spawner, sensor or node sync.
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/lifecycle_test.tscn"
@@ -44,7 +44,7 @@ There are no build scripts; the editor is the tool chain. The tests are module 9
 # Module 11: module 7's touch controls driving a player entity in module 9's ECS — moving,
 # sprint, the dash, stun, attacks aimed and tapped, cooldown, dummies broken and back,
 # skill slots, the weapon's swing as data, cleave, whirlwind, fireball, block, stamina and mana,
-# thorns, and the player falling and coming back. 65 checks, exit 0 only if all pass. Play it: "$GODOT" --path . "res://11. EcsControl/main.tscn"
+# thorns, the player falling and coming back, and skill costs paid by whoever casts. 68 checks, exit 0 only if all pass. Play it: "$GODOT" --path . "res://11. EcsControl/main.tscn"
 "$GODOT" --headless --path . "res://11. EcsControl/tests/control_test.tscn"
 
 # The hunt on its own: one dog in a bush, one rabbit — ambush, pounce, stun, bites.
@@ -420,9 +420,9 @@ been crossed.
 berry dies and becomes a record, so freeing a node is kill and only kill, and every live
 entity has a position to draw.
 
-**It is deliberately kept to a small core**: 30 components, 23 flags, 6
-singletons, 29 systems
-(`lifecycle > edit > spawner > hunger > energy > thirst > danger > sensor > breeding > memory > planning > low_brain > skill > consume > drink > harvest > attack > health > movement > collision > pickup > rot > remains > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
+**It is deliberately kept to a small core**: 30 components, 24 flags, 6
+singletons, 30 systems
+(`lifecycle > edit > spawner > hunger > energy > thirst > danger > sensor > breeding > memory > planning > low_brain > skill_cost > skill > consume > drink > harvest > attack > health > movement > collision > pickup > rot > remains > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
 rank in the plan's decision ladder — the planner sits *above* it — and not for the
 wandering it happens to do), and a world
 of 48 animals in 4 types (20 rabbits, 20 monkeys, 4 crocodiles and 4 wild dogs — a grazer,

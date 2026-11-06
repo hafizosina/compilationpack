@@ -3,6 +3,9 @@ extends EcsComponent
 
 ## How watered it is. `hydration` starts full and drains to zero, which costs health.
 
+## The field that is this bar's current amount; a skill cost reads it.
+const BAR_VALUE: StringName = &"hydration"
+
 ## Hydration lost per second while awake.
 @export var drain: float = 0.5
 ## Fraction of `drain` while asleep. Keep above 0 or thirst can't wake a sleeper.
@@ -20,6 +23,8 @@ extends EcsComponent
 
 ## Current hydration.
 var hydration: float = 100.0
+## Spending asked for (a skill's cost) and not yet applied; its own system applies it.
+var spent: float = 0.0
 
 func key() -> StringName:
 	return &"thirst"

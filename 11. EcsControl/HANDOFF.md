@@ -28,7 +28,7 @@ The status bar shows health, stamina (the energy bar) and mana. Thorn bushes hur
 | `singletons/` | `EcsPlayerInputSingleton` — this tick's input |
 | `flags/` | `EcsSwingFlag` (a swing in progress); skill effects `EcsStrikeFlag`, `EcsLaunchFlag`, `EcsBlockingFlag` |
 | `skills/` | Skill defs on module 9's `EcsSkillDef`: `EcsStrikeSkill` (melee), `EcsProjectileSkill` (spells), `EcsBlockSkill` |
-| `components/` | `EcsPlayerComponent` (the controlled entity, its tuning and skill costs), `EcsWeaponComponent` (what it holds, its swing, its pose), `EcsPoolComponent` → `EcsStaminaComponent`, `EcsManaComponent`; `EcsProjectileComponent`, `EcsLifetimeComponent`, `EcsThornsComponent`, `EcsRespawnComponent` |
+| `components/` | `EcsPlayerComponent` (the controlled entity and its tuning), `EcsWeaponComponent` (what it holds, its swing, its pose), `EcsPoolComponent` → `EcsStaminaComponent`, `EcsManaComponent`; `EcsProjectileComponent`, `EcsLifetimeComponent`, `EcsThornsComponent`, `EcsRespawnComponent` |
 | `systems/` | `EcsPlayerControlSystem` (the player's brain), `EcsPoolSystem`, `EcsStrikeSystem`, `EcsLaunchSystem`, `EcsProjectileSystem`, `EcsThornsSystem`, `EcsBlockSystem`, `EcsLifetimeSystem`, `EcsWeaponSystem`, `EcsRespawnSystem`, `EcsPlayerViewSystem` (camera, sprite facing, weapon, status bar, skill cooldowns; read only) |
 | `ui/` | `ui.tscn` — module 7's HUD, copied; `ui.gd` (`EcsControlHud`) sends abilities as signals |
 | `camera_follow.gd` | `EcsFollowCamera`, module 7's lead camera, fed a target |
@@ -153,8 +153,12 @@ others ask by adding to `spent`, and it pays, then refills after `regen_delay` w
 It runs right after control, so a cost is paid in the tick it's asked. Stamina is named so because
 module 9's `EcsEnergyComponent` is sleep.
 
-What a skill costs is the player's, `EcsPlayerComponent.skill_costs` (x stamina, y mana): dash 25,
-block 15, cleave 20, whirlwind 35, fireball 30 mana. Control casts only what it can pay for.
+**A skill's cost is the skill's**: `EcsSkillDef.cost`, by bar key — dash 25 stamina, block 15,
+cleave 20, whirlwind 35, fireball 30 mana. The brain only asks; module 9's
+**`EcsSkillCostSystem`**, between control and pool, pays it in the tick the skill would start and
+drops a cast that can't be paid, so nothing is paid for a skill that doesn't start. Stamina and
+mana are bars like health or fullness (`BAR_VALUE` on `EcsPoolComponent`), so a skill may cost
+any of them (module 9's HANDOFF, "Skill costs come from bars").
 Sprinting drains `sprint_drain` stamina a second; with none left it can't sprint. Stamina refills
 20/s after 0.8 s, mana 8/s after 1.5 s.
 
@@ -184,7 +188,8 @@ Turning the sprite is the one per-tick node write outside node sync; it is the p
 animals; potions; the player's hunger and thirst; damage numbers; the bow (the fireball's
 projectile is the way). Hit feedback is the swing and the target's health bar on the overlay.
 
-**Tests** (`control_test.tscn`, 65) — also: a fireball costs its mana in its tick, flies out as an
+**Tests** (`control_test.tscn`, 68) — also: any caster with skills and pools, no player brain,
+pays a skill's cost when it starts and can't start one it can't afford; a fireball costs its mana in its tick, flies out as an
 entity, hits a dummy for 1.75×, is gone leaving a burst that fades; one that hits nothing ends at
 its range without a burst; a miss can't swing again before the attack's interval, and can after;
 it is born clear of its caster and doesn't hit it, flies on when its

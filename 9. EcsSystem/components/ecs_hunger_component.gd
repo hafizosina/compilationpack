@@ -3,6 +3,9 @@ extends EcsComponent
 
 ## How fed it is. `fullness` starts full and drains to zero, which is starving.
 
+## The field that is this bar's current amount; a skill cost reads it.
+const BAR_VALUE: StringName = &"fullness"
+
 ## The food diet it eats: &"plant" or &"meat".
 @export var eats: StringName = &"plant"
 ## Fullness lost per second while awake.
@@ -25,6 +28,8 @@ extends EcsComponent
 
 ## Current fullness.
 var fullness: float = 100.0
+## Spending asked for (a skill's cost) and not yet applied; its own system applies it.
+var spent: float = 0.0
 
 func key() -> StringName:
 	return &"hunger"

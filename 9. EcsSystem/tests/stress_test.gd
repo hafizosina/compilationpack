@@ -441,6 +441,7 @@ func _build_pipeline() -> void:
 		EcsMemorySystem.new(),
 		EcsPlanningSystem.new(),
 		EcsLowBrainSystem.new(),
+		EcsSkillCostSystem.new(),
 		EcsSkillSystem.new(),
 		EcsConsumeSystem.new(),
 		EcsDrinkSystem.new(),

@@ -11,6 +11,9 @@ extends Resource
 @export var cooldown: float = 0.0
 ## Seconds it lasts. 0 is held: it lasts while asked for and `can_start` holds.
 @export var duration: float = 0.0
+## What starting it costs, by bar key (`&"stamina": 25`, `&"health": 10`). EcsSkillCostSystem
+## pays it from the caster's bars; one it can't pay doesn't start.
+@export var cost: Dictionary[StringName, float] = {}
 
 ## The skill in `skills` with `skill_id`, or null.
 static func find(skills: Array[EcsSkillDef], skill_id: StringName) -> EcsSkillDef:

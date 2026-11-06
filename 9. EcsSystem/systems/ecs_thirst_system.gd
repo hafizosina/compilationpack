@@ -17,7 +17,8 @@ func run(world: EcsWorld, delta: float) -> void:
 		var drain := thirst.drain
 		if world.has(id, EcsCollapsedFlag) or world.has(id, EcsAsleepFlag):
 			drain *= thirst.asleep_drain_scale
-		thirst.hydration = maxf(thirst.hydration - drain * delta, 0.0)
+		thirst.hydration = maxf(thirst.hydration - drain * delta - thirst.spent, 0.0)
+		thirst.spent = 0.0
 
 	var bodies := world.view([EcsThirstComponent, EcsHealthComponent])
 	thirsts = bodies.column(EcsThirstComponent)

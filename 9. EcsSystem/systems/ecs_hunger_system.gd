@@ -18,7 +18,8 @@ func run(world: EcsWorld, delta: float) -> void:
 		var drain := hunger.drain
 		if world.has(id, EcsCollapsedFlag) or world.has(id, EcsAsleepFlag):
 			drain *= hunger.asleep_drain_scale
-		hunger.fullness = maxf(hunger.fullness - drain * delta, 0.0)
+		hunger.fullness = maxf(hunger.fullness - drain * delta - hunger.spent, 0.0)
+		hunger.spent = 0.0
 
 	# Second pass: what fullness does to health, as flags EcsHealthSystem applies.
 	var bodies := world.view([EcsHungerComponent, EcsHealthComponent])

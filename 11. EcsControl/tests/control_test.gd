@@ -31,6 +31,7 @@ func _ready() -> void:
 	await _attack_skills()
 	await _fireball()
 	await _stamina()
+	_any_caster_pays_from_its_pools()
 	await _block()
 	await _thorns_and_a_fall()
 	print("[control] %d/%d checks passed" % [_checks - _failures, _checks])
@@ -152,7 +153,7 @@ func _fireball() -> void:
 	await _setup([Vector2(250, 0)])
 	var dummy := _dummy_at(Vector2(250, 0))
 	var mana := _world.get_component(_player, EcsManaComponent) as EcsManaComponent
-	var cost: Vector2 = _player_of().skill_costs[&"fireball"]
+	var cost := Vector2(0.0, _skill(&"fireball").cost[&"mana"])
 	_player_of().facing = Vector2.RIGHT
 	_slot(3)
 	await _ticks(1)
@@ -354,6 +355,37 @@ func _attack_skills() -> void:
 func _slot(index: int) -> void:
 	_input.actions.append({"ability": EcsPlayerInputSingleton.SKILLS[index], "aim": Vector2.ZERO, "tapped": true})
 
+## The cost is the skill's, paid when it starts, whoever cast it: a bare entity with
+## skills and stamina, no player brain, pays the same, and can't cast what it can't afford.
+func _any_caster_pays_from_its_pools() -> void:
+	var world := EcsWorld.new()
+	var skills := EcsScheduler.new()
+	skills.add(EcsSkillCostSystem.new()).add(EcsPoolSystem.new()).add(EcsSkillSystem.new())
+	var cleave := load("res://11. EcsControl/defs/skills/cleave.tres") as EcsSkillDef
+	var id := world.create_entity()
+	var known := world.add(id, EcsSkillsComponent.new()) as EcsSkillsComponent
+	known.swaps.append(cleave)
+	var stamina := world.add(id, EcsStaminaComponent.new()) as EcsStaminaComponent
+	var price: float = cleave.cost[&"stamina"]
+	_check("a skill's cost is on its def", price > 0.0)
+	var cast := EcsCastIntentFlag.new()
+	cast.skill = &"cleave"
+	world.add(id, cast)
+	skills.run_all(world, TICK)
+	_check("any caster pays it when the skill starts (%.0f left)" % stamina.value,
+		is_equal_approx(stamina.value, stamina.max_value - price) and known.active_left.has(&"cleave"))
+	world.remove(id, EcsCastIntentFlag)
+	for i in roundi((cleave.duration + cleave.cooldown) / TICK) + 2:
+		skills.run_all(world, TICK)
+	stamina.value = price - 1.0
+	var poor := EcsCastIntentFlag.new()
+	poor.skill = &"cleave"
+	world.add(id, poor)
+	skills.run_all(world, TICK)
+	_check("one it can't afford doesn't start, and costs nothing",
+		not known.active_left.has(&"cleave") and not world.has(id, EcsCastIntentFlag)
+		and stamina.value >= price - 1.0)
+
 func _skill(skill_id: StringName) -> EcsSkillDef:
 	return EcsSkillDef.find((_world.get_component(_player, EcsSkillsComponent) as EcsSkillsComponent).skills, skill_id)
 
@@ -381,6 +413,7 @@ func _setup(dummies: Array, thorns: Array = []) -> void:
 	_scheduler \
 		.add(EcsLifecycleSystem.new(_manager, CATALOG)) \
 		.add(EcsPlayerControlSystem.new()) \
+		.add(EcsSkillCostSystem.new()) \
 		.add(EcsPoolSystem.new()) \
 		.add(EcsSkillSystem.new()) \
 		.add(EcsStrikeSystem.new()) \

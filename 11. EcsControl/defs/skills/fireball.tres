@@ -7,5 +7,8 @@ script = ExtResource("def")
 id = &"fireball"
 cooldown = 1.2
 duration = 0.1
+cost = Dictionary[StringName, float]({
+&"mana": 30.0
+})
 blueprint = &"fireball"
 damage_scale = 1.75

@@ -7,6 +7,9 @@ script = ExtResource("def")
 id = &"cleave"
 cooldown = 2.5
 duration = 0.3
+cost = Dictionary[StringName, float]({
+&"stamina": 20.0
+})
 damage_scale = 2.0
 arc = 160.0
 swing_time = 0.3

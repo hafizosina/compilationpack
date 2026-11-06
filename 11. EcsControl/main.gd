@@ -69,6 +69,7 @@ func _build() -> void:
 	_scheduler \
 		.add(EcsLifecycleSystem.new(_manager, catalog)) \
 		.add(EcsPlayerControlSystem.new()) \
+		.add(EcsSkillCostSystem.new()) \
 		.add(EcsPoolSystem.new()) \
 		.add(EcsSkillSystem.new()) \
 		.add(EcsStrikeSystem.new()) \

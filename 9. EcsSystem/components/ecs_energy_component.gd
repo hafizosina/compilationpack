@@ -3,6 +3,9 @@ extends EcsComponent
 
 ## How rested it is. Drains while awake, refills while asleep.
 
+## The field that is this bar's current amount; a skill cost reads it.
+const BAR_VALUE: StringName = &"value"
+
 ## Fully rested.
 @export var max_energy: float = 100.0
 ## Drain per second while awake.
@@ -27,6 +30,8 @@ extends EcsComponent
 
 ## Current energy.
 var value: float = 100.0
+## Spending asked for (a skill's cost) and not yet applied; its own system applies it.
+var spent: float = 0.0
 ## Whether the starting value has been rolled. Set true in a placement that
 ## authors `value`, or the roll overwrites it.
 var rolled: bool = false
