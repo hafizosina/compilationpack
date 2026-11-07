@@ -114,6 +114,7 @@ func _run() -> void:
 	await _a_remembered_place_is_planned_and_walked_to()
 	await _fear_and_traffic_price_places()
 	await _memory_keeps_what_matters_to_it()
+	await _memory_loses_track_of_movers()
 	_a_stun_holds_still_and_wears_off()
 	_hunted_prey_cannot_hide()
 	await _a_pounce_stuns_and_bites_follow_until_dead()
@@ -3167,6 +3168,54 @@ func _fear_and_traffic_price_places() -> void:
 	_check("traffic halves over its half-life",
 		is_equal_approx(EcsMemoryFact.traffic_of(busy, dog_mind), before * 0.5))
 	for id in [rabbit, near_pond, far_pond, dog, near_bush, busy_bush, visitor, corpse]:
+		_world.add(id, EcsDyingFlag.new())
+	EcsLifecycleSystem.new(_manager, _catalog).run(_world, TICK)
+	await get_tree().physics_frame
+
+## A mover's fact keeps how fast it goes: the longer since it was seen, the dearer a walk to
+## it, and past lose_track_at it is not walked to. Walking to its spot and not finding it drops
+## the place but keeps who it was; seen again, it has a place again.
+func _memory_loses_track_of_movers() -> void:
+	var memory := EcsMemorySystem.new()
+	var spot := Vector2(-40000.0, 30000.0)
+	var dog := _manager.spawn(_world, _catalog, &"wild_dog", spot)
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(150.0, 0.0))
+	var eyes := _world.get_component(dog, EcsSensorComponent) as EcsSensorComponent
+	var mind := _world.get_component(dog, EcsMemoryComponent) as EcsMemoryComponent
+	var here := _position_of(dog)
+	var speed := (_world.get_component(dog, EcsMovementComponent) as EcsMovementComponent).speed
+	var prey_speed := (_world.get_component(rabbit, EcsMovementComponent) as EcsMovementComponent).speed
+	eyes.perceived.assign([rabbit])
+	_remember(memory, TICK)
+	var fact := mind.facts.get(rabbit) as EcsMemoryFact
+	_check("a moving thing is remembered with its speed",
+		fact != null and fact.is_a(EcsMemoryFact.PREY) and not fact.fixed and fact.speed == prey_speed)
+	var fresh := EcsMemoryFact.score(fact, mind, here, speed, EcsMemoryFact.PREY)
+	eyes.perceived.clear()
+	_remember(memory, 2.0)
+	_check("the longer since it was seen, the dearer a walk to it",
+		EcsMemoryFact.score(fact, mind, here, speed, EcsMemoryFact.PREY) > fresh)
+	_remember(memory, mind.lose_track_at / prey_speed)
+	_check("gone farther than it can follow, it is kept but not walked to",
+		mind.facts.has(rabbit) and EcsMemoryFact.best(mind, here, speed, EcsMemoryFact.PREY) == null)
+
+	eyes.perceived.assign([rabbit])
+	_remember(memory, TICK)
+	var rabbit_at := _world.get_component(rabbit, EcsPositionComponent) as EcsPositionComponent
+	rabbit_at.position = spot + Vector2(4000.0, 0.0)
+	eyes.perceived.clear()
+	var trip := _world.get_component(dog, EcsMovementComponent) as EcsMovementComponent
+	trip.destination = fact.position
+	trip.has_destination = true
+	_remember(memory, TICK)
+	trip.has_destination = false
+	_check("walking to where it was and not finding it, the place is lost and who it was kept",
+		mind.facts.has(rabbit) and not fact.placed
+		and EcsMemoryFact.best(mind, here, speed, EcsMemoryFact.PREY) == null)
+	eyes.perceived.assign([rabbit])
+	_remember(memory, TICK)
+	_check("seen again, it has a place again", fact.placed and fact.position == rabbit_at.position)
+	for id in [dog, rabbit]:
 		_world.add(id, EcsDyingFlag.new())
 	EcsLifecycleSystem.new(_manager, _catalog).run(_world, TICK)
 	await get_tree().physics_frame

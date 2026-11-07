@@ -25,6 +25,11 @@ var position: Vector2 = Vector2.ZERO
 var radius: float = 0.0
 ## It can't move, so its position and radius are never read again.
 var fixed: bool = false
+## False once it was looked for where it was seen and wasn't there: who it is, kept; where, lost.
+var placed: bool = true
+## Its velocity when last seen, and its top speed.
+var velocity: Vector2 = Vector2.ZERO
+var speed: float = 0.0
 ## What it is to the rememberer, as kind bits.
 var kinds: int = 0
 ## Clock time it was last seen.
@@ -48,17 +53,26 @@ static func strength_of(fact: EcsMemoryFact, memory: EcsMemoryComponent) -> floa
 static func fear_of(fact: EcsMemoryFact, memory: EcsMemoryComponent) -> float:
 	return maxf(1.0 - (memory.as_of - fact.feared_at) / memory.fear_for, 0.0)
 
+## How far it may have gone since it was seen; 0 for a thing that can't move.
+static func spread_of(fact: EcsMemoryFact, memory: EcsMemoryComponent) -> float:
+	return fact.speed * (memory.as_of - fact.seen_at)
+
+## Worth acting on: not forgotten, with a place, and not gone farther than it can follow.
+static func usable(fact: EcsMemoryFact, memory: EcsMemoryComponent) -> bool:
+	return fact.placed and strength_of(fact, memory) > 0.0 \
+		and spread_of(fact, memory) <= memory.lose_track_at
+
 ## Its traffic now, halving every `traffic_half_life`.
 static func traffic_of(fact: EcsMemoryFact, memory: EcsMemoryComponent) -> float:
 	if fact.traffic == 0.0:
 		return 0.0
 	return fact.traffic * pow(0.5, (memory.as_of - fact.traffic_at) / memory.traffic_half_life)
 
-## What going to `fact` costs a plan: the walk, plus fear (met here, or a remembered threat
-## near it), plus the expected wait if it is a lure taken as one.
+## What going to `fact` costs a plan: the walk, plus searching as far as it may have gone, plus
+## fear (met here, or a remembered threat near it), plus the expected wait if it is a lure.
 static func score(fact: EcsMemoryFact, memory: EcsMemoryComponent, here: Vector2, speed: float,
 		kind: int) -> float:
-	var cost := 1.0 + here.distance_to(fact.position) / speed / TRAVEL_SECONDS
+	var cost := 1.0 + (here.distance_to(fact.position) + spread_of(fact, memory)) / speed / TRAVEL_SECONDS
 	cost += memory.fear_cost * maxf(fear_of(fact, memory), threat_near(memory, fact))
 	if kind == LURE:
 		cost += memory.wait_cost / (1.0 + traffic_of(fact, memory))
@@ -69,7 +83,7 @@ static func threat_near(memory: EcsMemoryComponent, fact: EcsMemoryFact) -> floa
 	var found := 0.0
 	for about in memory.facts:
 		var other := memory.facts[about] as EcsMemoryFact
-		if not other.is_a(THREAT):
+		if not other.is_a(THREAT) or not other.placed:
 			continue
 		var reach := fact.radius + memory.near
 		if other.position.distance_squared_to(fact.position) <= reach * reach:
@@ -86,7 +100,7 @@ static func best(memory: EcsMemoryComponent, here: Vector2, speed: float, kind: 
 		return found
 	for about in memory.facts:
 		var fact := memory.facts[about] as EcsMemoryFact
-		if not fact.is_a(kind) or strength_of(fact, memory) <= 0.0:
+		if not fact.is_a(kind) or not usable(fact, memory):
 			continue
 		if in_sight and not seen.has(about):
 			continue

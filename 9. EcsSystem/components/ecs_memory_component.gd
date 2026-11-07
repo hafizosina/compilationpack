@@ -23,6 +23,8 @@ const KIND_NAMES: Dictionary = {1: "water", 2: "lure", 4: "food", 8: "bush", 16:
 @export var wait_cost: float = 2.0
 ## Traffic a corpse seen at a lure adds.
 @export var kill_traffic: float = 10.0
+## How far a moving thing may have gone, in px, before its last spot is no use.
+@export var lose_track_at: float = 600.0
 
 ## Remembered entity id -> EcsMemoryFact.
 var facts: Dictionary = {}
@@ -58,8 +60,13 @@ func describe() -> Dictionary:
 			if fact.kinds & bit != 0:
 				names.append(KIND_NAMES[bit])
 		var what := ", ".join(names)
-		var text := "%d%% at (%d, %d)" % [roundi(strength * 100.0),
-			roundi(fact.position.x), roundi(fact.position.y)]
+		var text := "%d%%, place unknown" % roundi(strength * 100.0)
+		if fact.placed:
+			text = "%d%% at (%d, %d)" % [roundi(strength * 100.0),
+				roundi(fact.position.x), roundi(fact.position.y)]
+			var spread := EcsMemoryFact.spread_of(fact, self)
+			if spread > 0.0:
+				text += " ±%d" % roundi(spread)
 		var fear := EcsMemoryFact.fear_of(fact, self)
 		if fear > 0.0:
 			text += ", fear %d%%" % roundi(fear * 100.0)

@@ -72,7 +72,8 @@ func run(world: EcsWorld, delta: float) -> void:
 			_forget_weakest(memory)
 
 ## Checks the one fact at its latest destination, walking there or arrived: once that spot is
-## in sight, the thing is there or the fact is forgotten. Matching a new destination to a fact
+## in sight, the thing is there, or the fact is forgotten — for something that moves, only its
+## place is. Matching a new destination to a fact
 ## walks the facts once per trip, never per run.
 static func _check_watched(move: EcsMovementComponent, memory: EcsMemoryComponent,
 		sensor: EcsSensorComponent, here: Vector2) -> void:
@@ -92,7 +93,10 @@ static func _check_watched(move: EcsMovementComponent, memory: EcsMemoryComponen
 	if here.distance_squared_to(fact.position) > sensor.radius * sensor.radius \
 			or sensor.perceived.has(fact.about):
 		return
-	memory.facts.erase(fact.about)
+	if fact.fixed:
+		memory.facts.erase(fact.about)
+	else:
+		fact.placed = false
 	memory.watching = EcsWorld.NO_ENTITY
 
 ## Asks `id`'s constant answers again; each id keeps its own period so they don't all land on one run.
@@ -157,14 +161,19 @@ func _write(world: EcsWorld, memory: EcsMemoryComponent, seen: int, bits: int, a
 		if at == null:
 			memory.facts.erase(seen)
 			return
+		var moves := world.get_component(seen, EcsMovementComponent) as EcsMovementComponent
 		if fact == null:
 			fact = EcsMemoryFact.new()
 			fact.about = seen
-			fact.fixed = not world.has(seen, EcsMovementComponent)
+			fact.fixed = moves == null
+			var body := world.get_component(seen, EcsBodyComponent) as EcsBodyComponent
+			fact.radius = body.radius if body != null else 0.0
 			memory.facts[seen] = fact
 		fact.position = at.position
-		var body := world.get_component(seen, EcsBodyComponent) as EcsBodyComponent
-		fact.radius = body.radius if body != null else 0.0
+		if moves != null:
+			fact.velocity = moves.velocity
+			fact.speed = moves.speed
+		fact.placed = true
 	fact.kinds = (fact.kinds | bits) if add else bits
 	fact.seen_at = memory.as_of
 

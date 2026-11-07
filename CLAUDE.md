@@ -354,10 +354,16 @@ weight 10 = eat) and the ladder both read.
 **Memory is a component** (HANDOFF §20): `EcsMemoryComponent.facts` holds what matters to the
 animal, decided by its own needs and power and never by species — water it drinks, food and bushes
 of its diet, lures it hides in, the threat its danger found, prey it can hunt — each a copied
-position, a `kinds` bitmask rewritten on every sighting, and a `strength` that fades over
-`remember_for`. `EcsMemorySystem` is its only writer, between sensor and planning; a fact
-whose spot is in sight without its thing is forgotten at once, so a wrong fact is gone before the
-replan. RECALL walks to the copied position, never the live entity. **Places are priced, not
+position, a `kinds` bitmask rewritten on every sighting, and a `seen_at` time — **memory is lazy**
+(HANDOFF §20, 2026-11-07): strength, fear and traffic are worked out from times when read, against
+the world clock (`EcsClockSingleton`, advanced by `EcsClockSystem`, stopped while paused), and
+nothing walks every fact per tick. `EcsMemorySystem` is its only writer, between sensor and
+planning. **A fact is checked only when acted on**: memory watches the fact at the animal's own
+latest movement destination (never the brain or an intent), and when that spot is in sight
+without its thing a fixed thing's fact is forgotten and a mover's loses only its place (`placed`),
+so a wrong fact is gone before the replan. A mover's fact keeps its speed: the longer unseen, the
+dearer the search, and past `lose_track_at` it isn't walked to. Relations and knowledge are to
+follow the same rules, stamped off the same clock. RECALL walks to the copied position, never the live entity. **Places are priced, not
 actions** (step 5): each go-to action binds and is priced by `EcsMemoryFact.best`/`score` — the
 walk, plus fear for a pond where a threat was met, or the expected wait at a lure, which traffic
 (prey or a kill seen there) lowers. Planner and brain share that helper so they can't disagree.
@@ -425,15 +431,15 @@ been crossed.
 berry dies and becomes a record, so freeing a node is kill and only kill, and every live
 entity has a position to draw.
 
-**It is deliberately kept to a small core**: 30 components, 24 flags, 7
-singletons, 30 systems
-(`lifecycle > edit > spawner > hunger > energy > thirst > danger > sensor > breeding > memory > planning > low_brain > skill_cost > skill > consume > drink > harvest > attack > health > movement > collision > pickup > rot > remains > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
+**It is deliberately kept to a small core**: 30 components, 24 flags, 8
+singletons, 31 systems
+(`lifecycle > edit > clock > spawner > hunger > energy > thirst > danger > sensor > breeding > memory > planning > low_brain > skill_cost > skill > consume > drink > harvest > attack > health > movement > collision > pickup > rot > remains > drop > selection > node_sync > debug > census > inspect`, where `EcsLowBrainSystem` is named for its
 rank in the plan's decision ladder — the planner sits *above* it — and not for the
 wandering it happens to do), and a world
 of 48 animals in 4 types (20 rabbits, 20 monkeys, 4 crocodiles and 4 wild dogs — a grazer,
 a carrier, an ambusher and a chaser, differing by a component or two and some authored values) plus 52 berry
 bushes and 16 ponds, on a 6400×3360 arena — the old density at 4× the area. `EcsDebugSystem` is a pure
-reader feeding one dumb view, `EcsDebugOverlay`, which annotates each entity in world
+reader feeding one dumb view, `EcsDebugOverlay`, which annotates each entity on screen (culled to the camera, HANDOFF §10) in world
 space: name, a velocity arrow, a dashed line to its destination, **fullness, energy and
 health as bars** (plus a **danger** bar while there is any, and the **planner's goal** under
 the name), a **badge on the sprite's shoulder** when it is carrying something, and

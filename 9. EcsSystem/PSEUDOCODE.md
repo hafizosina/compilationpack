@@ -129,13 +129,20 @@ EcsHunting                                  # no prey tag: diet and power only
     dash_ready(e)         = dash neither cooling nor active
     dash_reach(e)         = dash skill's reach, else 0
 
-EcsMemoryFact          { about, position, radius, kinds bitmask, strength, fear, traffic, kills_seen }
+EcsMemoryFact          { about, position, radius, kinds bitmask, fixed, placed, velocity, speed,
+                         seen_at, feared_at, traffic, traffic_at, kills_seen }
     bits: WATER 1, LURE 2, FOOD 4, BUSH 8, THREAT 16, PREY 32, MATE 64
+    read against memory.as_of, never written per run:
+        strength = 1 - (as_of - seen_at) / remember_for          # 0 = forgotten
+        fear     = 1 - (as_of - feared_at) / fear_for
+        traffic  = traffic * 0.5 ^ ((as_of - traffic_at) / traffic_half_life)
+        spread   = speed * (as_of - seen_at)                     # 0 if it can't move
+        usable   = placed and strength > 0 and spread <= lose_track_at
     score(fact, here, speed, kind):
-        cost = 1 + distance(here, fact.position) / speed / 5
-        cost += fear_cost * max(fact.fear, strongest THREAT fact within fact.radius + near)
-        if kind == LURE: cost += wait_cost / (1 + fact.traffic)
-    best(memory, here, speed, kind, in_sight?, seen?) = fact of kind with the lowest score
+        cost = 1 + (distance(here, fact.position) + spread) / speed / 5
+        cost += fear_cost * max(fear, strongest placed THREAT fact within fact.radius + near)
+        if kind == LURE: cost += wait_cost / (1 + traffic)
+    best(memory, here, speed, kind, in_sight?, seen?) = usable fact of kind with the lowest score
                                                         (only facts about ids in seen, if in_sight)
 ```
 
@@ -202,7 +209,7 @@ Fields below the line in each row are runtime, written by systems; the rest are 
 | `Energy` | max_energy, drain_idle, drain_moving, restore, hide_restore, rest_at, wake_at, collapse_release, collapse_damage, start_min, start_max | value, rolled | energy, planning, brain |
 | `Health` | max_health, power | value | health, damage, hunger/thirst/energy write it |
 | `Danger` | fill, hit_jump, decay, flee_at | value, threat, threat_at | danger writes; planning, memory, brain |
-| `Memory` | capacity, remember_for, near, fear_for, fear_cost, traffic_half_life, wait_cost, kill_traffic | facts | memory writes; planning, brain |
+| `Memory` | capacity, remember_for, near, fear_for, fear_cost, traffic_half_life, wait_cost, kill_traffic, lose_track_at | facts, as_of, watch_spot, watching, fear_left, its cached answers | memory writes; planning, brain |
 | `Skills` | swaps | skills, resolved, cooldown_left, active_left | skill writes; brain, attack read |
 | `Breeding` | ready_above, cooldown, cost, litter | cooldown_left, rolled | breeding only |
 | `Inventory` | capacity | items: [EcsItemRecord] | pickup, consume, drop, corpse |
@@ -365,16 +372,14 @@ for e with MateIntent, Breeding, not Dying:
 ```
 indexes: water, lures (cover that is water or a bush), crops, food by diet, hunters,
          diets present, living bodies (for power), ready by type, what each eater eats
-for e with Memory, Sensor, Position, not Dying:
-    for fact in facts:                                  # fade and falsify
-        strength -= dt / remember_for
-        forget if strength <= 0
-              or (fact.position within sight radius and fact.about not in perceived(e))
-        fear -= dt / fear_for; traffic *= 0.5 ^ (dt / traffic_half_life)
-    if danger >= flee_at: fear = 1 on every WATER fact near danger.threat_at
+for e with Memory, Sensor, Position, not Dying:          # no walk over every fact
+    as_of = clock.now
+    every ~1 s: re-ask drinks, eats, hide kinds, type     # cached on the component
+    if danger >= flee_at, at most once a second:
+        feared_at = now on every WATER fact near danger.threat_at
     if e drinks, eats a diet present, hunts, or anyone is ready:
         for seen in perceived(e):                       # learn
-            if e hunts and has lures: count traffic       # prey near a lure: + dt; a corpse: + kill_traffic once
+            if e hides at lures: count traffic          # prey near a lure: + dt; a corpse: + kill_traffic once
             bits  = WATER  if e drinks and seen is water
                   | LURE   if e hunts and seen is a lure of a kind e hides in
                   | FOOD   if seen is food of e's diet
@@ -382,9 +387,14 @@ for e with Memory, Sensor, Position, not Dying:
                   | PREY   if e hunts and seen is weaker and noticed
                   | MATE   if seen is ready and e's type
                   | THREAT kept from the old fact
-            bits == 0 ? forget seen : write(seen, bits)  # position copied, strength 1
+            bits == 0 ? forget seen : write(seen, bits)
+                # write: seen_at = now, placed; a mover's position, velocity, speed copied;
+                # a thing that can't move (fixed) reads neither position nor body again
     if danger.threat is in sight and noticed: add THREAT to its fact
-    over capacity: sort by strength, drop the weakest
+    if its destination changed: watching = the fact at that spot (one walk per trip)
+    if the watched spot is in sight and its thing not perceived:
+        fixed ? forget it : placed = false             # a mover keeps who, loses where
+    over capacity: sort by seen_at, drop the oldest
 ```
 
 ### planning `[20 Hz]` — L2 goal and L3 route

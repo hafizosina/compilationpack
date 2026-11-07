@@ -42,12 +42,13 @@ world1.tres ──► EcsEntityManager ──► EcsWorld                       
                 builds the nodes      World/Entities/entity_<id>/
 ```
 
-Every physics tick `EcsScheduler` runs thirty stages. `[20 Hz]` and `[10 Hz]` mark the
+Every physics tick `EcsScheduler` runs thirty-one stages. `[20 Hz]` and `[10 Hz]` mark the
 ones that run every third or sixth tick (§11); the rest run every tick.
 
 | stage | does | writes |
 |---|---|---|
 | `lifecycle` | births and deaths — the only stage that creates or frees | the world, the nodes |
+| `clock` | advances the world clock by the tick's delta; not while paused (§20) | `EcsClockSingleton` |
 | `spawner` | a spawner asks for what it spawns (no blueprint has one now; tests do) | a note on `EcsLifecycleSingleton` |
 | `hunger` `[10 Hz]` | fullness drains; starving costs health, fed mends it | `EcsHunger`, `EcsHealth` |
 | `energy` `[10 Hz]` | drains awake, restores asleep; collapse at zero | `EcsEnergy`, `EcsCollapsedFlag`, `EcsHealth` |
@@ -56,7 +57,7 @@ ones that run every third or sixth tick (§11); the rest run every tick.
 | `danger` `[20 Hz]` | fills on a threat in sight, jumps on a hit, decays | `EcsDanger`, clears `EcsHurtFlag` |
 | `sensor` `[20 Hz]` | what each entity sees and can touch | `EcsSensor.perceived`, `EcsAction.reached` |
 | `breeding` `[20 Hz]` | who is ready to breed; carries out a mate intent | `EcsReadyFlag`, `EcsBreeding`, the bars, a note on `EcsLifecycleSingleton` |
-| `memory` `[20 Hz]` | remembers what matters to the animal; fades and falsifies (§20) | `EcsMemory` |
+| `memory` `[20 Hz]` | remembers what matters to the animal; checks only the fact it walks to (§20) | `EcsMemory` |
 | `planning` `[20 Hz]` | scores goals, replans on events, under a budget (§18) | `EcsPlanner` |
 | `low_brain` `[20 Hz]` | runs the plan's first step, or its own ladder | its own state, a destination, intent flags |
 | `skill` | carries out a cast intent; runs skill timers (§19) | `EcsSkills`, the effect flags |
@@ -257,8 +258,8 @@ or soft collision stops it before its reach arrives.
 **Three distance checks sit on top of perception, all deliberate** (§19, §20): a scanning
 watcher sees a hider within its scan radius, the planner's `prey_close` is prey within dash
 reach, and memory forgets a fact whose spot is within sight radius but whose thing is not in
-`perceived`. The first two run only over `perceived` and the third only over the memory's own
-facts — the area still decides *whether* something is seen.
+`perceived`. The first two run only over `perceived` and the third only on the one fact at the
+animal's latest destination (§20, lazy memory) — the area still decides *whether* something is seen.
 
 ---
 
@@ -1382,6 +1383,70 @@ hunters see a handful of prey, not 54.
 30–34 of 40 were alive at the end (29–31 before). No deaths of thirst; kills 6–9, as before. Facts
 forgotten while still strong rose to 1,300–1,500 a run — emptied bushes and animals that moved, the
 rewrite-on-sighting rule doing its job.
+
+### Lazy memory: nothing walks every fact (2026-11-07)
+
+**The rule** (the user's, ahead of relations and knowledge, which will be large and read rarely):
+**all decay is lazy, and a fact is checked only when the animal acts on it; when acting on it shows
+it is wrong, that fact is updated.** Steps 1, 3 and 4 above — fade, falsify over every fact, and
+fear written every run — were a walk over every fact of every animal at 20 Hz, so their cost grew
+with animals × facts. Now:
+
+```
+EcsClockSingleton { now }                  # simulated seconds; EcsClockSystem, every tick, not paused
+EcsMemoryComponent
+  facts: id -> EcsMemoryFact
+  as_of                                    # clock at its last memory run; ages read against it
+  watch_spot, watching                     # its latest destination and the fact there
+  fear_left                                # ponds marked feared at most once a second while fleeing
+  drinks, eats, hide_kinds, kind, profile_left   # its constant answers, re-asked ~1 s
+EcsMemoryFact
+  about, kinds, position, radius
+  fixed                                    # can't move: position and radius never re-read
+  placed, velocity, speed                  # a mover's last place, and how fast it was going
+  seen_at, feared_at, traffic + traffic_at # times, not decaying values
+  strength_of = 1 - age / remember_for     # 0 = forgotten
+  fear_of     = 1 - (as_of - feared_at) / fear_for
+  traffic_of  = traffic × 0.5 ^ ((as_of - traffic_at) / traffic_half_life)
+  spread_of   = speed × age                # how far it may have gone
+  usable      = placed, strength > 0, spread <= lose_track_at (600 px)
+```
+
+- **Ages are timestamps.** Learning writes `seen_at`; nothing decrements. An expired fact stays in
+  `facts` until a new one needs its slot (over capacity the oldest `seen_at` go), and every reader —
+  `best`, `threat_near`, planning's `*_known` — skips it. The clock stops while paused and is saved,
+  so ages survive a save; an old save loads with fresh facts and no fear or traffic.
+- **Falsify only what it acts on.** Memory reads the animal's own `EcsMovementComponent`, never the
+  brain or an intent: when `destination` changes it looks once for the fact at that spot
+  (`_set_trip` copies `fact.position` exactly) and watches it. Each run the watched spot, once in
+  sight, either holds its thing or the fact is wrong — a thing that can't move is forgotten, a mover
+  loses only its place (`placed = false`, who it was kept for later relations). The destination
+  outlives the trip, so arriving and then looking still counts, and an animal that finds a pond gone
+  forgets it before the replan as before. **Given up:** passing a stale spot without going there no
+  longer clears it, so a berry someone else ate is "known" until the animal walks to it — one wasted
+  trip at most; fear near a pond lasts until it fades.
+- **Movers.** A mover's fact copies its `velocity` and top `speed` on every sighting. `score` adds
+  `spread / speed / TRAVEL_SECONDS`, the search, to the walk, and past `lose_track_at` a mover is not
+  walked to though still remembered. The centre stays where it was seen; `velocity` is kept but not
+  yet used to predict.
+- **Cheaper learning.** A thing that can't move (`fixed`, set when the fact is made) is refreshed
+  without reading its position or body; an animal's constant answers are cached and re-asked every
+  ~1 s, staggered by id, so a live edit of `eats` or a skill swap shows within a second. Traffic
+  gathers its lure facts only when a hunter sees prey or a corpse.
+
+**Measured** live, main scene, world1 tiled, overlay off, same machine and power state; `memory` ms
+per run (it runs every third tick):
+
+| entities | before | trims | + clock, lazy | + movers |
+|---|---|---|---|---|
+| 116 | 1.70 | 1.45 | 1.23 | 1.21 |
+| 464 | 6.74 | 6.03 | 5.04 | 4.92 |
+| 696 | 8.94 | 6.57 | 5.72 | 6.47 |
+| 1,044 | 12.90 | 10.26 | 8.87 | 9.55 |
+
+Runs differ by about ±1 ms. What is left is learning, per sighting, so a bigger memory no longer costs
+more per tick. In a 180 s run of world1, of 133 mover facts 125 had lost track and 2 were unplaced by
+a walk to an empty spot.
 
 ---
 
