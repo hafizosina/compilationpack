@@ -238,6 +238,16 @@ read anything back off a node**, and that is the whole of the exception: compone
 only truth, the areas are a derived index, and what is read back is *which ids overlap*,
 never where anything is. Every other system reads ids off components.
 
+**Signals mark; the sensor computes at its tick** (2026-11-07). Each sensor and action area's
+`area_shape_entered` / `area_shape_exited` only marks its entity. At its own tick and phase the
+sensor rewrites the lists of marked entities from `get_overlapping_areas()`, as before, so readers
+see the same lists at the same moment and in the same order. Everyone is rewritten after a view
+change (a birth, death, a component switched off or on, a load) or an edit
+(`EcsEditSingleton.applied`). The shape signals and not `area_entered`/`area_exited`, because a
+detached node stays in the overlap list until it is freed at the end of the frame, and that last
+removal is reported only as a shape exit. A test compares every list with a fresh look, every
+tick, in a busy world. About 3–6% of lists are rewritten a run.
+
 **Layer policy is declared on the component.** Only `EcsBodyComponent` claims a layer
 (`LAYER_BODY`) — a body is the only detectable thing in the world. Sensors and action areas
 carry no layer, so no sensor is ever reported to another sensor (without that the n² moves
@@ -867,6 +877,11 @@ ms a tick, and 44 → 55 FPS at 1,050 (alternating old/new runs, twice). In thos
 planning and memory each rose 0.1–0.3 ms a tick, unexplained; with fewer catch-up ticks most
 frames now run one tick with a render between. Godot's own physics step is 2.2 ms a tick at
 1,050 (~3,000 area pairs, mostly the 280–500 px sensors) and is untouched.
+
+**Sensor, live** (same day, same setup, alternating old/new twice): 4.2 → 0.26 ms a run at 1,050
+(1.4 → 0.09 ms a tick), 2.3 → 0.25 ms a run at 698, with 3–6% of lists rewritten a run (§4). FPS
+at 1,050 went 55 → 57. Godot's physics time, where the marks run, rose ~0.2 ms a tick at 698 and
+didn't move at 1,050.
 
 **Previous ramp**, 2026-10-29, `86d6028`, game rates
 (`--every=sensor:3:0,low_brain:3:1,hunger:6:2,energy:6:5,health:3:2`), against `6ee5529`

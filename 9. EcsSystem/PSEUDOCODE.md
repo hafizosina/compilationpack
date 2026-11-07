@@ -343,8 +343,11 @@ A hidden threat with low visibility can make `fill * seen < decay`, so it is nev
 ### sensor `[20 Hz]` — one of two systems that read nodes
 
 ```
-for e with Position, Sensor:  scan(e, sensor area, radius, into perceived)
-for e with Position, Action:  scan(e, action area, radius, into reached)
+area shape entered / exited (any tick):  marked.add(e)      # the signal only marks
+everyone = view changed or edits.applied changed
+for e with Position, Sensor, if everyone or e in marked:  scan(e, sensor area, radius, into perceived)
+for e with Position, Action, if everyone or e in marked:  scan(e, action area, radius, into reached)
+marked.clear()
 scan: clear list; set the area's circle to radius if changed;
       for area in overlapping_areas: append its entity_id (not e)
 ```

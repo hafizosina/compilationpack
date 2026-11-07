@@ -129,7 +129,9 @@ components stay method-free.
 **Perception and reach are physics, not arithmetic.** `EcsSensorComponent` (what it can
 see) and `EcsActionComponent` (what it can touch) each declare an area under the entity's
 container, and `EcsSensorSystem` writes what they overlap into `sensor.perceived` /
-`action.reached`. `EcsForageSystem` only chases a berry it perceives; `EcsPickupSystem`
+`action.reached`. The areas' shape signals only **mark** an entity; the sensor still computes,
+at its own tick, the lists of marked entities only — everyone's after a view change or an edit
+(HANDOFF §4). `EcsForageSystem` only chases a berry it perceives; `EcsPickupSystem`
 only takes one its action area touches. Those two read ids off components and never touch
 a node — `EcsSensorSystem` and `EcsCollisionSystem` are the **only** two files that read
 back off a node, and that is the whole of the exception. **Layer policy is declared on the

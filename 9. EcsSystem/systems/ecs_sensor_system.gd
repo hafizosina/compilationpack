@@ -2,19 +2,34 @@ class_name EcsSensorSystem
 extends EcsSystem
 
 ## Writes physics overlaps into `EcsSensorComponent.perceived` and
-## `EcsActionComponent.reached`. Results are one physics tick old.
+## `EcsActionComponent.reached`. Results are one physics tick old. An area's enter/exit
+## signals only mark its entity; each run rewrites the marked entities' lists, and
+## everyone's after a birth, a death or an edit.
+
+## One kind of area (sensor or action): its cached nodes, marks and view.
+class Watch:
+	var type: Script
+	var node_kind: StringName
+	var field: StringName  # the component's list of overlapped ids
+	var view: EcsView
+	var areas: Dictionary = {}      # entity id -> Area2D
+	var circles: Dictionary = {}    # entity id -> CircleShape2D
+	var colliders: Dictionary = {}  # entity id -> CollisionShape2D
+	var marks: Dictionary = {}      # entity id -> Callable connected to its area's signals
+	var dirty: Dictionary = {}      # entity ids whose area saw something enter or leave
+
+	func _init(component: Script, kind: StringName, list: StringName) -> void:
+		type = component
+		node_kind = kind
+		field = list
 
 var _manager: EcsEntityManager
+var _sensor := Watch.new(EcsSensorComponent, EcsConst.NODE_SENSOR, &"perceived")
+var _action := Watch.new(EcsActionComponent, EcsConst.NODE_ACTION, &"reached")
+var _edits_seen: int = -1
 
-# Node lookups cached per entity, pruned when an entity leaves the view.
-var _sensor_area: Dictionary = {}    # entity id -> Area2D
-var _sensor_circle: Dictionary = {}  # entity id -> CircleShape2D
-var _sensor_collider: Dictionary = {}  # entity id -> CollisionShape2D
-var _action_area: Dictionary = {}
-var _action_circle: Dictionary = {}
-var _action_collider: Dictionary = {}
-var _sensor_view: EcsView
-var _action_view: EcsView
+## Entities whose lists were rewritten. For tests.
+var rescanned: int = 0
 
 func _init(manager: EcsEntityManager) -> void:
 	_manager = manager
@@ -25,56 +40,82 @@ func label() -> StringName:
 func run(world: EcsWorld, _delta: float) -> void:
 	if _manager == null:
 		return
-	var sensing := world.view([EcsPositionComponent, EcsSensorComponent])
-	if sensing != _sensor_view:
-		_sensor_view = sensing
-		_prune(world, EcsSensorComponent, _sensor_area, _sensor_circle, _sensor_collider)
-	var sensors := sensing.column(EcsSensorComponent)
-	for k in sensing.ids.size():
-		var sensor := sensors[k] as EcsSensorComponent
-		_scan(sensing.ids[k], EcsConst.NODE_SENSOR, sensor.radius, sensor.shape, sensor.perceived,
-			_sensor_area, _sensor_circle, _sensor_collider)
-	var acting := world.view([EcsPositionComponent, EcsActionComponent])
-	if acting != _action_view:
-		_action_view = acting
-		_prune(world, EcsActionComponent, _action_area, _action_circle, _action_collider)
-	var actions := acting.column(EcsActionComponent)
-	for k in acting.ids.size():
-		var action := actions[k] as EcsActionComponent
-		_scan(acting.ids[k], EcsConst.NODE_ACTION, action.radius, action.shape, action.reached,
-			_action_area, _action_circle, _action_collider)
+	var edits := world.get_singleton(EcsEditSingleton) as EcsEditSingleton
+	var edited := edits.applied if edits != null else 0
+	var everyone := edited != _edits_seen
+	_edits_seen = edited
+	_pass(world, _sensor, everyone)
+	_pass(world, _action, everyone)
 
 ## Number of entities whose nodes are cached, sensor and action. For tests.
 func cached() -> Vector2i:
-	return Vector2i(_sensor_area.size(), _action_area.size())
+	return Vector2i(_sensor.areas.size(), _action.areas.size())
 
-## Drops cached nodes of entities that are dead or no longer have `type`.
-static func _prune(world: EcsWorld, type: Script, areas: Dictionary, circles: Dictionary,
-		colliders: Dictionary) -> void:
-	for id: int in areas.keys():
-		if not world.has(id, type):
-			areas.erase(id)
-			circles.erase(id)
-			colliders.erase(id)
+## Rewrites every entity's list after a change to the view or an edit, else only the marked ones'.
+func _pass(world: EcsWorld, watch: Watch, everyone: bool) -> void:
+	var view := world.view([EcsPositionComponent, watch.type])
+	if view != watch.view:
+		watch.view = view
+		_prune(world, watch)
+		everyone = true
+	if everyone:
+		var column := view.column(watch.type)
+		for k in view.ids.size():
+			_scan(view.ids[k], column[k], watch)
+	else:
+		for id: int in watch.dirty:
+			var component := world.get_component(id, watch.type)
+			if component != null and world.has(id, EcsPositionComponent):
+				_scan(id, component, watch)
+	watch.dirty.clear()
 
-## Sets the area's shape (or its circle's radius) and refills `into` (in place) with
-## the ids it overlaps, excluding the entity itself.
-func _scan(id: int, kind: StringName, radius: float, shape: Shape2D, into: Array[int],
-		areas: Dictionary, circles: Dictionary, colliders: Dictionary) -> void:
+## Drops cached nodes and marks of entities that are dead or no longer have the component.
+func _prune(world: EcsWorld, watch: Watch) -> void:
+	for id: int in watch.areas.keys():
+		if world.has(id, watch.type):
+			continue
+		var area = watch.areas[id]  # Untyped: a dead entity's area is already freed.
+		var mark: Callable = watch.marks.get(id, Callable())
+		if is_instance_valid(area) and mark.is_valid():
+			if area.area_shape_entered.is_connected(mark):
+				area.area_shape_entered.disconnect(mark)
+			if area.area_shape_exited.is_connected(mark):
+				area.area_shape_exited.disconnect(mark)
+		watch.areas.erase(id)
+		watch.circles.erase(id)
+		watch.colliders.erase(id)
+		watch.marks.erase(id)
+		watch.dirty.erase(id)
+
+# The shape signals, not area_entered/exited: only they report an area freed after it left the tree.
+func _mark(_rid: RID, _other, _other_shape: int, _own_shape: int, id: int, dirty: Dictionary) -> void:
+	dirty[id] = true
+
+## Sets the area's shape (or its circle's radius) and refills the component's list (in
+## place) with the ids it overlaps, excluding the entity itself.
+func _scan(id: int, component: EcsComponent, watch: Watch) -> void:
+	rescanned += 1
+	var into: Array[int] = component.get(watch.field)
 	into.clear()
 
-	var area: Area2D = areas.get(id)
+	var area: Area2D = watch.areas.get(id)
 	if area == null:
-		area = _manager.node_for(id, kind) as Area2D
+		area = _manager.node_for(id, watch.node_kind) as Area2D
 		if area == null:
 			return
-		areas[id] = area
+		watch.areas[id] = area
 		var found := area.get_node(^"Collider") as CollisionShape2D
-		colliders[id] = found
-		circles[id] = found.shape as CircleShape2D
+		watch.colliders[id] = found
+		watch.circles[id] = found.shape as CircleShape2D
+		var mark := _mark.bind(id, watch.dirty)
+		area.area_shape_entered.connect(mark)
+		area.area_shape_exited.connect(mark)
+		watch.marks[id] = mark
 
-	var circle: CircleShape2D = circles[id]
-	var collider: CollisionShape2D = colliders[id]
+	var radius: float = component.get(&"radius")
+	var shape: Shape2D = component.get(&"shape")
+	var circle: CircleShape2D = watch.circles[id]
+	var collider: CollisionShape2D = watch.colliders[id]
 	var wanted: Shape2D = shape if shape != null else circle
 	if collider.shape != wanted:
 		collider.shape = wanted

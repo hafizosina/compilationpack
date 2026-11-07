@@ -128,6 +128,8 @@ func _run() -> void:
 	_the_sensor_forgets_the_nodes_of_the_dead()
 	await _a_shaped_wall_pushes_and_a_shaped_sensor_sees_by_its_shape()
 	await _collision_works_from_contacts_and_changes()
+	await _the_sensor_lists_match_a_fresh_look_every_tick()
+	await _the_sensor_rescans_only_what_changed()
 	_a_look_scene_is_built_as_authored()
 	_a_skill_can_cost_health_or_fullness()
 	_the_world_index_sorts_the_world_once()
@@ -3928,6 +3930,104 @@ func _collision_works_from_contacts_and_changes() -> void:
 	collision.clear()
 	manager.clear()
 	root.queue_free()
+
+## The sensor rewrites only marked lists, so a missed signal would leave one stale: in a busy
+## world, after every tick, each list equals what its area overlaps now, in the same order.
+func _the_sensor_lists_match_a_fresh_look_every_tick() -> void:
+	var root := Node2D.new()
+	add_child(root)
+	var manager := EcsEntityManager.new(root)
+	var world := _snapshot_world()
+	var living := _snapshot_pipeline(manager)
+	var spot := Vector2(-280000.0, 0.0)
+	var kinds := [&"rabbit", &"rabbit", &"rabbit", &"rabbit", &"rabbit", &"rabbit", &"monkey",
+		&"monkey", &"monkey", &"monkey", &"crocodile", &"wild_dog", &"berry_bush", &"berry_bush",
+		&"berry_bush", &"berry", &"berry", &"berry", &"berry", &"water"]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	for kind: StringName in kinds:
+		manager.spawn(world, _catalog, kind, spot + Vector2(rng.randf_range(-600.0, 600.0), rng.randf_range(-400.0, 400.0)))
+	var compared := 0
+	var stale := 0
+	var killed := EcsWorld.NO_ENTITY
+	var watcher := EcsWorld.NO_ENTITY
+	for i in 300:
+		living.run_all(world, TICK)
+		for id in world.query([EcsPositionComponent, EcsSensorComponent]):
+			var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
+			compared += 1
+			if sensor.perceived != _overlaps_now(manager, id, EcsConst.NODE_SENSOR):
+				stale += 1
+			var reach := world.get_component(id, EcsActionComponent) as EcsActionComponent
+			if reach != null and reach.reached != _overlaps_now(manager, id, EcsConst.NODE_ACTION):
+				stale += 1
+			if i == 100 and killed == EcsWorld.NO_ENTITY:
+				for seen in sensor.perceived:
+					if not world.has(seen, EcsSensorComponent) and not world.has(seen, EcsDyingFlag):
+						killed = seen
+						watcher = id
+						world.add(seen, EcsDyingFlag.new())
+						break
+		await get_tree().physics_frame
+	_check("every sensor and reach list matched a fresh look, every tick (%d stale of %d)" % [stale, compared],
+		stale == 0 and compared > 1000)
+	var watched := world.get_component(watcher, EcsSensorComponent) as EcsSensorComponent
+	_check("a perceived thing that died left its watcher's list",
+		killed != EcsWorld.NO_ENTITY and watched != null and not watched.perceived.has(killed))
+	manager.clear()
+	root.queue_free()
+
+## Animals standing apart with nothing coming or going aren't rescanned; a live edit of a
+## sensor's radius is seen at the next runs.
+func _the_sensor_rescans_only_what_changed() -> void:
+	var root := Node2D.new()
+	add_child(root)
+	var manager := EcsEntityManager.new(root)
+	var world := _snapshot_world()
+	var inbox := EcsEditSingleton.new()
+	world.add_singleton(inbox)
+	var sensing := EcsSensorSystem.new(manager)
+	var still := EcsScheduler.new()
+	still.add(EcsLifecycleSystem.new(manager, _catalog)).add(sensing).add(EcsNodeSyncSystem.new(manager))
+	var spot := Vector2(-300000.0, 0.0)
+	var rabbit := EcsWorld.NO_ENTITY
+	for i in 5:
+		rabbit = manager.spawn(world, _catalog, &"rabbit", spot + Vector2(i * 3000.0, 0.0))
+	var sensor := world.get_component(rabbit, EcsSensorComponent) as EcsSensorComponent
+	var berry := manager.spawn(world, _catalog, &"berry", spot + Vector2(4 * 3000.0 + sensor.radius + 60.0, 0.0))
+	var run := func(ticks: int) -> void:
+		for i in ticks:
+			still.run_all(world, TICK)
+			await get_tree().physics_frame
+
+	await run.call(3)
+	var settled := sensing.rescanned
+	await run.call(10)
+	_check("animals with nothing coming or going aren't rescanned", sensing.rescanned == settled)
+	_check("the berry just past its sight isn't seen", not sensor.perceived.has(berry))
+
+	var edit := EcsEdit.new()
+	edit.ids = [rabbit]
+	edit.component = &"sensor"
+	edit.field = &"radius"
+	edit.value = sensor.radius + 200.0
+	inbox.edits.append(edit)
+	EcsEditSystem.new().run(world, 0.0)
+	await run.call(3)
+	_check("a live edit of the sensor's radius is seen: now the berry is", sensor.perceived.has(berry))
+	manager.clear()
+	root.queue_free()
+
+## What `id`'s area of `kind` overlaps now, excluding itself, in Godot's order.
+func _overlaps_now(manager: EcsEntityManager, id: int, kind: StringName) -> Array[int]:
+	var found: Array[int] = []
+	var area := manager.node_for(id, kind) as Area2D
+	if area == null:
+		return found
+	for other: EcsEntityArea in area.get_overlapping_areas():
+		if other.entity_id != id:
+			found.append(other.entity_id)
+	return found
 
 func _radius_in(world: EcsWorld, id: int) -> float:
 	return (world.get_component(id, EcsBodyComponent) as EcsBodyComponent).radius
