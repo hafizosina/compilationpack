@@ -60,8 +60,12 @@ func run(world: EcsWorld, _delta: float) -> void:
 		var danger := world.get_component(id, EcsDangerComponent) as EcsDangerComponent
 		var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
 		var thirst := world.get_component(id, EcsThirstComponent) as EcsThirstComponent
-		var ranked := _rank(planner, hunger, energy, danger, bag, thirst, _index.ready.has(id))
+		var ready := _index.ready.has(id)
 		# Wants nothing now and planned for nothing: no fact could change its empty plan.
+		if planner.ranking.is_empty() and planner.planned and not planner.dirty \
+				and not wants_any(hunger, energy, danger, bag, thirst, ready):
+			continue
+		var ranked := _rank(planner, hunger, energy, danger, bag, thirst, ready)
 		if ranked.is_empty() and planner.ranking.is_empty() and planner.planned and not planner.dirty:
 			continue
 		var facts := _facts(world, id, hunger, bag, danger, thirst)
@@ -136,6 +140,24 @@ static func score(goal: EcsGoalDef, hunger: EcsHungerComponent, energy: EcsEnerg
 				return goal.weight * (FLOOR + (1.0 - FLOOR)
 					* (danger.value - danger.flee_at) / maxf(1.0 - danger.flee_at, 0.01))
 	return 0.0
+
+## Whether any need is at or under the gate score() scores it from. False means every goal
+## scores 0, without scoring each one.
+static func wants_any(hunger: EcsHungerComponent, energy: EcsEnergyComponent,
+		danger: EcsDangerComponent, bag: EcsInventoryComponent, thirst: EcsThirstComponent,
+		ready: bool) -> bool:
+	if ready:
+		return true
+	if danger != null and danger.value >= danger.flee_at:
+		return true
+	if energy != null and energy.value <= energy.rest_at:
+		return true
+	# Provision's gate (with a bag) is never below eating's; starving and parched score anywhere.
+	if hunger != null and (hunger.fullness <= 0.0 or hunger.fullness <= (hunger.forage_below
+			if bag != null else minf(hunger.forage_below, hunger.eat_below))):
+		return true
+	return thirst != null and (EcsNeeds.parched(thirst)
+		or thirst.hydration <= minf(thirst.seek_water_below, thirst.drink_below))
 
 ## The goals that score above 0, best first, with the bonus on the current one.
 static func _rank(planner: EcsPlannerComponent, hunger: EcsHungerComponent,

@@ -403,8 +403,9 @@ for e with Memory, Sensor, Position, not Dying:          # no walk over every fa
 for e with Planner, LowBrain, not Dying:
     if e's AttackIntent target is Dying: settling = 1; continue    # wait for the corpse
     if settling > 0: settling -= 1; continue
+    if planner.ranking is empty and planned and not dirty and not wants_any(e): continue   # wants nothing
     ranked = rank(e)
-    if ranked is empty and planner.ranking is empty and planned and not dirty: continue   # wants nothing
+    if ranked is empty and planner.ranking is empty and planned and not dirty: continue
     facts  = snapshot(e)
     if not dirty and (not planned or facts != planner.facts or ids(ranked) != planner.ranking):
         dirty = true; queue e
@@ -423,6 +424,8 @@ score(goal):
     rest       -> weight * urgency(energy, rest_at)
     flee       -> weight * (FLOOR + (1 - FLOOR) * (danger - flee_at) / (1 - flee_at))  if danger >= flee_at
 rank: goals scoring > 0, best first, +0.5 on the current goal
+wants_any: ready, danger >= flee_at, energy <= rest_at, fullness <= its lowest gate or <= 0,
+           hydration <= its lower gate or parched — true exactly when some goal could score > 0
 
 snapshot(e) -> only true facts:
     starving, parched, has_room, food_in_bag (of its diet), dash_ready, ready_to_breed

@@ -63,7 +63,8 @@ func run(world: EcsWorld, delta: float) -> void:
 		# A threat is the one danger already found, not another walk over what it sees.
 		if danger != null and danger.threat != EcsWorld.NO_ENTITY and sensor.perceived.has(danger.threat) \
 				and EcsHunting.notices(world, id, danger.threat, here):
-			_write(world, memory, danger.threat, EcsMemoryFact.THREAT, true)
+			_write(world, memory, danger.threat, memory.facts.get(danger.threat) as EcsMemoryFact,
+				EcsMemoryFact.THREAT, true)
 
 		_check_watched(world.get_component(id, EcsMovementComponent) as EcsMovementComponent,
 			memory, sensor, here)
@@ -114,8 +115,9 @@ func _learn(world: EcsWorld, id: int, here: Vector2, sensor: EcsSensorComponent,
 		memory: EcsMemoryComponent, drinks: bool, eats: StringName,
 		hunts: bool, kinds: Array[StringName], kind: StringName, delta: float) -> void:
 	for seen in sensor.perceived:
+		var prey := hunts and _is_prey(world, id, seen, here)
 		if not kinds.is_empty():
-			_count_traffic(world, id, here, seen, memory, delta)
+			_count_traffic(world, seen, prey, memory, delta)
 		var bits := 0
 		if drinks and _index.water.has(seen):
 			bits |= EcsMemoryFact.WATER
@@ -127,19 +129,21 @@ func _learn(world: EcsWorld, id: int, here: Vector2, sensor: EcsSensorComponent,
 			var crop: EcsHarvestableComponent = _index.crops.get(seen)
 			if crop != null and crop.diet == eats and crop.stock > 0:
 				bits |= EcsMemoryFact.BUSH
-		if hunts and _is_prey(world, id, seen, here):
+		if prey:
 			bits |= EcsMemoryFact.PREY
 		if kind != &"" and seen != id and _index.ready.get(seen, &"") == kind:
 			bits |= EcsMemoryFact.MATE
 		# Threats are danger's to judge; the walk keeps the bit.
 		var old := memory.facts.get(seen) as EcsMemoryFact
-		if old != null and EcsMemoryFact.strength_of(old, memory) > 0.0:
-			bits |= old.kinds & EcsMemoryFact.THREAT
+		if old != null and old.kinds & EcsMemoryFact.THREAT != 0 \
+				and EcsMemoryFact.strength_of(old, memory) > 0.0:
+			bits |= EcsMemoryFact.THREAT
 		if bits == 0:
 			# Seen as nothing that matters now, such as an emptied bush.
-			memory.facts.erase(seen)
+			if old != null:
+				memory.facts.erase(seen)
 			continue
-		_write(world, memory, seen, bits, false)
+		_write(world, memory, seen, old, bits, false)
 
 ## EcsHunting.can_hunt and notices, for a known hunter: weaker, alive, and not hidden from it.
 ## Looked up per sighting, so no death rebuilds an index of every body.
@@ -152,9 +156,10 @@ func _is_prey(world: EcsWorld, id: int, seen: int, here: Vector2) -> bool:
 		return false
 	return not world.has(seen, EcsHiddenFlag) or EcsHunting.notices(world, id, seen, here)
 
-## Remembers `seen` as `bits`, seen now: replacing its kinds, or adding to them.
-func _write(world: EcsWorld, memory: EcsMemoryComponent, seen: int, bits: int, add: bool) -> void:
-	var fact := memory.facts.get(seen) as EcsMemoryFact
+## Remembers `seen` as `bits`, seen now: replacing its kinds, or adding to them. `fact` is
+## what it already knows of `seen`, or null.
+func _write(world: EcsWorld, memory: EcsMemoryComponent, seen: int, fact: EcsMemoryFact, bits: int,
+		add: bool) -> void:
 	if fact == null or not fact.fixed:
 		# Seen by the sensor, gone since: nothing to remember.
 		var at := world.get_component(seen, EcsPositionComponent) as EcsPositionComponent
@@ -186,10 +191,10 @@ static func _forget_weakest(memory: EcsMemoryComponent) -> void:
 
 ## Prey `seen` near a lure adds `delta` to its traffic; a corpse near one adds
 ## `kill_traffic`, once.
-func _count_traffic(world: EcsWorld, id: int, here: Vector2, seen: int,
-		memory: EcsMemoryComponent, delta: float) -> void:
+func _count_traffic(world: EcsWorld, seen: int, prey: bool, memory: EcsMemoryComponent,
+		delta: float) -> void:
 	var corpse := world.has(seen, EcsRotComponent)
-	if not corpse and not (EcsHunting.can_hunt(world, id, seen) and EcsHunting.notices(world, id, seen, here)):
+	if not corpse and not prey:
 		return
 	var at := world.get_component(seen, EcsPositionComponent) as EcsPositionComponent
 	if at == null:

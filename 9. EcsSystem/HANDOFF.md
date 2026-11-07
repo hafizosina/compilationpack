@@ -1056,7 +1056,11 @@ with stock, prey by `EcsHunting.can_hunt`, room, starving, threat). A planner th
 now and planned for nothing last time skips the snapshot: with no goal ranked, no fact can change
 its empty plan, so this changes no behaviour. That is ~92% of planners at any moment in world1
 tiled, and it took planning from 20.5 to 9.0 ms a run at 1,044 entities (2026-11-07, live,
-overlay off); what is left is mostly ranking and its component lookups. A planner is queued only
+overlay off). Scoring a goal costs ~0.9 µs of call overhead, so such a planner isn't ranked at all:
+`wants_any` asks once whether any need is at or under the gate `score()` scores it from (a
+5,000-case test pins the two together), which took planning to 7.0 ms a run. Ranking's inputs
+change every run (hunger and energy each update just before one of planning's two phases), so
+skipping on unchanged bars would never fire. What is left is the component lookups. A planner is queued only
 when its facts or its ranking differ from what its plan was made from. A settled creature is
 never replanned, and a need crossing its gate, a target appearing or vanishing, a hit or a
 kill each replan once. At most `MAX_REPLANS` (64) are planned per run, oldest first; the rest
@@ -1451,7 +1455,9 @@ per run (it runs every third tick):
 | 1,044 | 12.90 | 10.26 | 8.87 | 9.55 |
 
 Runs differ by about ±1 ms. What is left is learning, per sighting, so a bigger memory no longer costs
-more per tick. In a 180 s run of world1, of 133 mover facts 125 had lost track and 2 were unplaced by
+more per tick. Profiled inside at 1,044 (~1,165 sightings a run, ~4.5 µs each): a hunter asked
+"can I hunt it and do I notice it" twice per sighting, for traffic and for the prey bit, and the old
+fact was looked up twice; asking each once took memory from 7.9 to 6.7 ms a run. In a 180 s run of world1, of 133 mover facts 125 had lost track and 2 were unplaced by
 a walk to an empty spot.
 
 ---

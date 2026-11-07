@@ -93,6 +93,7 @@ func _run() -> void:
 	await _planned_plant_eaters_harvest_then_eat_or_take()
 	await _replans_follow_events_not_the_clock()
 	await _hunger_and_danger_are_weighed_both_ways()
+	_wants_any_agrees_with_scores()
 	await _a_rabbit_flees_what_could_hunt_it()
 	await _skills_start_end_and_cool()
 	await _a_hidden_hunter_is_noticed_late()
@@ -1990,6 +1991,48 @@ func _replans_follow_events_not_the_clock() -> void:
 	for id in crowd:
 		_world.add(id, EcsDyingFlag.new())
 	await _tick(1)
+
+## The planner's cheap any-need check agrees with scoring every goal, over random bars and
+## gates, at the gates exactly, and with readings missing.
+func _wants_any_agrees_with_scores() -> void:
+	var goals: Array[EcsGoalDef] = []
+	for goal in ["breed", "flee", "provision", "quench", "rest", "satisfy_hunger"]:
+		goals.append(load("res://9. EcsSystem/defs/goals/%s.tres" % goal) as EcsGoalDef)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var wrong := 0
+	var wanting := 0
+	for i in 5000:
+		var hunger := EcsHungerComponent.new()
+		hunger.forage_below = rng.randi_range(0, 100)
+		hunger.eat_below = rng.randi_range(0, 100)
+		hunger.fullness = rng.randi_range(-1, 101)
+		var energy := EcsEnergyComponent.new()
+		energy.rest_at = rng.randi_range(0, 100)
+		energy.value = rng.randi_range(0, 100)
+		var danger := EcsDangerComponent.new()
+		danger.flee_at = rng.randi_range(1, 10) / 10.0
+		danger.value = rng.randi_range(0, 10) / 10.0
+		var thirst := EcsThirstComponent.new()
+		thirst.seek_water_below = rng.randi_range(0, 100)
+		thirst.drink_below = rng.randi_range(0, 100)
+		thirst.parched_below = rng.randi_range(0, 40)
+		thirst.hydration = rng.randi_range(0, 100)
+		var bag := EcsInventoryComponent.new() if rng.randf() < 0.5 else null
+		var ready := rng.randf() < 0.1
+		if rng.randf() < 0.1: hunger = null
+		if rng.randf() < 0.1: energy = null
+		if rng.randf() < 0.1: danger = null
+		if rng.randf() < 0.1: thirst = null
+		var any := false
+		for goal in goals:
+			if EcsPlanningSystem.score(goal, hunger, energy, danger, bag, thirst, ready) > 0.0:
+				any = true
+		wanting += 1 if any else 0
+		if any != EcsPlanningSystem.wants_any(hunger, energy, danger, bag, thirst, ready):
+			wrong += 1
+	_check("the any-need check agrees with every goal's score (%d of 5000 wrong, %d wanting)"
+		% [wrong, wanting], wrong == 0 and wanting > 250 and wanting < 4750)
 
 ## Starving outranks danger; merely hungry or fed, danger wins.
 func _hunger_and_danger_are_weighed_both_ways() -> void:
