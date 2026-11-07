@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="EcsEntityDef" format=3]
+[gd_resource type="Resource" script_class="EcsEntityDef" format=3 uid="uid://d131jmlanknv1"]
 
 [ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="base"]
 [ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="def"]

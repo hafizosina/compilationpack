@@ -17,8 +17,8 @@ texture = ExtResource("t_sheet")
 
 [sub_resource type="Resource" id="c_furn"]
 script = ExtResource("s_furn")
-against_wall = true
 tags = Array[StringName]([&"bed"])
+against_wall = true
 
 [resource]
 script = ExtResource("def")

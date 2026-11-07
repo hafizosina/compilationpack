@@ -5,7 +5,7 @@
 
 [resource]
 script = ExtResource("1")
+rubble = &"rubble"
 key = &"wood"
 display_name = "wood"
 texture = ExtResource("2_sheet")
-rubble = &"rubble"
