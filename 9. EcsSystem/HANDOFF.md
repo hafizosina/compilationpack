@@ -571,6 +571,12 @@ pixels**, and `-1` means "has no such reading", so a berry draws no bars. The ov
 with `_draw()`, not Controls, so it sits outside the theme. Text and bars hold a fixed size on
 screen; the badge and sleep icon are sized off each sprite in world units, so they zoom with
 the animal — and they sit on the sprite actually drawn, since blueprints scale their own art.
+**Only what is on screen is sent** (2026-11-06): the system asks the overlay for the camera's
+world rect (`view_rect`, plus 200 screen px so labels don't pop at the edge) and skips every
+entity outside it, so the cost follows the view, not the world. Measured live, overlay on, same
+machine and power state: 1,044 entities went from 28.4 ms of `debug` per tick and 1.1 FPS to
+2.9 ms and 3.2 FPS (the simulation itself is then the limit); 232 from 5.2 to 48 FPS. An entity
+off screen with its destination on screen draws no line to it.
 
 **Selection** is strictly ECS: `main.gd` only *records* a click on `EcsSelectionSingleton`,
 `EcsSelectionSystem` resolves it next tick by a distance query over positions (no physics

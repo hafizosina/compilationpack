@@ -1,11 +1,13 @@
 class_name EcsDebugSystem
 extends EcsSystem
 
-## Sends a per-entity snapshot to the debug overlay. Read only. Bars are
-## ratios; -1 means the entity has no such reading.
+## Sends a per-entity snapshot to the debug overlay, for entities on screen only. Read only.
+## Bars are ratios; -1 means the entity has no such reading.
 
 ## Seconds a bite stays marked on its target.
 const BITE_SHOW := 0.35
+## Screen pixels past the view's edge still sent, so labels don't pop at the border.
+const VIEW_MARGIN := 200.0
 
 var _overlay: EcsDebugOverlay
 
@@ -29,9 +31,16 @@ func run(world: EcsWorld, _delta: float) -> void:
 			bites[target] = [fresh, (world.get_component(id, EcsPositionComponent) as EcsPositionComponent).position]
 
 	var rows: Array[Dictionary] = []
-	for id in world.query([EcsNameComponent, EcsPositionComponent]):
-		var named := world.get_component(id, EcsNameComponent) as EcsNameComponent
-		var place := world.get_component(id, EcsPositionComponent) as EcsPositionComponent
+	var on_screen := _overlay.view_rect(VIEW_MARGIN)
+	var view := world.view([EcsNameComponent, EcsPositionComponent])
+	var names := view.column(EcsNameComponent)
+	var places := view.column(EcsPositionComponent)
+	for k in view.ids.size():
+		var place := places[k] as EcsPositionComponent
+		if not on_screen.has_point(place.position):
+			continue
+		var id := view.ids[k]
+		var named := names[k] as EcsNameComponent
 		var move := world.get_component(id, EcsMovementComponent) as EcsMovementComponent
 		var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
 

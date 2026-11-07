@@ -58,6 +58,12 @@ func show_rows(rows: Array[Dictionary]) -> void:
 	_rows = rows
 	queue_redraw()
 
+## The world rect on screen, grown by `margin` screen pixels.
+func view_rect(margin: float) -> Rect2:
+	var to_world := get_canvas_transform().affine_inverse()
+	var zoom := maxf(get_canvas_transform().get_scale().x, 0.0001)
+	return (to_world * get_viewport_rect()).grow(margin / zoom)
+
 func clear() -> void:
 	_rows = []
 	queue_redraw()
