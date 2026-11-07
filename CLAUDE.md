@@ -306,7 +306,8 @@ dictionary of facts and the action defs in `defs/actions/` — and writes only
 `EcsPlannerComponent`. A planned creature's brain runs **only the rung for the plan's first
 step**; one whose planner has never planned keeps the ladder, which is what the ladder tests
 still pin. **Replans happen on events**: a planner is queued only when its facts or goal
-ranking changed, at most `MAX_REPLANS` per run. A step is an action id, never an entity:
+ranking changed, at most `MAX_REPLANS` per run, and one that wants nothing (no goal ranked, now
+or at its last plan) skips the facts snapshot. A step is an action id, never an entity:
 **targets bind at execution**, so the eat after a kill binds to the corpse. **Danger** fills
 while a threat is seen and jumps on a hit (`EcsHurtFlag`, raised by damage); `flee` wins only
 by score, and collapse is still the only forced override.

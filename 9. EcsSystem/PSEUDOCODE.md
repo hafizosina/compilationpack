@@ -403,8 +403,9 @@ for e with Memory, Sensor, Position, not Dying:          # no walk over every fa
 for e with Planner, LowBrain, not Dying:
     if e's AttackIntent target is Dying: settling = 1; continue    # wait for the corpse
     if settling > 0: settling -= 1; continue
-    facts  = snapshot(e)
     ranked = rank(e)
+    if ranked is empty and planner.ranking is empty and planned and not dirty: continue   # wants nothing
+    facts  = snapshot(e)
     if not dirty and (not planned or facts != planner.facts or ids(ranked) != planner.ranking):
         dirty = true; queue e
 replan up to 64 from the queue, oldest first:

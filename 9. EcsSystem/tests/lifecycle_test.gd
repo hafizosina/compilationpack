@@ -1951,6 +1951,15 @@ func _replans_follow_events_not_the_clock() -> void:
 	for i in 100:
 		planning.run(_world, TICK)
 	_check("a settled creature plans once (%d)" % planner.replans, planner.replans == 1)
+	var sensor := _world.get_component(croc, EcsSensorComponent) as EcsSensorComponent
+	var passing := _manager.spawn(_world, _catalog, &"rabbit", spot + Vector2(250.0, 0.0))
+	sensor.perceived.append(passing)
+	for i in 100:
+		planning.run(_world, TICK)
+	_check("wanting nothing, prey in sight changes no plan (%d)" % planner.replans,
+		planner.replans == 1)
+	sensor.perceived.erase(passing)
+	_world.add(passing, EcsDyingFlag.new())
 	hunger.fullness = 20.0
 	for i in 100:
 		planning.run(_world, TICK)

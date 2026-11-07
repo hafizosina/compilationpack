@@ -845,7 +845,9 @@ they took the average tick at 4,000 hungry from 203 to 119 ms and the heaviest f
 
 If the planner needs to get cheaper, the levers are, in order: snapshot only planners whose
 sensor or reach lists changed; run planning at 10 Hz; then move `EcsPlanner.plan` to
-`WorkerThreadPool`, which only pays once replans rather than snapshots dominate.
+`WorkerThreadPool`, which only pays once replans rather than snapshots dominate. (2026-11-07:
+planners that want nothing now skip the snapshot, §18; the plan search itself was ~0.1 ms of a
+20 ms run, so the thread would still save almost nothing.)
 
 **Previous ramp**, 2026-10-29, `86d6028`, game rates
 (`--every=sensor:3:0,low_brain:3:1,hunger:6:2,energy:6:5,health:3:2`), against `6ee5529`
@@ -1048,9 +1050,13 @@ the ladder's fall-through: hungry with nothing to eat in sight, it rests or wand
 shows as the goal only until energy passes `rest_at`; the brain's own sleep-until-rested
 holds the creature down after that, so a sleeper often shows no goal.
 
-**Replans happen on events, not on a clock.** Each run snapshots every planner's facts (the
-same tests the rungs make: food in bag, reach or sight by diet, a bush with stock, prey by
-`EcsHunting.can_hunt`, room, starving, threat) and ranks its goals. A planner is queued only
+**Replans happen on events, not on a clock.** Each run ranks every planner's goals and
+snapshots its facts (the same tests the rungs make: food in bag, reach or sight by diet, a bush
+with stock, prey by `EcsHunting.can_hunt`, room, starving, threat). A planner that wants nothing
+now and planned for nothing last time skips the snapshot: with no goal ranked, no fact can change
+its empty plan, so this changes no behaviour. That is ~92% of planners at any moment in world1
+tiled, and it took planning from 20.5 to 9.0 ms a run at 1,044 entities (2026-11-07, live,
+overlay off); what is left is mostly ranking and its component lookups. A planner is queued only
 when its facts or its ranking differ from what its plan was made from. A settled creature is
 never replanned, and a need crossing its gate, a target appearing or vanishing, a hit or a
 kill each replan once. At most `MAX_REPLANS` (64) are planned per run, oldest first; the rest

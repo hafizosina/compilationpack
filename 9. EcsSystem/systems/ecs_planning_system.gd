@@ -4,7 +4,8 @@ extends EcsSystem
 ## Chooses each planner's goal by utility and plans the route to it. Writes only
 ## EcsPlannerComponent; the brain executes the first step.
 ##
-## Each run it snapshots facts and ranks goals for every planner. A planner is
+## Each run it ranks goals for every planner, and snapshots facts for those that want
+## something now or did at their last plan. A planner is
 ## queued for a replan only when its facts or its ranking changed; at most
 ## MAX_REPLANS are planned per run, oldest first. Planning goes through goals in
 ## rank order until one has a plan. A planner whose kill is dying waits until its
@@ -59,8 +60,11 @@ func run(world: EcsWorld, _delta: float) -> void:
 		var danger := world.get_component(id, EcsDangerComponent) as EcsDangerComponent
 		var bag := world.get_component(id, EcsInventoryComponent) as EcsInventoryComponent
 		var thirst := world.get_component(id, EcsThirstComponent) as EcsThirstComponent
-		var facts := _facts(world, id, hunger, bag, danger, thirst)
 		var ranked := _rank(planner, hunger, energy, danger, bag, thirst, _index.ready.has(id))
+		# Wants nothing now and planned for nothing: no fact could change its empty plan.
+		if ranked.is_empty() and planner.ranking.is_empty() and planner.planned and not planner.dirty:
+			continue
+		var facts := _facts(world, id, hunger, bag, danger, thirst)
 		facts_of[id] = facts
 		ranked_of[id] = ranked
 		if planner.dirty:
