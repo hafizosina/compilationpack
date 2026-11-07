@@ -288,6 +288,16 @@ pass per tick, converging over a few ticks; `intersect_shape()` is the synchrono
 alternative if that ever matters. It costs: a fast mover can tunnel between ticks, a
 squeezed body can be pushed through a third, and nothing bounces.
 
+**Collision works only on contacts and changes** (2026-11-07). The pairs are a contact list kept
+by each body area's `area_entered` / `area_exited` signals, which Godot emits at the start of the
+physics tick from the same overlap data `get_overlapping_areas()` returns, so the list is exactly
+as old as before. A connected area that already overlaps something (the first build, a body
+switched back on) is seeded from one query; a death's pairs are dropped at the next rebuild,
+since a freed area sends no exit. Non-solid pairs stay on the list and are skipped by the push,
+so an edit to solid finds them. Shapes, radii and monitoring are synced onto the areas only on a
+rebuild or when `EcsEditSingleton.applied` moves, the same trigger node sync uses. Measured live
+at 1,050 entities, alternating runs: collision 2.07 → 0.13 ms a tick, 44 → 55 FPS.
+
 The body is **data, not a physics body** — the sim runs with no scene tree. The overlay does
 not draw body circles: the tree holds real `CollisionShape2D`s, so Godot's **Debug > Visible
 Collision Shapes** shows what the physics server actually uses.
@@ -848,6 +858,15 @@ sensor or reach lists changed; run planning at 10 Hz; then move `EcsPlanner.plan
 `WorkerThreadPool`, which only pays once replans rather than snapshots dominate. (2026-11-07:
 planners that want nothing now skip the snapshot, §18; the plan search itself was ~0.1 ms of a
 20 ms run, so the thread would still save almost nothing.)
+
+**Collision, live** (2026-11-07, world1 tiled 3×3, overlay off): 2.07 ms every tick at 1,050
+entities while only ~8 pairs touched. 1.77 ms of it was re-checking all 1,044 areas' shape,
+radius and monitoring against their components, and 0.45 ms asking all 432 movers for overlaps.
+Now pairs come from the areas' signals and the sync runs only on a rebuild or an edit (§5): 0.13
+ms a tick, and 44 → 55 FPS at 1,050 (alternating old/new runs, twice). In those runs sensor,
+planning and memory each rose 0.1–0.3 ms a tick, unexplained; with fewer catch-up ticks most
+frames now run one tick with a render between. Godot's own physics step is 2.2 ms a tick at
+1,050 (~3,000 area pairs, mostly the 280–500 px sensors) and is untouched.
 
 **Previous ramp**, 2026-10-29, `86d6028`, game rates
 (`--every=sensor:3:0,low_brain:3:1,hunger:6:2,energy:6:5,health:3:2`), against `6ee5529`

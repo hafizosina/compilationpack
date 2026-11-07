@@ -645,15 +645,20 @@ for e with Position, Movement:
 
 ```
 working set: every Position + Body with its body area; movable = also has Movement
-sync: area circle radius = body radius; monitoring = is_solid; monitorable = true
-for i movable and solid:
-    for other area overlapping i's:
-        skip if other not solid
-        gap = distance; touching = radius_i + radius_other
-        if gap < touching: position_i += away_from_other * (touching - gap) / 2
+on rebuild: connect new areas' entered/exited signals; seed pairs they already overlap;
+            drop pairs naming an entity no longer in the set
+area entered other: contacts.add(me, other)      # emitted by Godot before the tick's scripts
+area exited other:  contacts.erase(me, other)
+if rebuilt or edits.applied changed:
+    sync: area circle radius = body radius; monitoring = is_solid; monitorable = true
+for (i, other) in contacts:
+    skip unless i movable and solid, and other solid
+    gap = distance; touching = radius_i + radius_other
+    if gap < touching: position_i += away_from_other * (touching - gap) / 2
 ```
 
-Each pair is reported both ways, so each body moving half makes it symmetric.
+Each pair is on record both ways, so each body moving half makes it symmetric. Cost follows
+contacts, births, deaths and edits, not the number of bodies.
 
 ### pickup — executor of TakeIntent
 

@@ -463,7 +463,9 @@ It finds the pairs with an `Area2D` per solid entity — **the one deliberate ex
 index, and the only thing read back is which pairs are near each other, never where
 anything is. Do not widen that exception. `EcsEntityManager` owns those areas (it builds
 one for any entity whose `EcsBodyComponent` declares it) and they ride their entity's
-container, so the collision system writes only the radius and whether the body is live.
+container, so the collision system writes only the radius and whether the body is live —
+and only on a rebuild or an edit (`EcsEditSingleton.applied`). Its pairs are a contact list
+kept by the areas' enter/exit signals, so its cost follows contacts, not bodies (HANDOFF §5).
 The debug overlay does **not** draw body circles — there are real `CollisionShape2D`s in
 the tree now, so Godot's Debug > Visible Collision Shapes is the viewer. The pipeline
 therefore runs in **`_physics_process`** (fixed timestep; the overlap list refreshes once

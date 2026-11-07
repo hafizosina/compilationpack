@@ -127,6 +127,7 @@ func _run() -> void:
 	_a_save_keeps_the_random_rolls()
 	_the_sensor_forgets_the_nodes_of_the_dead()
 	await _a_shaped_wall_pushes_and_a_shaped_sensor_sees_by_its_shape()
+	await _collision_works_from_contacts_and_changes()
 	_a_look_scene_is_built_as_authored()
 	_a_skill_can_cost_health_or_fullness()
 	_the_world_index_sorts_the_world_once()
@@ -3862,6 +3863,74 @@ func _a_shaped_wall_pushes_and_a_shaped_sensor_sees_by_its_shape() -> void:
 		not sensor.perceived.has(beside) and place.position.distance_to(spot + Vector2(120.0, -120.0)) < sensor.radius)
 	manager.clear()
 	root.queue_free()
+
+## Collision keeps its pairs from the areas' signals and syncs shapes only on a change:
+## idle bodies cost no sync, an edit is seen both ways, and a death leaves no pair behind.
+func _collision_works_from_contacts_and_changes() -> void:
+	var root := Node2D.new()
+	add_child(root)
+	var manager := EcsEntityManager.new(root)
+	var world := _snapshot_world()
+	var inbox := EcsEditSingleton.new()
+	world.add_singleton(inbox)
+	var editing := EcsEditSystem.new()
+	var collision := EcsCollisionSystem.new(manager)
+	var living := EcsScheduler.new()
+	living.add(EcsLifecycleSystem.new(manager, _catalog)).add(collision).add(EcsNodeSyncSystem.new(manager))
+	var spot := Vector2(-260000.0, 0.0)
+	var a := manager.spawn(world, _catalog, &"rabbit", spot)
+	var b := manager.spawn(world, _catalog, &"rabbit", spot + Vector2(10.0, 0.0))
+	manager.spawn(world, _catalog, &"rabbit", spot + Vector2(0.0, 2000.0))
+	var pa := world.get_component(a, EcsPositionComponent) as EcsPositionComponent
+	var pb := world.get_component(b, EcsPositionComponent) as EcsPositionComponent
+	var touching := _radius_in(world, a) + _radius_in(world, b)
+	var set_solid := func(id: int, solid: bool) -> void:
+		var edit := EcsEdit.new()
+		edit.ids = [id]
+		edit.component = &"body"
+		edit.field = &"is_solid"
+		edit.value = solid
+		inbox.edits.append(edit)
+		editing.run(world, 0.0)
+	var run := func(ticks: int) -> void:
+		for i in ticks:
+			living.run_all(world, TICK)
+			await get_tree().physics_frame
+
+	await run.call(30)
+	_check("two stacked bodies are pushed apart from their signalled contact",
+		pa.position.distance_to(pb.position) >= touching - 0.5)
+	var synced := collision.synced
+	await run.call(10)
+	_check("with no birth, death or edit the shapes aren't synced again", collision.synced == synced)
+
+	pa.position = spot
+	pb.position = spot + Vector2(10.0, 0.0)
+	set_solid.call(a, false)
+	await run.call(10)
+	_check("an edit to non-solid is seen: the two now pass through each other",
+		pa.position.is_equal_approx(spot) and pb.position.is_equal_approx(spot + Vector2(10.0, 0.0)))
+	set_solid.call(a, true)
+	await run.call(30)
+	_check("and back to solid: both are pushed again, not only the one that never changed",
+		not pa.position.is_equal_approx(spot) and not pb.position.is_equal_approx(spot + Vector2(10.0, 0.0))
+		and pa.position.distance_to(pb.position) >= touching - 0.5)
+
+	pb.position = pa.position + Vector2(10.0, 0.0)
+	await run.call(2)
+	_check("touching bodies are on record", collision.contacts() > 0)
+	world.add(b, EcsDyingFlag.new())
+	await run.call(3)
+	var left := pa.position
+	await run.call(10)
+	_check("a death mid-contact leaves no pair behind", collision.contacts() == 0)
+	_check("and the survivor isn't pushed by a ghost", pa.position == left)
+	collision.clear()
+	manager.clear()
+	root.queue_free()
+
+func _radius_in(world: EcsWorld, id: int) -> float:
+	return (world.get_component(id, EcsBodyComponent) as EcsBodyComponent).radius
 
 ## One shared index files food, crops, water, cover, lures, ready mates and hunters; its
 ## tables hold live components, leave the dying out, rebuild only on change and aren't saved.
