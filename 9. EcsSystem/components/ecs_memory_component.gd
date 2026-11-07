@@ -26,6 +26,14 @@ const KIND_NAMES: Dictionary = {1: "water", 2: "lure", 4: "food", 8: "bush", 16:
 
 ## Remembered entity id -> EcsMemoryFact.
 var facts: Dictionary = {}
+## Clock time of its last memory run; facts' ages are read against it.
+var as_of: float = 0.0
+## The trip destination last matched to a fact, and that fact's id (or none). Only the fact it
+## is walking to is checked against what it sees.
+var watch_spot: Vector2 = Vector2.INF
+var watching: int = EcsWorld.NO_ENTITY
+## Seconds until fleeing may mark ponds feared again.
+var fear_left: float = 0.0
 ## Its own constant answers, re-asked every second or so: does it drink, what it eats, the
 ## cover kinds it hides in, its type.
 var drinks: bool = false
@@ -42,16 +50,21 @@ func describe() -> Dictionary:
 	var lines := {}
 	for about in facts:
 		var fact := facts[about] as EcsMemoryFact
+		var strength := EcsMemoryFact.strength_of(fact, self)
+		if strength <= 0.0:
+			continue
 		var names: PackedStringArray = []
 		for bit in KIND_NAMES:
 			if fact.kinds & bit != 0:
 				names.append(KIND_NAMES[bit])
-		var kind := ", ".join(names)
-		var text := "%d%% at (%d, %d)" % [roundi(fact.strength * 100.0),
+		var what := ", ".join(names)
+		var text := "%d%% at (%d, %d)" % [roundi(strength * 100.0),
 			roundi(fact.position.x), roundi(fact.position.y)]
-		if fact.fear > 0.0:
-			text += ", fear %d%%" % roundi(fact.fear * 100.0)
-		if fact.traffic > 0.0:
-			text += ", traffic %.1f" % fact.traffic
-		lines["#%d %s" % [about, kind]] = text
+		var fear := EcsMemoryFact.fear_of(fact, self)
+		if fear > 0.0:
+			text += ", fear %d%%" % roundi(fear * 100.0)
+		var traffic := EcsMemoryFact.traffic_of(fact, self)
+		if traffic > 0.0:
+			text += ", traffic %.1f" % traffic
+		lines["#%d %s" % [about, what]] = text
 	return {"tab": &"own", "lines": lines}

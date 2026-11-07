@@ -2,21 +2,28 @@ class_name EcsMemorySystem
 extends EcsSystem
 
 ## Remembers what each animal sees that matters to it: water it drinks, food and bushes of
-## its diet, lures it hides in, what can hunt it and what it can hunt. Facts fade while
-## unseen, and one whose spot is in sight without its thing is forgotten at once. A pond
-## where a threat was met is feared; a lure where prey or a kill was seen gains traffic.
+## its diet, lures it hides in, what can hunt it and what it can hunt. Nothing walks every
+## fact each run: ages are timestamps read later, and only the fact it is walking to is checked
+## against what it sees — its spot in sight without its thing, it is forgotten. A pond where a
+## threat was met is feared; a lure where prey or a kill was seen gains traffic.
 
 ## Seconds between asking an animal's constant answers again.
 const PROFILE_EVERY: float = 1.0
+## Seconds between marking ponds feared while it flees.
+const FEAR_EVERY: float = 1.0
 
 ## The world index, as of this run.
 var _index: EcsWorldIndexSingleton
+## This animal's lure facts, gathered the first time this run needs them.
+var _lures: Array[EcsMemoryFact] = []
+var _lures_ready: bool = false
 
 func label() -> StringName:
 	return &"memory"
 
 func run(world: EcsWorld, delta: float) -> void:
 	_index = EcsWorldIndex.of(world)
+	var now := EcsClockSingleton.now_of(world)
 	var minds := world.view([EcsMemoryComponent, EcsSensorComponent, EcsPositionComponent], [EcsDyingFlag])
 	var memories := minds.column(EcsMemoryComponent)
 	var sensors := minds.column(EcsSensorComponent)
@@ -26,29 +33,19 @@ func run(world: EcsWorld, delta: float) -> void:
 		var memory := memories[k] as EcsMemoryComponent
 		var sensor := sensors[k] as EcsSensorComponent
 		var here := (places[k] as EcsPositionComponent).position
-		var fade := delta / memory.remember_for
-		var calm := delta / memory.fear_for
-		var cool := pow(0.5, delta / memory.traffic_half_life)
-		var sight := sensor.radius * sensor.radius
-		var lures: Array[EcsMemoryFact] = []
-		for about in memory.facts.keys():
-			var fact := memory.facts[about] as EcsMemoryFact
-			fact.strength -= fade
-			if fact.strength <= 0.0 \
-					or (here.distance_squared_to(fact.position) <= sight and not sensor.perceived.has(about)):
-				memory.facts.erase(about)
-				continue
-			fact.fear = maxf(fact.fear - calm, 0.0)
-			fact.traffic *= cool
-			if fact.is_a(EcsMemoryFact.LURE):
-				lures.append(fact)
+		memory.as_of = now
+		_lures_ready = false
 
 		var danger := world.get_component(id, EcsDangerComponent) as EcsDangerComponent
-		if danger != null and danger.value >= danger.flee_at:
+		memory.fear_left -= delta
+		if danger == null or danger.value < danger.flee_at:
+			memory.fear_left = 0.0
+		elif memory.fear_left <= 0.0:
+			memory.fear_left = FEAR_EVERY
 			for about in memory.facts:
 				var fact := memory.facts[about] as EcsMemoryFact
 				if fact.is_a(EcsMemoryFact.WATER) and _near(fact, danger.threat_at, memory.near):
-					fact.fear = 1.0
+					fact.feared_at = now
 
 		memory.profile_left -= delta
 		if memory.profile_left <= 0.0:
@@ -62,14 +59,41 @@ func run(world: EcsWorld, delta: float) -> void:
 		# Nothing it could learn by looking around: skip the walk.
 		var kind := memory.kind if not _index.ready.is_empty() else &""
 		if drinks or eats != &"" or hunts or kind != &"":
-			_learn(world, id, here, sensor, memory, lures, drinks, eats, hunts, kinds, kind, delta)
+			_learn(world, id, here, sensor, memory, drinks, eats, hunts, kinds, kind, delta)
 		# A threat is the one danger already found, not another walk over what it sees.
 		if danger != null and danger.threat != EcsWorld.NO_ENTITY and sensor.perceived.has(danger.threat) \
 				and EcsHunting.notices(world, id, danger.threat, here):
 			_write(world, memory, danger.threat, EcsMemoryFact.THREAT, true)
 
+		_check_watched(world.get_component(id, EcsMovementComponent) as EcsMovementComponent,
+			memory, sensor, here)
+
 		if memory.facts.size() > memory.capacity:
 			_forget_weakest(memory)
+
+## Checks the one fact at its latest destination, walking there or arrived: once that spot is
+## in sight, the thing is there or the fact is forgotten. Matching a new destination to a fact
+## walks the facts once per trip, never per run.
+static func _check_watched(move: EcsMovementComponent, memory: EcsMemoryComponent,
+		sensor: EcsSensorComponent, here: Vector2) -> void:
+	if move != null and move.destination != memory.watch_spot:
+		memory.watch_spot = move.destination
+		memory.watching = EcsWorld.NO_ENTITY
+		for about in memory.facts:
+			if (memory.facts[about] as EcsMemoryFact).position == move.destination:
+				memory.watching = about
+				break
+	if memory.watching == EcsWorld.NO_ENTITY:
+		return
+	var fact := memory.facts.get(memory.watching) as EcsMemoryFact
+	if fact == null or fact.position != memory.watch_spot:
+		memory.watching = EcsWorld.NO_ENTITY
+		return
+	if here.distance_squared_to(fact.position) > sensor.radius * sensor.radius \
+			or sensor.perceived.has(fact.about):
+		return
+	memory.facts.erase(fact.about)
+	memory.watching = EcsWorld.NO_ENTITY
 
 ## Asks `id`'s constant answers again; each id keeps its own period so they don't all land on one run.
 static func _profile(world: EcsWorld, id: int, memory: EcsMemoryComponent) -> void:
@@ -83,11 +107,11 @@ static func _profile(world: EcsWorld, id: int, memory: EcsMemoryComponent) -> vo
 
 ## Walks what `id` sees and remembers what matters to it.
 func _learn(world: EcsWorld, id: int, here: Vector2, sensor: EcsSensorComponent,
-		memory: EcsMemoryComponent, lures: Array[EcsMemoryFact], drinks: bool, eats: StringName,
+		memory: EcsMemoryComponent, drinks: bool, eats: StringName,
 		hunts: bool, kinds: Array[StringName], kind: StringName, delta: float) -> void:
 	for seen in sensor.perceived:
-		if not lures.is_empty():
-			_count_traffic(world, id, here, seen, lures, memory, delta)
+		if not kinds.is_empty():
+			_count_traffic(world, id, here, seen, memory, delta)
 		var bits := 0
 		if drinks and _index.water.has(seen):
 			bits |= EcsMemoryFact.WATER
@@ -105,7 +129,7 @@ func _learn(world: EcsWorld, id: int, here: Vector2, sensor: EcsSensorComponent,
 			bits |= EcsMemoryFact.MATE
 		# Threats are danger's to judge; the walk keeps the bit.
 		var old := memory.facts.get(seen) as EcsMemoryFact
-		if old != null:
+		if old != null and EcsMemoryFact.strength_of(old, memory) > 0.0:
 			bits |= old.kinds & EcsMemoryFact.THREAT
 		if bits == 0:
 			# Seen as nothing that matters now, such as an emptied bush.
@@ -142,18 +166,18 @@ func _write(world: EcsWorld, memory: EcsMemoryComponent, seen: int, bits: int, a
 		var body := world.get_component(seen, EcsBodyComponent) as EcsBodyComponent
 		fact.radius = body.radius if body != null else 0.0
 	fact.kinds = (fact.kinds | bits) if add else bits
-	fact.strength = 1.0
+	fact.seen_at = memory.as_of
 
 ## Forgets the weakest facts until `memory` is at capacity, in one pass.
 static func _forget_weakest(memory: EcsMemoryComponent) -> void:
 	var facts := memory.facts.values()
-	facts.sort_custom(func(a: EcsMemoryFact, b: EcsMemoryFact) -> bool: return a.strength < b.strength)
+	facts.sort_custom(func(a: EcsMemoryFact, b: EcsMemoryFact) -> bool: return a.seen_at < b.seen_at)
 	for i in facts.size() - memory.capacity:
 		memory.facts.erase((facts[i] as EcsMemoryFact).about)
 
 ## Prey `seen` near a lure adds `delta` to its traffic; a corpse near one adds
 ## `kill_traffic`, once.
-func _count_traffic(world: EcsWorld, id: int, here: Vector2, seen: int, lures: Array[EcsMemoryFact],
+func _count_traffic(world: EcsWorld, id: int, here: Vector2, seen: int,
 		memory: EcsMemoryComponent, delta: float) -> void:
 	var corpse := world.has(seen, EcsRotComponent)
 	if not corpse and not (EcsHunting.can_hunt(world, id, seen) and EcsHunting.notices(world, id, seen, here)):
@@ -161,10 +185,19 @@ func _count_traffic(world: EcsWorld, id: int, here: Vector2, seen: int, lures: A
 	var at := world.get_component(seen, EcsPositionComponent) as EcsPositionComponent
 	if at == null:
 		return
+	if not _lures_ready:
+		_lures_ready = true
+		_lures.clear()
+		for about in memory.facts:
+			var lure := memory.facts[about] as EcsMemoryFact
+			if lure.is_a(EcsMemoryFact.LURE) and EcsMemoryFact.strength_of(lure, memory) > 0.0:
+				_lures.append(lure)
 	var there := at.position
-	for fact in lures:
+	for fact in _lures:
 		if not _near(fact, there, memory.near):
 			continue
+		fact.traffic = EcsMemoryFact.traffic_of(fact, memory)
+		fact.traffic_at = memory.as_of
 		if not corpse:
 			fact.traffic += delta
 		elif not fact.kills_seen.has(seen):

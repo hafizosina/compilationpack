@@ -251,6 +251,8 @@ func _facts(world: EcsWorld, id: int, hunger: EcsHungerComponent, bag: EcsInvent
 	if memory != null:
 		for about in memory.facts:
 			var fact := memory.facts[about] as EcsMemoryFact
+			if EcsMemoryFact.strength_of(fact, memory) <= 0.0:
+				continue
 			if fact.is_a(EcsMemoryFact.WATER) and drinks:
 				facts[&"water_known"] = true
 			if fact.is_a(EcsMemoryFact.LURE) and hunts:

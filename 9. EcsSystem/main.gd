@@ -200,6 +200,7 @@ func _build(snapshot: Dictionary = {}) -> void:
 	_scheduler \
 		.add(lifecycle) \
 		.add(edit) \
+		.add(EcsClockSystem.new()) \
 		.add(EcsSpawnerSystem.new()) \
 		.add(EcsHungerSystem.new(), BARS, 2) \
 		.add(EcsEnergySystem.new(), BARS, 5) \
@@ -234,6 +235,7 @@ func _build(snapshot: Dictionary = {}) -> void:
 	_world.add_singleton(EcsLifecycleSingleton.new())
 	_world.add_singleton(EcsCombatSingleton.new())
 	_world.add_singleton(EcsHealthSingleton.new())
+	_world.add_singleton(EcsClockSingleton.new())
 	var random := _world.add_singleton(EcsRandomSingleton.new()) as EcsRandomSingleton
 	random.rng.seed = random_seed if random_seed != 0 else randi()
 	print("[ecs] seed %d" % random.rng.seed)

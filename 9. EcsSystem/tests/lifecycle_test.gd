@@ -30,6 +30,7 @@ func _ready() -> void:
 	_world.add_singleton(EcsLifecycleSingleton.new())
 	_world.add_singleton(EcsCombatSingleton.new())
 	_world.add_singleton(EcsHealthSingleton.new())
+	_world.add_singleton(EcsClockSingleton.new())
 
 	# No brain or movement here, so nothing moves unless the test moves it.
 	_scheduler = EcsScheduler.new()
@@ -2921,9 +2922,14 @@ func _prey_scan_before_drinking() -> void:
 		watched["ran"] and not watched["drank"])
 	EcsConst.world_bounds = bounds
 
+## Advances the world clock by `delta`, then runs memory over that much time.
+func _remember(memory: EcsMemorySystem, delta: float) -> void:
+	(_world.get_singleton(EcsClockSingleton) as EcsClockSingleton).now += delta
+	memory.run(_world, delta)
+
 ## Memory keeps water for drinkers and lures for the hunter that hides in them. A
-## fact fades while unseen, a spot seen without its thing is forgotten at once, and
-## past capacity the weakest goes.
+## fact fades while unseen; walking to a spot and seeing it without its thing forgets it,
+## passing by does not; past capacity the oldest goes.
 func _memory_learns_fades_and_is_proven_wrong() -> void:
 	var memory := EcsMemorySystem.new()
 	var skills := EcsSkillSystem.new()
@@ -2959,31 +2965,40 @@ func _memory_learns_fades_and_is_proven_wrong() -> void:
 		(r[pond] as EcsMemoryFact).position == _position_of(pond))
 
 	var rabbit_at := _world.get_component(rabbit, EcsPositionComponent) as EcsPositionComponent
-	var remember_for := (_world.get_component(rabbit, EcsMemoryComponent) as EcsMemoryComponent).remember_for
+	var r_mind := _world.get_component(rabbit, EcsMemoryComponent) as EcsMemoryComponent
+	var remember_for := r_mind.remember_for
 	rabbit_at.position = spot + Vector2(5000.0, 0.0)
 	sees.call(rabbit, [])
-	memory.run(_world, remember_for * 0.5)
+	_remember(memory, remember_for * 0.5)
 	_check("out of sight, a fact fades but stays",
-		r.has(pond) and is_equal_approx((r[pond] as EcsMemoryFact).strength, 0.5))
+		r.has(pond) and is_equal_approx(EcsMemoryFact.strength_of(r[pond], r_mind), 0.5))
 	sees.call(rabbit, [pond])
-	memory.run(_world, TICK)
-	_check("seen again, it is fresh", is_equal_approx((r[pond] as EcsMemoryFact).strength, 1.0))
+	_remember(memory, TICK)
+	_check("seen again, it is fresh", is_equal_approx(EcsMemoryFact.strength_of(r[pond], r_mind), 1.0))
 	sees.call(rabbit, [])
-	memory.run(_world, remember_for * 1.01)
-	_check("unseen for remember_for, it is forgotten", not r.has(pond))
+	_remember(memory, remember_for * 1.01)
+	_check("unseen for remember_for, it is forgotten",
+		EcsMemoryFact.best(r_mind, rabbit_at.position, 100.0, EcsMemoryFact.WATER) == null)
 
 	sees.call(rabbit, [pond])
-	memory.run(_world, TICK)
+	_remember(memory, TICK)
 	rabbit_at.position = spot
 	sees.call(rabbit, [])
-	memory.run(_world, TICK)
-	_check("its spot in sight without it, it is forgotten at once", not r.has(pond))
+	_remember(memory, TICK)
+	_check("passing its spot with no trip there, it is kept", r.has(pond))
+	var trip := _world.get_component(rabbit, EcsMovementComponent) as EcsMovementComponent
+	trip.destination = (r[pond] as EcsMemoryFact).position
+	trip.has_destination = true
+	_remember(memory, TICK)
+	trip.has_destination = false
+	_check("walking to its spot and seeing it without it, it is forgotten", not r.has(pond))
 
-	(d[far_bush] as EcsMemoryFact).strength = 0.5
-	(_world.get_component(dog, EcsMemoryComponent) as EcsMemoryComponent).capacity = 2
+	var d_mind := _world.get_component(dog, EcsMemoryComponent) as EcsMemoryComponent
+	(d[far_bush] as EcsMemoryFact).seen_at = d_mind.as_of - d_mind.remember_for * 0.5
+	d_mind.capacity = 2
 	sees.call(dog, [pond, bush])
-	memory.run(_world, TICK)
-	_check("past capacity, the weakest is forgotten (%d kept)" % d.size(),
+	_remember(memory, TICK)
+	_check("past capacity, the oldest is forgotten (%d kept)" % d.size(),
 		d.size() == 2 and not d.has(far_bush))
 	for id in [rabbit, dog, croc, pond, bush, far_bush]:
 		_world.add(id, EcsDyingFlag.new())
@@ -3085,25 +3100,25 @@ func _fear_and_traffic_price_places() -> void:
 	danger.threat_at = _position_of(far_pond)
 	memory.run(_world, TICK)
 	_check("a threat below fleeing frightens no pond",
-		(mind.facts[far_pond] as EcsMemoryFact).fear == 0.0)
+		EcsMemoryFact.fear_of(mind.facts[far_pond], mind) == 0.0)
 	danger.value = danger.flee_at + 0.1
 	danger.threat_at = _position_of(near_pond)
 	memory.run(_world, TICK)
 	danger.value = 0.0
 	_check("a threat met by a pond makes it feared, and not a far one",
-		(mind.facts[near_pond] as EcsMemoryFact).fear > 0.99
-		and (mind.facts[far_pond] as EcsMemoryFact).fear == 0.0)
+		EcsMemoryFact.fear_of(mind.facts[near_pond], mind) > 0.99
+		and EcsMemoryFact.fear_of(mind.facts[far_pond], mind) == 0.0)
 	planning.run(_world, TICK)
 	brain.run(_world, TICK)
 	var state := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
 	var planner := _world.get_component(rabbit, EcsPlannerComponent) as EcsPlannerComponent
 	_check("the nearer pond feared, it goes to the far one (%s)" % " > ".join(planner.steps),
 		planner.steps == [&"go_to_water", &"drink"] and state.target == far_pond)
-	memory.run(_world, mind.fear_for)
+	_remember(memory, mind.fear_for)
 	var here := _position_of(rabbit)
 	_check("once the fear fades, the near one is cheaper again",
 		EcsMemoryFact.best(mind, here, speed, EcsMemoryFact.WATER, true, sensor.perceived).about == near_pond)
-	(mind.facts[near_pond] as EcsMemoryFact).fear = 1.0
+	(mind.facts[near_pond] as EcsMemoryFact).feared_at = mind.as_of
 	mind.facts.erase(far_pond)
 	_check("a feared pond still beats none",
 		EcsMemoryFact.best(mind, here, speed, EcsMemoryFact.WATER, true, sensor.perceived).about == near_pond)
@@ -3123,12 +3138,14 @@ func _fear_and_traffic_price_places() -> void:
 	var dog_mind := _world.get_component(dog, EcsMemoryComponent) as EcsMemoryComponent
 	var dog_speed := (_world.get_component(dog, EcsMovementComponent) as EcsMovementComponent).speed
 	skills.run(_world, TICK)
-	memory.run(_world, TICK)
-	memory.run(_world, 5.0)
+	_remember(memory, TICK)
+	_remember(memory, 5.0)
 	var busy := dog_mind.facts[busy_bush] as EcsMemoryFact
 	var quiet := dog_mind.facts[near_bush] as EcsMemoryFact
-	_check("prey seen by a lure builds its traffic, not another's (%.1f, %.1f)" % [busy.traffic, quiet.traffic],
-		busy.traffic > 4.0 and quiet.traffic == 0.0)
+	var busy_traffic := EcsMemoryFact.traffic_of(busy, dog_mind)
+	var quiet_traffic := EcsMemoryFact.traffic_of(quiet, dog_mind)
+	_check("prey seen by a lure builds its traffic, not another's (%.1f, %.1f)" % [busy_traffic, quiet_traffic],
+		busy_traffic > 4.0 and quiet_traffic == 0.0)
 	eyes.perceived.erase(visitor)
 	planning.run(_world, TICK)
 	brain.run(_world, TICK)
@@ -3139,14 +3156,16 @@ func _fear_and_traffic_price_places() -> void:
 
 	var corpse := _manager.spawn(_world, _catalog, &"corpse", spot2 + Vector2(300.0, 100.0))
 	eyes.perceived.append(corpse)
-	memory.run(_world, TICK)
-	memory.run(_world, TICK)
-	_check("a corpse by a lure counts once (%.2f)" % quiet.traffic,
-		quiet.traffic > dog_mind.kill_traffic * 0.99 and quiet.traffic <= dog_mind.kill_traffic)
+	_remember(memory, TICK)
+	_remember(memory, TICK)
+	quiet_traffic = EcsMemoryFact.traffic_of(quiet, dog_mind)
+	_check("a corpse by a lure counts once (%.2f)" % quiet_traffic,
+		quiet_traffic > dog_mind.kill_traffic * 0.99 and quiet_traffic <= dog_mind.kill_traffic)
 	eyes.perceived.erase(corpse)
-	var before := busy.traffic
-	memory.run(_world, dog_mind.traffic_half_life)
-	_check("traffic halves over its half-life", is_equal_approx(busy.traffic, before * 0.5))
+	var before := EcsMemoryFact.traffic_of(busy, dog_mind)
+	_remember(memory, dog_mind.traffic_half_life)
+	_check("traffic halves over its half-life",
+		is_equal_approx(EcsMemoryFact.traffic_of(busy, dog_mind), before * 0.5))
 	for id in [rabbit, near_pond, far_pond, dog, near_bush, busy_bush, visitor, corpse]:
 		_world.add(id, EcsDyingFlag.new())
 	EcsLifecycleSystem.new(_manager, _catalog).run(_world, TICK)
@@ -4525,6 +4544,7 @@ func _snapshot_world() -> EcsWorld:
 	world.add_singleton(EcsLifecycleSingleton.new())
 	world.add_singleton(EcsCombatSingleton.new())
 	world.add_singleton(EcsHealthSingleton.new())
+	world.add_singleton(EcsClockSingleton.new())
 	return world
 
 ## main.gd's pipeline without the view systems.
@@ -4532,6 +4552,7 @@ func _snapshot_pipeline(manager: EcsEntityManager) -> EcsScheduler:
 	var living := EcsScheduler.new()
 	living \
 		.add(EcsLifecycleSystem.new(manager, _catalog)) \
+		.add(EcsClockSystem.new()) \
 		.add(EcsSpawnerSystem.new()) \
 		.add(EcsHungerSystem.new()) \
 		.add(EcsEnergySystem.new()) \

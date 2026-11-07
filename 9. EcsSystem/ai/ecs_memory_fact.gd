@@ -1,8 +1,9 @@
 class_name EcsMemoryFact
 extends RefCounted
 
-## One remembered thing: what it was to the rememberer, where it was seen, and how fresh
-## that is. Each sighting rewrites `kinds`, so an emptied bush stops being food.
+## One remembered thing: what it was to the rememberer, where it was seen, and when. Each
+## sighting rewrites `kinds`, so an emptied bush stops being food. Freshness, fear and traffic
+## are stored as times and worked out when read, against the memory's `as_of`.
 
 ## Seconds of travel that cost one unit of a plan.
 const TRAVEL_SECONDS: float = 5.0
@@ -26,26 +27,41 @@ var radius: float = 0.0
 var fixed: bool = false
 ## What it is to the rememberer, as kind bits.
 var kinds: int = 0
-## 1 when seen, fading to 0 while unseen.
-var strength: float = 1.0
-## 1 when a threat was met here, fading to 0.
-var fear: float = 0.0
-## Seconds of prey seen here, fading; a kill seen here adds more.
+## Clock time it was last seen.
+var seen_at: float = 0.0
+## Clock time a threat was last met here.
+var feared_at: float = -INF
+## Seconds of prey seen here as of `traffic_at`; a kill seen here adds more.
 var traffic: float = 0.0
+var traffic_at: float = 0.0
 ## Corpse ids already counted into `traffic`.
 var kills_seen: Dictionary = {}
 
 func is_a(kind: int) -> bool:
 	return kinds & kind != 0
 
+## 1 when just seen, fading to 0 over `remember_for`; 0 means forgotten.
+static func strength_of(fact: EcsMemoryFact, memory: EcsMemoryComponent) -> float:
+	return clampf(1.0 - (memory.as_of - fact.seen_at) / memory.remember_for, 0.0, 1.0)
+
+## 1 when a threat was just met here, fading to 0 over `fear_for`.
+static func fear_of(fact: EcsMemoryFact, memory: EcsMemoryComponent) -> float:
+	return maxf(1.0 - (memory.as_of - fact.feared_at) / memory.fear_for, 0.0)
+
+## Its traffic now, halving every `traffic_half_life`.
+static func traffic_of(fact: EcsMemoryFact, memory: EcsMemoryComponent) -> float:
+	if fact.traffic == 0.0:
+		return 0.0
+	return fact.traffic * pow(0.5, (memory.as_of - fact.traffic_at) / memory.traffic_half_life)
+
 ## What going to `fact` costs a plan: the walk, plus fear (met here, or a remembered threat
 ## near it), plus the expected wait if it is a lure taken as one.
 static func score(fact: EcsMemoryFact, memory: EcsMemoryComponent, here: Vector2, speed: float,
 		kind: int) -> float:
 	var cost := 1.0 + here.distance_to(fact.position) / speed / TRAVEL_SECONDS
-	cost += memory.fear_cost * maxf(fact.fear, threat_near(memory, fact))
+	cost += memory.fear_cost * maxf(fear_of(fact, memory), threat_near(memory, fact))
 	if kind == LURE:
-		cost += memory.wait_cost / (1.0 + fact.traffic)
+		cost += memory.wait_cost / (1.0 + traffic_of(fact, memory))
 	return cost
 
 ## The strongest remembered threat within `near` of `fact`, 0 if none.
@@ -57,7 +73,7 @@ static func threat_near(memory: EcsMemoryComponent, fact: EcsMemoryFact) -> floa
 			continue
 		var reach := fact.radius + memory.near
 		if other.position.distance_squared_to(fact.position) <= reach * reach:
-			found = maxf(found, other.strength)
+			found = maxf(found, strength_of(other, memory))
 	return found
 
 ## The cheapest fact in `memory` of `kind`, or null. With `in_sight`, only facts about
@@ -70,7 +86,7 @@ static func best(memory: EcsMemoryComponent, here: Vector2, speed: float, kind: 
 		return found
 	for about in memory.facts:
 		var fact := memory.facts[about] as EcsMemoryFact
-		if not fact.is_a(kind):
+		if not fact.is_a(kind) or strength_of(fact, memory) <= 0.0:
 			continue
 		if in_sight and not seen.has(about):
 			continue
