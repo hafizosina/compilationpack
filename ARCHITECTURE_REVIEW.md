@@ -365,11 +365,27 @@ cache if long paths prove expensive.
 - **Scalability 1** goes with GOAP 3 (undecided); **3** (perception lists) stands as agreed on
   11-05, not scheduled; **4** (navigation) is module 10's later plan; **5**
   needs nothing.
+- **Live profile, 2026-11-06** (module 9's main scene rendered, world1 tiled up to 1,044
+  entities). Overlay off: 60 FPS to ~700, then the fixed-step catch-up collapses it (6 FPS at
+  1,044). Ranked: the debug overlay (fed and drawn for every entity), the catch-up spiral,
+  the slow stages each doing all their entities on one tick in three, then planning (~35% of
+  the sim), memory (~20%) and collision (~11%). **Fix 1 done**: the overlay is culled to the
+  camera (HANDOFF §10). Time-slicing the slow stages and capping catch-up ticks are proposed,
+  not decided. The planner is to move to its own thread later, so slicing would leave it out.
+- **Memory made lazy, 2026-11-07** (module 9 HANDOFF §20). Rule: all decay is lazy, and a fact is
+  checked only when the animal acts on it. There is a world clock (`EcsClockSingleton`), facts store
+  times, and nothing walks every fact per tick. Memory checks only the fact at the animal's own
+  latest movement destination. A fact about something that moves keeps its speed; when that thing
+  isn't found at its spot, the fact keeps who it was and loses only where. Memory per run at 1,044
+  entities: 12.9 → ~9 ms. What remains is learning from each thing seen, so a bigger memory no
+  longer costs more per tick. Relations and knowledge are to follow the same rules, off the same
+  clock.
 
 - **Memory knows deaths it never saw — to discuss later.** Not in the review. Memory itself is
-  right (copied positions; a fact goes when it fades or its spot is in sight without its thing),
-  but the brain peeks: `ecs_low_brain_system.gd:151` drops a RECALL trip the instant the remembered
-  entity dies anywhere, and `:420` skips remembered lures that are gone. Proposed: remove both
+  right (copied positions; a fact expires, or is found wrong when the animal walks to its spot
+  and sees it empty — 2026-11-07), but the brain peeks: `ecs_low_brain_system.gd:140` drops a
+  RECALL trip the instant the remembered entity dies anywhere, and `:409` skips remembered lures
+  that are gone. Proposed: remove both
   `is_alive` checks so a creature learns by seeing the spot empty. Being told (gossip, relations)
   is the later relations plan.
 
