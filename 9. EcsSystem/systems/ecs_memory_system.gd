@@ -6,6 +6,9 @@ extends EcsSystem
 ## unseen, and one whose spot is in sight without its thing is forgotten at once. A pond
 ## where a threat was met is feared; a lure where prey or a kill was seen gains traffic.
 
+## Seconds between asking an animal's constant answers again.
+const PROFILE_EVERY: float = 1.0
+
 ## The world index, as of this run.
 var _index: EcsWorldIndexSingleton
 
@@ -47,19 +50,17 @@ func run(world: EcsWorld, delta: float) -> void:
 				if fact.is_a(EcsMemoryFact.WATER) and _near(fact, danger.threat_at, memory.near):
 					fact.fear = 1.0
 
-		var drinks := not _index.water.is_empty() and world.has(id, EcsThirstComponent)
-		var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
-		var eats: StringName = hunger.eats if hunger != null else &""
-		if not _index.diets.has(eats):
-			eats = &""
+		memory.profile_left -= delta
+		if memory.profile_left <= 0.0:
+			_profile(world, id, memory)
+		var drinks := memory.drinks and not _index.water.is_empty()
+		var eats := memory.eats if _index.diets.has(memory.eats) else &""
 		var hunts := _index.hunters.has(id)
 		var kinds: Array[StringName] = []
 		if hunts and not _index.lures.is_empty():
-			kinds = EcsHunting.kinds_in(world.get_component(id, EcsSkillsComponent) as EcsSkillsComponent)
+			kinds = memory.hide_kinds
 		# Nothing it could learn by looking around: skip the walk.
-		var kind := &""
-		if not _index.ready.is_empty():
-			kind = (world.get_component(id, EcsNameComponent) as EcsNameComponent).type_id
+		var kind := memory.kind if not _index.ready.is_empty() else &""
 		if drinks or eats != &"" or hunts or kind != &"":
 			_learn(world, id, here, sensor, memory, lures, drinks, eats, hunts, kinds, kind, delta)
 		# A threat is the one danger already found, not another walk over what it sees.
@@ -69,6 +70,16 @@ func run(world: EcsWorld, delta: float) -> void:
 
 		if memory.facts.size() > memory.capacity:
 			_forget_weakest(memory)
+
+## Asks `id`'s constant answers again; each id keeps its own period so they don't all land on one run.
+static func _profile(world: EcsWorld, id: int, memory: EcsMemoryComponent) -> void:
+	memory.drinks = world.has(id, EcsThirstComponent)
+	var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+	memory.eats = hunger.eats if hunger != null else &""
+	memory.hide_kinds = EcsHunting.kinds_in(world.get_component(id, EcsSkillsComponent) as EcsSkillsComponent)
+	var name := world.get_component(id, EcsNameComponent) as EcsNameComponent
+	memory.kind = name.type_id if name != null else &""
+	memory.profile_left = PROFILE_EVERY * (0.5 + fposmod(id * 0.618034, 1.0))
 
 ## Walks what `id` sees and remembers what matters to it.
 func _learn(world: EcsWorld, id: int, here: Vector2, sensor: EcsSensorComponent,
@@ -115,19 +126,21 @@ func _is_prey(world: EcsWorld, id: int, seen: int, here: Vector2) -> bool:
 
 ## Remembers `seen` as `bits`, seen now: replacing its kinds, or adding to them.
 func _write(world: EcsWorld, memory: EcsMemoryComponent, seen: int, bits: int, add: bool) -> void:
-	# Seen by the sensor, gone since: nothing to remember.
-	var at := world.get_component(seen, EcsPositionComponent) as EcsPositionComponent
-	if at == null:
-		memory.facts.erase(seen)
-		return
 	var fact := memory.facts.get(seen) as EcsMemoryFact
-	if fact == null:
-		fact = EcsMemoryFact.new()
-		fact.about = seen
-		memory.facts[seen] = fact
-	fact.position = at.position
-	var body := world.get_component(seen, EcsBodyComponent) as EcsBodyComponent
-	fact.radius = body.radius if body != null else 0.0
+	if fact == null or not fact.fixed:
+		# Seen by the sensor, gone since: nothing to remember.
+		var at := world.get_component(seen, EcsPositionComponent) as EcsPositionComponent
+		if at == null:
+			memory.facts.erase(seen)
+			return
+		if fact == null:
+			fact = EcsMemoryFact.new()
+			fact.about = seen
+			fact.fixed = not world.has(seen, EcsMovementComponent)
+			memory.facts[seen] = fact
+		fact.position = at.position
+		var body := world.get_component(seen, EcsBodyComponent) as EcsBodyComponent
+		fact.radius = body.radius if body != null else 0.0
 	fact.kinds = (fact.kinds | bits) if add else bits
 	fact.strength = 1.0
 

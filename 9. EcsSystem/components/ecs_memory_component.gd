@@ -26,6 +26,14 @@ const KIND_NAMES: Dictionary = {1: "water", 2: "lure", 4: "food", 8: "bush", 16:
 
 ## Remembered entity id -> EcsMemoryFact.
 var facts: Dictionary = {}
+## Its own constant answers, re-asked every second or so: does it drink, what it eats, the
+## cover kinds it hides in, its type.
+var drinks: bool = false
+var eats: StringName = &""
+var hide_kinds: Array[StringName] = []
+var kind: StringName = &""
+## Seconds until those are asked again.
+var profile_left: float = 0.0
 
 func key() -> StringName:
 	return &"memory"

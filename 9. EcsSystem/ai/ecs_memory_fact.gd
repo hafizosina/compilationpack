@@ -22,6 +22,8 @@ var about: int = EcsWorld.NO_ENTITY
 var position: Vector2 = Vector2.ZERO
 ## Its body radius when seen.
 var radius: float = 0.0
+## It can't move, so its position and radius are never read again.
+var fixed: bool = false
 ## What it is to the rememberer, as kind bits.
 var kinds: int = 0
 ## 1 when seen, fading to 0 while unseen.
