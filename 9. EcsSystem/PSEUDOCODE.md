@@ -130,20 +130,21 @@ EcsHunting                                  # no prey tag: diet and power only
     dash_reach(e)         = dash skill's reach, else 0
 
 EcsMemoryFact          { about, position, radius, kinds bitmask, fixed, placed, velocity, speed,
-                         seen_at, feared_at, traffic, traffic_at, kills_seen }
+                         seen_at, in_sight,                       # the copy: written when it leaves sight
+                         feared_at, traffic, traffic_at, kills_seen }   # notes: written when learned
     bits: WATER 1, LURE 2, FOOD 4, BUSH 8, THREAT 16, PREY 32, MATE 64
     read against memory.as_of, never written per run:
-        strength = 1 - (as_of - seen_at) / remember_for          # 0 = forgotten
+        strength = 1 if in_sight else 1 - (as_of - seen_at) / remember_for   # 0 = forgotten
         fear     = 1 - (as_of - feared_at) / fear_for
         traffic  = traffic * 0.5 ^ ((as_of - traffic_at) / traffic_half_life)
-        spread   = speed * (as_of - seen_at)                     # 0 if it can't move
+        spread   = 0 if in_sight else speed * (as_of - seen_at)              # 0 if it can't move
         usable   = placed and strength > 0 and spread <= lose_track_at
-    score(fact, here, speed, kind):
-        cost = 1 + (distance(here, fact.position) + spread) / speed / 5
-        cost += fear_cost * max(fear, strongest placed THREAT fact within fact.radius + near)
-        if kind == LURE: cost += wait_cost / (1 + traffic)
-    best(memory, here, speed, kind, in_sight?, seen?) = usable fact of kind with the lowest score
-                                                        (only facts about ids in seen, if in_sight)
+    score_at(memory, about, position, radius, here, speed, kind):  # a place in sight, where it is now
+        cost = 1 + distance(here, position) / speed / 5
+        cost += fear_cost * max(fear of memory's note on about, strongest placed THREAT fact within radius + near)
+        if kind == LURE: cost += wait_cost / (1 + traffic of the note)
+    score(fact, here, speed, kind) = score_at at fact.position, plus spread in the walk
+    best(memory, here, speed, kind) = usable fact of kind, out of sight, with the lowest score
 ```
 
 ### Skills (`ai/`, data in `defs/skills/`)
@@ -209,7 +210,7 @@ Fields below the line in each row are runtime, written by systems; the rest are 
 | `Energy` | max_energy, drain_idle, drain_moving, restore, hide_restore, rest_at, wake_at, collapse_release, collapse_damage, start_min, start_max | value, rolled | energy, planning, brain |
 | `Health` | max_health, power | value | health, damage, hunger/thirst/energy write it |
 | `Danger` | fill, hit_jump, decay, flee_at | value, threat, threat_at | danger writes; planning, memory, brain |
-| `Memory` | capacity, remember_for, near, fear_for, fear_cost, traffic_half_life, wait_cost, kill_traffic, lose_track_at | facts, as_of, watch_spot, watching, fear_left, its cached answers | memory writes; planning, brain |
+| `Memory` | capacity, remember_for, near, fear_for, fear_cost, traffic_half_life, wait_cost, kill_traffic, lose_track_at | facts, as_of, sight, watch_spot, watching, fear_left, its cached answers | memory writes; planning, brain |
 | `Skills` | swaps | skills, resolved, cooldown_left, active_left | skill writes; brain, attack read |
 | `Breeding` | ready_above, cooldown, cost, litter | cooldown_left, rolled | breeding only |
 | `Inventory` | capacity | items: [EcsItemRecord] | pickup, consume, drop, corpse |
@@ -378,11 +379,13 @@ indexes: water, lures (cover that is water or a bush), crops, food by diet, hunt
 for e with Memory, Sensor, Position, not Dying:          # no walk over every fact
     as_of = clock.now
     every ~1 s: re-ask drinks, eats, hide kinds, type     # cached on the component
-    if danger >= flee_at, at most once a second:
-        feared_at = now on every WATER fact near danger.threat_at
-    if e drinks, eats a diet present, hunts, or anyone is ready:
-        for seen in perceived(e):                       # learn
-            if e hides at lures: count traffic          # prey near a lure: + dt; a corpse: + kill_traffic once
+    if danger >= flee_at, at most once a second:      # a note
+        feared_at = now on every WATER fact near danger.threat_at,
+                    and on water in sight near it (given a fact)
+    if perceived(e) != sight:                           # in sight, the AI reads the live entity
+        entered: its fact, if any: in_sight = true, seen_at = now
+        left, dead or Dying: forget it
+        left, alive:                                    # copied once, as it leaves
             bits  = WATER  if e drinks and seen is water
                   | LURE   if e hunts and seen is a lure of a kind e hides in
                   | FOOD   if seen is food of e's diet
@@ -390,10 +393,13 @@ for e with Memory, Sensor, Position, not Dying:          # no walk over every fa
                   | PREY   if e hunts and seen is weaker and noticed
                   | MATE   if seen is ready and e's type
                   | THREAT kept from the old fact
-            bits == 0 ? forget seen : write(seen, bits)
-                # write: seen_at = now, placed; a mover's position, velocity, speed copied;
+            bits == 0 ? forget seen : write(seen, bits); in_sight = false; seen_at = last run
+                # write: placed; a mover's position, velocity, speed copied;
                 # a thing that can't move (fixed) reads neither position nor body again
-    if danger.threat is in sight and noticed: add THREAT to its fact
+        sight = perceived(e)
+    if e hides at lures, for prey or a corpse in sight:  # a note
+        lures in sight get a fact; prey near a lure: traffic + dt; a corpse: + kill_traffic once
+    if danger.threat is in sight and noticed: add THREAT to its fact (in sight)
     if its destination changed: watching = the fact at that spot (one walk per trip)
     if the watched spot is in sight and its thing not perceived:
         fixed ? forget it : placed = false             # a mover keeps who, loses where
@@ -444,9 +450,10 @@ costs(e):                                            # only when it replans
     if prey_in_sight:
         hunt = min over noticed huntable prey of 1 + distance / (my speed - their speed) / 5
                (INF if no prey is slower)
-    for each memory kind known:
-        the in-sight go-to (go_to_water, go_to_lure, seek_mate) = score(best fact in sight)
-        the recall                                              = score(best fact), INF if none
+    for each memory kind:
+        if its *_in_sight: the go-to (go_to_water, go_to_lure, seek_mate)
+                           = cheapest score_at over those in sight, where they are now
+        if its *_known:    the recall = score(best fact), INF if none
 ```
 
 ### low_brain `[20 Hz]` — L1, the only thing that chooses
@@ -510,12 +517,12 @@ rungs:
     try_sleep:      energy <= rest_at, not starving, not parched -> stop; SLEEP
     try_drink:      thirsty (<= drink_below), not full, water in reach;
                     try_scan first if ready; else stop; DRINK(water)
-    try_seek_water: thirsty (<= seek_water_below); cheapest water in sight by memory score,
-                    else nearest -> SEEK_WATER + trip
+    try_seek_water: thirsty (<= seek_water_below); cheapest water in sight by score_at
+                    (nearest with no memory) -> SEEK_WATER + trip
     try_scan:       in SCAN: count pause down, release when done
                     else scan ready -> stop; SCAN; pause = scan duration
     try_cover:      cover in reach -> HIDE + trip to its middle
-                    else (lure_only: cheapest remembered lure in sight) or nearest cover in
+                    else (lure_only: cheapest lure in sight by score_at) or nearest cover in
                     sight it hides in -> HIDE + trip
     try_ambush:     in AMBUSH: patience -= dt; out of patience -> WANDER(target = the cover)
                     one leg straight away from it (a retreat leg the plan may not cut)

@@ -1,11 +1,11 @@
 class_name EcsMemorySystem
 extends EcsSystem
 
-## Remembers what each animal sees that matters to it: water it drinks, food and bushes of
-## its diet, lures it hides in, what can hunt it and what it can hunt. Nothing walks every
-## fact each run: ages are timestamps read later, and only the fact it is walking to is checked
-## against what it sees — its spot in sight without its thing, it is forgotten. A pond where a
-## threat was met is feared; a lure where prey or a kill was seen gains traffic.
+## Remembers what each animal has seen that matters to it: water it drinks, food and bushes of
+## its diet, lures it hides in, what can hunt it and what it can hunt. A thing is copied when it
+## leaves sight (forgotten if it died in sight); in sight, readers use the live entity. Notes are
+## written when learned: a pond where a threat was met is feared, a lure where prey or a kill was
+## seen gains traffic. Only the fact it is walking to is checked against what it sees.
 
 ## Seconds between asking an animal's constant answers again.
 const PROFILE_EVERY: float = 1.0
@@ -17,6 +17,9 @@ var _index: EcsWorldIndexSingleton
 ## This animal's lure facts, gathered the first time this run needs them.
 var _lures: Array[EcsMemoryFact] = []
 var _lures_ready: bool = false
+
+## Things copied into memory as they left sight. For tests.
+var copied: int = 0
 
 func label() -> StringName:
 	return &"memory"
@@ -33,6 +36,7 @@ func run(world: EcsWorld, delta: float) -> void:
 		var memory := memories[k] as EcsMemoryComponent
 		var sensor := sensors[k] as EcsSensorComponent
 		var here := (places[k] as EcsPositionComponent).position
+		var last_run := memory.as_of
 		memory.as_of = now
 		_lures_ready = false
 
@@ -42,10 +46,7 @@ func run(world: EcsWorld, delta: float) -> void:
 			memory.fear_left = 0.0
 		elif memory.fear_left <= 0.0:
 			memory.fear_left = FEAR_EVERY
-			for about in memory.facts:
-				var fact := memory.facts[about] as EcsMemoryFact
-				if fact.is_a(EcsMemoryFact.WATER) and _near(fact, danger.threat_at, memory.near):
-					fact.feared_at = now
+			_fear(world, memory, sensor, danger.threat_at)
 
 		memory.profile_left -= delta
 		if memory.profile_left <= 0.0:
@@ -56,15 +57,15 @@ func run(world: EcsWorld, delta: float) -> void:
 		var kinds: Array[StringName] = []
 		if hunts and not _index.lures.is_empty():
 			kinds = memory.hide_kinds
-		# Nothing it could learn by looking around: skip the walk.
 		var kind := memory.kind if not _index.ready.is_empty() else &""
-		if drinks or eats != &"" or hunts or kind != &"":
-			_learn(world, id, here, sensor, memory, drinks, eats, hunts, kinds, kind, delta)
+		if sensor.perceived != memory.sight:
+			_sight_changed(world, id, here, sensor, memory, drinks, eats, hunts, kinds, kind, last_run)
+		if not kinds.is_empty():
+			_watch_lures(world, id, here, sensor, memory, kinds, delta)
 		# A threat is the one danger already found, not another walk over what it sees.
 		if danger != null and danger.threat != EcsWorld.NO_ENTITY and sensor.perceived.has(danger.threat) \
 				and EcsHunting.notices(world, id, danger.threat, here):
-			_write(world, memory, danger.threat, memory.facts.get(danger.threat) as EcsMemoryFact,
-				EcsMemoryFact.THREAT, true)
+			_note(world, memory, danger.threat, EcsMemoryFact.THREAT)
 
 		_check_watched(world.get_component(id, EcsMovementComponent) as EcsMovementComponent,
 			memory, sensor, here)
@@ -110,40 +111,104 @@ static func _profile(world: EcsWorld, id: int, memory: EcsMemoryComponent) -> vo
 	memory.kind = name.type_id if name != null else &""
 	memory.profile_left = PROFILE_EVERY * (0.5 + fposmod(id * 0.618034, 1.0))
 
-## Walks what `id` sees and remembers what matters to it.
-func _learn(world: EcsWorld, id: int, here: Vector2, sensor: EcsSensorComponent,
+## What entered sight is marked in sight; what left is copied, as last seen at `last_run`, or
+## forgotten if it died.
+func _sight_changed(world: EcsWorld, id: int, here: Vector2, sensor: EcsSensorComponent,
 		memory: EcsMemoryComponent, drinks: bool, eats: StringName,
-		hunts: bool, kinds: Array[StringName], kind: StringName, delta: float) -> void:
+		hunts: bool, kinds: Array[StringName], kind: StringName, last_run: float) -> void:
+	var now_seen := {}
 	for seen in sensor.perceived:
-		var prey := hunts and _is_prey(world, id, seen, here)
-		if not kinds.is_empty():
-			_count_traffic(world, seen, prey, memory, delta)
-		var bits := 0
-		if drinks and _index.water.has(seen):
-			bits |= EcsMemoryFact.WATER
-		if not kinds.is_empty() and _index.lures.has(seen) and kinds.has((_index.lures[seen] as EcsCoverComponent).kind):
-			bits |= EcsMemoryFact.LURE
-		if eats != &"":
-			if _index.food.has(seen) and (_index.food[seen] as EcsConsumableComponent).diet == eats:
-				bits |= EcsMemoryFact.FOOD
-			var crop: EcsHarvestableComponent = _index.crops.get(seen)
-			if crop != null and crop.diet == eats and crop.stock > 0:
-				bits |= EcsMemoryFact.BUSH
-		if prey:
-			bits |= EcsMemoryFact.PREY
-		if kind != &"" and seen != id and _index.ready.get(seen, &"") == kind:
-			bits |= EcsMemoryFact.MATE
-		# Threats are danger's to judge; the walk keeps the bit.
-		var old := memory.facts.get(seen) as EcsMemoryFact
-		if old != null and old.kinds & EcsMemoryFact.THREAT != 0 \
-				and EcsMemoryFact.strength_of(old, memory) > 0.0:
-			bits |= EcsMemoryFact.THREAT
-		if bits == 0:
-			# Seen as nothing that matters now, such as an emptied bush.
-			if old != null:
-				memory.facts.erase(seen)
+		now_seen[seen] = true
+	var before := {}
+	for seen in memory.sight:
+		before[seen] = true
+		if not now_seen.has(seen):
+			_left(world, id, here, seen, memory, drinks, eats, hunts, kinds, kind, last_run)
+	for seen in sensor.perceived:
+		if before.has(seen):
 			continue
-		_write(world, memory, seen, old, bits, false)
+		var fact := memory.facts.get(seen) as EcsMemoryFact
+		if fact != null:
+			fact.in_sight = true
+			fact.seen_at = memory.as_of
+	memory.sight = sensor.perceived.duplicate()
+
+## Copies `seen` as it leaves sight, as what it is to `id` now; forgets it if that is nothing, or
+## if it died in sight.
+func _left(world: EcsWorld, id: int, here: Vector2, seen: int, memory: EcsMemoryComponent,
+		drinks: bool, eats: StringName, hunts: bool, kinds: Array[StringName], kind: StringName,
+		last_run: float) -> void:
+	var old := memory.facts.get(seen) as EcsMemoryFact
+	if not world.is_alive(seen) or world.has(seen, EcsDyingFlag):
+		memory.facts.erase(seen)
+		return
+	var bits := 0
+	if drinks and _index.water.has(seen):
+		bits |= EcsMemoryFact.WATER
+	if not kinds.is_empty() and _index.lures.has(seen) and kinds.has((_index.lures[seen] as EcsCoverComponent).kind):
+		bits |= EcsMemoryFact.LURE
+	if eats != &"":
+		if _index.food.has(seen) and (_index.food[seen] as EcsConsumableComponent).diet == eats:
+			bits |= EcsMemoryFact.FOOD
+		var crop: EcsHarvestableComponent = _index.crops.get(seen)
+		if crop != null and crop.diet == eats and crop.stock > 0:
+			bits |= EcsMemoryFact.BUSH
+	if hunts and _is_prey(world, id, seen, here):
+		bits |= EcsMemoryFact.PREY
+	if kind != &"" and seen != id and _index.ready.get(seen, &"") == kind:
+		bits |= EcsMemoryFact.MATE
+	# Threats are danger's to judge; leaving keeps the bit.
+	if old != null and old.kinds & EcsMemoryFact.THREAT != 0 \
+			and EcsMemoryFact.strength_of(old, memory) > 0.0:
+		bits |= EcsMemoryFact.THREAT
+	if bits == 0:
+		# Nothing that matters now, such as an emptied bush.
+		memory.facts.erase(seen)
+		return
+	copied += 1
+	var fact := _write(world, memory, seen, old, bits, false)
+	if fact != null:
+		fact.in_sight = false
+		fact.seen_at = last_run
+
+## Adds `bits` to what it knows of `seen`, which is in sight now.
+func _note(world: EcsWorld, memory: EcsMemoryComponent, seen: int, bits: int) -> EcsMemoryFact:
+	var fact := _write(world, memory, seen, memory.facts.get(seen) as EcsMemoryFact, bits, true)
+	if fact != null:
+		fact.in_sight = true
+	return fact
+
+## Marks feared every pond it drinks from near `threat_at`, remembered or in sight.
+func _fear(world: EcsWorld, memory: EcsMemoryComponent, sensor: EcsSensorComponent,
+		threat_at: Vector2) -> void:
+	for about in memory.facts:
+		var fact := memory.facts[about] as EcsMemoryFact
+		if fact.is_a(EcsMemoryFact.WATER) and _near(fact, threat_at, memory.near):
+			fact.feared_at = memory.as_of
+	if not memory.drinks:
+		return
+	for seen in sensor.perceived:
+		if not _index.water.has(seen) or memory.facts.has(seen):
+			continue
+		var fact := _note(world, memory, seen, EcsMemoryFact.WATER)
+		if fact != null and _near(fact, threat_at, memory.near):
+			fact.feared_at = memory.as_of
+		elif fact != null:
+			memory.facts.erase(seen)
+
+## A hunter that waits at lures counts the prey and kills it sees near them.
+func _watch_lures(world: EcsWorld, id: int, here: Vector2, sensor: EcsSensorComponent,
+		memory: EcsMemoryComponent, kinds: Array[StringName], delta: float) -> void:
+	for seen in sensor.perceived:
+		var corpse := world.has(seen, EcsRotComponent)
+		if not corpse and not _is_prey(world, id, seen, here):
+			continue
+		if not _lures_ready:
+			# A note needs a place: lures in sight get a fact.
+			for lure in sensor.perceived:
+				if _index.lures.has(lure) and kinds.has((_index.lures[lure] as EcsCoverComponent).kind):
+					_note(world, memory, lure, EcsMemoryFact.LURE)
+		_count_traffic(world, seen, not corpse, memory, delta)
 
 ## EcsHunting.can_hunt and notices, for a known hunter: weaker, alive, and not hidden from it.
 ## Looked up per sighting, so no death rebuilds an index of every body.
@@ -159,13 +224,13 @@ func _is_prey(world: EcsWorld, id: int, seen: int, here: Vector2) -> bool:
 ## Remembers `seen` as `bits`, seen now: replacing its kinds, or adding to them. `fact` is
 ## what it already knows of `seen`, or null.
 func _write(world: EcsWorld, memory: EcsMemoryComponent, seen: int, fact: EcsMemoryFact, bits: int,
-		add: bool) -> void:
+		add: bool) -> EcsMemoryFact:
 	if fact == null or not fact.fixed:
 		# Seen by the sensor, gone since: nothing to remember.
 		var at := world.get_component(seen, EcsPositionComponent) as EcsPositionComponent
 		if at == null:
 			memory.facts.erase(seen)
-			return
+			return null
 		var moves := world.get_component(seen, EcsMovementComponent) as EcsMovementComponent
 		if fact == null:
 			fact = EcsMemoryFact.new()
@@ -181,11 +246,13 @@ func _write(world: EcsWorld, memory: EcsMemoryComponent, seen: int, fact: EcsMem
 		fact.placed = true
 	fact.kinds = (fact.kinds | bits) if add else bits
 	fact.seen_at = memory.as_of
+	return fact
 
 ## Forgets the weakest facts until `memory` is at capacity, in one pass.
 static func _forget_weakest(memory: EcsMemoryComponent) -> void:
 	var facts := memory.facts.values()
-	facts.sort_custom(func(a: EcsMemoryFact, b: EcsMemoryFact) -> bool: return a.seen_at < b.seen_at)
+	facts.sort_custom(func(a: EcsMemoryFact, b: EcsMemoryFact) -> bool:
+		return (INF if a.in_sight else a.seen_at) < (INF if b.in_sight else b.seen_at))
 	for i in facts.size() - memory.capacity:
 		memory.facts.erase((facts[i] as EcsMemoryFact).about)
 

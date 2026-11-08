@@ -116,6 +116,7 @@ func _run() -> void:
 	await _fear_and_traffic_price_places()
 	await _memory_keeps_what_matters_to_it()
 	await _memory_loses_track_of_movers()
+	await _memory_copies_only_what_leaves_sight()
 	_a_stun_holds_still_and_wears_off()
 	_hunted_prey_cannot_hide()
 	await _a_pounce_stuns_and_bites_follow_until_dead()
@@ -130,6 +131,7 @@ func _run() -> void:
 	await _collision_works_from_contacts_and_changes()
 	await _the_sensor_lists_match_a_fresh_look_every_tick()
 	await _the_sensor_rescans_only_what_changed()
+	await _memory_matches_a_fresh_look_every_tick()
 	_a_look_scene_is_built_as_authored()
 	_a_skill_can_cost_health_or_fullness()
 	_the_world_index_sorts_the_world_once()
@@ -2983,9 +2985,59 @@ func _remember(memory: EcsMemorySystem, delta: float) -> void:
 	(_world.get_singleton(EcsClockSingleton) as EcsClockSingleton).now += delta
 	memory.run(_world, delta)
 
-## Memory keeps water for drinkers and lures for the hunter that hides in them. A
-## fact fades while unseen; walking to a spot and seeing it without its thing forgets it,
-## passing by does not; past capacity the oldest goes.
+## In sight, nothing is copied however long it stays; leaving, it is copied once. A thing
+## remembered that dies in sight is forgotten.
+func _memory_copies_only_what_leaves_sight() -> void:
+	var memory := EcsMemorySystem.new()
+	var spot := Vector2(-40000.0, 43000.0)
+	var rabbit := _manager.spawn(_world, _catalog, &"rabbit", spot)
+	var monkey := _manager.spawn(_world, _catalog, &"monkey", spot + Vector2(150.0, 0.0))
+	var pond := _manager.spawn(_world, _catalog, &"water", spot + Vector2(0.0, 250.0))
+	var berry := _manager.spawn(_world, _catalog, &"berry", spot + Vector2(-150.0, 0.0))
+	var eyes := _world.get_component(rabbit, EcsSensorComponent) as EcsSensorComponent
+	var mind := _world.get_component(rabbit, EcsMemoryComponent) as EcsMemoryComponent
+	eyes.perceived.assign([monkey, pond])
+	for i in 50:
+		_remember(memory, TICK)
+	_check("in sight for 50 runs, nothing is copied (%d)" % memory.copied,
+		memory.copied == 0 and mind.facts.is_empty())
+	eyes.perceived.clear()
+	_remember(memory, TICK)
+	_check("leaving sight, the pond is copied once, and the monkey, nothing to it, not at all (%d)" % memory.copied,
+		memory.copied == 1 and mind.facts.keys() == [pond])
+	eyes.perceived.assign([berry])
+	_remember(memory, TICK)
+	eyes.perceived.clear()
+	_remember(memory, TICK)
+	_check("a berry that left sight is remembered as food",
+		mind.facts.has(berry) and (mind.facts[berry] as EcsMemoryFact).is_a(EcsMemoryFact.FOOD))
+	eyes.perceived.assign([berry])
+	_remember(memory, TICK)
+	_world.add(berry, EcsDyingFlag.new())
+	_remember(memory, TICK)
+	eyes.perceived.clear()
+	_remember(memory, TICK)
+	_check("eaten in sight, it is forgotten", not mind.facts.has(berry))
+	for id in [rabbit, monkey, pond]:
+		_world.add(id, EcsDyingFlag.new())
+	EcsLifecycleSystem.new(_manager, _catalog).run(_world, TICK)
+	await get_tree().physics_frame
+
+## Of `ids`, all in sight, the one cheapest to walk to by `EcsMemoryFact.score_at`, priced at
+## where it is now; NO_ENTITY if none.
+func _cheapest_place(mind: EcsMemoryComponent, here: Vector2, speed: float, kind: int, ids: Array) -> int:
+	var found := EcsWorld.NO_ENTITY
+	var found_cost := INF
+	for id: int in ids:
+		var cost := EcsMemoryFact.score_at(mind, id, _position_of(id), _radius_in(_world, id), here, speed, kind)
+		if cost < found_cost:
+			found_cost = cost
+			found = id
+	return found
+
+## Memory keeps water for drinkers and lures for the hunter that hides in them, copied when
+## they leave sight. A fact fades while unseen; walking to a spot and seeing it without its
+## thing forgets it, passing by does not; past capacity the oldest goes.
 func _memory_learns_fades_and_is_proven_wrong() -> void:
 	var memory := EcsMemorySystem.new()
 	var skills := EcsSkillSystem.new()
@@ -3011,6 +3063,10 @@ func _memory_learns_fades_and_is_proven_wrong() -> void:
 	var r: Dictionary = facts_of.call(rabbit)
 	var d: Dictionary = facts_of.call(dog)
 	var c: Dictionary = facts_of.call(croc)
+	_check("in sight, nothing is copied into memory", r.is_empty() and d.is_empty() and c.is_empty())
+	for id in [rabbit, dog, croc]:
+		sees.call(id, [])
+	memory.run(_world, TICK)
 	_check("a rabbit remembers a pond as water, and no bush",
 		r.size() == 1 and r.has(pond) and r[pond].is_a(EcsMemoryFact.WATER) and not r[pond].is_a(EcsMemoryFact.LURE))
 	_check("the dog remembers a bush as a lure, and the pond only as water",
@@ -3030,7 +3086,8 @@ func _memory_learns_fades_and_is_proven_wrong() -> void:
 		r.has(pond) and is_equal_approx(EcsMemoryFact.strength_of(r[pond], r_mind), 0.5))
 	sees.call(rabbit, [pond])
 	_remember(memory, TICK)
-	_check("seen again, it is fresh", is_equal_approx(EcsMemoryFact.strength_of(r[pond], r_mind), 1.0))
+	_check("seen again, it is fresh and in sight",
+		is_equal_approx(EcsMemoryFact.strength_of(r[pond], r_mind), 1.0) and (r[pond] as EcsMemoryFact).in_sight)
 	sees.call(rabbit, [])
 	_remember(memory, remember_for * 1.01)
 	_check("unseen for remember_for, it is forgotten",
@@ -3151,19 +3208,19 @@ func _fear_and_traffic_price_places() -> void:
 	var mind := _world.get_component(rabbit, EcsMemoryComponent) as EcsMemoryComponent
 	var danger := _world.get_component(rabbit, EcsDangerComponent) as EcsDangerComponent
 	var speed := (_world.get_component(rabbit, EcsMovementComponent) as EcsMovementComponent).speed
+	var fear := func(pond: int) -> float:
+		return EcsMemoryFact.fear_of(mind.facts[pond], mind) if mind.facts.has(pond) else 0.0
 	memory.run(_world, TICK)
 	danger.value = danger.flee_at * 0.5
 	danger.threat_at = _position_of(far_pond)
 	memory.run(_world, TICK)
-	_check("a threat below fleeing frightens no pond",
-		EcsMemoryFact.fear_of(mind.facts[far_pond], mind) == 0.0)
+	_check("a threat below fleeing frightens no pond", fear.call(far_pond) == 0.0)
 	danger.value = danger.flee_at + 0.1
 	danger.threat_at = _position_of(near_pond)
 	memory.run(_world, TICK)
 	danger.value = 0.0
-	_check("a threat met by a pond makes it feared, and not a far one",
-		EcsMemoryFact.fear_of(mind.facts[near_pond], mind) > 0.99
-		and EcsMemoryFact.fear_of(mind.facts[far_pond], mind) == 0.0)
+	_check("a threat met by a pond in sight makes it feared, and not a far one",
+		fear.call(near_pond) > 0.99 and fear.call(far_pond) == 0.0)
 	planning.run(_world, TICK)
 	brain.run(_world, TICK)
 	var state := _world.get_component(rabbit, EcsLowBrainComponent) as EcsLowBrainComponent
@@ -3173,11 +3230,10 @@ func _fear_and_traffic_price_places() -> void:
 	_remember(memory, mind.fear_for)
 	var here := _position_of(rabbit)
 	_check("once the fear fades, the near one is cheaper again",
-		EcsMemoryFact.best(mind, here, speed, EcsMemoryFact.WATER, true, sensor.perceived).about == near_pond)
+		_cheapest_place(mind, here, speed, EcsMemoryFact.WATER, sensor.perceived) == near_pond)
 	(mind.facts[near_pond] as EcsMemoryFact).feared_at = mind.as_of
-	mind.facts.erase(far_pond)
 	_check("a feared pond still beats none",
-		EcsMemoryFact.best(mind, here, speed, EcsMemoryFact.WATER, true, sensor.perceived).about == near_pond)
+		_cheapest_place(mind, here, speed, EcsMemoryFact.WATER, [near_pond]) == near_pond)
 
 	var spot2 := spot + Vector2(0.0, 3000.0)
 	var dog := _manager.spawn(_world, _catalog, &"wild_dog", spot2)
@@ -3227,9 +3283,9 @@ func _fear_and_traffic_price_places() -> void:
 	EcsLifecycleSystem.new(_manager, _catalog).run(_world, TICK)
 	await get_tree().physics_frame
 
-## A mover's fact keeps how fast it goes: the longer since it was seen, the dearer a walk to
-## it, and past lose_track_at it is not walked to. Walking to its spot and not finding it drops
-## the place but keeps who it was; seen again, it has a place again.
+## A mover is copied with how fast it goes as it leaves sight: the longer since it was seen,
+## the dearer a walk to it, and past lose_track_at it is not walked to. Walking to its spot and
+## not finding it drops the place but keeps who it was; seen and left again, it has a place again.
 func _memory_loses_track_of_movers() -> void:
 	var memory := EcsMemorySystem.new()
 	var spot := Vector2(-40000.0, 30000.0)
@@ -3242,11 +3298,13 @@ func _memory_loses_track_of_movers() -> void:
 	var prey_speed := (_world.get_component(rabbit, EcsMovementComponent) as EcsMovementComponent).speed
 	eyes.perceived.assign([rabbit])
 	_remember(memory, TICK)
-	var fact := mind.facts.get(rabbit) as EcsMemoryFact
-	_check("a moving thing is remembered with its speed",
-		fact != null and fact.is_a(EcsMemoryFact.PREY) and not fact.fixed and fact.speed == prey_speed)
-	var fresh := EcsMemoryFact.score(fact, mind, here, speed, EcsMemoryFact.PREY)
 	eyes.perceived.clear()
+	_remember(memory, TICK)
+	var fact := mind.facts.get(rabbit) as EcsMemoryFact
+	_check("a moving thing leaving sight is remembered with its speed, where it left",
+		fact != null and fact.is_a(EcsMemoryFact.PREY) and not fact.fixed and fact.speed == prey_speed
+		and fact.position == _position_of(rabbit))
+	var fresh := EcsMemoryFact.score(fact, mind, here, speed, EcsMemoryFact.PREY)
 	_remember(memory, 2.0)
 	_check("the longer since it was seen, the dearer a walk to it",
 		EcsMemoryFact.score(fact, mind, here, speed, EcsMemoryFact.PREY) > fresh)
@@ -3256,9 +3314,10 @@ func _memory_loses_track_of_movers() -> void:
 
 	eyes.perceived.assign([rabbit])
 	_remember(memory, TICK)
+	eyes.perceived.clear()
+	_remember(memory, TICK)
 	var rabbit_at := _world.get_component(rabbit, EcsPositionComponent) as EcsPositionComponent
 	rabbit_at.position = spot + Vector2(4000.0, 0.0)
-	eyes.perceived.clear()
 	var trip := _world.get_component(dog, EcsMovementComponent) as EcsMovementComponent
 	trip.destination = fact.position
 	trip.has_destination = true
@@ -3269,16 +3328,20 @@ func _memory_loses_track_of_movers() -> void:
 		and EcsMemoryFact.best(mind, here, speed, EcsMemoryFact.PREY) == null)
 	eyes.perceived.assign([rabbit])
 	_remember(memory, TICK)
-	_check("seen again, it has a place again", fact.placed and fact.position == rabbit_at.position)
+	_check("seen again, it is in sight", fact.in_sight)
+	eyes.perceived.clear()
+	_remember(memory, TICK)
+	_check("leaving again, it has a place again", fact.placed and fact.position == rabbit_at.position)
 	for id in [dog, rabbit]:
 		_world.add(id, EcsDyingFlag.new())
 	EcsLifecycleSystem.new(_manager, _catalog).run(_world, TICK)
 	await get_tree().physics_frame
 
-## Each animal remembers what matters to it, by its own needs and power: a monkey keeps
-## ponds, stocked bushes and the threat its danger found, and no rabbit; a dog keeps prey,
-## the crocodile as a threat and bushes as lures. An emptied bush is forgotten; a remembered
-## bush is walked to when hungry; a remembered threat makes the pond beside it dearer.
+## Each animal remembers what matters to it, by its own needs and power, as it leaves sight: a
+## monkey keeps ponds, stocked bushes and the threat its danger found, and no rabbit; a dog keeps
+## prey, the crocodile as a threat and bushes as lures. A bush that leaves sight emptied is
+## forgotten; a remembered bush is walked to when hungry; a remembered threat makes the pond
+## beside it dearer.
 func _memory_keeps_what_matters_to_it() -> void:
 	var memory := EcsMemorySystem.new()
 	var skills := EcsSkillSystem.new()
@@ -3304,6 +3367,9 @@ func _memory_keeps_what_matters_to_it() -> void:
 	skills.run(_world, TICK)
 	EcsDangerSystem.new().run(_world, TICK)
 	memory.run(_world, TICK)
+	sees.call(monkey, [])
+	sees.call(dog, [])
+	memory.run(_world, TICK)
 	var m := (_world.get_component(monkey, EcsMemoryComponent) as EcsMemoryComponent).facts
 	var d := (_world.get_component(dog, EcsMemoryComponent) as EcsMemoryComponent).facts
 	var is_a := func(facts: Dictionary, id: int, kind: int) -> bool:
@@ -3319,15 +3385,20 @@ func _memory_keeps_what_matters_to_it() -> void:
 
 	var mind := _world.get_component(monkey, EcsMemoryComponent) as EcsMemoryComponent
 	var speed := (_world.get_component(monkey, EcsMovementComponent) as EcsMovementComponent).speed
-	var sight := (_world.get_component(monkey, EcsSensorComponent) as EcsSensorComponent).perceived
 	_check("a pond beside a remembered crocodile is dearer than a far one",
-		EcsMemoryFact.best(mind, spot, speed, EcsMemoryFact.WATER, true, sight).about == far_pond)
+		EcsMemoryFact.best(mind, spot, speed, EcsMemoryFact.WATER).about == far_pond)
 
-	crop.stock = 0
+	sees.call(monkey, [bush])
 	memory.run(_world, TICK)
-	_check("a bush seen emptied is forgotten", not m.has(bush))
+	crop.stock = 0
+	sees.call(monkey, [])
+	memory.run(_world, TICK)
+	_check("a bush that leaves sight emptied is forgotten", not m.has(bush))
 
 	crop.stock = crop.stock_max
+	sees.call(monkey, [bush])
+	memory.run(_world, TICK)
+	sees.call(monkey, [])
 	memory.run(_world, TICK)
 	var energy := _world.get_component(monkey, EcsEnergyComponent) as EcsEnergyComponent
 	energy.rolled = true
@@ -3580,13 +3651,14 @@ func _breeding_is_planned() -> void:
 	var steps := (_world.get_component(a, EcsPlannerComponent) as EcsPlannerComponent).steps
 	_check("ready, a ready rabbit in sight: seek it and mate (%s)" % " > ".join(steps),
 		steps == [&"seek_mate", &"mate"])
-	var m := (_world.get_component(monkey, EcsMemoryComponent) as EcsMemoryComponent).facts
-	var r := (_world.get_component(a, EcsMemoryComponent) as EcsMemoryComponent).facts
-	_check("a ready rabbit is a mate to a rabbit, nothing to a monkey",
-		r.has(b) and (r[b] as EcsMemoryFact).is_a(EcsMemoryFact.MATE) and not m.has(b))
 	(_world.get_component(a, EcsPositionComponent) as EcsPositionComponent).position = spot + Vector2(0.0, 5000.0)
 	eyes.perceived.clear()
+	(_world.get_component(monkey, EcsSensorComponent) as EcsSensorComponent).perceived.clear()
 	memory.run(_world, TICK)
+	var m := (_world.get_component(monkey, EcsMemoryComponent) as EcsMemoryComponent).facts
+	var r := (_world.get_component(a, EcsMemoryComponent) as EcsMemoryComponent).facts
+	_check("a ready rabbit leaving sight is a mate to a rabbit, nothing to a monkey",
+		r.has(b) and (r[b] as EcsMemoryFact).is_a(EcsMemoryFact.MATE) and not m.has(b))
 	planning.run(_world, TICK)
 	steps = (_world.get_component(a, EcsPlannerComponent) as EcsPlannerComponent).steps
 	_check("only remembered: walk back to it and mate (%s)" % " > ".join(steps),
@@ -4015,6 +4087,124 @@ func _the_sensor_rescans_only_what_changed() -> void:
 	EcsEditSystem.new().run(world, 0.0)
 	await run.call(3)
 	_check("a live edit of the sensor's radius is seen: now the berry is", sensor.perceived.has(berry))
+	manager.clear()
+	root.queue_free()
+
+## Runs the memory system in its place in the pipeline, and checks each animal's memory against
+## the rules worked out fresh: what left sight alive is copied as what it is to the animal then,
+## at its live place; what died in sight is forgotten; a fact is in sight exactly when its thing is.
+class MemoryProbe extends EcsSystem:
+	var inner := EcsMemorySystem.new()
+	var left := 0
+	var died := 0
+	var facts := 0
+	var wrong: Array[String] = []
+
+	func label() -> StringName:
+		return inner.label()
+
+	func run(world: EcsWorld, delta: float) -> void:
+		var leaving: Array = []
+		var minds := world.view([EcsMemoryComponent, EcsSensorComponent, EcsPositionComponent], [EcsDyingFlag])
+		for id in minds.ids:
+			var memory := world.get_component(id, EcsMemoryComponent) as EcsMemoryComponent
+			var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
+			for seen in memory.sight:
+				if sensor.perceived.has(seen):
+					continue
+				var dead := not world.is_alive(seen) or world.has(seen, EcsDyingFlag)
+				var old := memory.facts.get(seen) as EcsMemoryFact
+				var want := -1 if dead else _bits(world, id, seen)
+				if not dead and old != null and old.is_a(EcsMemoryFact.THREAT) \
+						and EcsMemoryFact.strength_of(old, memory) > 0.0:
+					want |= EcsMemoryFact.THREAT
+				leaving.append([id, seen, want, memory.as_of])
+		inner.run(world, delta)
+		for entry: Array in leaving:
+			var memory := world.get_component(entry[0], EcsMemoryComponent) as EcsMemoryComponent
+			var fact := memory.facts.get(entry[1]) as EcsMemoryFact
+			var want: int = entry[2]
+			var ok := fact == null
+			if want == -1:
+				died += 1
+			else:
+				left += 1
+				if want != 0:
+					ok = fact != null and fact.kinds == want and not fact.in_sight and fact.placed \
+						and fact.seen_at == entry[3] \
+						and fact.position == (world.get_component(entry[1], EcsPositionComponent) as EcsPositionComponent).position
+			if not ok:
+				wrong.append("%d left %d: want %d, got %s" % [entry[0], entry[1], want,
+					"none" if fact == null else str(fact.kinds)])
+		for id in minds.ids:
+			var memory := world.get_component(id, EcsMemoryComponent) as EcsMemoryComponent
+			var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
+			for about: int in memory.facts:
+				facts += 1
+				if (memory.facts[about] as EcsMemoryFact).in_sight != sensor.perceived.has(about):
+					wrong.append("%d's fact on %d: in_sight is wrong" % [id, about])
+
+	## What `seen` is to `id` now, by memory's rules, threat aside.
+	static func _bits(world: EcsWorld, id: int, seen: int) -> int:
+		var index := EcsWorldIndex.of(world)
+		var here := (world.get_component(id, EcsPositionComponent) as EcsPositionComponent).position
+		var hunger := world.get_component(id, EcsHungerComponent) as EcsHungerComponent
+		var eats: StringName = hunger.eats if hunger != null and index.diets.has(hunger.eats) else &""
+		var hunts := index.hunters.has(id)
+		var kinds: Array[StringName] = []
+		if hunts and not index.lures.is_empty():
+			kinds = EcsHunting.hide_kinds(world, id)
+		var name := world.get_component(id, EcsNameComponent) as EcsNameComponent
+		var bits := 0
+		if world.has(id, EcsThirstComponent) and index.water.has(seen):
+			bits |= EcsMemoryFact.WATER
+		if index.lures.has(seen) and kinds.has((index.lures[seen] as EcsCoverComponent).kind):
+			bits |= EcsMemoryFact.LURE
+		if eats != &"" and index.food.has(seen) and (index.food[seen] as EcsConsumableComponent).diet == eats:
+			bits |= EcsMemoryFact.FOOD
+		var crop: EcsHarvestableComponent = index.crops.get(seen)
+		if eats != &"" and crop != null and crop.diet == eats and crop.stock > 0:
+			bits |= EcsMemoryFact.BUSH
+		if hunts and EcsHunting.can_hunt(world, id, seen) and EcsHunting.notices(world, id, seen, here):
+			bits |= EcsMemoryFact.PREY
+		if name != null and index.ready.get(seen, &"") == name.type_id:
+			bits |= EcsMemoryFact.MATE
+		return bits
+
+## A busy world of every kind, 900 ticks: memory, run in its place in the pipeline, matches its
+## rules worked out fresh every tick (MemoryProbe), with things leaving sight and dying in it.
+func _memory_matches_a_fresh_look_every_tick() -> void:
+	var root := Node2D.new()
+	add_child(root)
+	var manager := EcsEntityManager.new(root)
+	var world := _snapshot_world()
+	var living := _snapshot_pipeline(manager)
+	var probe := MemoryProbe.new()
+	var systems := living.systems()
+	for i in systems.size():
+		if systems[i] is EcsMemorySystem:
+			systems[i] = probe
+	var spot := Vector2(-320000.0, 0.0)
+	var kinds := [&"rabbit", &"rabbit", &"rabbit", &"rabbit", &"rabbit", &"rabbit", &"monkey",
+		&"monkey", &"monkey", &"monkey", &"crocodile", &"wild_dog", &"berry_bush", &"berry_bush",
+		&"berry_bush", &"berry", &"berry", &"berry", &"berry", &"water"]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	for kind: StringName in kinds + kinds:
+		manager.spawn(world, _catalog, kind, spot + Vector2(rng.randf_range(-1500.0, 1500.0), rng.randf_range(-1000.0, 1000.0)))
+	var killed := false
+	for i in 900:
+		living.run_all(world, TICK)
+		if i == 100:
+			for id in world.query([EcsSensorComponent]):
+				for seen in (world.get_component(id, EcsSensorComponent) as EcsSensorComponent).perceived:
+					if not killed and world.has(seen, EcsConsumableComponent) and not world.has(seen, EcsDyingFlag):
+						world.add(seen, EcsDyingFlag.new())
+						killed = true
+		await get_tree().physics_frame
+	_check("memory matched its rules every tick: %d left sight, %d died in it, %d facts, %d wrong %s"
+		% [probe.left, probe.died, probe.facts, probe.wrong.size(), probe.wrong.slice(0, 3)],
+		probe.wrong.is_empty() and probe.left > 50 and probe.died > 0 and probe.facts > 100)
 	manager.clear()
 	root.queue_free()
 

@@ -345,26 +345,30 @@ func _try_seek_water(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	if sensor == null:
 		return false
 	var memory := world.get_component(id, EcsMemoryComponent) as EcsMemoryComponent
-	var known := EcsMemoryFact.best(memory, place.position, move.speed, EcsMemoryFact.WATER, true,
-		sensor.perceived)
-	if known != null and world.has(known.about, EcsDrinkableComponent):
-		_set_state(world, id, brain, EcsLowBrainComponent.State.SEEK_WATER, known.about)
-		_set_trip(move, _position_of(world, known.about))
-		return true
 	var best := EcsWorld.NO_ENTITY
-	var best_distance := INF
+	var best_cost := INF
 	for seen in sensor.perceived:
 		if not world.has(seen, EcsDrinkableComponent):
 			continue
-		var distance := place.position.distance_squared_to(_position_of(world, seen))
-		if distance < best_distance:
-			best_distance = distance
+		var cost := _place_cost(world, memory, seen, place.position, move.speed, EcsMemoryFact.WATER)
+		if cost < best_cost:
+			best_cost = cost
 			best = seen
 	if best == EcsWorld.NO_ENTITY:
 		return false
 	_set_state(world, id, brain, EcsLowBrainComponent.State.SEEK_WATER, best)
 	_set_trip(move, _position_of(world, best))
 	return true
+
+## What walking to `seen`, in sight, costs: its place's price with `memory`, else its distance.
+func _place_cost(world: EcsWorld, memory: EcsMemoryComponent, seen: int, here: Vector2,
+		speed: float, kind: int) -> float:
+	var there := _position_of(world, seen)
+	if memory == null:
+		return here.distance_squared_to(there)
+	var body := world.get_component(seen, EcsBodyComponent) as EcsBodyComponent
+	return EcsMemoryFact.score_at(memory, seen, there, body.radius if body != null else 0.0, here,
+		speed, kind)
 
 ## Not yet full, and `water` still drinkable and in reach.
 func _keep_drinking(world: EcsWorld, id: int, water: int) -> bool:
@@ -402,23 +406,17 @@ func _try_cover(world: EcsWorld, id: int, brain: EcsLowBrainComponent,
 	var sensor := world.get_component(id, EcsSensorComponent) as EcsSensorComponent
 	if sensor == null:
 		return false
-	if lure_only:
-		var memory := world.get_component(id, EcsMemoryComponent) as EcsMemoryComponent
-		var known := EcsMemoryFact.best(memory, place.position, move.speed, EcsMemoryFact.LURE, true,
-			sensor.perceived)
-		if known != null and world.is_alive(known.about):
-			_set_state(world, id, brain, EcsLowBrainComponent.State.HIDE, known.about)
-			_set_trip(move, _position_of(world, known.about))
-			return true
+	# A lure is priced by what memory noted there; any cover by distance.
+	var memory := world.get_component(id, EcsMemoryComponent) as EcsMemoryComponent if lure_only else null
 	var best := EcsWorld.NO_ENTITY
-	var best_distance := INF
+	var best_cost := INF
 	for seen in sensor.perceived:
 		if not EcsHunting.hides_in(world, id, seen) \
 				or (lure_only and not EcsHunting.is_lure(world, seen)):
 			continue
-		var distance := place.position.distance_squared_to(_position_of(world, seen))
-		if distance < best_distance:
-			best_distance = distance
+		var cost := _place_cost(world, memory, seen, place.position, move.speed, EcsMemoryFact.LURE)
+		if cost < best_cost:
+			best_cost = cost
 			best = seen
 	if best == EcsWorld.NO_ENTITY:
 		return false

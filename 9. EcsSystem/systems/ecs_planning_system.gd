@@ -22,13 +22,14 @@ const SETTLE_RUNS: int = 1
 ## Seconds of travel that cost one unit of a plan.
 const TRAVEL_SECONDS: float = EcsMemoryFact.TRAVEL_SECONDS
 
-## Memory kind -> [its known fact, its recall action, its in-sight action priced by place].
+## Memory kind -> [its known fact, its recall action, its in-sight action priced by place,
+## its in-sight fact].
 const RECALLS: Dictionary = {
-	EcsMemoryFact.WATER: [&"water_known", &"recall_water", &"go_to_water"],
-	EcsMemoryFact.LURE: [&"lure_known", &"recall_lure", &"go_to_lure"],
-	EcsMemoryFact.FOOD: [&"food_known", &"recall_food", &""],
-	EcsMemoryFact.BUSH: [&"bush_known", &"recall_bush", &""],
-	EcsMemoryFact.MATE: [&"mate_known", &"recall_mate", &"seek_mate"],
+	EcsMemoryFact.WATER: [&"water_known", &"recall_water", &"go_to_water", &"water_in_sight"],
+	EcsMemoryFact.LURE: [&"lure_known", &"recall_lure", &"go_to_lure", &"lure_in_sight"],
+	EcsMemoryFact.FOOD: [&"food_known", &"recall_food", &"", &""],
+	EcsMemoryFact.BUSH: [&"bush_known", &"recall_bush", &"", &""],
+	EcsMemoryFact.MATE: [&"mate_known", &"recall_mate", &"seek_mate", &"mate_in_sight"],
 }
 
 ## Ids waiting for a replan, oldest first.
@@ -197,14 +198,18 @@ func _replan(world: EcsWorld, id: int, planner: EcsPlannerComponent, facts: Dict
 			return
 
 ## Costs that come from this entity's stats, built only when it replans. A chase costs
-## its expected time, and is impossible against prey at least as fast. Going to water or a
-## lure costs the place it would go to: the walk, plus fear or the expected wait.
+## its expected time, and is impossible against prey at least as fast. Going to water, a lure
+## or a mate costs the place it would go to: the walk, plus fear or the expected wait; in
+## sight it is priced at the live place, out of sight at the remembered one.
 func _costs(world: EcsWorld, id: int, facts: Dictionary) -> Dictionary:
 	var costs := {}
 	var hunt := facts.has(&"prey_in_sight")
 	var memory := world.get_component(id, EcsMemoryComponent) as EcsMemoryComponent
-	var places := memory != null and (facts.has(&"water_known") or facts.has(&"lure_known") \
-		or facts.has(&"food_known") or facts.has(&"bush_known") or facts.has(&"mate_known"))
+	var places := false
+	if memory != null:
+		for kind in RECALLS:
+			var spec: Array = RECALLS[kind]
+			places = places or facts.has(spec[0]) or (spec[3] != &"" and facts.has(spec[3]))
 	if not hunt and not places:
 		return costs
 	var move := world.get_component(id, EcsMovementComponent) as EcsMovementComponent
@@ -225,15 +230,41 @@ func _costs(world: EcsWorld, id: int, facts: Dictionary) -> Dictionary:
 	if places:
 		for kind in RECALLS:
 			var spec: Array = RECALLS[kind]
+			if spec[3] != &"" and facts.has(spec[3]):
+				var near := _cheapest_in_sight(world, id, memory, sensor, here, move.speed, kind)
+				if not is_inf(near):
+					costs[spec[2]] = near
 			if not facts.has(spec[0]):
 				continue
-			if spec[2] != &"":
-				var near := EcsMemoryFact.best(memory, here, move.speed, kind, true, sensor.perceived)
-				if near != null:
-					costs[spec[2]] = EcsMemoryFact.score(near, memory, here, move.speed, kind)
 			var known := EcsMemoryFact.best(memory, here, move.speed, kind)
 			costs[spec[1]] = INF if known == null else EcsMemoryFact.score(known, memory, here, move.speed, kind)
 	return costs
+
+## The cheapest place of `kind` (water it drinks, a lure it hides in, a ready mate) in sight,
+## priced at where it is now; INF if none.
+func _cheapest_in_sight(world: EcsWorld, id: int, memory: EcsMemoryComponent,
+		sensor: EcsSensorComponent, here: Vector2, speed: float, kind: int) -> float:
+	var best := INF
+	var kinds := EcsHunting.hide_kinds(world, id) if kind == EcsMemoryFact.LURE else ([] as Array[StringName])
+	var mine := _index.ready.get(id, &"") as StringName
+	for seen in sensor.perceived:
+		match kind:
+			EcsMemoryFact.WATER:
+				if not _index.water.has(seen):
+					continue
+			EcsMemoryFact.LURE:
+				if not _index.lures.has(seen) or not kinds.has((_index.lures[seen] as EcsCoverComponent).kind):
+					continue
+			EcsMemoryFact.MATE:
+				if seen == id or mine == &"" or _index.ready.get(seen, &"") != mine:
+					continue
+		var at := world.get_component(seen, EcsPositionComponent) as EcsPositionComponent
+		if at == null:
+			continue
+		var body := world.get_component(seen, EcsBodyComponent) as EcsBodyComponent
+		best = minf(best, EcsMemoryFact.score_at(memory, seen, at.position,
+			body.radius if body != null else 0.0, here, speed, kind))
+	return best
 
 static func _ids(goals: Array[EcsGoalDef]) -> Array[StringName]:
 	var ids: Array[StringName] = []

@@ -357,7 +357,10 @@ weight 10 = eat) and the ladder both read.
 **Memory is a component** (HANDOFF §20): `EcsMemoryComponent.facts` holds what matters to the
 animal, decided by its own needs and power and never by species — water it drinks, food and bushes
 of its diet, lures it hides in, the threat its danger found, prey it can hunt — each a copied
-position, a `kinds` bitmask rewritten on every sighting, and a `seen_at` time — **memory is lazy**
+position, a `kinds` bitmask and a `seen_at` time. **Memory is what it can't see** (HANDOFF §20,
+2026-11-08): a thing is copied once, as it leaves sight (forgotten if it died in sight); in sight the
+AI reads the live entity, and a place in sight is priced where it is (`EcsMemoryFact.score_at`). What
+it learns about a place — fear at a pond, traffic at a lure — is a note, written when learned. **Memory is also lazy**
 (HANDOFF §20, 2026-11-07): strength, fear and traffic are worked out from times when read, against
 the world clock (`EcsClockSingleton`, advanced by `EcsClockSystem`, stopped while paused), and
 nothing walks every fact per tick. `EcsMemorySystem` is its only writer, between sensor and

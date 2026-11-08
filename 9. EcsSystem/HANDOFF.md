@@ -883,6 +883,23 @@ frames now run one tick with a render between. Godot's own physics step is 2.2 m
 at 1,050 went 55 → 57. Godot's physics time, where the marks run, rose ~0.2 ms a tick at 698 and
 didn't move at 1,050.
 
+**Memory, live** (2026-11-08, same setup, alternating old/new twice; §20 "copied when it leaves
+sight"):
+
+| entities | old ms/run | new ms/run |
+|---|---|---|
+| 1,050 normal | 7.5 | 5.0 |
+| 464 crowded | 9.7–9.9 | 6.0 |
+| 696 crowded | 18.4 | 11.0 |
+| 1,044 crowded | 39–42 | 23–24 |
+
+- Things copied per run: 5–6 at 1,050 normal, 14–15 at 696 crowded.
+- Our systems at 1,050 went 10.9–11.0 → 9.7–10.0 ms/tick; FPS 55.5 / 53.5 → 58.7 / 55.8.
+- The crowd still collapses at 696, on planning.
+- What is left in memory is a fixed cost per animal, timed at 1,050: the head (danger, fear,
+  profile, index checks) ~1.9 ms/run; hunters counting traffic ~1.7 (72 hunters); the threat note,
+  the watched fact and capacity ~1.4. The sight diff and copies are ~0.7.
+
 **Previous ramp**, 2026-10-29, `86d6028`, game rates
 (`--every=sensor:3:0,low_brain:3:1,hunger:6:2,energy:6:5,health:3:2`), against `6ee5529`
 (before the views) in the same sitting. Average tick in ms, heaviest tick in brackets;
@@ -1493,6 +1510,41 @@ more per tick. Profiled inside at 1,044 (~1,165 sightings a run, ~4.5 µs each):
 "can I hunt it and do I notice it" twice per sighting, for traffic and for the prey bit, and the old
 fact was looked up twice; asking each once took memory from 7.9 to 6.7 ms a run. In a 180 s run of world1, of 133 mover facts 125 had lost track and 2 were unplaced by
 a walk to an empty spot.
+
+### Copied when it leaves sight (2026-11-08)
+
+**The rule** (the user's): while something is in sight, the live entity is the truth, so copying it
+every run was redundant. Memory is **what the animal can't see**, plus what it learned about places.
+- **In sight:** the AI reads the live entity. Planning's `*_in_sight` facts already did. A place in
+  sight is priced where it is now, by `EcsMemoryFact.score_at(memory, about, position, radius, …)`:
+  the walk, plus memory's notes on it (fear, a lure's wait) and any remembered threat near it.
+  Planning's `go_to_water` / `go_to_lure` / `seek_mate` and the brain's `try_seek_water` /
+  `try_cover` loop `perceived` with it.
+- **Leaving sight:** memory classifies the thing once, by the same rules as before (§"What matters
+  to each animal"), and copies it at its live place, `seen_at` = its last run.
+- **Died in sight** (eaten, killed, rotted): it is forgotten. Before, an eaten berry stayed known
+  until someone walked to it.
+- **Notes are written when learned**, even in sight: fear marks ponds near a threat while fleeing,
+  and traffic counts prey and kills near a lure. A pond or lure in sight with no fact gets one, since
+  a note needs a place. Danger's threat in sight is still noted every run (its position prices
+  ponds near it).
+- **`in_sight`** on a fact: set when its thing enters sight, cleared when it leaves. While set,
+  `strength` is 1, `spread` is 0, `_forget_weakest` keeps it, and `best()` skips it (`best` is now
+  out of sight only).
+- **How memory notices:** it keeps `sight`, a copy of the sensor's list from its last run, and does
+  anything only when the two differ (a native array compare). There is no signal from the sensor,
+  so tests that hand-set `perceived` still drive it.
+- **What changes for the planner:** something seen for the first time and still in sight has no
+  fact, so `water_known` can be false while `water_in_sight` is true; the plan uses the in-sight
+  action. A recall to a thing that is in sight is INF.
+
+**Pinned by** `_memory_matches_a_fresh_look_every_tick`: `MemoryProbe` wraps the memory system in
+a full pipeline of 40 entities for 900 ticks. Before each run it works out with the rules what
+leaving things should be copied as, and after it checks: 110 left alive, 11 died in sight, 0 wrong.
+Also `_memory_copies_only_what_leaves_sight`.
+
+**Measured** (§14, "Memory, live"): 7.5 → 5.0 ms a run at 1,050, 18.4 → 11.0 at 696 crowded. What
+is left is fixed cost per animal, not sightings.
 
 ---
 

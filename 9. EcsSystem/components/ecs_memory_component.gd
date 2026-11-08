@@ -1,7 +1,8 @@
 class_name EcsMemoryComponent
 extends EcsComponent
 
-## What it has seen that matters to it, and where. Only EcsMemorySystem writes it.
+## What it has seen that matters to it, and where: copied when it leaves sight. Only
+## EcsMemorySystem writes it.
 
 ## Kind bit -> its name, for describe().
 const KIND_NAMES: Dictionary = {1: "water", 2: "lure", 4: "food", 8: "bush", 16: "threat", 32: "prey",
@@ -30,6 +31,8 @@ const KIND_NAMES: Dictionary = {1: "water", 2: "lure", 4: "food", 8: "bush", 16:
 var facts: Dictionary = {}
 ## Clock time of its last memory run; facts' ages are read against it.
 var as_of: float = 0.0
+## Its sensor's list as of its last memory run, to tell what entered and left sight.
+var sight: Array[int] = []
 ## The trip destination last matched to a fact, and that fact's id (or none). Only the fact it
 ## is walking to is checked against what it sees.
 var watch_spot: Vector2 = Vector2.INF
@@ -61,7 +64,9 @@ func describe() -> Dictionary:
 				names.append(KIND_NAMES[bit])
 		var what := ", ".join(names)
 		var text := "%d%%, place unknown" % roundi(strength * 100.0)
-		if fact.placed:
+		if fact.in_sight:
+			text = "in sight"
+		elif fact.placed:
 			text = "%d%% at (%d, %d)" % [roundi(strength * 100.0),
 				roundi(fact.position.x), roundi(fact.position.y)]
 			var spread := EcsMemoryFact.spread_of(fact, self)
