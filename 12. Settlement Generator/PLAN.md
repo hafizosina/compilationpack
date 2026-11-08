@@ -4,7 +4,10 @@ A whole town from a seed: terrain, a centre, roads, plots, and the right buildin
 farmhouses on the outskirts with fields, fishing huts on the shore, a manor near the centre.
 Module 10 makes one building; module 12 decides **where every building goes and why**.
 
-**Status: a draft for review. Nothing is built.** The open questions at the end come first.
+**Status (2026-11-08): step 1 is done** — on two levels, an L2 region and L1 windows zoomed into
+it (see `HANDOFF.md`). Steps 2–9 are planned for L1 only. Answered: question 4 (terrain is
+generated here), question 5 (new content goes into module 10's catalogs), the map sizes
+(160×120 / 256×192 / 384×288), the name, and the world is finite.
 
 ---
 
@@ -28,7 +31,7 @@ Module 10 makes one building; module 12 decides **where every building goes and 
 Each stage reads the stages before it and adds one layer. Each is a pure function with a viewer
 toggle and a test.
 
-### Step 1 — Terrain
+### Step 1 — Terrain ✅ (2026-11-08, `HANDOFF.md` §2; also an L2 region with L1 zoom)
 Seeded noise (`FastNoiseLite`) over the map: **water** (a lake, a river or a coast — one per
 town def), **sand** along the shore, **forest** zones, **rocky ground** (a hill or an outcrop,
 where the mine nodes are) and open grass for fields. Then the **resource nodes** are scattered

@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="EcsSettlementDef" format=3 uid="uid://cglq4g0uh5su"]
+
+[ext_resource type="Script" uid="uid://bt0vopbka5s5v" path="res://12. Settlement Generator/defs/ecs_node_spawn_def.gd" id="1_5tpvt"]
+[ext_resource type="Script" uid="uid://byp1jwtg3iiwk" path="res://12. Settlement Generator/defs/ecs_settlement_def.gd" id="2_b411x"]
+
+[resource]
+script = ExtResource("2_b411x")
+key = &"region"
+display_name = "Region (L2)"
+size = Vector2i(256, 192)
+water = 3
+water_share = 0.18
+rock_share = 0.06
+forest_share = 0.3
+shore_width = 1
+river_width = Vector2i(2, 4)
