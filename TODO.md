@@ -25,6 +25,12 @@ Plans noted for later across modules 9, 10 and 11.
 ## Module 10 — Town Generator
 - [ ] Discuss your plan for the "closed" building flag (`CLOSE_BUILDING`).
 - [x] Pathfinding system (2026-11-08, HANDOFF §12).
+- [ ] Per-entity pathfinding: a cell's cost depends on who walks it. Decide whether Godot's A* is
+      enough or it needs a custom C++ GDExtension.
+  - Doors: open if it has access; a solid wall if not; with a lockpick, a path at a high cost
+    set by its lockpicking skill and morale.
+  - Walls: a weapon that can break walls makes them walkable at a cost (morale, war, enemies near).
+  - Water: some never enter it, some prefer it over land.
 
 ## Module 11 — EcsControl
 - [ ] Animals.
