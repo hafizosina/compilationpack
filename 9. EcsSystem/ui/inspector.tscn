@@ -51,32 +51,37 @@ layout_mode = 2
 size_flags_vertical = 3
 horizontal_scroll_mode = 0
 
-[node name="Page" type="VBoxContainer" parent="Box/Scroll"]
+[node name="Gutter" type="MarginContainer" parent="Box/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"DockScrollGutter"
+
+[node name="Page" type="VBoxContainer" parent="Box/Scroll/Gutter"]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"DockVBox"
 
-[node name="Bars" type="VBoxContainer" parent="Box/Scroll/Page"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_type_variation = &"DockVBox"
-
-[node name="Summary" type="VBoxContainer" parent="Box/Scroll/Page"]
+[node name="Bars" type="VBoxContainer" parent="Box/Scroll/Gutter/Page"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_type_variation = &"SimVBox"
 
-[node name="Flags" type="HFlowContainer" parent="Box/Scroll/Page"]
+[node name="Summary" type="VBoxContainer" parent="Box/Scroll/Gutter/Page"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SimVBox"
+
+[node name="Flags" type="HFlowContainer" parent="Box/Scroll/Gutter/Page"]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="Rule" type="HSeparator" parent="Box/Scroll/Page"]
+[node name="Rule" type="HSeparator" parent="Box/Scroll/Gutter/Page"]
 layout_mode = 2
 
-[node name="Cards" type="VBoxContainer" parent="Box/Scroll/Page"]
+[node name="Cards" type="VBoxContainer" parent="Box/Scroll/Gutter/Page"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_type_variation = &"DockVBox"
+theme_type_variation = &"SimVBox"
 
 [node name="EmptyHint" type="Label" parent="Box"]
 unique_name_in_owner = true

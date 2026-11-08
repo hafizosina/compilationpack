@@ -78,14 +78,14 @@ func _show_bars(bars: Array) -> void:
 			var row := _row(_bars, bar["label"])
 			var meter := ProgressBar.new()
 			meter.show_percentage = false
-			meter.custom_minimum_size = Vector2(0, 12)
+			meter.custom_minimum_size = Vector2(0, 8)
 			meter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			meter.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			var tone: StringName = bar.get("tone", &"")
 			meter.theme_type_variation = StringName("DockBar" + String(tone).capitalize()) \
 				if TONES.has(tone) else &"DockBar"
 			var value := Label.new()
-			value.theme_type_variation = &"DockLabel"
+			value.theme_type_variation = &"DockHint"
 			value.custom_minimum_size = Vector2(VALUE_WIDTH, 0)
 			value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			row.add_child(meter)
@@ -224,7 +224,7 @@ func _row(parent: Control, key: String) -> HBoxContainer:
 
 func _value_label(row: HBoxContainer) -> Label:
 	var value := Label.new()
-	value.theme_type_variation = &"DockLabel"
+	value.theme_type_variation = &"DockHint"
 	value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	value.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	row.add_child(value)

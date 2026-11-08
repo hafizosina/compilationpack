@@ -203,9 +203,9 @@ corner_radius_bottom_left = 6
 
 [sub_resource type="StyleBoxFlat" id="sb_card_head_hover"]
 content_margin_left = 4.0
-content_margin_top = 2.0
+content_margin_top = 0.0
 content_margin_right = 6.0
-content_margin_bottom = 2.0
+content_margin_bottom = 0.0
 bg_color = Color(0.831, 0.702, 0.392, 0.6)
 border_width_bottom = 1
 border_color = Color(0.165, 0.125, 0.086, 0.35)
@@ -216,9 +216,9 @@ corner_radius_bottom_left = 4
 
 [sub_resource type="StyleBoxFlat" id="sb_card_head"]
 content_margin_left = 4.0
-content_margin_top = 2.0
+content_margin_top = 0.0
 content_margin_right = 6.0
-content_margin_bottom = 2.0
+content_margin_bottom = 0.0
 bg_color = Color(0.831, 0.702, 0.392, 0.35)
 border_width_bottom = 1
 border_color = Color(0.165, 0.125, 0.086, 0.35)
@@ -540,7 +540,7 @@ DockCardHead/colors/font_disabled_color = Color(0.165, 0.125, 0.086, 0.45)
 DockCardHead/colors/font_hover_color = Color(0.165, 0.125, 0.086, 1)
 DockCardHead/colors/font_hover_pressed_color = Color(0.165, 0.125, 0.086, 1)
 DockCardHead/colors/font_pressed_color = Color(0.165, 0.125, 0.086, 1)
-DockCardHead/font_sizes/font_size = 14
+DockCardHead/font_sizes/font_size = 13
 DockCardHead/styles/focus = SubResource("sb_empty_box")
 DockCardHead/styles/hover = SubResource("sb_card_head_hover")
 DockCardHead/styles/hover_pressed = SubResource("sb_card_head_hover")
@@ -598,6 +598,8 @@ DockPanel/styles/panel = SubResource("sb_dock")
 DockTitle/base_type = &"Label"
 DockTitle/colors/font_color = Color(0.165, 0.125, 0.086, 1)
 DockTitle/font_sizes/font_size = 15
+DockScrollGutter/base_type = &"MarginContainer"
+DockScrollGutter/constants/margin_right = 12
 DockTree/base_type = &"Tree"
 DockTree/colors/font_color = Color(0.165, 0.125, 0.086, 1)
 DockTree/colors/font_hovered_color = Color(0.165, 0.125, 0.086, 1)
