@@ -3,7 +3,8 @@
 The living state of module 9. Beside it are the roadmap (`ECS_REFACTOR_PLAN.md`) and
 `ECS_GOAP_REPORT.md`, a short report on where the ECS and the planner stand as of 2026-11-01 —
 read that first for the overview, this for the detail — and `PSEUDOCODE.md`, the core logic of
-every component, flag, singleton and system as pseudocode. Read this before touching the folder. It says what exists, why it is
+every component, flag, singleton and system as pseudocode; `ONI_STUDY.md`, notes on how
+Oxygen Not Included scales (2026-11-08) and which of its tricks fit here. Read this before touching the folder. It says what exists, why it is
 shaped that way, what is settled, what is open, and what has been measured. History —
 earlier designs and the reasoning that retired them — is in git; commit hashes are given
 where a design is worth recovering.
@@ -771,6 +772,10 @@ ponds (§20); `MoveIntent`; weapons, durability and broken (they wait on
 what a carried record may *do*); prey fighting back; bag capacity and stacking; **power as a
 derived, tweakable value** (today it is authored). **Do not re-add breadth without being
 asked** — the small size is the point.
+
+**Perf ideas from Oxygen Not Included** (`ONI_STUDY.md`, 2026-11-08, not started): a fixed
+brain budget per tick with a priority queue for `low_brain` and `sensor`, skipping off-camera
+movers in `node_sync`, and stacking ground items. Its suggested order is a proposal, not a decision.
 
 Smaller, not done: speed variance is per placement, so a runtime
 spawn gets the blueprint default; the Respawn button keeps keyboard focus after a click.
