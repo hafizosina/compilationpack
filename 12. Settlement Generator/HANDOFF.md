@@ -5,12 +5,15 @@ this file is what exists. Module 9's ECS and module 10's grid, build commands, p
 catalogs are **borrowed, never copied**; new terrains and blueprints went into module 10's
 catalogs, by decision (2026-11-08), so module 10's builder can place them too.
 
-**Status (2026-11-08):** step 1, terrain and resource nodes, is done, on two levels: an **L2
-region** and **L1 windows** zoomed 8× into it. Towns and buildings (steps 2–9) will be L1 only.
+**Status (2026-11-08):** step 1 (terrain and resource nodes, on an **L2 region** with **L1**
+streamed 8× into it in chunks) and step 2 (the town's site, plaza and well, §3) are done. Steps 3–9
+work on L1 only, inside the town's area.
 
 ```bash
 # 38 checks, ~60 s; exit 0 only if all pass. Prints plan and load costs.
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/terrain_test.tscn"
+# Step 2: 14 checks, ~50 s. Prints how long picking a site takes.
+"$GODOT" --headless --path . "res://12. Settlement Generator/tests/site_test.tscn"
 # The viewer: Generate makes the L2 region; the wheel zooms in until L1 streams in chunk by chunk.
 "$GODOT" --path . "res://12. Settlement Generator/generator.tscn"
 ```
@@ -22,9 +25,9 @@ region** and **L1 windows** zoomed 8× into it. Towns and buildings (steps 2–9
 | Path | Role |
 |---|---|
 | `defs/` | `EcsSettlementDef` (a kind of map), `EcsNodeSpawnDef` (where a node grows); `settlements/`: `hamlet`, `village`, `town`, `region` |
-| `ecs/` | `EcsTerrainGenerator` (pure: `plan`, `refine`, and the chunk stages `refine_terrain`, `refine_nodes`), `EcsTerrainCheck` (pure: `problems`, `follows`), `EcsTerrainChunks` (the L1 chunks kept in memory and what to make next) |
+| `ecs/` | `EcsTerrainGenerator` (pure: `plan`, `refine`, and the chunk stages `refine_terrain`, `refine_nodes`), `EcsTerrainCheck` (pure: `problems`, `follows`), `EcsTerrainChunks` (the L1 chunks kept in memory, what to make next, and the town's overlay), `EcsSitePicker` and `EcsSiteCheck` (pure: the town's site and centre), `EcsSettlementSite` (the record) |
 | `generator.tscn` | The viewer (`generator_view.gd`); its panel is built in code |
-| `tests/` | `terrain_test.tscn` |
+| `tests/` | `terrain_test.tscn`, `site_test.tscn` |
 | `PLAN.md` | The nine steps |
 
 Module 10 additions for it (module 10's HANDOFF §13): the `rock` and `forest` terrains, the
@@ -186,3 +189,95 @@ command list are where to look.
 - a refined window has no rivers of its own beyond its parent's (no tributaries);
 - the chunk store has no cap: a chunk's plans stay for the whole session (small: a few KB a chunk);
 - the coast's sand is thin on big maps.
+
+---
+
+## 3. Step 2 — the town's site and centre (2026-11-08)
+
+One town per region (decided). The generator picks its site; a right-click in the viewer moves it;
+the **Town** option sets its size from the shipped defs (hamlet 160×120, village 256×192, town
+384×288 L1 cells; plaza 8, 12, 16 cells a side).
+
+**`EcsSettlementDef`** gained two groups:
+- **Town:** `plaza_size`, `plaza_floor` (`stone`), `well` (`well`), `clear_margin` (2).
+- **Site:** `water_near` (2–10 region cells), `water_weight`, `open_weight`, `edge_margin_cells` (4).
+
+**`EcsSitePicker.pick(region_plan, region_def, def, seed, scale, catalog, shares)`** scores every
+region cell (pure, L2 only).
+- **Refused:**
+  - on water;
+  - a town area that would come within `edge_margin_cells` of the region's edge;
+  - an area under 70% land;
+  - land that doesn't reach the region's edge, which roads (step 3) will need.
+- **Score:**
+  - *water*: full marks between `water_near` cells, falling off nearer or further;
+  - *open*: grass and sand round the site, forest and rock at half;
+  - *room*: the land share under the area;
+  - +0.2 for a river within reach.
+- Sums over windows come from summed-area tables, so scoring all 49k cells is one pass.
+- The best is taken; ties go to the cell nearest the region's centre, then the cell itself, so the
+  same seed gives the same town.
+- The top 20 are tried in turn until one's centre works out.
+
+**`place(…, cell, …)`** does the same at a chosen cell and returns `{site}` or `{refused: why}`.
+
+**The centre**, on L1:
+- The town's area is refined with `refine_terrain`, the same cells the chunks draw.
+- The plaza is the `plaza_size` rect within a quarter of the area from the site, on no water, with
+  the fewest forest and rock cells, nearest first.
+- Its land must reach the area's edge.
+- The well is its middle cell.
+- **`EcsSettlementSite`** holds:
+  - the region cell, the L1 area, the plaza and the well;
+  - the commands (`SET_FLOOR` stone on every plaza cell, `PLACE_OBJECT` the well);
+  - the cleared rects (the plaza grown by `clear_margin`);
+  - the score parts.
+
+The plaza is a floor, so the ground under it, and the L2 ↔ L1 rule, are untouched.
+
+**Into the chunks**: `EcsTerrainChunks.site` holds the town.
+- `overlay(at, objects)` gives a chunk the town's floors on its cells and border, so a plaza split
+  across chunks joins, and its objects on its own cells only, so the well is placed once.
+- `blocked(at)` marks the chunk's cleared cells. `refine_nodes` takes it, so no node is planned
+  there; `_nodes` starts from it as kept-clear.
+- `touching(rect)` lists the chunks under a town.
+- A new site makes those chunks under the old and new towns drop their nodes and drawing (their
+  terrain stays) and be made again. Jobs still running for them are thrown away, by a per-chunk
+  `rev`.
+
+**`EcsSiteCheck.problems(…)`** reports:
+- an area leaving the region, or a site on water;
+- a plaza leaving the area, or water under it;
+- a well outside the plaza;
+- the plaza's land not reaching the area's edge;
+- given planned nodes, any on cleared ground.
+
+The walk check is on water only. Nodes are planned per chunk, and step 1's check keeps them from
+walling land off.
+
+**Viewer:**
+- The Town option re-sites the town at its cell (or picks afresh).
+- The region shows the town's area (pale) and plaza (orange) outlined.
+- The info panel gives the site's score parts, or the reason a move was refused.
+- A right-click moves the town; the move is planned on a worker.
+- The cell panel says when an L1 cell is the well, the plaza, cleared ground or in the town's area,
+  and gives the site's score on the site's L2 cell.
+
+**Tests** (`site_test`, 14):
+- every town size over 10 seeds is sound;
+- the same seed gives the same town;
+- moving it onto water or by the edge is refused with the reason, and onto good land it goes there;
+- a hamlet's area with its plaza and nodes goes through module 10's build system: all 1,200
+  commands accepted, stone on every plaza cell, the well born, no node on cleared ground;
+- a plaza crossing 9 (8-cell) chunks draws the town's floor on every chunk's cells and border, the
+  well is placed by one chunk, and no chunk plans a node on cleared ground.
+
+**Measured:** picking a site takes ~0.7 s for a hamlet, ~0.9 s for a village and ~1.3 s for a
+town, on a worker. Most of it is scoring 49k cells in GDScript and refining the area for the
+plaza search. Fine for generation; scoring only cells near water first would cut it if needed.
+
+**Not yet:**
+- a second settlement;
+- height or slope;
+- plaza shapes other than a rectangle;
+- the plaza is a floor, not cleared terrain: forest under it stays forest under the stone.

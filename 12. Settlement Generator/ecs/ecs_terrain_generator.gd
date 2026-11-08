@@ -176,10 +176,11 @@ static func blend_shares(parent: Dictionary, parent_def: EcsSettlementDef) -> Ar
 		shares.append(share)
 	return shares
 
-## Nodes for a child area of `def`'s size from its `zones`, seeded by `key` (a window or chunk).
+## Nodes for a child area of `def`'s size from its `zones`, seeded by `key` (a window or chunk),
+## none on a cell `blocked` marks (a town's cleared ground).
 static func refine_nodes(def: EcsSettlementDef, zones: PackedByteArray, rng_seed: int, key: Variant,
-		entities: EcsEntityCatalog) -> Array[Dictionary]:
-	return _nodes(def, zones, entities, _rng(hash([rng_seed, key]), 7))
+		entities: EcsEntityCatalog, blocked: PackedByteArray = PackedByteArray()) -> Array[Dictionary]:
+	return _nodes(def, zones, entities, _rng(hash([rng_seed, key]), 7), blocked)
 
 ## The `size` window at `from` of a `w`-wide grid.
 static func _crop(cells: PackedByteArray, w: int, from: Vector2i, size: Vector2i) -> PackedByteArray:
@@ -467,7 +468,7 @@ static func _forest(def: EcsSettlementDef, kinds: PackedByteArray, rng: RandomNu
 			kinds[i] = FOREST
 
 static func _nodes(def: EcsSettlementDef, zones: PackedByteArray, entities: EcsEntityCatalog,
-		rng: RandomNumberGenerator) -> Array[Dictionary]:
+		rng: RandomNumberGenerator, blocked: PackedByteArray = PackedByteArray()) -> Array[Dictionary]:
 	var w := def.size.x
 	var h := def.size.y
 	var lists: Array[PackedInt32Array] = []
@@ -480,6 +481,8 @@ static func _nodes(def: EcsSettlementDef, zones: PackedByteArray, entities: EcsE
 	# 0 free, 1 kept clear, 2 a node.
 	var taken := PackedByteArray()
 	taken.resize(w * h)
+	if not blocked.is_empty():
+		taken = blocked.duplicate()
 	var placed: Array[Dictionary] = []
 	for spawn in def.nodes:
 		var place := EcsBuildRules.template(entities, spawn.blueprint, &"grid_position") as EcsGridPositionComponent

@@ -123,3 +123,4 @@ script = ExtResource("2_x7w7d")
 key = &"hamlet"
 display_name = "Hamlet"
 nodes = Array[ExtResource("1_h1p0h")]([SubResource("Resource_7x65i"), SubResource("Resource_k6c7k"), SubResource("Resource_hhrl2"), SubResource("Resource_m4lwf"), SubResource("Resource_ii645"), SubResource("Resource_2sukx"), SubResource("Resource_aum8y"), SubResource("Resource_7mpx1"), SubResource("Resource_jcbr6"), SubResource("Resource_0upwq"), SubResource("Resource_0oejp"), SubResource("Resource_4fmgp"), SubResource("Resource_uv4af"), SubResource("Resource_m0do4"), SubResource("Resource_u8scr"), SubResource("Resource_ihtsm")])
+plaza_size = Vector2i(8, 8)

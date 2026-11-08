@@ -126,3 +126,4 @@ size = Vector2i(384, 288)
 water = 2
 water_share = 0.15
 nodes = Array[ExtResource("1_b66dv")]([SubResource("Resource_i87ue"), SubResource("Resource_nyb8v"), SubResource("Resource_via66"), SubResource("Resource_ld3ar"), SubResource("Resource_y2ma5"), SubResource("Resource_82qow"), SubResource("Resource_ugt3d"), SubResource("Resource_qkjmh"), SubResource("Resource_x36pn"), SubResource("Resource_5u25e"), SubResource("Resource_qcc31"), SubResource("Resource_co6k8"), SubResource("Resource_si6xo"), SubResource("Resource_d8at4"), SubResource("Resource_hnly7"), SubResource("Resource_wf7ve")])
+plaza_size = Vector2i(16, 16)

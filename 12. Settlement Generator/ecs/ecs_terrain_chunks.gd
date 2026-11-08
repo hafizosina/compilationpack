@@ -4,7 +4,8 @@ extends RefCounted
 ## The L1 chunks of a region and what each has: its terrain planned, drawn, its objects planned,
 ## drawn. Kept in memory, so a chunk is never planned twice. Says what to do next: every stage of
 ## the chunks in view, nearest the view's centre first, before any of the ring around them, and
-## within that terrain before drawing it, before objects, before drawing them.
+## within that terrain before drawing it, before objects, before drawing them. A town over the
+## chunks (`site`) gives the chunks it covers its commands and keeps their nodes off its ground.
 
 enum Stage { TERRAIN, DRAW_TERRAIN, OBJECTS, DRAW_OBJECTS }
 
@@ -12,8 +13,10 @@ enum Stage { TERRAIN, DRAW_TERRAIN, OBJECTS, DRAW_OBJECTS }
 var size: int
 ## Chunks across the region.
 var count: Vector2i
-## Chunk -> {terrain, nodes, drawn, objects_drawn, busy}; a missing key means not yet.
+## Chunk -> {terrain, nodes, drawn, objects_drawn, busy, rev}; a missing key means not yet.
 var chunks: Dictionary = {}
+## The town over the chunks, or null.
+var site: EcsSettlementSite
 
 func _init(region_size: Vector2i, scale: int, chunk_size: int) -> void:
 	size = chunk_size
@@ -65,6 +68,52 @@ func far(view: Rect2i, keep: int) -> Array[Vector2i]:
 	for at: Vector2i in chunks:
 		if chunks[at].get("drawn", false) and not chunks[at].get("busy", false) and not near.has_point(at):
 			out.append(at)
+	return out
+
+## The town's commands for chunk `at`, moved onto the chunk's own grid (its border one cell in):
+## floors on its cells and border, so a floor split across chunks joins; objects, when asked, only
+## on its own cells, so none is placed twice.
+func overlay(at: Vector2i, objects: bool) -> Array[EcsBuildCommand]:
+	var out: Array[EcsBuildCommand] = []
+	if site == null:
+		return out
+	var own := Rect2i(at * size, Vector2i(size, size))
+	for command in site.commands:
+		var local := command.cell - own.position + Vector2i.ONE
+		if command.kind == EcsBuildCommand.Kind.PLACE_OBJECT:
+			if objects and own.has_point(command.cell):
+				out.append(EcsBuildCommand.place(command.kind, local, command.blueprint, command.value))
+		elif own.grow(1).has_point(command.cell):
+			out.append(EcsBuildCommand.make(command.kind, local, command.value))
+	return out
+
+## Chunk `at`'s cells the town clears, as 1s over its `size` × `size` cells, for refine_nodes;
+## empty when it clears none.
+func blocked(at: Vector2i) -> PackedByteArray:
+	var out := PackedByteArray()
+	if site == null:
+		return out
+	var own := Rect2i(at * size, Vector2i(size, size))
+	for rect in site.cleared:
+		var part := rect.intersection(own)
+		if part.has_area():
+			if out.is_empty():
+				out.resize(size * size)
+			for y in range(part.position.y, part.end.y):
+				for x in range(part.position.x, part.end.x):
+					out[(y - own.position.y) * size + x - own.position.x] = 1
+	return out
+
+## The chunks `rect` (L1 cells) touches, its border cells included.
+func touching(rect: Rect2i) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	if not rect.has_area():
+		return out
+	var first := chunk_at(rect.position - Vector2i.ONE).clamp(Vector2i.ZERO, count - Vector2i.ONE)
+	var last := chunk_at(rect.end).clamp(Vector2i.ZERO, count - Vector2i.ONE)
+	for y in range(first.y, last.y + 1):
+		for x in range(first.x, last.x + 1):
+			out.append(Vector2i(x, y))
 	return out
 
 ## How many chunks have reached each stage: [terrain planned, drawn, objects planned, objects drawn].

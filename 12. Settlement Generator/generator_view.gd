@@ -9,10 +9,14 @@ extends Node2D
 ## the terrain-only one, so the main thread only ever adds a finished chunk. Made chunks stay in
 ## memory; far ones free their nodes and keep their plans. Zooming out fades L1 away. A left click
 ## on the map outlines that cell, L1's where L1 is drawn, else L2's, and shows its details.
+## The town (EcsSitePicker) is picked with the region, sized by the Town option, outlined, and drawn
+## into the chunks it covers; a right click moves it to that region cell.
 
 const DEFS := "res://12. Settlement Generator/defs/settlements/"
 ## The def L1 chunks take their shore and nodes from.
 const L1_DEF: StringName = &"town"
+## Town sizes: the def that gives the town its area and plaza.
+const TOWNS: Array[StringName] = [&"hamlet", &"village", &"town"]
 const CHUNK_SIZES: Array[int] = [32, 64, 128]
 const WATER_NAMES: Array[String] = ["The region's", "Lake", "River", "Coast", "River to the sea"]
 ## L1 cells per L2 cell side.
@@ -49,6 +53,7 @@ const TINTS := [
 
 var _panel: PanelContainer
 var _chunk_size: OptionButton
+var _town_size: OptionButton
 var _water: OptionButton
 var _seed: SpinBox
 var _generate_button: Button
@@ -58,6 +63,10 @@ var _detail: Label
 ## The clicked cell's outline, and the cell: {level: 1 or 2, cell}, or {}.
 var _marker: Line2D
 var _picked: Dictionary = {}
+## The town, the reason the last move was refused, and its outlines (area, plaza).
+var _site: EcsSettlementSite
+var _site_note: String = ""
+var _site_lines: Array[Line2D] = []
 var _zones_on: bool = false
 var _nodes_on: bool = true
 ## The region shown: {root, world, scheduler, tile_sync, zones, def, plan, shares, seed, problems}.
@@ -85,6 +94,14 @@ func _ready() -> void:
 	_marker.z_index = 30
 	_marker.visible = false
 	_world_root.add_child(_marker)
+	for colour: Color in [Color(1.0, 0.95, 0.6), Color(0.9, 0.5, 0.2)]:
+		var line := Line2D.new()
+		line.closed = true
+		line.default_color = colour
+		line.z_index = 29
+		line.visible = false
+		_world_root.add_child(line)
+		_site_lines.append(line)
 	_generate()
 
 func _exit_tree() -> void:
@@ -119,6 +136,8 @@ func _process(_delta: float) -> void:
 	_report()
 	if _marker.visible:
 		_marker.width = 3.0 / _camera.zoom.x
+	for line in _site_lines:
+		line.width = 2.5 / _camera.zoom.x
 
 func _physics_process(delta: float) -> void:
 	if _region.is_empty():
@@ -143,10 +162,14 @@ func _input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 	_zoom_at(get_global_mouse_position(), _camera.zoom.x * step)
 
-## A left click on the map picks the cell under it.
+## A left click on the map picks the cell under it; a right click moves the town there.
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and not _region.is_empty():
+	if not event is InputEventMouseButton or not event.pressed or _region.is_empty():
+		return
+	if event.button_index == MOUSE_BUTTON_LEFT:
 		_pick(get_global_mouse_position())
+	elif event.button_index == MOUSE_BUTTON_RIGHT:
+		_move_site(EcsTownGrid.cell_at(get_global_mouse_position()))
 
 ## Sets the zoom, keeping world point `at` where it is on screen.
 func _zoom_at(at: Vector2, zoom: float) -> void:
@@ -178,6 +201,11 @@ func _build_panel() -> void:
 	# 32: each chunk entering the scene costs the engine one short frame; 64 costs some frames 40–70 ms.
 	_chunk_size.select(0)
 	_chunk_size.item_selected.connect(func(_k: int) -> void: _reset_l1())
+	_town_size = _option(box, "Town", TOWNS.map(func(k: StringName) -> String:
+		var size := (load(DEFS + "%s.tres" % k) as EcsSettlementDef).size
+		return "%s, %d×%d" % [String(k).capitalize(), size.x, size.y]))
+	_town_size.select(1)
+	_town_size.item_selected.connect(func(_k: int) -> void: _move_site(_site.l2_cell if _site != null else Vector2i(-1, -1)))
 	_water = _option(box, "Water", WATER_NAMES)
 	var row := HBoxContainer.new()
 	box.add_child(row)
@@ -285,6 +313,10 @@ func _describe() -> void:
 		lines.append("Zones: %s" % _zone_names((plan["zones"] as PackedByteArray)[i]))
 		lines.append("Walk cost: %s" % _walk_cost(kind))
 		lines.append("Holds L1 cells %s to %s" % [cell * ZOOM, cell * ZOOM + Vector2i(ZOOM - 1, ZOOM - 1)])
+		if _site != null and cell == _site.l2_cell:
+			lines.append("The town's site: " + _town_line().split("score ")[1].split("\n")[0])
+		elif _site != null and Rect2i(_site.area.position / ZOOM, _site.area.size / ZOOM).has_point(cell):
+			lines.append("In the town's area")
 	else:
 		var at := _chunks.chunk_at(cell)
 		var chunk: Dictionary = _chunks.chunks.get(at, {})
@@ -300,6 +332,15 @@ func _describe() -> void:
 			lines.append("Zones: %s" % _zone_names((chunk["terrain"]["zones"] as PackedByteArray)[local.y * _chunks.size + local.x]))
 			lines.append("Walk cost: %s" % _walk_cost(kind))
 		lines.append("Object: %s" % _object_at(chunk, local))
+		if _site != null:
+			if cell == _site.well:
+				lines.append("Town: the well")
+			elif _site.plaza.has_point(cell):
+				lines.append("Town: the plaza (stone floor)")
+			elif _site.cleared.any(func(r: Rect2i) -> bool: return r.has_point(cell)):
+				lines.append("Town: cleared ground round the plaza")
+			elif _site.area.has_point(cell):
+				lines.append("Town: in its area")
 		lines.append("In L2 cell %s: %s" % [parent, EcsTerrainGenerator.TERRAIN_KEYS[(plan["kinds"] as PackedByteArray)[parent.y * region.size.x + parent.x]]])
 		var made := PackedStringArray()
 		for step: Array in [["terrain", chunk.has("terrain")], ["drawn", chunk.get("drawn", false)],
@@ -308,6 +349,14 @@ func _describe() -> void:
 				made.append(step[0])
 		lines.append("Chunk made: %s" % (", ".join(made) if not made.is_empty() else "nothing yet"))
 	_detail.text = "\n".join(lines)
+
+func _town_line() -> String:
+	var note := "" if _site_note == "" else "\n" + _site_note
+	if _site == null:
+		return "No town" + note
+	var score := _site.score
+	return "Town at region cell %s, score %.2f (water %.2f, open %.2f, room %.2f, river %.2f)%s" % [_site.l2_cell,
+		score["total"], score["water"], score["open"], score["room"], score["river"], note]
 
 func _zone_names(bits: int) -> String:
 	var names := PackedStringArray()
@@ -357,14 +406,72 @@ func _generate() -> void:
 		def.water = _water.selected - 1
 		def.water_share = 0.03 if def.water == EcsSettlementDef.Water.RIVER else (0.18 if def.water == EcsSettlementDef.Water.RIVER_TO_SEA else 0.12)
 	var rng_seed := int(_seed.value)
+	var town := _town_def()
 	_generation += 1
 	_generate_button.disabled = true
 	_start({"kind": &"region"}, func() -> Dictionary:
 		var plan := EcsTerrainGenerator.plan(def, rng_seed, catalog, entity_catalog)
 		var level := _make_level(def.size, plan["commands"], Vector2.ZERO, 1.0, false)
+		var shares := EcsTerrainGenerator.blend_shares(plan, def)
 		level.merge({"def": def, "plan": plan, "seed": rng_seed, "problems": EcsTerrainCheck.problems(def, plan),
-			"shares": EcsTerrainGenerator.blend_shares(plan, def), "tint": _tint(def.size, plan["zones"])})
+			"shares": shares, "tint": _tint(def.size, plan["zones"]),
+			"site": EcsSitePicker.pick(plan, def, town, rng_seed, ZOOM, catalog, shares)})
 		return level)
+
+func _town_def() -> EcsSettlementDef:
+	return load(DEFS + "%s.tres" % TOWNS[_town_size.selected]) as EcsSettlementDef
+
+## Re-sites the town on a worker: at region cell `cell`, or the best site when `cell` is (-1, -1).
+func _move_site(cell: Vector2i) -> void:
+	if _region.is_empty():
+		return
+	for job: Dictionary in _jobs.values():
+		if job["kind"] == &"site" or job["kind"] == &"region":
+			return
+	var plan: Dictionary = _region["plan"]
+	var region: EcsSettlementDef = _region["def"]
+	var shares: Array = _region["shares"]
+	var rng_seed: int = _region["seed"]
+	var town := _town_def()
+	_site_note = "Placing the town…"
+	_start({"kind": &"site"}, func() -> Dictionary:
+		if cell == Vector2i(-1, -1):
+			var site := EcsSitePicker.pick(plan, region, town, rng_seed, ZOOM, catalog, shares)
+			return {"site": site} if site != null else {"refused": "no site on this region"}
+		return EcsSitePicker.place(plan, region, town, cell, rng_seed, ZOOM, catalog, shares))
+
+## Puts `site` over the chunks: those under the old or new town lose their objects and drawing (their
+## terrain stays) and are made again with it; any of their jobs still running is thrown away.
+func _set_site(site: EcsSettlementSite) -> void:
+	var affected: Array[Vector2i] = []
+	for old in [_chunks.site, site]:
+		if old != null:
+			affected.append_array(_chunks.touching((old as EcsSettlementSite).area))
+	_site = site
+	_chunks.site = site
+	for at in affected:
+		var chunk: Dictionary = _chunks.chunks.get(at, {})
+		if chunk.is_empty():
+			continue
+		chunk["rev"] = int(chunk.get("rev", 0)) + 1
+		chunk["busy"] = false
+		chunk.erase("nodes")
+		if chunk.has("level"):
+			(chunk["level"]["root"] as Node2D).queue_free()
+			chunk.erase("level")
+		chunk["drawn"] = false
+		chunk["objects_drawn"] = false
+	_outline_site()
+
+## Outlines the town's area and plaza over the region.
+func _outline_site() -> void:
+	var rects := [_site.area, _site.plaza] if _site != null else []
+	for k in _site_lines.size():
+		_site_lines[k].visible = k < rects.size()
+		if k < rects.size():
+			var px := float(EcsTownGrid.CELL) / ZOOM
+			var rect := Rect2(Vector2((rects[k] as Rect2i).position) * px, Vector2((rects[k] as Rect2i).size) * px)
+			_site_lines[k].points = PackedVector2Array([rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)])
 
 ## Starts chunk `at`'s `stage` on a worker.
 func _start_chunk(at: Vector2i, stage: int) -> void:
@@ -372,7 +479,7 @@ func _start_chunk(at: Vector2i, stage: int) -> void:
 		_chunks.chunks[at] = {}
 	var chunk: Dictionary = _chunks.chunks[at]
 	var size := _chunks.size
-	var job := {"kind": &"chunk", "chunk": at, "stage": stage}
+	var job := {"kind": &"chunk", "chunk": at, "stage": stage, "rev": int(chunk.get("rev", 0))}
 	match stage:
 		EcsTerrainChunks.Stage.TERRAIN:
 			var parent: Dictionary = _region["plan"]
@@ -387,6 +494,7 @@ func _start_chunk(at: Vector2i, stage: int) -> void:
 		EcsTerrainChunks.Stage.DRAW_TERRAIN, EcsTerrainChunks.Stage.DRAW_OBJECTS:
 			var kinds: PackedByteArray = chunk["terrain"]["kinds"]
 			var nodes: Array = chunk["nodes"] if stage == EcsTerrainChunks.Stage.DRAW_OBJECTS else []
+			var town := _chunks.overlay(at, stage == EcsTerrainChunks.Stage.DRAW_OBJECTS)
 			var origin := Vector2(at * size - Vector2i.ONE) * EcsTownGrid.CELL / ZOOM
 			chunk["busy"] = true
 			_start(job, func() -> Dictionary:
@@ -396,14 +504,16 @@ func _start_chunk(at: Vector2i, stage: int) -> void:
 				for node: Dictionary in nodes:
 					commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT,
 						(node["cell"] as Vector2i) + Vector2i.ONE, node["blueprint"], 0))
+				commands.append_array(town)
 				return _make_level(outer, commands, origin, 1.0 / ZOOM, true))
 		EcsTerrainChunks.Stage.OBJECTS:
 			var zones: PackedByteArray = chunk["terrain"]["zones"]
 			var def := _chunk_def
 			var rng_seed: int = _region["seed"]
+			var blocked := _chunks.blocked(at)
 			chunk["busy"] = true
 			_start(job, func() -> Dictionary:
-				return {"nodes": EcsTerrainGenerator.refine_nodes(def, zones, rng_seed, at, entity_catalog)})
+				return {"nodes": EcsTerrainGenerator.refine_nodes(def, zones, rng_seed, at, entity_catalog, blocked)})
 
 func _start(job: Dictionary, work: Callable) -> void:
 	job["generation"] = _generation
@@ -463,8 +573,17 @@ func _arrived(job: Dictionary) -> void:
 		if result.has("root"):
 			(result["root"] as Node2D).free()
 		return
+	if job["kind"] == &"site":
+		_site_note = result.get("refused", "")
+		if result.has("site"):
+			_set_site(result["site"])
+		return
 	var at: Vector2i = job["chunk"]
 	var chunk: Dictionary = _chunks.chunks[at]
+	if job["rev"] != int(chunk.get("rev", 0)):
+		if result.has("root"):
+			(result["root"] as Node2D).free()
+		return
 	chunk["busy"] = false
 	match job["stage"]:
 		EcsTerrainChunks.Stage.TERRAIN:
@@ -507,6 +626,8 @@ func _show_region(level: Dictionary) -> void:
 	level["zones"] = zones
 	_region = level
 	_world_root.add_child(level["root"])
+	_site = level["site"]
+	_site_note = "" if _site != null else "No site for a town on this region"
 	_reset_l1()
 	_frame()
 	_show_layers()
@@ -524,6 +645,8 @@ func _reset_l1() -> void:
 	_chunks = EcsTerrainChunks.new((_region["def"] as EcsSettlementDef).size, ZOOM, CHUNK_SIZES[_chunk_size.selected])
 	_chunk_def = (load(DEFS + "%s.tres" % L1_DEF) as EcsSettlementDef).duplicate() as EcsSettlementDef
 	_chunk_def.size = Vector2i(_chunks.size, _chunks.size)
+	_chunks.site = _site
+	_outline_site()
 	_picked = {}
 	_marker.visible = false
 	_detail_panel.visible = false
@@ -582,6 +705,7 @@ func _report() -> void:
 		"L2 region %d×%d at 8 m a cell, %s, seed %d" % [region.size.x, region.size.y,
 			WATER_NAMES[region.water + 1].to_lower(), _region["seed"]],
 		"Sound" if problems.is_empty() else "Problems: " + "; ".join(problems),
+		_town_line(),
 		"Zoom ×%.2f: %s" % [_camera.zoom.x, "L1, 1 m a cell" if _in_l1 else "L2 (L1 from ×%.2f)" % L1_ZOOM],
 		"L1 chunks of %d×%d, %d×%d across the region" % [_chunks.size, _chunks.size, _chunks.count.x, _chunks.count.y],
 		"Terrain planned %d, drawn %d; objects planned %d, drawn %d" % [tally[0], tally[1], tally[2], tally[3]],

@@ -37,8 +37,9 @@ Plans noted for later across modules 9 to 12.
 ## Module 12 — Settlement Generator
 - [x] Step 1: terrain and resource nodes, on an L2 region with L1 streamed in chunks; cell detail
       panel (2026-11-08).
-- [ ] Steps 2–9 on L1 (`PLAN.md`): site and centre, roads, plots, zoning, buildings, outdoors,
-      whole-town check, viewer and measurements.
+- [x] Step 2: the town's site, plaza and well; moved by right-click (2026-11-08).
+- [ ] Steps 3–9 on L1 (`PLAN.md`): roads, plots, zoning, buildings, outdoors, whole-town check,
+      viewer and measurements.
 - [ ] Open plan questions: layout style (organic or grid), crops on tilled soil (a module 10 rule
       change, or soil as a terrain), fences as objects or a structure with gates.
 - [ ] L3 world map, and height-based water: heightmap, Priority-Flood lakes, D8 rivers (the

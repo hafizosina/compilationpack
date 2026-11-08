@@ -41,10 +41,124 @@ reeds and clay at the water.
   edge); land is within the def's share; there's room for the town's plots; every node kind the
   town def asks for is present.
 
-### Step 2 — Site and centre
-The town centre: a land cell away from the map's edge, near water but not on it, with flat open
-ground around. It becomes a **plaza** (a stone floor) with the **well**.
-- *Done when:* the plaza is all land, and the centre can reach the map edge by land.
+### Step 2 — Site and centre ✅ (done 2026-11-08, `HANDOFF.md` §3)
+
+**Goal.** One town per region. A site is picked on the L2 region, the town gets a fixed L1 area
+there, and the centre of that area becomes a stone plaza with the well. Steps 3–9 then work inside
+that area, on L1 only.
+
+**Decided (2026-11-08):**
+- one town per region;
+- the generator scores and picks the site, and a right-click in the viewer moves the town;
+- a **Town size** option on the panel sets the town's L1 area, from the shipped defs: hamlet
+  160×120, village 256×192, town 384×288.
+
+#### 2.1 What it builds on
+- The L2 region plan: kinds, zones, river mask, coast side (step 1).
+- L1 is streamed in chunks (`EcsTerrainChunks`), and `refine_terrain` gives any L1 area cell for
+  cell the same as the chunks. **So the town is an overlay on the chunks, not a separate map.**
+  - Its commands are kept by L1 cell.
+  - A chunk drawn over the town takes the town's commands for its cells.
+  - Node planning skips cells the town clears.
+- Module 10's `well` blueprint and `stone` floor exist. The plaza needs no new art.
+
+#### 2.2 Data
+**`EcsSettlementDef` gains**:
+- `plaza_size` (Vector2i): hamlet 8×8, village 12×12, town 16×16;
+- `plaza_floor` (`&"stone"`) and `well` (`&"well"`);
+- `clear_margin` (int, default 2): node-free cells kept round the plaza;
+- the site weights, so tuning a town is data:
+  - `water_near` (Vector2i, min–max distance in L2 cells, default 2–10);
+  - `water_weight`, `open_weight`, `edge_margin_cells`.
+
+**`EcsSettlementSite`** (a plain `RefCounted` record, the town's plan from here on):
+- `l2_cell`: the site;
+- `area`: the town's L1 rect, centred on the site and kept inside the region;
+- `plaza`: L1 rect;
+- `well`: L1 cell;
+- `commands`: L1-cell build commands, plaza floor then well;
+- `cleared`: a `Rect2i` list nodes must stay out of;
+- `score` and its parts, for the viewer.
+
+#### 2.3 Picking the site — `EcsSitePicker.pick(region_plan, region_def, def, rng_seed)` (pure)
+Runs on L2 only (49k cells; tens of ms), so it can rescore on a click.
+1. **Candidates:** L2 cells that are land (not water), whose whole town area fits inside the
+   region with `edge_margin_cells` to spare.
+2. **Score**, each part 0–1, summed by weight:
+   - **Water near:** BFS distance from water. Full marks between `water_near.x` and `.y`, falling to
+     0 outside. A river or coast both count, and a river adds a little, since mills want one.
+   - **Open land:** the share of grass and sand within the plaza-sized L2 neighbourhood
+     (plaza_size / 8, at least 3×3). Forest and rock count half, water nothing.
+   - **Room:** the share of land, not water, in the whole town area. Below 70% the candidate is
+     dropped.
+   - **Reach:** the candidate's land area (4-connected, not water) must touch the region's edge, so
+     roads can leave (step 3). Done once with `EcsTerrainGenerator.areas`.
+3. **Best:** the highest score; ties go to the cell nearest the region's centre, then the seeded
+   RNG, so the same seed gives the same site.
+4. **Moved by hand:** `place(region_plan, region_def, def, l2_cell)` builds the same record at a
+   chosen cell. It refuses water, or a town area that doesn't fit, with the reason.
+
+#### 2.4 The plaza and well on L1 — `EcsSitePicker.centre(site, region_plan, …)`
+1. Refine the town area's terrain (`refine_terrain`, with the region's `blend_shares`). That's one
+   area, the same cells the chunks will draw.
+2. **The plaza rect:** search outward from the site's centre cell in a spiral, within 1/4 of the
+   area. Take the first `plaza_size` rect with:
+   - no water;
+   - the fewest forest and rock cells, all of which it clears.
+   It is never placed on water. If none fits, the site fails and the picker takes the next best.
+3. **The well:** the plaza's centre cell.
+4. **Commands** (L1 cells):
+   - `SET_FLOOR` stone on every plaza cell;
+   - `PLACE_OBJECT` well.
+
+   No terrain changes: the plaza is a floor over the ground, so the L2 ↔ L1 rules still hold.
+5. **Cleared:** the plaza grown by `clear_margin`. No node is planned there.
+6. **Reach check:** an `AStarGrid2D` over the town area, with nodes treated as solid after the
+   clearing. A path must run from the plaza's edge to the area's edge. If none does, the cleared
+   ring is widened toward the nearest edge, or the next site is tried.
+
+#### 2.5 Into the chunks (viewer and later the game)
+- `EcsTerrainChunks` gets an **overlay**: L1 cell → commands, plus a cleared mask. The site
+  registers its commands and cleared rects.
+- **Objects stage:** `refine_nodes` gets a `skip` callable, or a cleared mask over the chunk, so no
+  node lands in a cleared rect.
+- **Draw stages:** after its terrain commands, a chunk takes the overlay commands for its cells,
+  moved by its border offset. A plaza split across chunks draws as one: the floor is dual-grid,
+  and the borders are each other's cells.
+- A new site, after Generate or a right-click, drops the chunks that overlap the old and new town
+  areas, so they redraw. Other chunks stay.
+
+#### 2.6 Viewer
+- **Town size** option (hamlet, village, town).
+- **On L2:** an outline of the town area and of the plaza, and the score in the info panel.
+- **Right-click** on L2 or L1 moves the town to that cell (`place`); a refusal shows its reason.
+- **The cell panel** says when a cell is in the town, the plaza or a cleared ring, and shows the
+  site's score parts when the site cell is picked.
+
+#### 2.7 Check — `EcsSiteCheck.problems(site, region_plan, region_def, def)` (pure)
+- The town area is inside the region; the site cell is land.
+- The plaza is inside the area, with no water under it; the well is in the plaza.
+- No planned node in a cleared rect (checked against the chunks' nodes in the test).
+- A walkable path from the plaza to the area's edge, and the site's land touches the region's edge.
+- The same seed gives the same site and commands.
+
+#### 2.8 Tests (`tests/site_test.tscn`, or new checks in `terrain_test`)
+- **Sites:** 30 seeds × 3 town sizes × the region's water kinds; every site sound.
+- **Moving by hand:** onto water is refused, onto an edge cell where the area doesn't fit is
+  refused, and a good cell is accepted.
+- **Through module 10's build system:** the town area with its plaza commands, every command
+  accepted. The stone floor covers the plaza, the well is born on its cell, and no node sits in
+  the cleared ring.
+- **Seams:** a plaza drawn across 4 chunks gives the same floor and well as the area drawn whole.
+- **Measured:** site scoring on L2, the plaza search on L1, and the extra cost per chunk.
+
+#### 2.9 Not in step 2
+Roads (step 3) — the reach check only proves one can be built. Buildings, plots, a second
+settlement, height or slope (L2 has no height yet), and a plaza shape other than a rectangle.
+
+- *Done when:* every seed's town has a sound site, a stone plaza with the well on land,
+  reachable from the area's edge, drawn the same across chunks. The viewer shows it, and a
+  right-click moves it.
 
 ### Step 3 — Roads
 - **Main roads** from the centre to two to four exits at the map's edge, routed by A* over

@@ -1,0 +1,18 @@
+class_name EcsSettlementSite
+extends RefCounted
+
+## Where a town stands and its centre: what EcsSitePicker found. L1 cells are whole-region L1 cells.
+
+## The region cell picked.
+var l2_cell: Vector2i = Vector2i.ZERO
+## The town's L1 area, centred on the site and inside the region.
+var area: Rect2i = Rect2i()
+## The plaza, in L1 cells, and the well in its middle.
+var plaza: Rect2i = Rect2i()
+var well: Vector2i = Vector2i.ZERO
+## The plaza floor and the well, as build commands on L1 cells.
+var commands: Array[EcsBuildCommand] = []
+## L1 rects no resource node may stand in.
+var cleared: Array[Rect2i] = []
+## The site's score and its parts: {water, open, room, river, total}.
+var score: Dictionary = {}
