@@ -8,3 +8,4 @@ script = ExtResource("1")
 key = &"water"
 display_name = "water"
 texture = ExtResource("2_tiles")
+walk_cost = 0.0

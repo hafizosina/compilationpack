@@ -114,6 +114,8 @@ func _tool_name(tool: StringName, id: int, brush: int, turns: int) -> String:
 				return "Stamp: %s, turned %d°" % [_stamps[id - 1].display_name, turns * 90]
 		&"copy":
 			return "Save building"
+		&"villager":
+			return "Villager"
 		&"":
 			return "No tool"
 	return String(tool).capitalize()
@@ -161,6 +163,8 @@ func _tools() -> Array:
 		var swatch := _cut_piece(tile, size)
 		into.append({"id": (_blueprints[tool] as Array).size(), "label": def.display_name, "icon": swatch})
 		_add_ghost(tool, (_blueprints[tool] as Array).size(), swatch, size)
+	var villager := (_entities.get_def(&"villager").template(&"sprite") as EcsSpriteComponent).texture
+	_add_ghost(&"villager", 0, villager, Vector2i.ONE)
 	return [
 		{"tool": &"terrain", "label": "Terrain", "icon": load(ICONS % "terrain"),
 			"hint": "Drag to paint the ground.", "choices": terrains, "sized": true},
@@ -189,6 +193,8 @@ func _tools() -> Array:
 		{"tool": &"stamp", "label": "Stamp", "keys": "Q turns", "icon": load(ICONS % "stamp"),
 			"hint": "Click to build the chosen building, top-left on the cell. Q turns it a quarter.",
 			"choices": _stamp_choices()},
+		{"tool": &"villager", "label": "Villager", "icon": villager,
+			"hint": "Click to place a villager; it wanders around walls and through doors. With no tool in hand, click one to select it (shift adds) and right-click a cell to send it there."},
 	]
 
 func _stamp_choices() -> Array:

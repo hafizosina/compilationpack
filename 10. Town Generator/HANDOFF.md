@@ -6,17 +6,19 @@ scheduler and systems are **borrowed, never copied**; everything new lives in th
 module 9 changes only through a hook the author approves first. The plan is the brief
 (`MODULE10_BRIEF.md`, kept outside the repo); started from tag `ecs-baseline`.
 
-**Status (2026-11-05):** the brief's steps 1–8 are done (§2–§10), and so is its §5 stress scene (§11). Open: §12.
+**Status (2026-11-08):** the brief's steps 1–8 are done (§2–§10), and so is its §5 stress scene (§11).
+Since the brief: pathfinding and placeable villagers (§12). Open: §13.
 
 **Not in this module, by decision:** live edit, the inspector, selection HUD. Its pipeline is
 module 9's ECS core plus the town systems.
 
 ```bash
 # Tools, types, brush size and views are on the build panel; right-click puts the tool down.
+# With no tool, a click selects a villager (shift adds) and a right-click sends the selected ones to a cell.
 # Keys: Q turns a piece or a stamp; F5 saves the town, F9 loads it. WASD or a middle-drag moves the camera, the wheel zooms.
 "$GODOT" --path .   # main.tscn is the main scene
 
-# 124 checks; exit 0 only if all pass. Also prints tile sync and command costs.
+# 142 checks; exit 0 only if all pass. Also prints tile sync and command costs.
 "$GODOT" --headless --path . "res://10. Town Generator/tests/town_test.tscn"
 
 # The generator: 1,000 seeds per building type, 18 checks, ~12 s; and its viewer.
@@ -38,19 +40,19 @@ component is a sheet (a PNG) and a tile size; the TileSets are made from them at
 
 | Path | Role |
 |---|---|
-| `singletons/` | `EcsTownGridSingleton` — the grid |
-| `components/` | `EcsWanderComponent` (stress villagers), `EcsBuildingComponent`, `EcsGridPositionComponent`, `EcsDoorComponent`, `EcsTileComponent`, `EcsFurnitureComponent`, `EcsPlantComponent`, `EcsAttachableComponent`, `EcsAttachedToComponent` |
+| `singletons/` | `EcsTownGridSingleton` — the grid; `EcsTownNavSingleton` — where a walker can step, and "go to" orders |
+| `components/` | `EcsWanderComponent`, `EcsPathComponent` (villagers), `EcsBuildingComponent`, `EcsGridPositionComponent`, `EcsDoorComponent`, `EcsTileComponent`, `EcsFurnitureComponent`, `EcsPlantComponent`, `EcsAttachableComponent`, `EcsAttachedToComponent` |
 | `ecs/` | `EcsTownGrid` (cell maths, making a grid), `EcsDualGrid` (masks, layout, TileSet), `EcsBuildCommand`, `EcsBuildRules` (every check, changing nothing), `EcsBuildingStamp` (capture a building, stamp a def as commands), `EcsBuildingGenerator` (a building from a seed, as commands), `EcsBuildingCheck` (is a built building sound) |
 | `generator.tscn` | The generator's viewer (`generator_view.gd`) |
 | `save/` | `EcsTownSave`, a saved town by key |
-| `systems/` | `EcsBuildCommandSystem`, `EcsRoomDetectionSystem`, `EcsRoofSystem`, `EcsTileSyncSystem`, `EcsTownOverlaySystem`, `EcsWanderSystem` (stress scene only) |
+| `systems/` | `EcsBuildCommandSystem`, `EcsRoomDetectionSystem`, `EcsRoofSystem`, `EcsTileSyncSystem`, `EcsTownOverlaySystem`, `EcsTownNavSystem`, `EcsPathSystem`, `EcsWanderSystem` |
 | `ui/` | `town_ui.gd` (`EcsTownUI`, on main.tscn's `UI` CanvasLayer): the HUD's code; `build_panel.tscn` (`EcsBuildPanel`), the build panel on the left |
 | `town_overlay.gd` | `EcsTownOverlay`, the view that draws footprints and drag previews |
 | `defs/` | `EcsTileDef` (a sheet and a tile size) → `EcsTerrainDef`, `EcsFloorDef`, `EcsRoofDef`, `EcsWallDef` (+ hp, rubble); `EcsTownCatalog`; `town_catalog.tres` and one `.tres` per type; `EcsBuildingDef` and `buildings/` (cottage, workshop); `EcsBuildingTypeDef` and `building_type/` (house, workshop); `entity_catalog.tres` (module 9's `EcsEntityCatalog`) and `blueprints/` |
 | `art/placeholder/` | Generated placeholder sheets, `make_placeholders.py`, layout in its README |
 | `tests/` | `town_test.tscn`, `generator_test.tscn`, `town_stress_test.tscn` |
 
-Pipeline (`main.gd`): `lifecycle > build > rooms > roof > tile_sync > overlay`. Lifecycle is module 9's, with its
+Pipeline (`main.gd`): `lifecycle > build > nav > rooms > roof > wander > path > movement > tile_sync > node_sync > selection > overlay`. Lifecycle is module 9's, with its
 `EcsEntityManager` rooted at `World/Entities`; buildings declare no node, so it builds none.
 
 ---
@@ -395,7 +397,7 @@ signals (`tool_picked(tool, id)`, `brush_size_changed`, `view_toggled`, `town_re
 before it — 1–8, 0, `[ ]`, B, C, W/E, D/F, T, X, R, O — were removed). S and P (save building,
 stamp) went too, S because WASD moves the camera. The keys left have no panel button: Q (turn), F5,
 F9. **Right-click on the map puts the tool in hand down** (2026-11-05): no tool picked on the panel
-(`clear_tool()`), no ghost, any drag dropped, and left clicks do nothing until a tool is picked again; a
+(`clear_tool()`), no ghost, any drag dropped, and left clicks only select villagers until a tool is picked again (§12); a
 right-click over the panel is the panel's and changes nothing. `select()` shows the starting tool; `set_pressed_no_signal` skips a `ButtonGroup`, so it releases
 the other tools itself. Tools are named (`&"terrain"`, `&"wall"`, …) and grouped by
 how they use the mouse: brushes paint while held, building drags a rectangle, wall and remove drag a
@@ -588,7 +590,8 @@ to see how the town's systems behave with movers on top. A `villager` blueprint 
 `EcsWanderSystem` gives a standing villager a random point within its radius after a pause, and module
 9's `EcsMovementSystem` and `EcsNodeSyncSystem` walk and draw it. **Walls don't block them** (the brief
 allows it; decided 2026-11-05: no pathfinding yet). No body, no collision: villagers overlap. Only the
-stress scene runs these; `main.tscn` has no villagers.
+stress scene runs these; `main.tscn` has no villagers. *(Superseded 2026-11-08: villagers path round walls
+and through doors, and `main.tscn` places them — §12.)*
 
 Measured 2026-11-05 (headless, every stage every tick):
 
@@ -610,7 +613,62 @@ Measured 2026-11-05 (headless, every stage every tick):
 
 ---
 
-## 12. Open for discussion
+## 12. Pathfinding (2026-11-08)
+
+Villagers walk round walls and through doors, on 8 directions with no corner cut.
+
+**Walkability is the grid's, read by one rule** (`EcsTownNavSystem.cost`): a wall blocks; a door is
+walked through, open or closed, unless `is_locked`; any object on a cell (furniture, a plant, rubble)
+blocks — the same rule `EcsBuildingCheck` walks by; otherwise the cost is the floor's `walk_cost`, else
+the terrain's (`EcsTerrainDef` / `EcsFloorDef.walk_cost`, 0 = can't be walked). Water is 0, sand 1.3, road
+0.6, the rest 1 — so a road laid over water is a bridge, and walkers drift to roads.
+
+**`EcsTownNavSingleton.astar` is an index, not a second grid**: an `AStarGrid2D`, one point per cell, octile
+heuristic, `DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES`. `EcsTownNavSystem` is its only writer: its first run builds
+it from every cell, after that it updates only the cells in `grid.dirty` (terrain, floor, structure or
+object bits) and bumps `revision` when one's solidity or cost changed. It reads `dirty` **before the tile
+sync clears it**, so it sits right after build. Road's cost under 1 makes the heuristic overestimate a little
+on roads — paths stay sound, at worst slightly longer than the cheapest.
+
+**`EcsPathComponent{goal, wants, cells, next, revision, failed}`** asks and remembers. `EcsPathSystem`:
+- hands the newest of `nav.orders` (cells `main.gd` appends on a right-click) to every walker with
+  `EcsSelectedFlag`, as its goal;
+- plans at most `MAX_PLANS` (32) asked-for paths a run with `get_id_path`; no way (a sealed room, a goal on
+  a wall, a start that became solid) sets `failed` and stands it still;
+- when `revision` moved, checks the cells still ahead of each walking path and replans one that a wall, a
+  piece or water now blocks;
+- hands movement the next cell's centre whenever it has no destination. It runs **before movement**, so a
+  walker never waits a tick between cells; module 9's movement and trip clock are used as they are, and
+  no module 9 file changed.
+
+**Wander asks for paths**: an idle wanderer (no destination, nothing asked, no cells left) waits out its
+pause, then asks for a random walkable cell within its radius. A cell in a sealed room fails and it tries
+again after the next pause.
+
+**In `main.tscn`**: a **Villager** tool on the panel places one on a walkable cell (the ghost says
+`blocked` otherwise), through lifecycle. Right-click still puts a tool down; **with no tool in hand, a click
+selects a villager** (module 9's `EcsSelectionSystem` and marker, borrowed; shift adds) **and a right-click
+sends the selected ones to that cell**. Villagers aren't in a town save: a load starts with none.
+
+**Tests** (18, in `town_test`): walls and furniture block, a door and a room's floor don't; water blocks, a
+road over it doesn't and is cheaper; one changed cell is all that's updated, and an idle tick changes
+nothing; round a wall by its one gap, every step onto an open cell next to the last and no diagonal past a
+solid corner, and walked to the goal; into a house by its door; a sealed room and a wall cell refused, the
+villager standing still; a wall put up across a path mid-walk is noticed, replanned through the gap, and
+walked.
+
+**Measured** (stress scene, headless, 2026-11-08): the nav grid's first build is 26 ms at 100 buildings
+(133×113 cells) and 293 ms at 1,000 (419×355), about 6% of the load. A tick with villagers, before → after:
+1,000 villagers 1.7 → 2.4 ms, 2,000 4.4 → 6.1 ms (worst 12.8 ms); path ~0.75 µs a villager a tick, wander
+~0.7. The town's own stages still don't grow with villagers.
+
+**Not yet**: doors don't swing as a walker passes (closed ones are walked through); villagers have no body,
+so they overlap; a path is planned whole, with no window or background thread (the ONI notes,
+`9. EcsSystem/ONI_STUDY.md` §3, have the next step if long paths ever cost).
+
+---
+
+## 13. Open for discussion
 
 - **What "closed" means** (flagged 2026-11-05). `CLOSE_BUILDING` sets `EcsBuildingComponent.closed`,
   one way; the only thing that reads it is the overlay (dashed outline open, solid with a fill closed),

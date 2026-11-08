@@ -68,11 +68,11 @@ func _process(_delta: float) -> void:
 ## One town of `n` buildings and `count` villagers, run live with the camera on it.
 func _watch(n: int, count: int) -> void:
 	_town(n)
-	# Roofs off, so the villagers show walking through the buildings.
-	(_scheduler.systems()[6] as EcsTileSyncSystem).roofs_visible = false
-	_spawn_villagers(count)
+	# Roofs off, so the villagers show walking in and out of the buildings.
+	(_scheduler.systems()[8] as EcsTileSyncSystem).roofs_visible = false
 	for k in LOAD_TICKS:
 		_scheduler.run_all(_world, TICK)
+	_spawn_villagers(count)
 	_camera.position = _bounds.get_center()
 	_camera.zoom = Vector2(0.5, 0.5)
 	_watching = true
@@ -131,6 +131,7 @@ func _town(n: int) -> int:
 	_world = EcsWorld.new()
 	_world.add_singleton(grid)
 	_world.add_singleton(EcsLifecycleSingleton.new())
+	_world.add_singleton(EcsTownNavSingleton.new())
 	_root = Node2D.new()
 	add_child(_root)
 	var layers := Node.new()
@@ -144,9 +145,11 @@ func _town(n: int) -> int:
 	_scheduler \
 		.add(EcsLifecycleSystem.new(_manager, ENTITIES)) \
 		.add(EcsBuildCommandSystem.new(CATALOG, ENTITIES)) \
+		.add(EcsTownNavSystem.new(CATALOG)) \
 		.add(EcsRoomDetectionSystem.new(CATALOG)) \
 		.add(EcsRoofSystem.new(CATALOG)) \
-		.add(EcsWanderSystem.new(_bounds)) \
+		.add(EcsWanderSystem.new()) \
+		.add(EcsPathSystem.new()) \
 		.add(EcsMovementSystem.new()) \
 		.add(EcsTileSyncSystem.new(layers, CATALOG)) \
 		.add(EcsNodeSyncSystem.new(_manager)) \
@@ -155,11 +158,17 @@ func _town(n: int) -> int:
 
 func _spawn_villagers(count: int) -> void:
 	var inbox := _world.get_singleton(EcsLifecycleSingleton) as EcsLifecycleSingleton
-	for k in count:
+	var nav := _world.get_singleton(EcsTownNavSingleton) as EcsTownNavSingleton
+	var spawned := 0
+	while spawned < count:
+		var at := Vector2(randf_range(_bounds.position.x, _bounds.end.x), randf_range(_bounds.position.y, _bounds.end.y))
+		if not EcsTownNavSystem.walkable(nav, EcsTownGrid.cell_at(at)):
+			continue
 		var note := EcsSpawnRequest.new()
 		note.type_id = &"villager"
-		note.position = Vector2(randf_range(_bounds.position.x, _bounds.end.x), randf_range(_bounds.position.y, _bounds.end.y))
+		note.position = at
 		inbox.spawn_requests.append(note)
+		spawned += 1
 
 ## Runs `count` ticks, every stage every tick, timing each: {sums: {label: µs}, total, worst}.
 func _ticks(count: int) -> Dictionary:

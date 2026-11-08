@@ -28,7 +28,7 @@ There are no build scripts; the editor is the tool chain. The tests are module 9
 # carry vs graze, and ECS toggles with the life cycle. ~8 s with --fixed-fps.
 "$GODOT" --headless --fixed-fps 60 --path . "res://9. EcsSystem/tests/demo_worlds_test.tscn"
 
-# Module 10: the town grid, commands, dual-grid tile sync, rooms, stamps and town saves; prints costs.
+# Module 10: the town grid, commands, dual-grid tile sync, rooms, stamps, town saves and pathfinding; prints costs.
 "$GODOT" --headless --path . "res://10. Town Generator/tests/town_test.tscn"
 
 # Module 10's generator: 1,000 seeds per building type through the real build system and
@@ -37,7 +37,7 @@ There are no build scripts; the editor is the tool chain. The tests are module 9
 "$GODOT" --headless --path . "res://10. Town Generator/tests/generator_test.tscn"
 
 # Module 10's stress scene (brief §5): 100, 500 and 1,000 generated buildings — load cost per
-# stage, idle tick (~23 µs at any size), then wandering villagers (~2 µs each). ~22 s.
+# stage, idle tick (~28 µs at any size), then villagers wandering by path (~3 µs each). ~22 s.
 # `-- --n=500 --npcs=1000` for one size; without --headless (or F6) it runs 1,000 buildings and 2,000 villagers live, with FPS.
 "$GODOT" --headless --path . "res://10. Town Generator/tests/town_stress_test.tscn"
 
@@ -89,9 +89,9 @@ Hand-edited scene/resource files are the main breakage risk in this repo: `.tscn
 | `docs/devlog/Summary.md` | Longer per-module write-up, one section per module |
 | `ARCHITECTURE_REVIEW.md` | Cross-module review of modules 9, 10 and 11 (2026-11-05): GOAP, ECS, data-driven design, scalability, and the decisions taken on them |
 | `8. SimpleAiSystem/*.md` | **Design archive — the code is deleted.** Five docs kept for the reasoning module 9 is built against |
-| `9. EcsSystem/*.md` | Module 9 likewise — `HANDOFF.md` is its state-of-the-build, `ECS_GOAP_REPORT.md` a short overview of where the ECS and planner stand, `PSEUDOCODE.md` the core logic of every component and system, `ECS_REFACTOR_PLAN.md` the roadmap it follows; `HANDOFF.md` §3 covers the entity-lifecycle model. Plans for finished work are deleted once folded into `HANDOFF.md` (the fetch-time job is in §14) |
+| `9. EcsSystem/*.md` | Module 9 likewise — `HANDOFF.md` is its state-of-the-build, `ECS_GOAP_REPORT.md` a short overview of where the ECS and planner stand, `PSEUDOCODE.md` the core logic of every component and system, `ECS_REFACTOR_PLAN.md` the roadmap it follows, `ONI_STUDY.md` notes on how Oxygen Not Included scales and which of its tricks fit module 9 and 10; `HANDOFF.md` §3 covers the entity-lifecycle model. Plans for finished work are deleted once folded into `HANDOFF.md` (the fetch-time job is in §14) |
 | `9. EcsSystem/tests/` | Module 9's lifecycle acceptance test and its population stress test |
-| `10. Town Generator/` | Town building on module 9's borrowed ECS, aimed at procedural generation. `HANDOFF.md` is its state of the build; `main.tscn` (`main.gd`) is the ECS scene and the project's main scene; `tests/` holds the town test, the generator test and the stress scene. The brief's steps 1–8 and its §5 measurements are done. Read its HANDOFF before touching it |
+| `10. Town Generator/` | Town building on module 9's borrowed ECS, aimed at procedural generation. `HANDOFF.md` is its state of the build; `main.tscn` (`main.gd`) is the ECS scene and the project's main scene; `tests/` holds the town test, the generator test and the stress scene. The brief's steps 1–8 and its §5 measurements are done, and villagers path round walls and through doors (HANDOFF §12). Read its HANDOFF before touching it |
 | `11. EcsControl/` | Module 7's touch HUD on module 9's ECS: the player is an entity whose brain is `EcsPlayerControlSystem`, turning input into `steer` and module 9's intent flags. `HANDOFF.md` is its state of the build. Read it before touching it |
 
 Keep feature work inside the module folder it belongs to; promote something to `Global/` or `System/` only when a second module needs it.

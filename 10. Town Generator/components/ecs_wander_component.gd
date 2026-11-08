@@ -1,7 +1,7 @@
 class_name EcsWanderComponent
 extends EcsComponent
 
-## Walks to a random point nearby, pauses, and goes again. Walls don't stop it yet.
+## Walks to a random walkable cell nearby, around walls and through doors, pauses, and goes again.
 
 ## How far one walk may go, in px.
 @export var radius: float = 160.0

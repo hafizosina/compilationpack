@@ -52,6 +52,11 @@ func _ready() -> void:
 	_a_house_is_saved_and_stamped_ten_times()
 	_a_saved_town_reloads_intact()
 	_every_shipped_building_stamps_in_every_turn()
+	_walls_and_furniture_block_doors_and_roads_dont()
+	_a_villager_walks_around_a_wall()
+	_a_villager_goes_in_through_the_door()
+	_a_sealed_room_has_no_way_in()
+	_a_wall_across_the_way_makes_it_replan()
 	_measure()
 	_measure_rooms()
 	print("[town] %d/%d checks passed" % [_checks - _failures, _checks])
@@ -1070,6 +1075,187 @@ func _a_wall_can_be_hit() -> void:
 	var damaged := grid.wall_hp.has(other)
 	_send(t, [_cmd(EcsBuildCommand.Kind.REMOVE_STRUCTURE, Vector2i(6, 3))])
 	_check("a damaged wall removed forgets its damage", damaged and not grid.wall_hp.has(other))
+	t.root.queue_free()
+
+## As _setup, with the nav grid, paths and movement in main.gd's order.
+func _walk_setup(size: Vector2i) -> Dictionary:
+	var world := EcsWorld.new()
+	world.add_singleton(EcsTownGrid.make(size.x, size.y, GRASS))
+	world.add_singleton(EcsLifecycleSingleton.new())
+	world.add_singleton(EcsTownNavSingleton.new())
+	var root := Node.new()
+	add_child(root)
+	var tiles := Node.new()
+	root.add_child(tiles)
+	var entities := Node2D.new()
+	root.add_child(entities)
+	var nav := EcsTownNavSystem.new(CATALOG)
+	var paths := EcsPathSystem.new()
+	var scheduler := EcsScheduler.new()
+	scheduler.add(EcsLifecycleSystem.new(EcsEntityManager.new(entities), ENTITIES)) \
+		.add(EcsBuildCommandSystem.new(CATALOG, ENTITIES)).add(nav).add(EcsRoomDetectionSystem.new(CATALOG)) \
+		.add(EcsRoofSystem.new(CATALOG)).add(paths).add(EcsMovementSystem.new()).add(EcsTileSyncSystem.new(tiles, CATALOG))
+	scheduler.run_all(world, 0.0)
+	return {"world": world, "grid": world.get_singleton(EcsTownGridSingleton), "nav": world.get_singleton(EcsTownNavSingleton),
+		"nav_system": nav, "paths": paths, "scheduler": scheduler, "root": root}
+
+## A building over `rect` with walls on `walls`, then a tick.
+func _wall_off(t: Dictionary, rect: Rect2i, walls: Array[Vector2i]) -> void:
+	var plan: Array[EcsBuildCommand] = [EcsBuildCommand.create_building(rect)]
+	for cell in walls:
+		plan.append(_cmd(EcsBuildCommand.Kind.PLACE_WALL, cell, 1))
+	_send(t, plan)
+
+## A villager born on `cell`, walking fast so a test needs few ticks; its id.
+func _villager(t: Dictionary, cell: Vector2i) -> int:
+	var note := EcsSpawnRequest.new()
+	note.type_id = &"villager"
+	note.position = EcsTownGrid.centre_of(cell)
+	(t.world.get_singleton(EcsLifecycleSingleton) as EcsLifecycleSingleton).spawn_requests.append(note)
+	_send(t, [])
+	(t.world.get_component(note.born, EcsMovementComponent) as EcsMovementComponent).speed = 400.0
+	return note.born
+
+## Asks villager `id` to walk to `goal` and plans it; its path.
+func _walk_to(t: Dictionary, id: int, goal: Vector2i) -> EcsPathComponent:
+	var path := t.world.get_component(id, EcsPathComponent) as EcsPathComponent
+	path.goal = goal
+	path.wants = true
+	_tick(t, 1)
+	return path
+
+func _tick(t: Dictionary, count: int) -> void:
+	for k in count:
+		(t.scheduler as EcsScheduler).run_all(t.world, 1.0 / 60.0)
+
+func _cell_of(t: Dictionary, id: int) -> Vector2i:
+	return EcsTownGrid.cell_at((t.world.get_component(id, EcsPositionComponent) as EcsPositionComponent).position)
+
+## Every step of `cells`, from `start`, is onto a walkable cell, one cell away, and a diagonal
+## one never squeezes past a solid corner.
+func _a_fair_walk(nav: EcsTownNavSingleton, start: Vector2i, cells: Array[Vector2i]) -> bool:
+	var at := start
+	for cell in cells:
+		var step := cell - at
+		if not EcsTownNavSystem.walkable(nav, cell) or absi(step.x) > 1 or absi(step.y) > 1:
+			return false
+		if step.x != 0 and step.y != 0 and (not EcsTownNavSystem.walkable(nav, at + Vector2i(step.x, 0))
+				or not EcsTownNavSystem.walkable(nav, at + Vector2i(0, step.y))):
+			return false
+		at = cell
+	return true
+
+## Walls and furniture block a walker, a door doesn't, water does unless a road is laid over it,
+## and only the cells that changed are updated.
+func _walls_and_furniture_block_doors_and_roads_dont() -> void:
+	var t := _walk_setup(Vector2i(16, 12))
+	var nav := t.nav as EcsTownNavSingleton
+	var system := t.nav_system as EcsTownNavSystem
+	_check("the first run builds a point per cell, all open on grass",
+		nav.astar.region == Rect2i(0, 0, 16, 12) and EcsTownNavSystem.walkable(nav, Vector2i(5, 5)))
+	var walls: Array[Vector2i] = []
+	for x in range(2, 8):
+		walls.append_array([Vector2i(x, 2), Vector2i(x, 6)])
+	for y in range(3, 6):
+		walls.append_array([Vector2i(2, y), Vector2i(7, y)])
+	_wall_off(t, Rect2i(2, 2, 6, 5), walls)
+	_send(t, [_cmd(EcsBuildCommand.Kind.PLACE_DOOR, Vector2i(4, 6), 1),
+		EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, Vector2i(4, 3), &"chair", 0)])
+	_send(t, [])
+	_check("a wall blocks", not EcsTownNavSystem.walkable(nav, Vector2i(2, 4)))
+	_check("a door is walked through", EcsTownNavSystem.walkable(nav, Vector2i(4, 6)))
+	_check("furniture blocks, the floor of the room beside it doesn't",
+		not EcsTownNavSystem.walkable(nav, Vector2i(4, 3)) and EcsTownNavSystem.walkable(nav, Vector2i(5, 3)))
+	var revision := nav.revision
+	_send(t, [_cmd(EcsBuildCommand.Kind.SET_TERRAIN, Vector2i(12, 8), WATER)])
+	_check("water blocks, and one changed cell is all that is updated",
+		not EcsTownNavSystem.walkable(nav, Vector2i(12, 8)) and system.updated == 1 and nav.revision == revision + 1)
+	_send(t, [_cmd(EcsBuildCommand.Kind.SET_FLOOR, Vector2i(12, 8), CATALOG.floor_id(&"road"))])
+	_check("a road laid over it can be walked, and is cheaper than grass",
+		EcsTownNavSystem.walkable(nav, Vector2i(12, 8)) and nav.astar.get_point_weight_scale(Vector2i(12, 8)) < 1.0)
+	revision = nav.revision
+	_tick(t, 3)
+	_check("an idle tick changes nothing", nav.revision == revision)
+	t.root.queue_free()
+
+## A wall with one gap: the path goes round by the gap, never through the wall or past a corner.
+func _a_villager_walks_around_a_wall() -> void:
+	var t := _walk_setup(Vector2i(16, 10))
+	var walls: Array[Vector2i] = []
+	for y in range(0, 9):
+		walls.append(Vector2i(8, y))
+	_wall_off(t, Rect2i(8, 0, 1, 10), walls)
+	var id := _villager(t, Vector2i(3, 2))
+	var path := _walk_to(t, id, Vector2i(12, 2))
+	var cells := path.cells.duplicate()
+	_check("a path is found round the wall, through its gap",
+		not path.failed and cells.has(Vector2i(8, 9)) and cells.back() == Vector2i(12, 2))
+	_check("every step is onto an open cell next to the last, and no diagonal cuts a corner",
+		_a_fair_walk(t.nav, Vector2i(3, 2), cells))
+	_check("it steps diagonally in the open", cells[0] == Vector2i(4, 3))
+	_tick(t, 300)
+	_check("and the villager walks it to the goal", _cell_of(t, id) == Vector2i(12, 2) and path.cells.is_empty())
+	t.root.queue_free()
+
+## A walled house with a door: a villager outside reaches a cell inside by the door.
+func _a_villager_goes_in_through_the_door() -> void:
+	var t := _walk_setup(Vector2i(16, 12))
+	var walls: Array[Vector2i] = []
+	for x in range(4, 11):
+		walls.append_array([Vector2i(x, 2), Vector2i(x, 8)])
+	for y in range(3, 8):
+		walls.append_array([Vector2i(4, y), Vector2i(10, y)])
+	_wall_off(t, Rect2i(4, 2, 7, 7), walls)
+	_send(t, [_cmd(EcsBuildCommand.Kind.PLACE_DOOR, Vector2i(7, 8), 1)])
+	_send(t, [])
+	var id := _villager(t, Vector2i(1, 1))
+	var path := _walk_to(t, id, Vector2i(7, 4))
+	var cells := path.cells.duplicate()
+	_check("the way in is through the door, and a fair walk",
+		not path.failed and cells.has(Vector2i(7, 8)) and _a_fair_walk(t.nav, Vector2i(1, 1), cells))
+	_tick(t, 300)
+	_check("and the villager ends inside", _cell_of(t, id) == Vector2i(7, 4))
+	t.root.queue_free()
+
+## The same house with no door: asking for a cell inside fails, and the villager stays put.
+func _a_sealed_room_has_no_way_in() -> void:
+	var t := _walk_setup(Vector2i(16, 12))
+	var walls: Array[Vector2i] = []
+	for x in range(4, 11):
+		walls.append_array([Vector2i(x, 2), Vector2i(x, 8)])
+	for y in range(3, 8):
+		walls.append_array([Vector2i(4, y), Vector2i(10, y)])
+	_wall_off(t, Rect2i(4, 2, 7, 7), walls)
+	var id := _villager(t, Vector2i(1, 1))
+	var path := _walk_to(t, id, Vector2i(7, 4))
+	var move := t.world.get_component(id, EcsMovementComponent) as EcsMovementComponent
+	_check("no way into a sealed room: the ask fails and it doesn't move",
+		path.failed and path.cells.is_empty() and not move.has_destination)
+	path = _walk_to(t, id, Vector2i(4, 2))
+	_check("nor onto a wall", path.failed)
+	t.root.queue_free()
+
+## Walking across an empty footprint, a wall goes up ahead with one gap: the path is found
+## blocked, planned again through the gap, and walked.
+func _a_wall_across_the_way_makes_it_replan() -> void:
+	var t := _walk_setup(Vector2i(20, 10))
+	_send(t, [EcsBuildCommand.create_building(Rect2i(12, 0, 1, 10))])
+	_send(t, [])
+	var id := _villager(t, Vector2i(2, 4))
+	(t.world.get_component(id, EcsMovementComponent) as EcsMovementComponent).speed = 200.0
+	var path := _walk_to(t, id, Vector2i(17, 4))
+	_check("first straight across", not path.failed and path.cells.has(Vector2i(12, 4)))
+	_tick(t, 10)
+	var walls: Array[EcsBuildCommand] = []
+	for y in range(0, 9):
+		walls.append(_cmd(EcsBuildCommand.Kind.PLACE_WALL, Vector2i(12, y), 1))
+	_send(t, walls)
+	_tick(t, 1)
+	var after := path.cells.duplicate()
+	_check("the wall ahead is noticed and it plans again, through the gap",
+		after.has(Vector2i(12, 9)) and not after.has(Vector2i(12, 4)) and _a_fair_walk(t.nav, _cell_of(t, id), after.slice(path.next - 1)))
+	_tick(t, 400)
+	_check("and gets there", _cell_of(t, id) == Vector2i(17, 4))
 	t.root.queue_free()
 
 func _check(what: String, passed: bool) -> void:

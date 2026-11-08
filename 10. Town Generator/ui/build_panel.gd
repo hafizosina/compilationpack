@@ -79,7 +79,7 @@ func clear_tool() -> void:
 		(_specs[tool]["button"] as Button).set_pressed_no_signal(false)
 	_open_tool = &""
 	_tool_name.text = "No tool"
-	_hint.text = "Pick a tool above. Right-click on the map puts the tool in hand down."
+	_hint.text = "Pick a tool above. Right-click on the map puts the tool in hand down. With none, click a villager to select it and right-click a cell to send it there."
 	for child in _types.get_children():
 		child.queue_free()
 	_type_buttons.clear()

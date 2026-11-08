@@ -5,6 +5,7 @@
 [ext_resource type="Script" uid="uid://c62j1k5pdptjl" path="res://9. EcsSystem/components/ecs_movement_component.gd" id="s_move"]
 [ext_resource type="Script" uid="uid://crlgsdgqgc3wp" path="res://9. EcsSystem/components/ecs_sprite_component.gd" id="s_sprite"]
 [ext_resource type="Script" uid="uid://d3gowmnnbblig" path="res://10. Town Generator/components/ecs_wander_component.gd" id="s_wander"]
+[ext_resource type="Script" uid="uid://bkwfini0l6bop" path="res://10. Town Generator/components/ecs_path_component.gd" id="s_path"]
 [ext_resource type="Texture2D" uid="uid://flw42i8l4ym5" path="res://Global/Asset/bald64.png" id="t_villager"]
 
 [sub_resource type="Resource" id="c_move"]
@@ -13,6 +14,9 @@ speed = 40.0
 
 [sub_resource type="Resource" id="c_wander"]
 script = ExtResource("s_wander")
+
+[sub_resource type="Resource" id="c_path"]
+script = ExtResource("s_path")
 
 [sub_resource type="Resource" id="c_sprite"]
 script = ExtResource("s_sprite")
@@ -24,4 +28,4 @@ z_index = 5
 script = ExtResource("def")
 id = &"villager"
 display_name = "Villager"
-components = Array[ExtResource("base")]([SubResource("c_move"), SubResource("c_wander"), SubResource("c_sprite")])
+components = Array[ExtResource("base")]([SubResource("c_move"), SubResource("c_wander"), SubResource("c_path"), SubResource("c_sprite")])

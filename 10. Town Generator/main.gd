@@ -1,7 +1,8 @@
 extends Node2D
 
 ## Module 10 entry point: the town grid on module 9's ECS, map input and the tools'
-## commands; the HUD is the UI node's (EcsTownUI). Right-click puts the tool down. Keys: Q turns a piece or a stamp, F5
+## commands; the HUD is the UI node's (EcsTownUI). Right-click puts the tool down; with no tool, a click selects a
+## villager and a right-click sends the selected ones to that cell. Keys: Q turns a piece or a stamp, F5
 ## saves the town, F9 loads it; WASD or a middle-drag moves the camera, the wheel zooms.
 ## The tile layers are built from the catalog, under World/TilemapGroup, by EcsTileSyncSystem.
 
@@ -32,6 +33,7 @@ var _manager: EcsEntityManager
 var _scheduler: EcsScheduler
 var _build: EcsBuildCommandSystem
 var _tile_sync: EcsTileSyncSystem
+var _marker: EcsSelectionMarker
 var _tool: StringName = &"terrain"
 ## The current tool's type: a terrain, floor (0 clears), wall or door id.
 var _tool_id: int = 2
@@ -50,6 +52,8 @@ var _turns: int = 0
 func _ready() -> void:
 	catalog.number()
 	_manager = EcsEntityManager.new(_entities_root)
+	_marker = EcsSelectionMarker.new()
+	$World.add_child(_marker)
 	_start(EcsTownGrid.make(grid_size.x, grid_size.y, catalog.terrain_id(base_terrain)))
 	_camera.position = Vector2(grid_size * EcsTownGrid.CELL) * 0.5
 	_load_stamps()
@@ -65,6 +69,8 @@ func _start(grid: EcsTownGridSingleton, commands: Array[EcsBuildCommand] = []) -
 	_world = EcsWorld.new()
 	_world.add_singleton(grid)
 	_world.add_singleton(EcsLifecycleSingleton.new())
+	_world.add_singleton(EcsTownNavSingleton.new())
+	_world.add_singleton(EcsSelectionSingleton.new())
 	grid.commands.append_array(commands)
 	_build = EcsBuildCommandSystem.new(catalog, entity_catalog)
 	_tile_sync = EcsTileSyncSystem.new(_layers_root, catalog)
@@ -73,9 +79,15 @@ func _start(grid: EcsTownGridSingleton, commands: Array[EcsBuildCommand] = []) -
 	_scheduler \
 		.add(EcsLifecycleSystem.new(_manager, entity_catalog)) \
 		.add(_build) \
+		.add(EcsTownNavSystem.new(catalog)) \
 		.add(EcsRoomDetectionSystem.new(catalog)) \
 		.add(EcsRoofSystem.new(catalog)) \
+		.add(EcsWanderSystem.new()) \
+		.add(EcsPathSystem.new()) \
+		.add(EcsMovementSystem.new()) \
 		.add(_tile_sync) \
+		.add(EcsNodeSyncSystem.new(_manager)) \
+		.add(EcsSelectionSystem.new(_marker)) \
 		.add(EcsTownOverlaySystem.new(_overlay))
 	_hover_key = []
 
@@ -91,7 +103,7 @@ func _physics_process(delta: float) -> void:
 func _hover() -> void:
 	var cell := EcsTownGrid.cell_at(get_global_mouse_position())
 	var over_panel := get_viewport().gui_get_hovered_control() != null
-	var key := [] if over_panel or _pressing else [cell, _tool, _tool_id, _brush_size, _turns, _build.applied, _grid().pending.size()]
+	var key := [] if over_panel or _pressing else [cell, _tool, _tool_id, _brush_size, _turns, _build.applied, _grid().pending.size(), _nav().revision]
 	if key == _hover_key:
 		return
 	_hover_key = key
@@ -125,6 +137,8 @@ func _show_ghost(cell: Vector2i) -> void:
 					marks.append(command.cell)
 	if not commands.is_empty():
 		reason = String(EcsBuildRules.refusal(_world, _grid(), catalog, entity_catalog, commands[0])).replace("_", " ")
+	elif _tool == &"villager" and not EcsTownNavSystem.walkable(_nav(), cell):
+		reason = "blocked"
 	var texture: Texture2D = look.get("texture")
 	if _tool == &"door" and EcsBuildRules.door_runs_down(_grid(), cell):
 		texture = look["down"]
@@ -144,7 +158,12 @@ func _on_view_toggled(view: StringName, on: bool) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-		_drop_tool()
+		if _tool != &"":
+			_drop_tool()
+		else:
+			_nav().orders.append(EcsTownGrid.cell_at(get_global_mouse_position()))
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and _tool == &"":
+		_select(get_global_mouse_position(), event.shift_pressed)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and _tool != &"":
 		var cell := EcsTownGrid.cell_at(get_global_mouse_position())
 		if event.pressed:
@@ -191,6 +210,26 @@ func _shortcut(key: Key) -> void:
 
 func _grid() -> EcsTownGridSingleton:
 	return _world.get_singleton(EcsTownGridSingleton) as EcsTownGridSingleton
+
+func _nav() -> EcsTownNavSingleton:
+	return _world.get_singleton(EcsTownNavSingleton) as EcsTownNavSingleton
+
+## Asks the selection system for the villager under `at`; `additive` toggles it instead.
+func _select(at: Vector2, additive: bool) -> void:
+	var request := _world.get_singleton(EcsSelectionSingleton) as EcsSelectionSingleton
+	request.pending = true
+	request.pick_at = at
+	request.is_box = false
+	request.additive = additive
+
+## Asks lifecycle for a villager on `cell`, if it can be stood on.
+func _place_villager(cell: Vector2i) -> void:
+	if not EcsTownNavSystem.walkable(_nav(), cell):
+		return
+	var note := EcsSpawnRequest.new()
+	note.type_id = &"villager"
+	note.position = EcsTownGrid.centre_of(cell)
+	(_world.get_singleton(EcsLifecycleSingleton) as EcsLifecycleSingleton).spawn_requests.append(note)
 
 ## Asks for the brush's cells around `centre`; the build system applies them next tick.
 func _paint(centre: Vector2i) -> void:
@@ -255,11 +294,14 @@ func _click(cell: Vector2i) -> void:
 		if EcsTownGrid.in_bounds(_grid(), cell):
 			_save_building(_grid().building_id[EcsTownGrid.index(_grid(), cell)])
 		return
+	if _tool == &"villager":
+		_place_villager(cell)
+		return
 	_grid().commands.append_array(_commands_at(cell))
 
 ## The commands the tool in hand sends for a click at `cell` — a drag tool's one-cell version —
 ## and so what the hover checks: the one place a tool becomes commands. Empty for the brushes,
-## remove and save building.
+## remove, save building and villager.
 func _commands_at(cell: Vector2i) -> Array[EcsBuildCommand]:
 	var commands: Array[EcsBuildCommand] = []
 	match _tool:
