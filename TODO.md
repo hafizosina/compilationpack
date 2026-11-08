@@ -25,6 +25,8 @@ Plans noted for later across modules 9, 10 and 11.
 ## Module 10 — Town Generator
 - [ ] Discuss your plan for the "closed" building flag (`CLOSE_BUILDING`).
 - [x] Pathfinding system (2026-11-08, HANDOFF §12).
+- [ ] A real town generator: a whole town laid out, not single buildings. Roads, a town centre and
+      well, farmhouses, a manor, fishing, gathering and hunting huts, and more building types.
 - [ ] Per-entity pathfinding: a cell's cost depends on who walks it. Decide whether Godot's A* is
       enough or it needs a custom C++ GDExtension.
   - Doors: open if it has access; a solid wall if not; with a lockpick, a path at a high cost
