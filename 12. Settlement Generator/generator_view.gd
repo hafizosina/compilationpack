@@ -7,7 +7,8 @@ extends Node2D
 ## drawn (EcsTerrainChunks says which). Planning and building a chunk's world run on worker
 ## threads, off the scene tree: drawing objects rebuilds the chunk with them and swaps it in over
 ## the terrain-only one, so the main thread only ever adds a finished chunk. Made chunks stay in
-## memory; far ones free their nodes and keep their plans. Zooming out fades L1 away.
+## memory; far ones free their nodes and keep their plans. Zooming out fades L1 away. A left click
+## on the map outlines that cell, L1's where L1 is drawn, else L2's, and shows its details.
 
 const DEFS := "res://12. Settlement Generator/defs/settlements/"
 ## The def L1 chunks take their shore and nodes from.
@@ -52,6 +53,11 @@ var _water: OptionButton
 var _seed: SpinBox
 var _generate_button: Button
 var _info: Label
+var _detail_panel: PanelContainer
+var _detail: Label
+## The clicked cell's outline, and the cell: {level: 1 or 2, cell}, or {}.
+var _marker: Line2D
+var _picked: Dictionary = {}
 var _zones_on: bool = false
 var _nodes_on: bool = true
 ## The region shown: {root, world, scheduler, tile_sync, zones, def, plan, shares, seed, problems}.
@@ -72,6 +78,13 @@ func _ready() -> void:
 	# Builds the catalog's lookup here, so the workers only ever read it.
 	entity_catalog.has_def(&"tree")
 	_build_panel()
+	_build_detail_panel()
+	_marker = Line2D.new()
+	_marker.closed = true
+	_marker.default_color = Color(1.0, 0.85, 0.2)
+	_marker.z_index = 30
+	_marker.visible = false
+	_world_root.add_child(_marker)
 	_generate()
 
 func _exit_tree() -> void:
@@ -104,6 +117,8 @@ func _process(_delta: float) -> void:
 		for at in _chunks.far(view, KEEP):
 			_undraw(at)
 	_report()
+	if _marker.visible:
+		_marker.width = 3.0 / _camera.zoom.x
 
 func _physics_process(delta: float) -> void:
 	if _region.is_empty():
@@ -127,6 +142,11 @@ func _input(event: InputEvent) -> void:
 		return
 	get_viewport().set_input_as_handled()
 	_zoom_at(get_global_mouse_position(), _camera.zoom.x * step)
+
+## A left click on the map picks the cell under it.
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and not _region.is_empty():
+		_pick(get_global_mouse_position())
 
 ## Sets the zoom, keeping world point `at` where it is on screen.
 func _zoom_at(at: Vector2, zoom: float) -> void:
@@ -196,6 +216,122 @@ func _build_panel() -> void:
 	_panel.gui_input.connect(func(event: InputEvent) -> void:
 		if event is InputEventMouse:
 			_panel.accept_event())
+
+## The cell panel, top right; hidden until a cell is picked.
+func _build_detail_panel() -> void:
+	_detail_panel = PanelContainer.new()
+	_detail_panel.theme_type_variation = &"DockPanel"
+	_detail_panel.custom_minimum_size = Vector2(280, 0)
+	_detail_panel.anchor_left = 1.0
+	_detail_panel.anchor_right = 1.0
+	_detail_panel.offset_left = -292.0
+	_detail_panel.offset_right = -12.0
+	_detail_panel.offset_top = 12.0
+	_detail_panel.visible = false
+	_detail_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_ui.add_child(_detail_panel)
+	var box := VBoxContainer.new()
+	_detail_panel.add_child(box)
+	var row := HBoxContainer.new()
+	box.add_child(row)
+	var title := Label.new()
+	title.text = "Cell"
+	title.theme_type_variation = &"DockTitle"
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(title)
+	var close := Button.new()
+	close.text = "×"
+	close.pressed.connect(func() -> void: _picked = {}; _marker.visible = false; _detail_panel.visible = false)
+	row.add_child(close)
+	_detail = Label.new()
+	_detail.theme_type_variation = &"DockLabel"
+	_detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_detail)
+
+## Picks the cell at `at` (world position): L1's where its chunk is drawn and L1 shows, else L2's.
+func _pick(at: Vector2) -> void:
+	var l1 := EcsTownGrid.cell_at(at * ZOOM)
+	var chunk: Dictionary = _chunks.chunks.get(_chunks.chunk_at(l1), {})
+	var region := _region["def"] as EcsSettlementDef
+	var size := float(EcsTownGrid.CELL)
+	if _in_l1 and chunk.get("drawn", false):
+		_picked = {"level": 1, "cell": l1}
+		size /= ZOOM
+	else:
+		var cell := EcsTownGrid.cell_at(at)
+		if not Rect2i(Vector2i.ZERO, region.size).has_point(cell):
+			return
+		_picked = {"level": 2, "cell": cell}
+	var corner := Vector2(_picked["cell"] as Vector2i) * size
+	_marker.points = PackedVector2Array([corner, corner + Vector2(size, 0), corner + Vector2(size, size), corner + Vector2(0, size)])
+	_marker.visible = true
+	_detail_panel.visible = true
+	_describe()
+
+## The picked cell's details, refreshed as its chunk is made.
+func _describe() -> void:
+	if _picked.is_empty():
+		return
+	var cell: Vector2i = _picked["cell"]
+	var region := _region["def"] as EcsSettlementDef
+	var plan := _region["plan"] as Dictionary
+	var lines := PackedStringArray()
+	if _picked["level"] == 2:
+		var i := cell.y * region.size.x + cell.x
+		var kind: int = (plan["kinds"] as PackedByteArray)[i]
+		lines.append("L2 cell %s, 8 m a side" % cell)
+		lines.append("Ground: %s%s" % [EcsTerrainGenerator.TERRAIN_KEYS[kind],
+			", river" if (plan["river"] as PackedByteArray)[i] != 0 else (", sea" if kind == EcsTerrainGenerator.WATER else "")])
+		lines.append("Zones: %s" % _zone_names((plan["zones"] as PackedByteArray)[i]))
+		lines.append("Walk cost: %s" % _walk_cost(kind))
+		lines.append("Holds L1 cells %s to %s" % [cell * ZOOM, cell * ZOOM + Vector2i(ZOOM - 1, ZOOM - 1)])
+	else:
+		var at := _chunks.chunk_at(cell)
+		var chunk: Dictionary = _chunks.chunks.get(at, {})
+		var local := cell - at * _chunks.size
+		var parent := Vector2i((Vector2(cell) / ZOOM).floor())
+		lines.append("L1 cell %s, 1 m a side" % cell)
+		lines.append("Chunk %s, cell %s in it" % [at, local])
+		if chunk.has("terrain"):
+			var outer := _chunks.size + 2
+			var kind: int = (chunk["terrain"]["kinds"] as PackedByteArray)[(local.y + 1) * outer + local.x + 1]
+			lines.append("Ground: %s%s" % [EcsTerrainGenerator.TERRAIN_KEYS[kind],
+				", river" if (chunk["terrain"]["river"] as PackedByteArray)[(local.y + 1) * outer + local.x + 1] != 0 else ""])
+			lines.append("Zones: %s" % _zone_names((chunk["terrain"]["zones"] as PackedByteArray)[local.y * _chunks.size + local.x]))
+			lines.append("Walk cost: %s" % _walk_cost(kind))
+		lines.append("Object: %s" % _object_at(chunk, local))
+		lines.append("In L2 cell %s: %s" % [parent, EcsTerrainGenerator.TERRAIN_KEYS[(plan["kinds"] as PackedByteArray)[parent.y * region.size.x + parent.x]]])
+		var made := PackedStringArray()
+		for step: Array in [["terrain", chunk.has("terrain")], ["drawn", chunk.get("drawn", false)],
+				["objects", chunk.has("nodes")], ["objects drawn", chunk.get("objects_drawn", false)]]:
+			if step[1]:
+				made.append(step[0])
+		lines.append("Chunk made: %s" % (", ".join(made) if not made.is_empty() else "nothing yet"))
+	_detail.text = "\n".join(lines)
+
+func _zone_names(bits: int) -> String:
+	var names := PackedStringArray()
+	for zone in EcsNodeSpawnDef.Zone.size():
+		if bits & (1 << zone):
+			names.append(String(EcsNodeSpawnDef.Zone.keys()[zone]).to_lower().replace("_", " "))
+	return ", ".join(names) if not names.is_empty() else "none"
+
+func _walk_cost(kind: int) -> String:
+	var cost := catalog.terrain(catalog.terrain_id(EcsTerrainGenerator.TERRAIN_KEYS[kind])).walk_cost
+	return "can't be walked" if cost <= 0.0 else "%.1f" % cost
+
+## What stands on `local` in `chunk`: a node covering it, its kind and what it gives.
+func _object_at(chunk: Dictionary, local: Vector2i) -> String:
+	if not chunk.has("nodes"):
+		return "not planned yet"
+	for node: Dictionary in chunk["nodes"]:
+		if Rect2i(node["cell"], node["size"]).has_point(local):
+			var def := entity_catalog.get_def(node["blueprint"])
+			var source := def.template(&"resource_node") as EcsResourceNodeComponent
+			var size: Vector2i = node["size"]
+			return "%s (%s, gives %s)%s" % [def.display_name, source.kind, String(source.gives).replace("_", " "),
+				"" if size == Vector2i.ONE else ", %d×%d from %s" % [size.x, size.y, node["cell"]]]
+	return "none"
 
 func _option(box: VBoxContainer, label: String, items: Array) -> OptionButton:
 	var row := HBoxContainer.new()
@@ -388,6 +524,9 @@ func _reset_l1() -> void:
 	_chunks = EcsTerrainChunks.new((_region["def"] as EcsSettlementDef).size, ZOOM, CHUNK_SIZES[_chunk_size.selected])
 	_chunk_def = (load(DEFS + "%s.tres" % L1_DEF) as EcsSettlementDef).duplicate() as EcsSettlementDef
 	_chunk_def.size = Vector2i(_chunks.size, _chunks.size)
+	_picked = {}
+	_marker.visible = false
+	_detail_panel.visible = false
 	_in_l1 = false
 	_l1.modulate.a = 0.0
 
@@ -449,3 +588,4 @@ func _report() -> void:
 		"Worker jobs running %d" % _jobs.size(),
 	])
 	_info.text = "\n".join(lines)
+	_describe()

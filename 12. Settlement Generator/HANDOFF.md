@@ -135,6 +135,14 @@ those free their nodes but keep their plans, so coming back only redraws them.
     so there is no seam.
 - Below ×0.75, L1 fades out, but its chunks stay made.
 - Changing the chunk size (32, 64, 128) starts L1 afresh.
+- **A left click picks a cell.** It's L1's where its chunk is drawn and L1 shows, else L2's. The
+  cell is outlined, and a panel top right shows its details, kept current as its chunk is made:
+  - **L2:** position, ground (river or sea), zones, walk cost, and the L1 cells it holds.
+  - **L1:** position, chunk and place in it, ground, zones, walk cost, the object covering it
+    (name, kind, what it gives, size and origin if larger than a cell), its L2 cell's ground, and
+    which stages its chunk has reached.
+
+  × closes the panel; a new region or chunk size clears it.
 
 **Measured** (window, 8 cores, zooming into a river):
 - My code on the main thread costs ~8 ms when a chunk's terrain arrives, ~5–7 ms when its objects
