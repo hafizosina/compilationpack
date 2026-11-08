@@ -30,10 +30,13 @@ toggle and a test.
 
 ### Step 1 — Terrain
 Seeded noise (`FastNoiseLite`) over the map: **water** (a lake, a river or a coast — one per
-town def), **sand** along the shore, **forest** zones (trees placed as plant objects) and open
-grass for fields.
+town def), **sand** along the shore, **forest** zones, **rocky ground** (a hill or an outcrop,
+where the mine nodes are) and open grass for fields. Then the **resource nodes** are scattered
+over it (see *Resource nodes* below): trees and bushes in the forest, stone and ore on the rocks,
+reeds and clay at the water.
 - *Done when:* the same seed gives the same map; the water is one body (or one river edge to
-  edge); land is within the def's share; there's room for the town's plots.
+  edge); land is within the def's share; there's room for the town's plots; every node kind the
+  town def asks for is present.
 
 ### Step 2 — Site and centre
 The town centre: a land cell away from the map's edge, near water but not on it, with flat open
@@ -76,6 +79,8 @@ population), its plot size, where it likes to stand, and its wealth.
 | Gathering hut | 1–2 | At the forest's edge | poor |
 | Hunting hut | 1 | At the forest's edge, away from the centre | poor |
 | Lumber camp | 1 | Inside the forest's edge: a log pile and a chopping block, no walls | — |
+| Miner's hut | 1 (village and up) | At the rocky ground's edge, by the mine entrance | poor |
+| Quarry | 1 | On rocky ground: stone nodes cleared to a pit, a stone pile, no walls | — |
 | Chapel | 1 (village and up) | Near the plaza, on its own plot | middling |
 | Well | 1 + 1 per district | The plaza, then district centres | — |
 
@@ -152,6 +157,7 @@ blueprint and a tile. **Exists** means module 10 already ships it.
 | Fishing hut | one room | small |
 | Gathering hut | one room | small |
 | Hunting hut | one room | small |
+| Miner's hut | one room, store | small, stone walls |
 
 ### Room types (`EcsRoomTypeDef`)
 
@@ -171,6 +177,7 @@ blueprint and a tile. **Exists** means module 10 already ships it.
 | Fishery | net rack | fish drying rack, barrel |
 | Gatherer's room | herb drying rack | baskets |
 | Hunter's room | skinning table | hide rack, trophy (a wall attachment) |
+| Miner's room | pick rack | ore cart, lantern (an attachment) |
 
 ### Furniture and attachments (indoors)
 
@@ -198,6 +205,32 @@ workbench, sawmill, and the attachments banner, book, candle, mug, plate, wall l
 - **Water's edge:** boat, mooring post, water wheel (the watermill's outdoor half).
 - **Plaza:** market stall (2×1), notice board, bench, lamp post.
 - **Forest:** log pile, chopping block, stump.
+- **Mining:** mine entrance (2×2, set into the rock), ore cart, stone pile.
+
+### Resource nodes
+
+Things in the world that something can be gathered from. For now each is a placeholder object
+that blocks walking. Gathering, regrowth and running out come later, with villagers and
+`EcsProficiencyComponent`. Module 9's bushes already work this way for animals: harvested, not
+spawners.
+
+| Node | Where | Kinds | Exists? |
+|---|---|---|---|
+| Tree | Forest, thinning at its edge; a few lone ones on grass | oak, pine, birch; a fruit tree in gardens and orchards | tree exists; kinds new |
+| Bush | Forest edge, meadows | berry bush, herb bush | bush exists; kinds new |
+| Rock | Rocky ground, a few on grass | boulder, stone outcrop (2×2) | new |
+| Ore vein | Inside rocky ground, rarer the richer it is | iron, copper, coal, gold (rare) | new |
+| Clay pit | Riverbank or lakeshore | clay | new |
+| Reeds | Shallow water's edge | reeds | new |
+| Mushroom patch | Deep forest | mushrooms | new |
+
+How a node is placed is data too, on an **`EcsNodeSpawnDef`**:
+- which terrain or zone it grows in;
+- how dense it is, with an optional cluster size, so ore forms veins and trees form groves;
+- how far it keeps from roads and plots.
+
+Step 1 scatters the nodes; steps 3–5 clear them from roads and plots; the forest's edge, the
+rocky ground's edge and the shore are what the huts' site rules look for.
 
 ### Floors and terrain
 
@@ -209,6 +242,8 @@ workbench, sawmill, and the attachments banner, book, candle, mug, plate, wall l
   soil becomes a terrain instead.
 - **Plaza stone:** plain `stone` is enough unless real art wants its own.
 - **Forest floor:** an optional darker grass terrain under the forest.
+- **Rock ground:** a terrain for hills and outcrops, walkable but dear, where stone and ore
+  nodes grow.
 
 ---
 
