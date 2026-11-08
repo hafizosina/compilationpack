@@ -57,6 +57,10 @@ def texture(kind, base, seed):
     elif kind == "rug":
         img[((x + y) % 8 < 2)] -= 22
         img[((x - y) % 8 < 1)] += 18
+    elif kind == "rock":
+        img[r.random((CELL, CELL)) < 0.05] -= 35
+        img[((x * 3 + y * 5) % 23 == 0) & (r.random((CELL, CELL)) < 0.8)] -= 45
+        img[r.random((CELL, CELL)) < 0.04] += 25
     elif kind == "roof":
         rows = y % 8 == 0
         img[rows] -= 40
@@ -163,6 +167,37 @@ def objects_atlas(name):
     img.save(os.path.join(HERE, name))
 
 
+def nodes_atlas(name):
+    """Resource nodes on a 32 px grid, 8x3. Layout in README.md."""
+    img = Image.new("RGBA", (CELL * 8, CELL * 3), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    ink = (42, 32, 22, 255)
+    trunk = (100, 70, 40, 255)
+    def e(cx, cy, x0, y0, x1, y1, **kw):
+        d.ellipse([cx * CELL + x0, cy * CELL + y0, cx * CELL + x1, cy * CELL + y1], outline=ink, **kw)
+    def p(cx, cy, points, **kw):
+        d.polygon([(cx * CELL + x, cy * CELL + y) for x, y in points], outline=ink, **kw)
+    e(0, 0, 1, 1, 30, 30, fill=(45, 110, 45, 255)); e(0, 0, 7, 6, 20, 19, fill=(65, 140, 55, 255)); e(0, 0, 13, 13, 18, 18, fill=trunk)  # oak
+    p(1, 0, [(16, 1), (29, 28), (3, 28)], fill=(30, 85, 55, 255)); p(1, 0, [(16, 8), (24, 24), (8, 24)], fill=(45, 105, 65, 255)); e(1, 0, 14, 14, 18, 18, fill=trunk)  # pine
+    e(2, 0, 3, 3, 28, 28, fill=(120, 170, 70, 255)); e(2, 0, 13, 13, 18, 18, fill=(225, 225, 215, 255))  # birch
+    e(3, 0, 1, 1, 30, 30, fill=(55, 125, 50, 255))  # fruit tree
+    for fx, fy in ((9, 9), (20, 8), (8, 20), (21, 21), (15, 15)): e(3, 0, fx - 3, fy - 3, fx + 3, fy + 3, fill=(210, 60, 50, 255))
+    e(4, 0, 4, 6, 27, 27, fill=(60, 130, 55, 255))  # berry bush
+    for fx, fy in ((11, 12), (19, 14), (14, 21), (21, 21)): e(4, 0, fx - 2, fy - 2, fx + 2, fy + 2, fill=(80, 60, 170, 255))
+    e(5, 0, 5, 7, 26, 26, fill=(90, 150, 80, 255))  # herb bush
+    for fx, fy in ((12, 12), (19, 17), (13, 20)): e(5, 0, fx - 2, fy - 2, fx + 2, fy + 2, fill=(240, 240, 240, 255))
+    for fx, fy, rad in ((10, 18, 5), (20, 13, 6), (19, 23, 4)): e(6, 0, fx - rad, fy - rad, fx + rad, fy + rad, fill=(190, 90, 60, 255))  # mushrooms
+    for k in range(6): d.line([7 * CELL + 5 + k * 4, 28, 7 * CELL + 3 + k * 5, 5 + (k % 3) * 3], fill=(150, 170, 80, 255), width=2)  # reeds
+    p(0, 1, [(4, 24), (8, 9), (19, 5), (28, 13), (27, 26)], fill=(125, 122, 118, 255))  # boulder
+    p(1, 1, [(3, 50), (6, 18), (18, 5), (40, 3), (58, 16), (61, 44), (44, 60), (14, 60)], fill=(115, 112, 108, 255))  # outcrop 2x2
+    d.line([CELL + 20, CELL + 20, CELL + 38, CELL + 40], fill=ink, width=2); d.line([CELL + 40, CELL + 14, CELL + 34, CELL + 30], fill=ink, width=2)
+    for cx, ore in ((3, (170, 110, 80, 255)), (4, (200, 120, 60, 255)), (5, (30, 30, 30, 255)), (6, (235, 195, 60, 255))):  # iron, copper, coal, gold veins
+        p(cx, 1, [(3, 25), (6, 8), (18, 3), (28, 11), (27, 27)], fill=(110, 108, 105, 255))
+        for fx, fy in ((10, 12), (19, 10), (15, 19), (22, 20)): e(cx, 1, fx - 3, fy - 3, fx + 3, fy + 3, fill=ore)
+    e(7, 1, 3, 6, 28, 26, fill=(165, 95, 60, 255)); e(7, 1, 9, 11, 22, 21, fill=(185, 115, 75, 255))  # clay pit
+    img.save(os.path.join(HERE, name))
+
+
 def attachments_atlas(name):
     """16 px icons, one row: wall lamp, candle, plate, book, mug, banner."""
     S = 16
@@ -215,6 +250,7 @@ def ui_icons():
                             d.line([(22, 18), (29, 18), (29, 29), (14, 29), (14, 26)], fill=ink, width=2)))
     icon("stamp", lambda d: (d.rectangle([11, 3, 21, 13], outline=ink, width=2), d.line([(16, 13), (16, 18)], fill=ink, width=3),
                              d.rectangle([5, 18, 27, 23], outline=ink, width=2), d.line([(5, 28), (27, 28)], fill=ink, width=2)))
+    icon("resource", lambda d: (d.arc([4, 3, 28, 19], 200, 340, fill=ink, width=3), d.line([(16, 6), (16, 29)], fill=ink, width=3)))
     icon("none", lambda d: (d.ellipse([5, 5, 27, 27], outline=ink, width=2), d.line([(9, 23), (23, 9)], fill=ink, width=2)))
 
 
@@ -223,6 +259,8 @@ dual_sheet("terrain_grass.png", "grass", "#5E8A2E")
 dual_sheet("terrain_dirt.png", "dirt", "#7A5A38")
 dual_sheet("terrain_sand.png", "sand", "#D8C38A")
 dual_sheet("terrain_water.png", "water", "#2F5E93")
+dual_sheet("terrain_rock.png", "rock", "#8A847A")
+dual_sheet("terrain_forest.png", "grass", "#3F6A26")
 dual_sheet("floor_wood.png", "planks", "#9A7650")
 dual_sheet("floor_stone.png", "stone", "#8C8A84")
 dual_sheet("floor_road.png", "road", "#6E665C")
@@ -232,4 +270,5 @@ wall_sheet("wall_stone.png", beam=(140, 138, 132, 255), post=(110, 108, 104, 255
 door_sheet("door_states.png")
 objects_atlas("objects.png")
 attachments_atlas("attachments.png")
+nodes_atlas("nodes.png")
 print("done")

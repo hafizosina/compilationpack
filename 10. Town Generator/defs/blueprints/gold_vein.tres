@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="EcsEntityDef" format=3 uid="uid://cydruo8ttqn2m"]
+
+[ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="1_cy67k"]
+[ext_resource type="Script" uid="uid://dn2f5xd6hs8m4" path="res://10. Town Generator/components/ecs_grid_position_component.gd" id="2_2v3rs"]
+[ext_resource type="Script" uid="uid://bin24ox2e0o22" path="res://10. Town Generator/components/ecs_tile_component.gd" id="3_jexrv"]
+[ext_resource type="Texture2D" uid="uid://dqtvm1q2ifuk4" path="res://10. Town Generator/art/placeholder/nodes.png" id="4_7sdlp"]
+[ext_resource type="Script" uid="uid://cye8rjukbq3ev" path="res://10. Town Generator/components/ecs_resource_node_component.gd" id="5_8hygu"]
+[ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="6_4uvsc"]
+
+[sub_resource type="Resource" id="Resource_nk42o"]
+script = ExtResource("2_2v3rs")
+
+[sub_resource type="Resource" id="Resource_xp5n4"]
+script = ExtResource("3_jexrv")
+texture = ExtResource("4_7sdlp")
+atlas = Vector2i(6, 1)
+
+[sub_resource type="Resource" id="Resource_q5xlm"]
+script = ExtResource("5_8hygu")
+kind = &"ore"
+gives = &"gold_ore"
+
+[resource]
+script = ExtResource("6_4uvsc")
+id = &"gold_vein"
+display_name = "Gold vein"
+components = Array[ExtResource("1_cy67k")]([SubResource("Resource_nk42o"), SubResource("Resource_xp5n4"), SubResource("Resource_q5xlm")])

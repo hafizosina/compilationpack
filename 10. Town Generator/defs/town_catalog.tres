@@ -25,13 +25,15 @@
 [ext_resource type="Resource" uid="uid://bxijm35xmt1pd" path="res://10. Town Generator/defs/terrain/dirt.tres" id="t2"]
 [ext_resource type="Resource" uid="uid://by6bit62sy8c3" path="res://10. Town Generator/defs/terrain/sand.tres" id="t3"]
 [ext_resource type="Resource" uid="uid://bfovdx53nqy1w" path="res://10. Town Generator/defs/terrain/water.tres" id="t4"]
+[ext_resource type="Resource" uid="uid://ckct6lp82028r" path="res://10. Town Generator/defs/terrain/rock.tres" id="t5"]
+[ext_resource type="Resource" uid="uid://brp525b3gdew2" path="res://10. Town Generator/defs/terrain/forest.tres" id="t6"]
 [ext_resource type="Script" uid="uid://cuh411fcskjqj" path="res://10. Town Generator/defs/ecs_wall_def.gd" id="w"]
 [ext_resource type="Resource" uid="uid://du3o3361f2fqc" path="res://10. Town Generator/defs/wall/wood.tres" id="w1"]
 [ext_resource type="Resource" uid="uid://b6fx676kshdux" path="res://10. Town Generator/defs/wall/stone.tres" id="w2"]
 
 [resource]
 script = ExtResource("1")
-terrains = Array[ExtResource("t")]([ExtResource("t1"), ExtResource("t2"), ExtResource("t3"), ExtResource("t4")])
+terrains = Array[ExtResource("t")]([ExtResource("t1"), ExtResource("t2"), ExtResource("t3"), ExtResource("t4"), ExtResource("t5"), ExtResource("t6")])
 floors = Array[ExtResource("f")]([ExtResource("f1"), ExtResource("f2"), ExtResource("f3"), ExtResource("f4")])
 walls = Array[ExtResource("w")]([ExtResource("w1"), ExtResource("w2")])
 doors = Array[ExtResource("d")]([ExtResource("d1"), ExtResource("d2")])

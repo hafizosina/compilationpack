@@ -5,6 +5,7 @@
 [ext_resource type="Script" uid="uid://dn2f5xd6hs8m4" path="res://10. Town Generator/components/ecs_grid_position_component.gd" id="s_grid"]
 [ext_resource type="Script" uid="uid://fbykptqiyyux" path="res://10. Town Generator/components/ecs_plant_component.gd" id="s_plant"]
 [ext_resource type="Script" uid="uid://bin24ox2e0o22" path="res://10. Town Generator/components/ecs_tile_component.gd" id="s_tile"]
+[ext_resource type="Script" uid="uid://cye8rjukbq3ev" path="res://10. Town Generator/components/ecs_resource_node_component.gd" id="s_node"]
 [ext_resource type="Texture2D" uid="uid://dnkwxks8nnlod" path="res://10. Town Generator/art/placeholder/objects.png" id="t_sheet"]
 
 [sub_resource type="Resource" id="c_grid"]
@@ -15,6 +16,11 @@ script = ExtResource("s_tile")
 texture = ExtResource("t_sheet")
 atlas = Vector2i(5, 2)
 
+[sub_resource type="Resource" id="c_node"]
+script = ExtResource("s_node")
+kind = &"bush"
+gives = &"berries"
+
 [sub_resource type="Resource" id="c_plant"]
 script = ExtResource("s_plant")
 
@@ -22,4 +28,4 @@ script = ExtResource("s_plant")
 script = ExtResource("def")
 id = &"bush"
 display_name = "Bush"
-components = Array[ExtResource("base")]([SubResource("c_grid"), SubResource("c_tile"), SubResource("c_plant")])
+components = Array[ExtResource("base")]([SubResource("c_grid"), SubResource("c_tile"), SubResource("c_plant"), SubResource("c_node")])

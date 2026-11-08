@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="EcsEntityDef" format=3 uid="uid://b1kp2cwbnw6vh"]
+
+[ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="1_suel7"]
+[ext_resource type="Script" uid="uid://dn2f5xd6hs8m4" path="res://10. Town Generator/components/ecs_grid_position_component.gd" id="2_hc3tb"]
+[ext_resource type="Script" uid="uid://bin24ox2e0o22" path="res://10. Town Generator/components/ecs_tile_component.gd" id="3_272lv"]
+[ext_resource type="Texture2D" uid="uid://dqtvm1q2ifuk4" path="res://10. Town Generator/art/placeholder/nodes.png" id="4_wf53w"]
+[ext_resource type="Script" uid="uid://cye8rjukbq3ev" path="res://10. Town Generator/components/ecs_resource_node_component.gd" id="5_atmrg"]
+[ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="6_tav7e"]
+
+[sub_resource type="Resource" id="Resource_xtjge"]
+script = ExtResource("2_hc3tb")
+size = Vector2i(2, 2)
+
+[sub_resource type="Resource" id="Resource_v043v"]
+script = ExtResource("3_272lv")
+texture = ExtResource("4_wf53w")
+atlas = Vector2i(1, 1)
+
+[sub_resource type="Resource" id="Resource_uqr6w"]
+script = ExtResource("5_atmrg")
+kind = &"rock"
+gives = &"stone"
+
+[resource]
+script = ExtResource("6_tav7e")
+id = &"outcrop"
+display_name = "Outcrop"
+components = Array[ExtResource("1_suel7")]([SubResource("Resource_xtjge"), SubResource("Resource_v043v"), SubResource("Resource_uqr6w")])

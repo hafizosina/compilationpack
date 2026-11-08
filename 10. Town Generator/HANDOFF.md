@@ -7,7 +7,8 @@ module 9 changes only through a hook the author approves first. The plan is the 
 (`MODULE10_BRIEF.md`, kept outside the repo); started from tag `ecs-baseline`.
 
 **Status (2026-11-08):** the brief's steps 1–8 are done (§2–§10), and so is its §5 stress scene (§11).
-Since the brief: pathfinding and placeable villagers (§12). Open: §13.
+Since the brief: pathfinding and placeable villagers (§12); resource nodes, rock and forest for module 12
+(§13). Open: §14.
 
 **Not in this module, by decision:** live edit, the inspector, selection HUD. Its pipeline is
 module 9's ECS core plus the town systems.
@@ -668,7 +669,27 @@ so they overlap; a path is planned whole, with no window or background thread (t
 
 ---
 
-## 13. Open for discussion
+## 13. Resource nodes, rock and forest (2026-11-08, for module 12)
+
+Module 12's generator places them; they live here so the builder can too (decided 2026-11-08).
+- **Terrains** `rock` (`walk_cost` 1.6) and `forest` (a darker grass, 1.0), appended to the catalog's
+  list, so ids and saves are unchanged. Placeholder sheets come from `make_placeholders.py`.
+- **`EcsResourceNodeComponent{kind, gives}`**: something that can be gathered from (`&"tree"`, `&"wood"`).
+  Data only, for gathering later.
+- **15 node blueprints** on `nodes.png` (layout in the placeholder README), each grid position + tile
+  + resource node, and `plant` for trees and bushes:
+  - oak, pine, birch, fruit tree, berry bush, herb bush, mushrooms, reeds;
+  - boulder, outcrop (2×2);
+  - iron, copper, coal and gold veins, clay pit.
+
+  `tree` and `bush` gained the component too.
+- **The Resources tool** on the panel lists every blueprint with a resource node and places it like
+  furniture. The Plant tool keeps only crops. A tree or bush still refuses a floor (`plant_on_floor`).
+  Checked in the real scene: a pine is refused on a floor and placed on grass; an iron vein is placed.
+
+---
+
+## 14. Open for discussion
 
 - **What "closed" means** (flagged 2026-11-05). `CLOSE_BUILDING` sets `EcsBuildingComponent.closed`,
   one way; the only thing that reads it is the overlay (dashed outline open, solid with a fill closed),

@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="EcsEntityDef" format=3 uid="uid://dshsy4rwj8p2f"]
+
+[ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="1_cpss8"]
+[ext_resource type="Script" uid="uid://dn2f5xd6hs8m4" path="res://10. Town Generator/components/ecs_grid_position_component.gd" id="2_rf04s"]
+[ext_resource type="Script" uid="uid://bin24ox2e0o22" path="res://10. Town Generator/components/ecs_tile_component.gd" id="3_ncqfr"]
+[ext_resource type="Texture2D" uid="uid://dqtvm1q2ifuk4" path="res://10. Town Generator/art/placeholder/nodes.png" id="4_k7aqh"]
+[ext_resource type="Script" uid="uid://cye8rjukbq3ev" path="res://10. Town Generator/components/ecs_resource_node_component.gd" id="5_apkd8"]
+[ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="6_bojrm"]
+
+[sub_resource type="Resource" id="Resource_6ti4a"]
+script = ExtResource("2_rf04s")
+
+[sub_resource type="Resource" id="Resource_hye10"]
+script = ExtResource("3_ncqfr")
+texture = ExtResource("4_k7aqh")
+atlas = Vector2i(7, 1)
+
+[sub_resource type="Resource" id="Resource_lmk7g"]
+script = ExtResource("5_apkd8")
+kind = &"clay"
+gives = &"clay"
+
+[resource]
+script = ExtResource("6_bojrm")
+id = &"clay_pit"
+display_name = "Clay pit"
+components = Array[ExtResource("1_cpss8")]([SubResource("Resource_6ti4a"), SubResource("Resource_hye10"), SubResource("Resource_lmk7g")])

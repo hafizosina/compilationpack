@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="EcsEntityDef" format=3 uid="uid://cvl0wqykoqnn6"]
+
+[ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="1_dv06c"]
+[ext_resource type="Script" uid="uid://dn2f5xd6hs8m4" path="res://10. Town Generator/components/ecs_grid_position_component.gd" id="2_pphvd"]
+[ext_resource type="Script" uid="uid://bin24ox2e0o22" path="res://10. Town Generator/components/ecs_tile_component.gd" id="3_jh4w0"]
+[ext_resource type="Texture2D" uid="uid://dqtvm1q2ifuk4" path="res://10. Town Generator/art/placeholder/nodes.png" id="4_ysah5"]
+[ext_resource type="Script" uid="uid://cye8rjukbq3ev" path="res://10. Town Generator/components/ecs_resource_node_component.gd" id="5_g3xjx"]
+[ext_resource type="Script" uid="uid://fbykptqiyyux" path="res://10. Town Generator/components/ecs_plant_component.gd" id="6_m7400"]
+[ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="7_sy6mr"]
+
+[sub_resource type="Resource" id="Resource_y5vef"]
+script = ExtResource("2_pphvd")
+
+[sub_resource type="Resource" id="Resource_okrc7"]
+script = ExtResource("3_jh4w0")
+texture = ExtResource("4_ysah5")
+atlas = Vector2i(1, 0)
+
+[sub_resource type="Resource" id="Resource_d8t5o"]
+script = ExtResource("5_g3xjx")
+kind = &"tree"
+gives = &"wood"
+
+[sub_resource type="Resource" id="Resource_aibxj"]
+script = ExtResource("6_m7400")
+
+[resource]
+script = ExtResource("7_sy6mr")
+id = &"pine"
+display_name = "Pine"
+components = Array[ExtResource("1_dv06c")]([SubResource("Resource_y5vef"), SubResource("Resource_okrc7"), SubResource("Resource_d8t5o"), SubResource("Resource_aibxj")])

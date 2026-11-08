@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="EcsEntityDef" format=3 uid="uid://bhdpisu6c2dax"]
+
+[ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="1_so1c0"]
+[ext_resource type="Script" uid="uid://dn2f5xd6hs8m4" path="res://10. Town Generator/components/ecs_grid_position_component.gd" id="2_fqoui"]
+[ext_resource type="Script" uid="uid://bin24ox2e0o22" path="res://10. Town Generator/components/ecs_tile_component.gd" id="3_8b7mq"]
+[ext_resource type="Texture2D" uid="uid://dqtvm1q2ifuk4" path="res://10. Town Generator/art/placeholder/nodes.png" id="4_h4j85"]
+[ext_resource type="Script" uid="uid://cye8rjukbq3ev" path="res://10. Town Generator/components/ecs_resource_node_component.gd" id="5_40jeh"]
+[ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="6_ct5en"]
+
+[sub_resource type="Resource" id="Resource_if6gm"]
+script = ExtResource("2_fqoui")
+
+[sub_resource type="Resource" id="Resource_nbqua"]
+script = ExtResource("3_8b7mq")
+texture = ExtResource("4_h4j85")
+atlas = Vector2i(0, 1)
+
+[sub_resource type="Resource" id="Resource_hq03c"]
+script = ExtResource("5_40jeh")
+kind = &"rock"
+gives = &"stone"
+
+[resource]
+script = ExtResource("6_ct5en")
+id = &"boulder"
+display_name = "Boulder"
+components = Array[ExtResource("1_so1c0")]([SubResource("Resource_if6gm"), SubResource("Resource_nbqua"), SubResource("Resource_hq03c")])

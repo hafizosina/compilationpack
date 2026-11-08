@@ -119,11 +119,11 @@ func _show_ghost(cell: Vector2i) -> void:
 	var cells := Rect2i(cell, Vector2i.ONE)
 	var reason := ""
 	var marks: Array[Vector2i] = []
-	var placed := _tool == &"furniture" or _tool == &"plant"
+	var placed := _tool == &"furniture" or _tool == &"plant" or _tool == &"resource"
 	match _tool:
 		&"terrain", &"floor":
 			cells = Rect2i(cell - Vector2i(_brush_size / 2, _brush_size / 2), Vector2i(_brush_size, _brush_size))
-		&"furniture", &"plant":
+		&"furniture", &"plant", &"resource":
 			cells.size = EcsTownGrid.turned(look.get("size", Vector2i.ONE), _turns)
 		&"copy":
 			if _grid().building_id[EcsTownGrid.index(_grid(), cell)] <= EcsWorld.NO_ENTITY:
@@ -305,7 +305,7 @@ func _click(cell: Vector2i) -> void:
 func _commands_at(cell: Vector2i) -> Array[EcsBuildCommand]:
 	var commands: Array[EcsBuildCommand] = []
 	match _tool:
-		&"furniture", &"plant":
+		&"furniture", &"plant", &"resource":
 			commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, cell, _chosen_blueprint(), _turns))
 		&"attach":
 			commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.ATTACH, cell, _chosen_blueprint()))

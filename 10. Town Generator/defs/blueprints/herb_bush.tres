@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="EcsEntityDef" format=3 uid="uid://c11l542qumiwk"]
+
+[ext_resource type="Script" uid="uid://cc5jtxa1fcpu8" path="res://9. EcsSystem/ecs/ecs_component.gd" id="1_n200b"]
+[ext_resource type="Script" uid="uid://dn2f5xd6hs8m4" path="res://10. Town Generator/components/ecs_grid_position_component.gd" id="2_aefjg"]
+[ext_resource type="Script" uid="uid://bin24ox2e0o22" path="res://10. Town Generator/components/ecs_tile_component.gd" id="3_c2djf"]
+[ext_resource type="Texture2D" uid="uid://dqtvm1q2ifuk4" path="res://10. Town Generator/art/placeholder/nodes.png" id="4_6lcyp"]
+[ext_resource type="Script" uid="uid://cye8rjukbq3ev" path="res://10. Town Generator/components/ecs_resource_node_component.gd" id="5_l2skm"]
+[ext_resource type="Script" uid="uid://fbykptqiyyux" path="res://10. Town Generator/components/ecs_plant_component.gd" id="6_pgiwh"]
+[ext_resource type="Script" uid="uid://2viguy8kg1qx" path="res://9. EcsSystem/defs/ecs_entity_def.gd" id="7_ho634"]
+
+[sub_resource type="Resource" id="Resource_y6fdq"]
+script = ExtResource("2_aefjg")
+
+[sub_resource type="Resource" id="Resource_k4qo2"]
+script = ExtResource("3_c2djf")
+texture = ExtResource("4_6lcyp")
+atlas = Vector2i(5, 0)
+
+[sub_resource type="Resource" id="Resource_suay8"]
+script = ExtResource("5_l2skm")
+kind = &"bush"
+gives = &"herbs"
+
+[sub_resource type="Resource" id="Resource_qk4tq"]
+script = ExtResource("6_pgiwh")
+
+[resource]
+script = ExtResource("7_ho634")
+id = &"herb_bush"
+display_name = "Herb bush"
+components = Array[ExtResource("1_n200b")]([SubResource("Resource_y6fdq"), SubResource("Resource_k4qo2"), SubResource("Resource_suay8"), SubResource("Resource_qk4tq")])

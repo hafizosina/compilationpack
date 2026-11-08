@@ -5,8 +5,9 @@ Replace any sheet with real art in the same layout, or point its def at a new Ti
 
 | File | Layout |
 |---|---|
-| `terrain_grass/dirt/sand/water.png`, `floor_wood/stone/road/rug.png`, `roof.png` | Dual grid, 6×3 of 32 px, the same layout as `Global/Asset/Tilemap/WoodFloor.png` (3:2, 4:2, 5:2 are full-tile variants of 1:1) |
+| `terrain_grass/dirt/sand/water/rock/forest.png`, `floor_wood/stone/road/rug.png`, `roof.png` | Dual grid, 6×3 of 32 px, the same layout as `Global/Asset/Tilemap/WoodFloor.png` (3:2, 4:2, 5:2 are full-tile variants of 1:1) |
 | `wall_stone.png` | Cell grid, 6×3 of 32 px, the same side layout as `WoodWall.png` |
 | `door_states.png` | 4 tiles of 48 px, oversized on a 32 px cell: horizontal closed, vertical closed, horizontal open, vertical open |
 | `objects.png` | 32 px grid, 8×4. Origin cell and size: bed (0,0) 1×2, double bed (1,0) 2×2, table (3,0), long table (4,0) 2×1, chair (6,0), stove (7,0), chest (3,1), workbench (4,1) 2×1, shelf (6,1), barrel (7,1), sawmill (0,2) 2×2, anvil (2,2), crop (3,2), tree (4,2), bush (5,2), well (6,2), hearth (7,2), rubble (2,3) |
+| `nodes.png` | Resource nodes, 32 px grid, 8×3. Row 0: oak, pine, birch, fruit tree, berry bush, herb bush, mushrooms, reeds. Row 1: boulder (0,1), outcrop (1,1) 2×2, iron vein (3,1), copper vein (4,1), coal vein (5,1), gold vein (6,1), clay pit (7,1) |
 | `attachments.png` | 16 px, one row: wall lamp, candle, plate, book, mug, banner |

@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="EcsTerrainDef" format=3 uid="uid://brp525b3gdew2"]
+
+[ext_resource type="Script" uid="uid://bjrdpjs1inii4" path="res://10. Town Generator/defs/ecs_terrain_def.gd" id="1_grmud"]
+[ext_resource type="Texture2D" uid="uid://dr7c4syi5p7ds" path="res://10. Town Generator/art/placeholder/terrain_forest.png" id="2_06aq8"]
+
+[resource]
+script = ExtResource("1_grmud")
+key = &"forest"
+display_name = "forest floor"
+texture = ExtResource("2_06aq8")

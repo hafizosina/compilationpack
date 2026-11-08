@@ -105,6 +105,8 @@ func _tool_name(tool: StringName, id: int, brush: int, turns: int) -> String:
 			return "Wall: %s" % _catalog.wall(id).display_name
 		&"door":
 			return "Door: %s" % _catalog.door(id).display_name
+		&"resource":
+			return "Resources: %s" % _entities.get_def(blueprint(tool, id)).display_name
 		&"furniture", &"plant":
 			return "%s: %s, turned %d°" % [String(tool).capitalize(), _entities.get_def(blueprint(tool, id)).display_name, turns * 90]
 		&"attach":
@@ -141,11 +143,12 @@ func _tools() -> Array:
 	var furniture: Array = []
 	var plants: Array = []
 	var attachments: Array = []
+	var resources: Array = []
 	for def in _entities.defs:
 		var place := def.template(&"grid_position") as EcsGridPositionComponent
 		var tile := def.template(&"tile") as EcsTileComponent
 		var offered := def.template(&"furniture") != null or def.template(&"plant") != null \
-			or def.template(&"attachable") != null
+			or def.template(&"attachable") != null or def.template(&"resource_node") != null
 		if tile == null or not offered:
 			continue
 		var tool: StringName = &"furniture"
@@ -153,6 +156,9 @@ func _tools() -> Array:
 		if def.template(&"attachable") != null:
 			tool = &"attach"
 			into = attachments
+		elif def.template(&"resource_node") != null:
+			tool = &"resource"
+			into = resources
 		elif def.template(&"plant") != null:
 			tool = &"plant"
 			into = plants
@@ -180,6 +186,9 @@ func _tools() -> Array:
 			"choices": furniture},
 		{"tool": &"plant", "label": "Plant", "icon": load(ICONS % "plant"),
 			"hint": "Click to plant on bare ground, never on a floor; Q turns it.", "choices": plants},
+		{"tool": &"resource", "label": "Resources", "icon": load(ICONS % "resource"),
+			"hint": "Click to place a tree, bush, rock or ore vein, top-left on the cell. Trees and bushes never go on a floor.",
+			"choices": resources},
 		{"tool": &"attach", "label": "Attach", "icon": load(ICONS % "attach"),
 			"hint": "Click a wall to hang it, or a table, stove or shelf to set it on.", "choices": attachments},
 		{"tool": &"toggle", "label": "Open / close", "icon": load(ICONS % "toggle"),
