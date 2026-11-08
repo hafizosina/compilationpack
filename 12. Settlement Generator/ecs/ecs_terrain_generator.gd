@@ -32,8 +32,9 @@ const SIDES: Array[Vector2i] = [Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT, Ve
 const DETAIL: float = 0.3
 ## How far a refined river's centre wanders from its parent's line, in child cells.
 const RIVER_JITTER: float = 1.5
-## Child cells worked round a refined window, then cropped: more than the shore width and the jitter.
-const MARGIN: int = 4
+## Child cells worked round a refined area, then cropped: past the shore width, the jitter and the
+## deepest zone distance, so cells near the edge get the same zones as in a bigger area.
+const MARGIN: int = 5
 
 ## The map for `def` and `rng_seed`: {commands, kinds, zones (bit per EcsNodeSpawnDef.Zone),
 ## nodes: [{blueprint, cell, size}], counts: {blueprint: n}, rivers: [{points, radii}],
@@ -73,30 +74,87 @@ static func plan(def: EcsSettlementDef, rng_seed: int, catalog: EcsTownCatalog, 
 	started = Time.get_ticks_usec()
 	_forest(def, kinds, _rng(rng_seed, 3))
 	usec["forest"] = _lap(started)
-	var out := _finish(def, kinds, _rng(rng_seed, 4), catalog, entities, usec)
+	var out := _finish(def, kinds, PackedByteArray(), _rng(rng_seed, 4), catalog, entities, usec)
 	out["rivers"] = rivers
 	out["river"] = river
 	out["coast_side"] = coast_side
 	return out
 
-## A child map of `def`'s size zoomed `scale` times into `parent`'s cells from `origin`: the
-## parent's kinds blended up with detail noise, its rivers redrawn along their own lines so
-## they run smooth, the child's shore and nodes added. Noise is sampled in whole-map
-## coordinates and the window is worked with a margin, so neighbouring windows meet without a
-## seam. Same result as `plan`.
+## A child map of `def`'s size zoomed `scale` times into `parent`'s cells from `origin`: its
+## terrain (`refine_terrain`), then nodes and commands as in `plan`. Neighbouring windows meet
+## without a seam.
 static func refine(parent: Dictionary, parent_def: EcsSettlementDef, def: EcsSettlementDef, origin: Vector2i,
 		scale: int, rng_seed: int, catalog: EcsTownCatalog, entities: EcsEntityCatalog) -> Dictionary:
+	var terrain := refine_terrain(parent, parent_def, def.size, def.shore_width, origin * scale, scale, rng_seed)
+	var usec := terrain["usec"] as Dictionary
+	var out := _finish(def, terrain["kinds"], terrain["zones"], _rng(hash([rng_seed, origin]), 7), catalog, entities, usec)
+	out["rivers"] = []
+	out["river"] = terrain["river"]
+	out["coast_side"] = parent["coast_side"]
+	return out
+
+## A child's ground only, `size` cells from child cell `at` (`scale` child cells a parent cell):
+## the parent's kinds blended up with detail noise, its rivers redrawn along their own lines so
+## they run smooth, then the shore. Noise is read in whole-map coordinates and the work is done
+## MARGIN cells wider each side, so any two areas agree cell for cell where they overlap.
+## {kinds, river: with `border` cells round `size`, zones: `size` only, usec}. `shares` is
+## `blend_shares(parent, …)` when the caller keeps it, else it is made here.
+static func refine_terrain(parent: Dictionary, parent_def: EcsSettlementDef, size: Vector2i, shore_width: int,
+		at: Vector2i, scale: int, rng_seed: int, border: int = 0, shares: Array = []) -> Dictionary:
+	var pw := parent_def.size.x
+	var ph := parent_def.size.y
+	var pad := border + MARGIN
+	var w := size.x + pad * 2
+	var h := size.y + pad * 2
+	var base := at - Vector2i(pad, pad)
+	var usec: Dictionary = {}
+	var started := Time.get_ticks_usec()
+	if shares.is_empty():
+		shares = blend_shares(parent, parent_def)
+	var detail: Array[PackedByteArray] = []
+	var noise_rng := _rng(rng_seed, 5)
+	for kind in KIND_COUNT:
+		var noise := _noise(noise_rng, 0.08)
+		noise.offset = Vector3(base.x, base.y, 0)
+		detail.append(noise.get_image(w, h, false, false, false).get_data())
+	var kinds := PackedByteArray()
+	kinds.resize(w * h)
+	for i in w * h:
+		var p := (Vector2(base) + Vector2((i % w) + 0.5, (i / w) + 0.5)) / scale - Vector2(0.5, 0.5)
+		var best := GRASS
+		var best_score := -INF
+		for kind in KIND_COUNT:
+			var score := _blend(shares[kind], pw, ph, p) + (detail[kind][i] / 255.0 * 2.0 - 1.0) * DETAIL
+			if score > best_score:
+				best_score = score
+				best = kind
+		kinds[i] = best
+	usec["blend"] = _lap(started)
+	started = Time.get_ticks_usec()
+	var river := PackedByteArray()
+	river.resize(w * h)
+	var jitter := _noise(_rng(rng_seed, 6), 0.05)
+	for line: Dictionary in parent["rivers"]:
+		_redraw(line, base, scale, kinds, river, w, h, jitter)
+	usec["river"] = _lap(started)
+	started = Time.get_ticks_usec()
+	var from_water := distance_from(kinds, w, h, WATER, false)
+	for i in w * h:
+		if kinds[i] == GRASS and from_water[i] <= shore_width:
+			kinds[i] = SAND
+	var zones := _crop(zones_of(kinds, w, h), w, Vector2i(pad, pad), size)
+	var outer := size + Vector2i(border, border) * 2
+	usec["shore"] = _lap(started)
+	return {"kinds": _crop(kinds, w, Vector2i(MARGIN, MARGIN), outer), "river": _crop(river, w, Vector2i(MARGIN, MARGIN), outer),
+		"zones": zones, "usec": usec}
+
+## A parent's kinds as 0 or 1 per cell, one array per kind, for blending. A river cell counts as
+## its sandy bank, so a child's river comes only from its smooth line, except where it meets other
+## water, so the mouth stays joined. Keep it to refine many areas of one parent.
+static func blend_shares(parent: Dictionary, parent_def: EcsSettlementDef) -> Array[PackedFloat32Array]:
 	var pw := parent_def.size.x
 	var ph := parent_def.size.y
 	var parent_kinds := parent["kinds"] as PackedByteArray
-	# Worked with MARGIN child cells round it, then cropped, so the shore sees water just outside.
-	var w := def.size.x + MARGIN * 2
-	var h := def.size.y + MARGIN * 2
-	var base := origin * scale - Vector2i(MARGIN, MARGIN)
-	var usec: Dictionary = {}
-	var started := Time.get_ticks_usec()
-	# Each kind as 0 or 1 per parent cell. A river cell counts as its sandy bank, so the river comes
-	# only from its smooth line below, except where it meets other water, so the mouth stays joined.
 	var parent_river := parent["river"] as PackedByteArray
 	var blended := parent_kinds.duplicate()
 	for i in pw * ph:
@@ -116,76 +174,49 @@ static func refine(parent: Dictionary, parent_def: EcsSettlementDef, def: EcsSet
 		for i in pw * ph:
 			share[i] = 1.0 if blended[i] == kind else 0.0
 		shares.append(share)
-	var detail: Array[PackedByteArray] = []
-	var noise_rng := _rng(rng_seed, 5)
-	for kind in KIND_COUNT:
-		var noise := _noise(noise_rng, 0.08)
-		noise.offset = Vector3(base.x, base.y, 0)
-		detail.append(noise.get_image(w, h, false, false, false).get_data())
-	var kinds := PackedByteArray()
-	kinds.resize(w * h)
-	for i in w * h:
-		var at := (Vector2(base) + Vector2((i % w) + 0.5, (i / w) + 0.5)) / scale - Vector2(0.5, 0.5)
-		var best := GRASS
-		var best_score := -INF
-		for kind in KIND_COUNT:
-			var score := _blend(shares[kind], pw, ph, at) + (detail[kind][i] / 255.0 * 2.0 - 1.0) * DETAIL
-			if score > best_score:
-				best_score = score
-				best = kind
-		kinds[i] = best
-	usec["blend"] = _lap(started)
-	started = Time.get_ticks_usec()
-	var river := PackedByteArray()
-	river.resize(w * h)
-	var jitter := _noise(_rng(rng_seed, 6), 0.05)
-	for line: Dictionary in parent["rivers"]:
-		_redraw(line, base, scale, kinds, river, w, h, jitter)
-	usec["river"] = _lap(started)
-	started = Time.get_ticks_usec()
-	var from_water := distance_from(kinds, w, h, WATER, false)
-	for i in w * h:
-		if kinds[i] == GRASS and from_water[i] <= def.shore_width:
-			kinds[i] = SAND
-	kinds = _crop(kinds, w, def.size)
-	river = _crop(river, w, def.size)
-	usec["shore"] = _lap(started)
-	var out := _finish(def, kinds, _rng(hash([rng_seed, origin]), 7), catalog, entities, usec)
-	out["rivers"] = []
-	out["river"] = river
-	out["coast_side"] = parent["coast_side"]
-	return out
+	return shares
 
-## The `size` window at (MARGIN, MARGIN) of a `w`-wide grid.
-static func _crop(cells: PackedByteArray, w: int, size: Vector2i) -> PackedByteArray:
+## Nodes for a child area of `def`'s size from its `zones`, seeded by `key` (a window or chunk).
+static func refine_nodes(def: EcsSettlementDef, zones: PackedByteArray, rng_seed: int, key: Variant,
+		entities: EcsEntityCatalog) -> Array[Dictionary]:
+	return _nodes(def, zones, entities, _rng(hash([rng_seed, key]), 7))
+
+## The `size` window at `from` of a `w`-wide grid.
+static func _crop(cells: PackedByteArray, w: int, from: Vector2i, size: Vector2i) -> PackedByteArray:
 	var out := PackedByteArray()
 	out.resize(size.x * size.y)
 	for y in size.y:
 		for x in size.x:
-			out[y * size.x + x] = cells[(y + MARGIN) * w + x + MARGIN]
+			out[y * size.x + x] = cells[(y + from.y) * w + x + from.x]
 	return out
 
-## Zones, nodes and commands for finished `kinds`.
-static func _finish(def: EcsSettlementDef, kinds: PackedByteArray, rng: RandomNumberGenerator,
+## Nodes and commands for finished `kinds`, their zones made here when `zones` is empty.
+static func _finish(def: EcsSettlementDef, kinds: PackedByteArray, zones: PackedByteArray, rng: RandomNumberGenerator,
 		catalog: EcsTownCatalog, entities: EcsEntityCatalog, usec: Dictionary) -> Dictionary:
 	var w := def.size.x
 	var h := def.size.y
 	var started := Time.get_ticks_usec()
-	var zones := zones_of(kinds, w, h)
-	var placed := _nodes(def, kinds, zones, entities, rng)
+	if zones.is_empty():
+		zones = zones_of(kinds, w, h)
+	var placed := _nodes(def, zones, entities, rng)
 	usec["nodes"] = _lap(started)
 	started = Time.get_ticks_usec()
-	var commands: Array[EcsBuildCommand] = []
-	for i in w * h:
-		if kinds[i] != GRASS:
-			commands.append(EcsBuildCommand.make(EcsBuildCommand.Kind.SET_TERRAIN, Vector2i(i % w, i / w),
-				catalog.terrain_id(TERRAIN_KEYS[kinds[i]])))
+	var commands := terrain_commands(kinds, def.size, Vector2i.ZERO, catalog)
 	var counts: Dictionary = {}
 	for node: Dictionary in placed:
 		commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, node["cell"], node["blueprint"], 0))
 		counts[node["blueprint"]] = int(counts.get(node["blueprint"], 0)) + 1
 	usec["commands"] = _lap(started)
 	return {"commands": commands, "kinds": kinds, "zones": zones, "nodes": placed, "counts": counts, "usec": usec}
+
+## SET_TERRAIN for every cell of `kinds` (`size`) that isn't grass, each moved by `offset`.
+static func terrain_commands(kinds: PackedByteArray, size: Vector2i, offset: Vector2i, catalog: EcsTownCatalog) -> Array[EcsBuildCommand]:
+	var commands: Array[EcsBuildCommand] = []
+	for i in size.x * size.y:
+		if kinds[i] != GRASS:
+			commands.append(EcsBuildCommand.make(EcsBuildCommand.Kind.SET_TERRAIN, Vector2i(i % size.x, i / size.x) + offset,
+				catalog.terrain_id(TERRAIN_KEYS[kinds[i]])))
+	return commands
 
 ## `share` read between parent cell centres at `at` (parent cells, centre-based), edges clamped.
 static func _blend(share: PackedFloat32Array, pw: int, ph: int, at: Vector2) -> float:
@@ -435,8 +466,8 @@ static func _forest(def: EcsSettlementDef, kinds: PackedByteArray, rng: RandomNu
 		if score[i] >= 0.0 and score[i] >= cut:
 			kinds[i] = FOREST
 
-static func _nodes(def: EcsSettlementDef, kinds: PackedByteArray, zones: PackedByteArray,
-		entities: EcsEntityCatalog, rng: RandomNumberGenerator) -> Array[Dictionary]:
+static func _nodes(def: EcsSettlementDef, zones: PackedByteArray, entities: EcsEntityCatalog,
+		rng: RandomNumberGenerator) -> Array[Dictionary]:
 	var w := def.size.x
 	var h := def.size.y
 	var lists: Array[PackedInt32Array] = []

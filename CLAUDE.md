@@ -42,7 +42,8 @@ There are no build scripts; the editor is the tool chain. The tests are module 9
 "$GODOT" --headless --path . "res://10. Town Generator/tests/town_stress_test.tscn"
 
 # Module 12's terrain: maps by size and water, an L2 region and L1 windows that follow it,
-# seams, and loading through module 10's build system. 34 checks, ~60 s. Viewer: "res://12. Settlement Generator/generator.tscn".
+# seams, L1 chunks and their order, and loading through module 10's build system. 38 checks, ~60 s.
+# Viewer (zoom in to stream L1 chunks): "res://12. Settlement Generator/generator.tscn".
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/terrain_test.tscn"
 
 # Module 11: module 7's touch controls driving a player entity in module 9's ECS — moving,

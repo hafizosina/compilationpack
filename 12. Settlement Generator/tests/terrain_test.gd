@@ -30,6 +30,8 @@ func _ready() -> void:
 	_a_region_is_sound()
 	_a_zoomed_window_follows_its_region()
 	_neighbouring_windows_meet_without_a_seam()
+	_chunk_borders_are_their_neighbours_cells()
+	_chunks_are_made_in_order_and_kept()
 	print("[terrain] %d/%d checks passed" % [_checks - _failures, _checks])
 	get_tree().quit(1 if _failures > 0 else 0)
 
@@ -130,6 +132,59 @@ func _neighbouring_windows_meet_without_a_seam() -> void:
 					or right[y * town.size.x + x] != both[y * wide.size.x + town.size.x + x]:
 				same = false
 	_check("two windows side by side across the river meet without a seam", same)
+
+## A chunk's terrain with a one-cell border: its border cells are its neighbour's own, cell for
+## cell, and both are the same cells as one area twice as wide.
+func _chunk_borders_are_their_neighbours_cells() -> void:
+	var region := load(DEFS % &"region") as EcsSettlementDef
+	var parent := EcsTerrainGenerator.plan(region, 5, CATALOG, ENTITIES)
+	var shares := EcsTerrainGenerator.blend_shares(parent, region)
+	var points := ((parent["rivers"] as Array)[0] as Dictionary)["points"] as PackedVector2Array
+	const SIZE := 32
+	var at := (Vector2i(points[points.size() / 2]) * ZOOM / SIZE) * SIZE
+	var a := EcsTerrainGenerator.refine_terrain(parent, region, Vector2i(SIZE, SIZE), 2, at, ZOOM, 5, 1, shares)["kinds"] as PackedByteArray
+	var b := EcsTerrainGenerator.refine_terrain(parent, region, Vector2i(SIZE, SIZE), 2, at + Vector2i(SIZE, 0), ZOOM, 5, 1, shares)["kinds"] as PackedByteArray
+	var both := EcsTerrainGenerator.refine_terrain(parent, region, Vector2i(SIZE * 2, SIZE), 2, at, ZOOM, 5, 0, shares)["kinds"] as PackedByteArray
+	var outer := SIZE + 2
+	var same := true
+	for y in SIZE:
+		# A's right border is B's first column, B's left border A's last, and both match the wide area.
+		if a[(y + 1) * outer + SIZE + 1] != b[(y + 1) * outer + 1] or b[(y + 1) * outer] != a[(y + 1) * outer + SIZE]:
+			same = false
+		for x in SIZE:
+			if a[(y + 1) * outer + x + 1] != both[y * SIZE * 2 + x] or b[(y + 1) * outer + x + 1] != both[y * SIZE * 2 + SIZE + x]:
+				same = false
+	_check("a chunk's border cells are its neighbour's, and chunks are one area cut up", same)
+
+## Chunks in view go through every stage before the ring round them, terrain first; what is
+## made is kept; drawn chunks far outside the view are offered up to free.
+func _chunks_are_made_in_order_and_kept() -> void:
+	var chunks := EcsTerrainChunks.new(Vector2i(64, 48), ZOOM, 32)
+	var view := Rect2i(Vector2i(160, 96), Vector2i(64, 32))
+	var visible := chunks.around(view, 0)
+	var order: Array[String] = []
+	var done := {EcsTerrainChunks.Stage.TERRAIN: "terrain", EcsTerrainChunks.Stage.DRAW_TERRAIN: "drawn",
+		EcsTerrainChunks.Stage.OBJECTS: "nodes", EcsTerrainChunks.Stage.DRAW_OBJECTS: "objects_drawn"}
+	for step in 400:
+		var job := chunks.next_job(view, 1)
+		if job.is_empty():
+			break
+		var at: Vector2i = job["chunk"]
+		if not chunks.chunks.has(at):
+			chunks.chunks[at] = {}
+		chunks.chunks[at][done[job["stage"]]] = true
+		order.append("%s%d" % ["in" if visible.has(at) else "ring", job["stage"]])
+	var in_view := visible.size() * 4
+	var first := order.slice(0, in_view)
+	var staged := first == first.duplicate()
+	for k in range(1, first.size()):
+		if first[k] < first[k - 1]:
+			staged = false
+	_check("the %d chunks in view get all four stages, in stage order, before any of the ring" % visible.size(),
+		first.all(func(o: String) -> bool: return o.begins_with("in")) and staged and order.size() == chunks.around(view, 1).size() * 4)
+	_check("nothing is planned again once made", chunks.next_job(view, 1).is_empty())
+	var far := chunks.far(Rect2i(Vector2i(0, 0), Vector2i(32, 32)), 1)
+	_check("drawn chunks far from a moved view are offered up to free", far.size() > 0 and not far.has(Vector2i(0, 0)))
 
 ## A map through module 10's real pipeline: every command accepted, the grid's terrain the
 ## plan's, every node born on its cell.

@@ -9,10 +9,9 @@ catalogs, by decision (2026-11-08), so module 10's builder can place them too.
 region** and **L1 windows** zoomed 8× into it. Towns and buildings (steps 2–9) will be L1 only.
 
 ```bash
-# 34 checks, ~60 s; exit 0 only if all pass. Prints plan and load costs.
+# 38 checks, ~60 s; exit 0 only if all pass. Prints plan and load costs.
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/terrain_test.tscn"
-# The viewer: pick hamlet, village, town or Region (L2), press Generate (it plans on a worker
-# thread); click the region to zoom into L1 there.
+# The viewer: Generate makes the L2 region; the wheel zooms in until L1 streams in chunk by chunk.
 "$GODOT" --path . "res://12. Settlement Generator/generator.tscn"
 ```
 
@@ -23,7 +22,7 @@ region** and **L1 windows** zoomed 8× into it. Towns and buildings (steps 2–9
 | Path | Role |
 |---|---|
 | `defs/` | `EcsSettlementDef` (a kind of map), `EcsNodeSpawnDef` (where a node grows); `settlements/`: `hamlet`, `village`, `town`, `region` |
-| `ecs/` | `EcsTerrainGenerator` (pure: `plan`, `refine`), `EcsTerrainCheck` (pure: `problems`, `follows`) |
+| `ecs/` | `EcsTerrainGenerator` (pure: `plan`, `refine`, and the chunk stages `refine_terrain`, `refine_nodes`), `EcsTerrainCheck` (pure: `problems`, `follows`), `EcsTerrainChunks` (the L1 chunks kept in memory and what to make next) |
 | `generator.tscn` | The viewer (`generator_view.gd`); its panel is built in code |
 | `tests/` | `terrain_test.tscn` |
 | `PLAN.md` | The nine steps |
@@ -101,21 +100,52 @@ The cell sizes follow the September L3/L2/L1 notes: L1 is 1 m a cell (a module 1
 chair), L2 8 m. L3 isn't built. **The world is finite** (decided 2026-11-08), so a future L3 can
 see whole basins.
 
-**The viewer** offers the four maps, the water kind and the seed.
-- **Generate** plans them; changing an input doesn't. Next and Random set the seed and generate.
-- **Planning runs on a `WorkerThreadPool` task**, both the plan and a zoom's refine. The button
-  reads "Planning on a worker thread…" and the window keeps drawing: about 60 FPS, worst frame
-  18 ms, while a ~1 s window is planned. Loading the result (entities and tiles) stays on the main
-  thread, since it touches the scene tree.
-- The worker only reads the catalogs: the entity catalog's lookup is built in `_ready`, so the
-  worker never fills it.
-- On the **region**, an outline follows the mouse, and a click zooms into that L1 window, with the
-  region's own seed whatever the seed box now shows. **Back** returns.
-- Nodes and a zone tint toggle.
-- It reports the shares, node counts, plan time, commands refused, the seed used, and the checks
-  (for a window, that it follows its region).
+**L1 in chunks** (2026-11-08). `refine` is two stages a chunk can run apart:
+- **`refine_terrain(parent, …, size, shore, at, scale, seed, border, shares)`** gives a child area's
+  kinds and river with `border` extra cells all round, and its zones.
+  - It works MARGIN (5) cells wider, so zones near the edge are the same as in a bigger area.
+  - `blend_shares` is made once per region and passed in.
+  - **Any two areas agree cell for cell where they overlap** (tested: two 32-cell chunks with a
+    border match one 64-wide area, and each border is the neighbour's own cells).
+- **`refine_nodes(def, zones, seed, key, …)`** places nodes, seeded by the chunk.
 
-**Tests** (`terrain_test`, 34):
+A node never crosses a chunk's edge, and its keep-clear ring doesn't reach into the next chunk.
+
+**`EcsTerrainChunks`** keeps every chunk's plans in memory and says what to do next. First the
+chunks in view, nearest the centre first, each through its stages in order:
+1. terrain planned;
+2. terrain drawn;
+3. objects planned;
+4. objects drawn.
+
+Then the same for one ring of chunks round them. It also lists drawn chunks far outside the view;
+those free their nodes but keep their plans, so coming back only redraws them.
+
+**The viewer** streams L1 with it:
+- **Generate** plans the L2 region (always; the water kind and seed are its inputs).
+- The wheel zooms by a factor toward the mouse. The shared camera's own wheel step is set to 0 in
+  this scene; it still pans.
+- **From zoom ×1, L1 fades in over the region and streams.**
+  - Up to 3 worker tasks at once plan chunks and build their worlds off the scene tree: module
+    10's pipeline, run until settled.
+  - Drawing objects rebuilds the chunk on a worker with terrain and objects together, and fades it
+    in over the terrain-only one. The main thread only ever adds a finished chunk.
+  - A chunk is drawn with a one-cell border of its neighbours' cells, and its outer ring of ground
+    tiles is erased. The dual-grid tiles left at an edge are drawn the same by both neighbours,
+    so there is no seam.
+- Below ×0.75, L1 fades out, but its chunks stay made.
+- Changing the chunk size (32, 64, 128) starts L1 afresh.
+
+**Measured** (window, 8 cores, zooming into a river):
+- My code on the main thread costs ~8 ms when a chunk's terrain arrives, ~5–7 ms when its objects
+  do, and ~25 ms when the region does (once).
+- The rest of a slow frame is the engine building the new tile layers. It grows with chunk area.
+  **With 64×64 chunks, 34 of 1,391 frames went over 33 ms (some 40–70 ms); with 32×32, none did**,
+  so 32 is the default.
+- A view's worth of chunks (about 45) is fully made in ~10 s, nearest first, with terrain
+  visible within a second or two.
+
+**Tests** (`terrain_test`, 38):
 - every size × lake, river and coast over 20 / 10 / 5 seeds;
 - the same seed gives the same commands, and the next seed others;
 - one map per size, and one L1 window, through module 10's build system: every command
@@ -123,7 +153,10 @@ see whole basins.
 - the region over 10 seeds;
 - nine L1 windows (on the river, on the coast, inland, for three seeds) follow their region and
   are sound;
-- two neighbouring windows meet without a seam.
+- two neighbouring windows meet without a seam;
+- a chunk's border cells are its neighbour's, and chunks are one area cut up;
+- chunks in view get all four stages in order before the ring, nothing is planned twice, and far
+  drawn chunks are offered up to free.
 
 **Measured** (headless, 2026-11-08):
 
@@ -143,4 +176,5 @@ command list are where to look.
 - no L3, and L2 isn't height-based. The September notes' heightmap, Priority-Flood lakes and D8
   rivers would replace the noise water;
 - a refined window has no rivers of its own beyond its parent's (no tributaries);
+- the chunk store has no cap: a chunk's plans stay for the whole session (small: a few KB a chunk);
 - the coast's sand is thin on big maps.

@@ -13,17 +13,10 @@ entity_catalog = ExtResource("4_entities")
 
 [node name="World" type="Node2D" parent="."]
 
-[node name="TilemapGroup" type="Node" parent="World"]
-
-[node name="Entities" type="Node2D" parent="World"]
-
-[node name="Zones" type="Sprite2D" parent="World"]
-visible = false
-z_index = 20
-centered = false
-
 [node name="Camera2D" parent="." instance=ExtResource("1_camera")]
+zoom_speed = 0.0
 min_zoom = 0.05
+max_zoom = 16.0
 
 [node name="UI" type="CanvasLayer" parent="."]
 
