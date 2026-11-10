@@ -23,6 +23,7 @@ Plans noted for later across modules 9 to 12.
 - [ ] Day and night cycle.
 - [ ] A simple in-game calendar (days and seasons), like Stardew Valley's.
 - [ ] ONI study notes (`9. EcsSystem/ONI_STUDY.md`), kept as a note for now.
+- [ ] Songs of Syx study notes (`9. EcsSystem/SYX_STUDY.md`), kept as a note for now.
 
 ## Module 10 — Town Generator
 - [ ] Discuss your plan for the "closed" building flag (`CLOSE_BUILDING`).
