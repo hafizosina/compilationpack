@@ -20,6 +20,8 @@ Plans noted for later across modules 9 to 12.
   - Drop the slicing `git stash`, or keep it on a branch.
   - Pick the next lever: planning on changes, planning at 10 Hz, timers as end times, or danger skipping idle animals.
 - [ ] Continue after the AI walkthrough (paused 2026-11-08).
+- [ ] Day and night cycle.
+- [ ] A simple in-game calendar (days and seasons), like Stardew Valley's.
 - [ ] ONI study notes (`9. EcsSystem/ONI_STUDY.md`), kept as a note for now.
 
 ## Module 10 — Town Generator
@@ -53,6 +55,8 @@ Plans noted for later across modules 9 to 12.
       September L3/L2/L1 notes). The world is finite.
 - [ ] Tributaries: L1 rivers of its own beyond the L2 river.
 - [ ] Chunks: a cap on chunks kept in memory; objects that can cross a chunk edge.
+- [ ] Simulate by chunk: entities out of view simulate more slowly, and the further away the
+      slower. A chunk that comes into view catches up on demand first.
 - [ ] Faster L1 chunks if they are streamed while playing (the blend and the command lists).
 - [ ] The coast's sand is thin on big maps.
 - [ ] Texture LOD for a better zoom experience.
