@@ -8,8 +8,8 @@ catalogs, by decision (2026-11-08), so module 10's builder can place them too.
 **Status (2026-11-10):** step 1 (terrain and resource nodes, on an **L2 region** with **L1**
 streamed 8× into it in chunks), step 2 (the town's site, plaza and well, §3), step 3 (its main
 roads, §4) and step 4 (plots, then the lanes they need, §5) are done. Steps 5–9 work on L1 only,
-inside the town's area. Step 5 (what the town lives on and its building list, §6) is done; its
-plots don't yet follow the list (step 5b).
+inside the town's area. Step 5 (what the town lives on and its building list, §6) and step 5b
+(each building places its own plot, works out at their resource, §7) are done.
 
 ```bash
 # 41 checks, ~60 s; exit 0 only if all pass. Prints plan and load costs.
@@ -18,7 +18,7 @@ plots don't yet follow the list (step 5b).
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/site_test.tscn"
 # Step 3: 11 checks, ~60 s. Prints how long a town with its roads takes.
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/road_test.tscn"
-# Step 4: 7 checks, ~50 s. Prints how long a town with its roads and plots takes.
+# Steps 4 and 5b: 9 checks, ~70 s. Prints how long a town takes and what came up short.
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/plot_test.tscn"
 # Step 5: 7 checks, ~90 s. Prints what each town lives on and its mean survey.
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/economy_test.tscn"
@@ -32,7 +32,7 @@ plots don't yet follow the list (step 5b).
 
 | Path | Role |
 |---|---|
-| `defs/` | `EcsLandDef` (what the land is: size, water, shares, shore, nodes, deposits, its L1 `child`), `EcsSettlementDef` (a tier of town: area, plaza, site, roads, economy, plots), `EcsNodeSpawnDef` (where a node grows), `EcsDepositDef` (an ore or clay deposit), `EcsSettlementRoleDef` and `EcsSettlementCharacterDef` in `EcsEconomyCatalog` (`economy.tres`); `lands/`: `region` (L2), `l1` (its child); `settlements/`: `hamlet`, `village`, `town` |
+| `defs/` | `EcsLandDef` (what the land is: size, water, shares, shore, nodes, deposits, its L1 `child`), `EcsSettlementDef` (a tier of town: area, plaza, site, roads, economy, plot gap and yards), `EcsNodeSpawnDef` (where a node grows), `EcsDepositDef` (an ore or clay deposit), `EcsSettlementRoleDef` and `EcsSettlementCharacterDef` in `EcsEconomyCatalog` (`economy.tres`); `lands/`: `region` (L2), `l1` (its child); `settlements/`: `hamlet`, `village`, `town` |
 | `ecs/` | `EcsTerrainGenerator` (pure: `plan`, `refine`, and the chunk stages `refine_terrain`, `refine_nodes`), `EcsTerrainCheck` (pure: `problems`, `follows`), `EcsTerrainChunks` (the L1 chunks kept in memory, what to make next, and the town's overlay), `EcsSitePicker` and `EcsSiteCheck` (pure: the town's site and centre), `EcsRoadPlanner` and `EcsRoadCheck` (pure: its roads), `EcsPlotPlanner` and `EcsPlotCheck` (pure: its plots and lanes), `EcsResourceSurvey` and `EcsTownEconomy` (pure: what is in reach, what the town lives on and builds), `EcsSettlementSite` (the record) |
 | `generator.tscn` | The viewer (`generator_view.gd`); its panel is built in code |
 | `tests/` | `terrain_test.tscn`, `site_test.tscn`, `road_test.tscn`, `plot_test.tscn`, `economy_test.tscn` |
@@ -540,4 +540,105 @@ planner's route costs).
   the weights were tuned. The weights are a first pass;
 - the info panel runs off the screen for a town's long building list;
 - City and Great City.
+
+---
+
+## 7. Step 5b — plots placed by role (2026-11-10)
+
+Decided: **each building on the economy's list places its own plot**, and **the town's area is a
+guideline, not a border**. A work whose resource isn't in the area goes out to it; anything else
+that fits nowhere grows the area.
+
+**Data.** `EcsSettlementRoleDef` gained:
+- `group` (home, food, craft, faith, trade, water, works), for the viewer;
+- `size_min` and `size_max`;
+- `priority`;
+- `sites` (rule → weight);
+- `must` and `must_any` (rules that must score 0.5);
+- `yard_depth` (farmhouse 8, herder 6).
+
+All 48 roles in `economy.tres` have them. `EcsSettlementDef` lost `plots`, `plot_size_centre` and
+`plot_size_edge`. `lane_reach` went from 80 to 250, because outskirts farms are far from a road.
+
+**Rules** (`EcsPlotPlanner.score_rule`, 0–1 at a footprint and its front):
+- `plaza`: the door's cell is on the plaza or beside it.
+- `centre` and `outskirts`: the footprint's distance from the well.
+- `main_road`: from the door.
+- `water`, `river`, `forest`, `rock` and each deposit key: the fewest steps from the footprint's
+  ring to that ground. They use distance fields worked once per grid (`distance_from`), falling from
+  1 to 0 over `NEAR`.
+- `open`: no forest or rock within 6.
+- `apart`: the gap to the nearest other footprint.
+
+**The planner** (`EcsPlotPlanner.plan(site, def, terrain, ctx)`, rewritten round a `Grid`: rect,
+kinds, river, deposits, use, reach, fields):
+1. The role list is expanded to one entry per building, highest `priority` first.
+2. **Each entry is placed in the area:**
+   - 40 tries at the role's size, drawn round the plaza (flush against a side, so a wide manor
+     can face it), beside a main road, or anywhere;
+   - each fitting footprint is weighed **on every side whose door could reach a road**, by the
+     role's `sites` plus a little noise; `must` and `must_any` refuse;
+   - the best is kept.
+3. **A work that fits nowhere inside goes out** (`_go_out`). A work is a role whose `must` or
+   `must_any` names a resource: river, water, forest, rock or a deposit key.
+   - First it tries a window already opened for its resource.
+   - Then it tries new 32×32 L1 windows round the catchment's cells of that resource, nearest by
+     route first, up to 6.
+   - Each window gets a **track** first (`_track`): from its border cell nearest the well, routed
+     by `AStarGrid2D` on L2 round the area and other windows to the nearest main road, drawn 1 cell
+     wide on L1. A cell on water is a bridge.
+   - **A window where nothing fits is undone with its track**, so no track leads nowhere.
+4. **Anything else that fits nowhere grows the area** 16 cells a side, up to 4 times, re-refined.
+   This never triggered in the tests' 18 towns, so it is untested.
+5. Whatever still fits nowhere goes to `site.economy.short`.
+6. **Lanes** run per grid, as in step 4. Lanes may step onto a road on a grid's border, which is
+   where a track enters a window. A plot no lane reaches is dropped and counted short.
+7. **Yards** run per grid, to each role's depth.
+8. `site.outlying` records each window: {rect, resource, terrain}. `site.bridges` is recounted.
+
+**`EcsPlotCheck`** also reports:
+- a plot for no building;
+- a plot outside the area and every window;
+- a plot whose role's `must` rules don't hold where it stands.
+
+**Viewer:**
+- footprints tinted by group;
+- outlying windows outlined in orange;
+- tracks drawn paler than lanes;
+- the info panel gives metres of track, outlying plots and windows, and what is short;
+- the cell panel names a plot's building;
+- moving the town also redraws chunks under its roads and windows, not only its area.
+
+**Tests** (`plot_test`, 9), 6 seeds each:
+
+| Size | Buildings placed | Short | Plots outside the area |
+|---|---|---|---|
+| hamlet | 73 of 73 | 0 | 3, in 2 windows |
+| village | 197 of 197 | 0 | 11, in 6 windows |
+| town | 533 of 540 | 5 miners' huts, a mine, a farmhouse | 11, in 7 windows |
+
+- every plot sound and every road joined;
+- 12 of 12 manors face the plaza;
+- houses stand 60 cells from the well on average, farmhouses 146;
+- same seed, same plots and roles;
+- the hamlet's area through module 10's build system.
+
+**Measured** (one hamlet and one town, stages timed alone):
+
+| Stage | Hamlet | Town |
+|---|---|---|
+| placing in the area | 0.16–0.19 s | 0.5 s |
+| windows and tracks | 0 | 0.1–0.3 s |
+| lanes | 0.35–0.66 s | 0.9–1.65 s |
+| yards | ~0.01 s | ~0.04 s |
+
+Lanes are the largest part, with `lane_reach` at 250. A whole town pick in the test took ~2.2 s for
+a hamlet, ~2.7 s for a village and ~4.6 s for a town, including the region plan; the main roads alone took 1–2 s, so this
+machine was slower than at step 4.
+
+**Not yet:**
+- area growth is untested (it never triggered);
+- a few works still come up short in big towns (no fit in 6 windows) and get no third try;
+- lanes route with dictionaries in GDScript; they are the first thing to speed up;
+- fields, pens and docks are only yards until step 7.
 

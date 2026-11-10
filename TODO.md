@@ -43,7 +43,9 @@ Plans noted for later across modules 9 to 12.
       (2026-11-10).
 - [x] Step 5: L2 ore deposits, the resource survey, what each town lives on and its building list
       (2026-11-10).
-- [ ] Step 5b: plots placed by role, each where its site rules say.
+- [x] Step 5b: plots placed by role, each where its site rules say; works out at their resource with a
+      track (2026-11-10).
+- [ ] Speed up lanes (the largest part of a town's plots), and test the area growing.
 - [ ] Steps 6–9 on L1 (`PLAN.md`): buildings, outdoors, whole-town check, viewer and measurements.
 - [ ] Open plan questions: crops on tilled soil (a module 10 rule
       change, or soil as a terrain), fences as objects or a structure with gates.

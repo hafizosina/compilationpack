@@ -67,7 +67,7 @@ static func plan(site: EcsSettlementSite, region_plan: Dictionary, region_def: E
 	for cell: Vector2i in main_cells:
 		var bridge := water.at(cell)
 		site.road_cells[cell] = &"bridge" if bridge else &"main"
-	site.bridges = _bridges(site.road_cells)
+	site.bridges = bridges_of(site.road_cells)
 	return true
 
 ## Every road cell of `site` floored in its commands (road, or wood for a bridge) and cleared, with
@@ -223,7 +223,7 @@ static func _brush(at: Vector2, width: int, cells: Dictionary, skip: Rect2i, bou
 				cells[cell] = true
 
 ## Water crossings: groups of 8-touching bridge cells.
-static func _bridges(road_cells: Dictionary) -> int:
+static func bridges_of(road_cells: Dictionary) -> int:
 	var seen: Dictionary = {}
 	var count := 0
 	for cell: Vector2i in road_cells:

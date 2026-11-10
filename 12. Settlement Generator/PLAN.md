@@ -532,10 +532,127 @@ Example: a farming village by a river with an iron deposit 600 m off:
 The fish in the river aren't strong enough for a side operation, so there are no fishing huts.
 
 #### 5.5 What follows (later steps, not this one)
-- **Step 5b, role-led plots:** step 4's placement goes through the role list in priority order.
-  Each role finds its best spot by its site rules at its own size, so a mill lands on the bank and
-  a quarry on rock. Then lanes and yards run as now (`EcsPlotPlanner`).
+- **Step 5b, role-led plots:** each building places its own plot by its site rules (below).
 - **Step 6:** module 10 building types for the new roles (most are 1–2 room huts).
+
+### Step 5b — Plots placed by role ✅ (done 2026-11-10, `HANDOFF.md` §7)
+
+**Goal.** Step 4 places as many plots as `plots` says, sized by distance from the plaza, and none
+knows what it is for. Step 5 now gives the town a building list. 5b joins them: **each building on
+the list places its own plot**, at its own size, where its site rules say. A watermill lands on the
+river bank, a quarry by rock, the manor beside the plaza, farmhouses on the outskirts and houses
+round the centre. Lanes and yards then run exactly as step 4 built them.
+
+#### 5b.1 What it builds on
+- **Step 5:** `site.economy.roles` [{role, count}], and the survey.
+- **Step 4:** `EcsPlotPlanner`: footprints that fit (`_fits`), facing the nearest road (`_front`),
+  lanes routed from doors, yards grown to meet them. Only *where spots come from* and *how one is
+  chosen* change.
+- **The area's refined ground** (`kinds`), as now.
+
+#### 5b.2 Data — `EcsSettlementRoleDef` gains
+- `size_min`, `size_max` (Vector2i): its footprint's width and height range, in L1 cells. A hut
+  5×4–6×5, a house 6×5–8×7, a farmhouse 7×6–9×8, a manor 12×10–16×12, a church 10×8–14×10.
+- `priority` (int): placing order, highest first. Unique and large buildings go before many small
+  ones, so the manor gets the plaza's side before houses fill it.
+- `sites` (Dictionary[StringName, float]): site rule → weight. Its score at a spot is the
+  weighted sum.
+- `must` (Array[StringName]): rules that must score at least 0.5, or the spot is refused. A
+  watermill must be `river`, a fishing hut `water`, a quarry `rock`.
+- `yard_depth` (int, 0 = the settlement's): a farmhouse's yard is its field, so it grows further.
+
+`EcsSettlementDef` loses `plots`, `plot_size_centre` and `plot_size_edge`, because the role list
+and role sizes replace them. `plot_gap`, `yard_depth` and `lane_reach` stay.
+
+#### 5b.3 Site rules (pure, scored 0–1 at a footprint)
+Worked once per town as distance fields over the area's L1 cells (BFS from each kind), then read
+at the footprint's door side:
+
+| Rule | Scores 1 when | Used by |
+|---|---|---|
+| `plaza` | its door faces the plaza | manor, church, chapel, tavern, inn, market, town hall |
+| `centre` | near the plaza, falling to 0 at the area's edge | houses, bakery, merchant houses |
+| `main_road` | its door within 3 cells of a main road | inn, waystation, blacksmith, toll house, warehouse |
+| `outskirts` | near the area's edge | farmhouse, herder, barn, tannery, charcoal |
+| `water` | within 3 cells of lake, sea or river water | fishing hut, smokehouse, net shed, boatwright, harbour |
+| `river` | within 2 cells of the river | watermill, sawmill, dyer, tannery |
+| `forest` | within 4 cells of forest | woodcutter, lumber camp, carpenter, charcoal |
+| `rock` | within 4 cells of rock | quarry, stonemason, miner's hut, mine |
+| `open` | on open grass, no forest or rock within 6 | windmill, granary, farmhouse |
+| `apart` | far from other plots | tannery, smelter, lime kiln (smell and smoke) |
+
+#### 5b.4 Placing
+1. **Expand the role list** into one entry per building, sorted by `priority`, then by role key
+   for ties.
+2. **For each**, draw candidate spots the same three ways as now: round the plaza, beside main
+   roads, and anywhere in the area. Each gets a size from the role's range. Footprints that don't
+   fit, or that fail a `must`, are dropped.
+3. **Score** each surviving spot by the role's `sites`, plus a little seeded noise so towns
+   differ, and keep the best of up to 40 tries.
+4. **None fits inside:** a work goes out to its resource (5b.7). Anything else is **reported
+   short** (`site.economy.short`: [{role, count}]), not forced.
+5. **Each plot records its role:** `plots[k].role`.
+
+Then lanes (nearest road first) and yards (per-role depth) run as in step 4.
+
+#### 5b.5 Check, viewer and tests
+- **`EcsPlotCheck`** also reports a plot with no role, and a plot whose role's `must` fails.
+- **Viewer:** footprints tinted by role group (homes, food, craft, faith and rule, trade, water,
+  resource works). The cell panel names the plot's role. The info panel lists the buildings
+  reported short.
+- **Tests:**
+  - every town's plots match its role list, less what is reported short;
+  - every watermill is within 2 cells of the river; every fishing hut within 3 of water;
+  - the manor faces the plaza;
+  - houses are nearer the plaza than farmhouses, on average;
+  - the same seed gives the same plots;
+  - measured cost per town size.
+
+#### 5b.6 Not in 5b
+- Building interiors and module 10 building types for the new roles (step 6).
+- Fields, pens, docks and log piles as outdoor objects (step 7). The yard is their place for now.
+
+#### 5b.7 Works outside the town's area
+**Decided (2026-11-10): the town's area is a guideline, not a border.** The survey reaches further
+than the area: a hamlet's area is 160×120 m, but its catchment walks about 320 m. So a work whose
+resource lies outside the area goes **out to its resource**, and the town grows to include it.
+This replaces the "reported short" outcome for anything its catchment has.
+
+- **Which roles:** those with a resource `must` (`river`, `water`, `forest`, `rock`, or a deposit
+  key such as `iron` or `clay`): mine, miner's hut, quarry, lumber camp, woodcutter, clay pit,
+  fishing hut, watermill, sawmill.
+- **Inside first:** such a role first tries the area, as in 5b.4. Only when no spot there passes
+  its `must` does it go out.
+- **Out to the resource:**
+  1. The candidate region cells are the catchment's cells that hold its resource: a deposit cell
+     of its key, rock, a forest edge, a river or shore bank. They are ranked by route cost from the
+     site (`site.costs`), so the nearest goes first.
+  2. An **outlying window** is refined round the best cell: 32×32 L1 cells (`refine_terrain`, the
+     chunks' ground). The plot is placed in it by the same `_fits`, `_front` and `must` as inside.
+     Works of the same resource share a window, so a mine and its miners' huts stand together.
+  3. If the window has no fit, the next cell is tried, up to 6.
+- **A track joins it to the town:**
+  - routed on L2 from the window to the nearest main road cell, or the site, by A* over
+    `road_costs`, with main road cells cheap so it joins one;
+  - drawn on L1 like a main road but 1 cell wide and of kind `track` (road floor). A track
+    may bridge, like a main road;
+  - its cells join `road_cells`, so `EcsRoadCheck`'s network check covers it.
+- **The record:** `site.outlying` [{rect: L1 window, kinds}]. A plot outside `site.area` lies in
+  one of them. `site.area` stays the core: plaza, houses and the lanes' grid.
+- **Lanes and yards** run in each window as in the area, from the window's plots to the track.
+- **The core grows too.** If a building that isn't a work fits nowhere in the area, say houses
+  once it is full, the area grows by 16 L1 cells a side, as far as the region allows. It is
+  re-refined, and placing carries on. So the area's size in the def is where a town starts, not
+  where it must stop.
+- **Short:** a role is reported short only when its catchment has none of its resource, 6 windows
+  found no fit, or the area can't grow further.
+- **Viewer:** outlying windows outlined like the area; tracks drawn on L2 thinner than lanes.
+- **Tests:** a mine's plot lies on or beside its deposit; every outlying plot's track joins the
+  network; nothing is short when the catchment has the resource.
+
+- *Done when:* every building on the list has a plot where its rules say, inside the area or out
+  at its resource with a track to the town, or is reported short for lack of the resource; lanes,
+  tracks and yards pass step 3 and 4's checks.
 
 ### Step 6 — Buildings
 Each assigned plot calls module 10's `EcsBuildingGenerator` with the role's type, wealth, plot

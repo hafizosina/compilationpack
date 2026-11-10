@@ -185,7 +185,7 @@ static func _centre(parts: Dictionary, plan: Dictionary, region_def: EcsLandDef,
 		return null
 	site.survey = EcsResourceSurvey.of(site, plan, region_def, def)
 	site.economy = EcsTownEconomy.plan(site.survey, def, rng_seed, cell)
-	EcsPlotPlanner.plan(site, def, kinds, rng_seed)
+	EcsPlotPlanner.plan(site, def, terrain, {"plan": plan, "region_def": region_def, "scale": scale, "shares": shares, "seed": rng_seed})
 	EcsRoadPlanner.lay(site, def, catalog)
 	return site
 

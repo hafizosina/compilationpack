@@ -50,7 +50,7 @@ There are no build scripts; the editor is the tool chain. The tests are module 9
 # Module 12's step 3: main roads to the region's edge, organic lanes, bridges, into the chunks. 11 checks, ~60 s.
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/road_test.tscn"
 
-# Module 12's step 4: plots placed first, lanes routed from their doors, yards grown to meet them. 7 checks, ~50 s.
+# Module 12's steps 4 and 5b: each building places its plot by its site rules, works go out to their resource with a track, lanes from doors, yards. 9 checks, ~70 s.
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/plot_test.tscn"
 
 # Module 12's step 5: deposits, the survey, what each town lives on and its building list. 7 checks, ~90 s.
@@ -107,7 +107,7 @@ Hand-edited scene/resource files are the main breakage risk in this repo: `.tscn
 | `9. EcsSystem/*.md` | Module 9 likewise — `HANDOFF.md` is its state-of-the-build, `ECS_GOAP_REPORT.md` a short overview of where the ECS and planner stand, `PSEUDOCODE.md` the core logic of every component and system, `ECS_REFACTOR_PLAN.md` the roadmap it follows, `ONI_STUDY.md` notes on how Oxygen Not Included scales and which of its tricks fit module 9 and 10; `HANDOFF.md` §3 covers the entity-lifecycle model. Plans for finished work are deleted once folded into `HANDOFF.md` (the fetch-time job is in §14) |
 | `9. EcsSystem/tests/` | Module 9's lifecycle acceptance test and its population stress test |
 | `10. Town Generator/` | Town building on module 9's borrowed ECS, aimed at procedural generation. `HANDOFF.md` is its state of the build; `main.tscn` (`main.gd`) is the ECS scene and the project's main scene; `tests/` holds the town test, the generator test and the stress scene. The brief's steps 1–8 and its §5 measurements are done, and villagers path round walls and through doors (HANDOFF §12). Read its HANDOFF before touching it |
-| `12. Settlement Generator/` | A whole settlement from a seed, on module 10's grid; `PLAN.md` is its nine steps, `HANDOFF.md` its state. Steps 1–5 are done: terrain, resource nodes and ore deposits, as an L2 region with L1 streamed 8× into it in chunks, the town's site with its plaza and well, its main roads, plots placed first with lanes routed from them, and what the town lives on with its building list. Read its HANDOFF before touching it |
+| `12. Settlement Generator/` | A whole settlement from a seed, on module 10's grid; `PLAN.md` is its nine steps, `HANDOFF.md` its state. Steps 1–5 are done: terrain, resource nodes and ore deposits, as an L2 region with L1 streamed 8× into it in chunks, the town's site with its plaza and well, its main roads, plots placed first with lanes routed from them, what the town lives on with its building list, and each building placing its own plot (works out at their resource). Read its HANDOFF before touching it |
 | `11. EcsControl/` | Module 7's touch HUD on module 9's ECS: the player is an entity whose brain is `EcsPlayerControlSystem`, turning input into `steer` and module 9's intent flags. `HANDOFF.md` is its state of the build. Read it before touching it |
 
 Keep feature work inside the module folder it belongs to; promote something to `Global/` or `System/` only when a second module needs it.

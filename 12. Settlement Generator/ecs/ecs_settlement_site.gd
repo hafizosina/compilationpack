@@ -16,11 +16,11 @@ var commands: Array[EcsBuildCommand] = []
 var cleared: Array[Rect2i] = []
 ## The site's score and its parts: {water, open, room, river, total}.
 var score: Dictionary = {}
-## Main roads and lanes: [{kind: &"main" or &"lane", points: L1 polyline, l2_points (main only), width}].
+## Main roads, lanes and tracks: [{kind: &"main", &"lane" or &"track", points: L1 polyline, l2_points (main and track), width}].
 var roads: Array[Dictionary] = []
 ## Where the main roads leave the region, in region cells.
 var exits: Array[Vector2i] = []
-## Road cells: L1 cell -> &"main", &"lane" or &"bridge".
+## Road cells: L1 cell -> &"main", &"lane", &"track" or &"bridge".
 var road_cells: Dictionary = {}
 ## Single L1 cells no resource node may stand on (roads and their verges), beside `cleared`.
 var cleared_cells: Dictionary = {}
@@ -31,7 +31,9 @@ var costs: PackedFloat32Array = PackedFloat32Array()
 ## What is within reach (EcsResourceSurvey), and what the town is and has (EcsTownEconomy).
 var survey: Dictionary = {}
 var economy: Dictionary = {}
-## Plots: [{footprint: Rect2i, front: the side the door faces, door: L1 cell, yard: L1 cells}].
+## Plots: [{role, footprint: Rect2i, front: the side the door faces, door: L1 cell, yard: L1 cells}].
 var plots: Array[Dictionary] = []
 ## L1 cell -> index into `plots`, for footprints and yards.
 var plot_at: Dictionary = {}
+## Windows outside the area where works stand at their resource: [{rect, resource, terrain}].
+var outlying: Array[Dictionary] = []

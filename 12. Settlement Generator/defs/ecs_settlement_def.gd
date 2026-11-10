@@ -52,14 +52,9 @@ extends Resource
 ## The main trade's core counts are multiplied by this.
 @export var trade_scale: float = 1.0
 @export_group("Plots")
-## How many plots the town tries for, picked in this range.
-@export var plots: Vector2i = Vector2i(12, 18)
-## A footprint's sides in L1 cells, in this range near the plaza and in that one at the area's edge.
-@export var plot_size_centre: Vector2i = Vector2i(7, 10)
-@export var plot_size_edge: Vector2i = Vector2i(5, 8)
 ## Cells kept between footprints, so a lane fits.
 @export var plot_gap: int = 2
 ## Rings a yard may grow round its footprint.
 @export var yard_depth: int = 4
 ## The dearest route a lane may take from a door to a road; a plot further out is dropped.
-@export var lane_reach: float = 80.0
+@export var lane_reach: float = 250.0
