@@ -10,9 +10,19 @@ var area: Rect2i = Rect2i()
 ## The plaza, in L1 cells, and the well in its middle.
 var plaza: Rect2i = Rect2i()
 var well: Vector2i = Vector2i.ZERO
-## The plaza floor and the well, as build commands on L1 cells.
+## The plaza floor, the well and the road floors, as build commands on L1 cells.
 var commands: Array[EcsBuildCommand] = []
 ## L1 rects no resource node may stand in.
 var cleared: Array[Rect2i] = []
 ## The site's score and its parts: {water, open, room, river, total}.
 var score: Dictionary = {}
+## Main roads and lanes: [{kind: &"main" or &"lane", points: L1 polyline, l2_points (main only), width}].
+var roads: Array[Dictionary] = []
+## Where the main roads leave the region, in region cells.
+var exits: Array[Vector2i] = []
+## Road cells: L1 cell -> &"main", &"lane" or &"bridge".
+var road_cells: Dictionary = {}
+## Single L1 cells no resource node may stand on (roads and their verges), beside `cleared`.
+var cleared_cells: Dictionary = {}
+## Water crossings on the main roads.
+var bridges: int = 0

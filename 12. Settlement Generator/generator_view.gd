@@ -10,7 +10,8 @@ extends Node2D
 ## memory; far ones free their nodes and keep their plans. Zooming out fades L1 away. A left click
 ## on the map outlines that cell, L1's where L1 is drawn, else L2's, and shows its details.
 ## The town (EcsSitePicker) is picked with the region, sized by the Town option, outlined, and drawn
-## into the chunks it covers; a right click moves it to that region cell.
+## into the chunks it covers; a right click moves it to that region cell. Its roads show as lines
+## over the region, fading as L1 fades in, where the chunks draw them as floors.
 
 const DEFS := "res://12. Settlement Generator/defs/settlements/"
 ## The def L1 chunks take their shore and nodes from.
@@ -67,6 +68,9 @@ var _picked: Dictionary = {}
 var _site: EcsSettlementSite
 var _site_note: String = ""
 var _site_lines: Array[Line2D] = []
+## The roads drawn over the region, and the region cells a main road passes.
+var _roads_layer: Node2D
+var _road_l2_cells: Dictionary = {}
 var _zones_on: bool = false
 var _nodes_on: bool = true
 ## The region shown: {root, world, scheduler, tile_sync, zones, def, plan, shares, seed, problems}.
@@ -102,6 +106,9 @@ func _ready() -> void:
 		line.visible = false
 		_world_root.add_child(line)
 		_site_lines.append(line)
+	_roads_layer = Node2D.new()
+	_roads_layer.z_index = 28
+	_world_root.add_child(_roads_layer)
 	_generate()
 
 func _exit_tree() -> void:
@@ -138,6 +145,10 @@ func _process(_delta: float) -> void:
 		_marker.width = 3.0 / _camera.zoom.x
 	for line in _site_lines:
 		line.width = 2.5 / _camera.zoom.x
+	if _l1 != null:
+		_roads_layer.modulate.a = 1.0 - _l1.modulate.a
+	for line: Line2D in _roads_layer.get_children():
+		line.width = maxf(line.get_meta(&"width", 4.0), line.get_meta(&"screen", 2.0) / _camera.zoom.x)
 
 func _physics_process(delta: float) -> void:
 	if _region.is_empty():
@@ -313,6 +324,8 @@ func _describe() -> void:
 		lines.append("Zones: %s" % _zone_names((plan["zones"] as PackedByteArray)[i]))
 		lines.append("Walk cost: %s" % _walk_cost(kind))
 		lines.append("Holds L1 cells %s to %s" % [cell * ZOOM, cell * ZOOM + Vector2i(ZOOM - 1, ZOOM - 1)])
+		if _road_l2_cells.has(cell):
+			lines.append("A main road passes through")
 		if _site != null and cell == _site.l2_cell:
 			lines.append("The town's site: " + _town_line().split("score ")[1].split("\n")[0])
 		elif _site != null and Rect2i(_site.area.position / ZOOM, _site.area.size / ZOOM).has_point(cell):
@@ -332,7 +345,9 @@ func _describe() -> void:
 			lines.append("Zones: %s" % _zone_names((chunk["terrain"]["zones"] as PackedByteArray)[local.y * _chunks.size + local.x]))
 			lines.append("Walk cost: %s" % _walk_cost(kind))
 		lines.append("Object: %s" % _object_at(chunk, local))
-		if _site != null:
+		if _site != null and _site.road_cells.has(cell):
+			lines.append("Town: %s" % {&"main": "main road", &"lane": "lane", &"bridge": "bridge (wood over water)"}[_site.road_cells[cell]])
+		elif _site != null:
 			if cell == _site.well:
 				lines.append("Town: the well")
 			elif _site.plaza.has_point(cell):
@@ -355,8 +370,13 @@ func _town_line() -> String:
 	if _site == null:
 		return "No town" + note
 	var score := _site.score
-	return "Town at region cell %s, score %.2f (water %.2f, open %.2f, room %.2f, river %.2f)%s" % [_site.l2_cell,
-		score["total"], score["water"], score["open"], score["room"], score["river"], note]
+	var counts := {&"main": 0, &"lane": 0, &"bridge": 0}
+	for kind: StringName in _site.road_cells.values():
+		counts[kind] += 1
+	var lanes := _site.roads.filter(func(r: Dictionary) -> bool: return r["kind"] == &"lane").size()
+	return "Town at region cell %s, score %.2f (water %.2f, open %.2f, room %.2f, river %.2f)\nRoads: %d exits, %d m of main road, %d lanes (%d m), %d bridge%s%s" % [_site.l2_cell,
+		score["total"], score["water"], score["open"], score["room"], score["river"], _site.exits.size(),
+		counts[&"main"] / _town_def().main_width, lanes, counts[&"lane"], _site.bridges, "" if _site.bridges == 1 else "s", note]
 
 func _zone_names(bits: int) -> String:
 	var names := PackedStringArray()
@@ -463,6 +483,51 @@ func _set_site(site: EcsSettlementSite) -> void:
 		chunk["objects_drawn"] = false
 	_outline_site()
 
+## Draws the town's roads over the region: main roads thick, bridges light, lanes thin, exits marked.
+func _draw_roads() -> void:
+	for child in _roads_layer.get_children():
+		child.queue_free()
+	_road_l2_cells.clear()
+	if _site == null:
+		return
+	var px := float(EcsTownGrid.CELL) / ZOOM
+	for road: Dictionary in _site.roads:
+		var main: bool = road["kind"] == &"main"
+		# Split into runs on land and runs over bridges; each run starts where the last ended.
+		var runs: Array = []
+		var run := PackedVector2Array()
+		var on_bridge := false
+		for point: Vector2 in road["points"]:
+			var bridge: bool = _site.road_cells.get(Vector2i(point.round()), &"") == &"bridge"
+			var at := (point + Vector2(0.5, 0.5)) * px
+			if bridge != on_bridge and not run.is_empty():
+				runs.append([on_bridge, run])
+				run = PackedVector2Array([run[run.size() - 1]])
+			on_bridge = bridge
+			run.append(at)
+		runs.append([on_bridge, run])
+		for run_of: Array in runs:
+			var run_points := run_of[1] as PackedVector2Array
+			if run_points.size() < 2:
+				continue
+			var line := Line2D.new()
+			line.points = run_points
+			line.default_color = Color(0.85, 0.75, 0.55) if run_of[0] else (Color(0.45, 0.3, 0.18) if main else Color(0.6, 0.45, 0.3))
+			line.set_meta(&"width", road["width"] * px)
+			line.set_meta(&"screen", 3.0 if main else 1.5)
+			_roads_layer.add_child(line)
+		if main:
+			for point: Vector2 in road["l2_points"]:
+				_road_l2_cells[Vector2i(point.round())] = true
+	for exit in _site.exits:
+		var mark := Line2D.new()
+		var at := (Vector2(exit) + Vector2(0.5, 0.5)) * EcsTownGrid.CELL
+		mark.points = PackedVector2Array([at + Vector2(-24, -24), at + Vector2(24, 24), at, at + Vector2(-24, 24), at + Vector2(24, -24)])
+		mark.default_color = Color(0.9, 0.2, 0.15)
+		mark.set_meta(&"width", 6.0)
+		mark.set_meta(&"screen", 3.0)
+		_roads_layer.add_child(mark)
+
 ## Outlines the town's area and plaza over the region.
 func _outline_site() -> void:
 	var rects := [_site.area, _site.plaza] if _site != null else []
@@ -472,6 +537,7 @@ func _outline_site() -> void:
 			var px := float(EcsTownGrid.CELL) / ZOOM
 			var rect := Rect2(Vector2((rects[k] as Rect2i).position) * px, Vector2((rects[k] as Rect2i).size) * px)
 			_site_lines[k].points = PackedVector2Array([rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)])
+	_draw_roads()
 
 ## Starts chunk `at`'s `stage` on a worker.
 func _start_chunk(at: Vector2i, stage: int) -> void:

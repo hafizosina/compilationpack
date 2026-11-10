@@ -38,3 +38,26 @@ enum Water { LAKE, RIVER, COAST, RIVER_TO_SEA }
 @export var open_weight: float = 1.0
 ## Region cells kept between the town's area and the region's edge.
 @export var edge_margin_cells: int = 4
+@export_group("Roads")
+## How many main roads leave the town for the region's edge, picked in this range.
+@export var exits: Vector2i = Vector2i(2, 4)
+## Road widths in L1 cells.
+@export var main_width: int = 2
+@export var lane_width: int = 1
+## The floor of a road, and of a road over water: a bridge.
+@export var road_floor: StringName = &"road"
+@export var bridge_floor: StringName = &"wood"
+## What a step onto each kind of ground costs a route, in EcsTerrainGenerator's kind order: grass,
+## water, sand, rock, forest. Water's is high, so a bridge is built only when going round is far longer.
+@export var road_costs: PackedFloat32Array = PackedFloat32Array([1.0, 30.0, 1.2, 4.0, 3.0])
+## A step onto a road already routed costs this share, so main roads share a trunk before forking.
+@export var reuse_cost: float = 0.3
+## L1 cells between lane branches along a road, lane lengths, and how far a lane may turn a step.
+@export var lane_spacing: Vector2i = Vector2i(12, 20)
+@export var lane_length: Vector2i = Vector2i(8, 40)
+@export var lane_turn: float = 12.0
+@export var lane_branch_chance: float = 0.6
+## Node-free cells kept beside main roads.
+@export var verge: int = 1
+## Most bridges a town's roads may have.
+@export var max_bridges: int = 3

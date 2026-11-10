@@ -102,6 +102,11 @@ func blocked(at: Vector2i) -> PackedByteArray:
 			for y in range(part.position.y, part.end.y):
 				for x in range(part.position.x, part.end.x):
 					out[(y - own.position.y) * size + x - own.position.x] = 1
+	for cell: Vector2i in site.cleared_cells:
+		if own.has_point(cell):
+			if out.is_empty():
+				out.resize(size * size)
+			out[(cell.y - own.position.y) * size + cell.x - own.position.x] = 1
 	return out
 
 ## The chunks `rect` (L1 cells) touches, its border cells included.

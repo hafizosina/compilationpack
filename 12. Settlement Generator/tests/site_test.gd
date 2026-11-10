@@ -99,6 +99,9 @@ func _the_centre_loads_through_the_build_system() -> void:
 		for y in range(part.position.y, part.end.y):
 			for x in range(part.position.x, part.end.x):
 				blocked[(y - site.area.position.y) * site.area.size.x + x - site.area.position.x] = 1
+	for cell: Vector2i in site.cleared_cells:
+		if site.area.has_point(cell):
+			blocked[(cell.y - site.area.position.y) * site.area.size.x + cell.x - site.area.position.x] = 1
 	var nodes := EcsTerrainGenerator.refine_nodes(def, terrain["zones"], 1, site.area.position, ENTITIES, blocked)
 	var commands := EcsTerrainGenerator.terrain_commands(terrain["kinds"], site.area.size, Vector2i.ZERO, CATALOG)
 	var whole: Array = []
@@ -106,6 +109,9 @@ func _the_centre_loads_through_the_build_system() -> void:
 		commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, node["cell"], node["blueprint"], 0))
 		whole.append({"cell": site.area.position + (node["cell"] as Vector2i), "size": node["size"]})
 	for command in site.commands:
+		# Main roads run on past the area to the region's edge; only the area is built here.
+		if not site.area.has_point(command.cell):
+			continue
 		var local := command.cell - site.area.position
 		commands.append(EcsBuildCommand.place(command.kind, local, command.blueprint, command.value) if command.kind == EcsBuildCommand.Kind.PLACE_OBJECT
 			else EcsBuildCommand.make(command.kind, local, command.value))

@@ -160,14 +160,136 @@ settlement, height or slope (L2 has no height yet), and a plaza shape other than
   reachable from the area's edge, drawn the same across chunks. The viewer shows it, and a
   right-click moves it.
 
-### Step 3 — Roads
-- **Main roads** from the centre to two to four exits at the map's edge, routed by A* over
-  terrain cost (land cheap, water dear, so a crossing becomes a **bridge**, a road over water).
-  This reuses module 10's walk costs.
-- **Lanes** branch off the main roads at intervals, perpendicular, organic rather than a strict grid.
-- Roads are module 10's `road` floor, 2 cells wide for main roads and 1 for lanes.
-- *Done when:* every road cell connects to the centre, and roads never cut through each other's
-  plots.
+### Step 3 — Roads ✅ (done 2026-11-08, `HANDOFF.md` §4)
+
+**Goal.** The town's roads:
+- **main roads** from the plaza to 2–4 exits on the region's edge, routed on L2 and drawn on L1
+  wherever they pass;
+- **lanes** branching off them inside the town's area, on L1.
+
+Every later step hangs off these: plots line them (step 4), buildings face them (step 6), paths join
+doors to them (step 7).
+
+**Decided (2026-11-08):**
+- main roads run to the region's edge, not only the town's;
+- the layout is **organic**: roads follow the terrain, and lanes branch and bend round obstacles;
+- **bridges where needed**: a road may cross water at a high cost.
+
+#### 3.1 What it builds on
+- **The site (step 2):** the plaza, the town's L1 area, and the overlay the chunks draw (floors on
+  their cells and border, objects once, nodes kept off cleared ground).
+- **The region plan (step 1):** kinds, the river mask and lines, the coast side.
+- **Module 10:** the `road` floor (`walk_cost` 0.6) and `wood` floor already exist. A floor laid
+  over water is walkable there (its own walk cost replaces the terrain's), so **a bridge is a wood
+  floor over water**, with no new rule and no new art.
+
+#### 3.2 Data
+**`EcsSettlementDef`, a Roads group:**
+- `exits` (Vector2i, 2–4): how many main roads leave;
+- `main_width` (2) and `lane_width` (1), in L1 cells;
+- `road_floor` (`road`) and `bridge_floor` (`wood`);
+- `road_costs`: a step's cost by ground for routing — grass 1, sand 1.2, forest 3, rock 4, water 30.
+  High enough that a bridge is taken only when going round is far longer;
+- `reuse_cost` (0.3): a step on a road already routed costs this share, so main roads share a
+  trunk out of town before forking, as real ones do;
+- `lane_spacing` (12–20 L1 cells between branches), `lane_length` (8–40), `lane_turn` (degrees a
+  step may bend), `lane_branch_chance`;
+- `verge` (1): node-free cells kept beside main roads.
+
+**`EcsSettlementSite` gains**:
+- `roads`: [{kind: main or lane, points: L1 polyline, width}];
+- `exits`: L2 cells;
+- `road_cells`: L1 cell → main, lane or bridge;
+- `cleared_cells`: cells nodes must stay off, beside the existing cleared rects.
+
+Road and bridge floors are appended to `commands`, so the chunks' overlay needs no change for drawing.
+
+#### 3.3 Exits — `EcsRoadPlanner` (pure; new file)
+1. The region's edge cells are split into `exits.y` sectors by angle round the site. The number
+   used is picked by the seed in `exits`.
+2. In each sector, land edge cells are sampled (every 8th), and the one whose route from the site
+   is cheapest is kept. Routing uses an `AStarGrid2D` over L2: 8 directions, no corner cutting,
+   weights from `road_costs`.
+3. Sectors whose cheapest exit is unreachable (cut off by the sea) are dropped. At least one exit
+   must remain, which step 2's reach check guarantees.
+
+#### 3.4 Main roads on L2
+- Routed one exit at a time, nearest first, with the cells of roads already routed costing
+  `reuse_cost`, so they merge into a trunk.
+- Kept as polylines in L2 cells, like rivers, then smoothed (two rounds of Chaikin) so the L1
+  course curves.
+- **Bridges:** an L2 water cell on a route is a crossing. Allowed, but its cost keeps crossings
+  short and few. The count is reported.
+
+#### 3.5 Main roads on L1
+- Each L2 polyline is scaled 8× into L1 cells, with the same seeded wander as rivers (±1.5 cells,
+  read in region coordinates, so chunks agree). It is drawn `main_width` wide.
+- Inside the town's area it starts at the plaza's nearest edge, not its centre.
+- Each L1 road cell on water is a **bridge** (`bridge_floor`); else a road (`road_floor`). Plaza
+  cells keep their stone.
+- The whole region's main road cells are worked out at once: a few thousand cells, so chunks only
+  look them up.
+
+#### 3.6 Lanes on L1 (inside the town's area)
+- Grown from the main roads and the plaza's sides. Every `lane_spacing` cells along a main road
+  inside the area, by `lane_branch_chance`, a lane leaves to one side or both.
+- A lane walks one cell at a time from its heading, turning at most `lane_turn` a step, nudged by
+  noise. It stops at:
+  - the area's edge;
+  - `lane_length`;
+  - water (lanes never bridge);
+  - a road or lane within 2 cells, which it joins, making a loop.
+- Forest and rock are crossed and cleared.
+- One more level: a lane may branch once more at half the chance, so the town thickens near the
+  centre.
+- Lanes are worked on the area's own refined terrain (`refine_terrain`, as the plaza search), so
+  they avoid exactly the L1 water the chunks draw.
+
+#### 3.7 Clearing
+- Road and lane cells, and a `verge` beside main roads, go into `cleared_cells`.
+- `EcsTerrainChunks.blocked` marks them too, so no tree or rock is planned on a road or right at
+  its side.
+
+#### 3.8 Into the chunks and the viewer
+- **Chunks:** nothing new to draw. Road and bridge floors are in the site's commands, and the
+  overlay already gives each chunk its cells and border. Only `blocked` learns `cleared_cells`.
+- **L2 view:** the region's tiles can't show a 2-cell road, so main roads and lanes are drawn as
+  lines over the region (`Line2D` per polyline, main roads thicker) and the exits marked.
+  Bridges show as a lighter segment.
+- **The cell panel:** "main road", "lane" or "bridge" on L1 cells. On L2 cells, a road passing
+  through.
+- **The info panel:** exits, main road length in metres, lanes, bridges.
+- **A moved town** (right-click or Town size) re-plans its roads with its site, in the same worker
+  job.
+
+#### 3.9 Check — `EcsRoadCheck.problems(site, region_plan, …)` (pure)
+- Every main road joins the plaza to an exit on the region's edge.
+- Every road cell is land or a bridge, and lanes never bridge.
+- All road cells are one network, joined to the plaza: a flood over road cells.
+- Bridges are under a cap (default 3 per town).
+- Given planned nodes, none on a road cell or verge.
+- The same seed gives the same roads.
+
+#### 3.10 Tests (`tests/road_test.tscn`)
+- **Roads sound:** 10 seeds × 3 town sizes (and the coast and river water kinds).
+- **Merging:** two exits close together share a trunk. The overlap of their L2 routes is above zero.
+- **A river crossing** (on a seed whose exit is across the river) gives a bridge of `bridge_floor`
+  cells, and the bridge is walkable in module 10's nav.
+- **Through module 10's build system:** the town's area with plaza, roads and lanes. Every command
+  accepted, road floor on every road cell, no node on a road or verge.
+- **Chunks:** roads crossing several chunks draw the same floors in each chunk's cells and border.
+- **Measured:** exits and main roads on L2, the L1 rasterising, lanes, the cost per chunk.
+
+#### 3.11 Not in step 3
+- plots (step 4) and buildings;
+- roads between settlements (one town per region);
+- road ranks beyond main and lane;
+- crossroads features, slopes and gradients (no height yet);
+- traffic.
+
+- *Done when:* every seed's town has 2–4 main roads to the region's edge and organic lanes in its
+  area, all joined to the plaza, bridged only where they must be, drawn the same across chunks,
+  kept clear of nodes, shown on both levels, and re-planned when the town moves.
 
 ### Step 4 — Plots
 Plots line the roads (frontage), each one **facing its road**. The facing becomes the building's

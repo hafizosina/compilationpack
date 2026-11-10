@@ -6,14 +6,16 @@ catalogs are **borrowed, never copied**; new terrains and blueprints went into m
 catalogs, by decision (2026-11-08), so module 10's builder can place them too.
 
 **Status (2026-11-08):** step 1 (terrain and resource nodes, on an **L2 region** with **L1**
-streamed 8× into it in chunks) and step 2 (the town's site, plaza and well, §3) are done. Steps 3–9
-work on L1 only, inside the town's area.
+streamed 8× into it in chunks), step 2 (the town's site, plaza and well, §3) and step 3 (its roads,
+§4) are done. Steps 4–9 work on L1 only, inside the town's area.
 
 ```bash
 # 38 checks, ~60 s; exit 0 only if all pass. Prints plan and load costs.
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/terrain_test.tscn"
-# Step 2: 14 checks, ~50 s. Prints how long picking a site takes.
+# Step 2: 14 checks, ~60 s. Prints how long picking a site takes.
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/site_test.tscn"
+# Step 3: 11 checks, ~60 s. Prints how long a town with its roads takes.
+"$GODOT" --headless --path . "res://12. Settlement Generator/tests/road_test.tscn"
 # The viewer: Generate makes the L2 region; the wheel zooms in until L1 streams in chunk by chunk.
 "$GODOT" --path . "res://12. Settlement Generator/generator.tscn"
 ```
@@ -25,9 +27,9 @@ work on L1 only, inside the town's area.
 | Path | Role |
 |---|---|
 | `defs/` | `EcsSettlementDef` (a kind of map), `EcsNodeSpawnDef` (where a node grows); `settlements/`: `hamlet`, `village`, `town`, `region` |
-| `ecs/` | `EcsTerrainGenerator` (pure: `plan`, `refine`, and the chunk stages `refine_terrain`, `refine_nodes`), `EcsTerrainCheck` (pure: `problems`, `follows`), `EcsTerrainChunks` (the L1 chunks kept in memory, what to make next, and the town's overlay), `EcsSitePicker` and `EcsSiteCheck` (pure: the town's site and centre), `EcsSettlementSite` (the record) |
+| `ecs/` | `EcsTerrainGenerator` (pure: `plan`, `refine`, and the chunk stages `refine_terrain`, `refine_nodes`), `EcsTerrainCheck` (pure: `problems`, `follows`), `EcsTerrainChunks` (the L1 chunks kept in memory, what to make next, and the town's overlay), `EcsSitePicker` and `EcsSiteCheck` (pure: the town's site and centre), `EcsRoadPlanner` and `EcsRoadCheck` (pure: its roads), `EcsSettlementSite` (the record) |
 | `generator.tscn` | The viewer (`generator_view.gd`); its panel is built in code |
-| `tests/` | `terrain_test.tscn`, `site_test.tscn` |
+| `tests/` | `terrain_test.tscn`, `site_test.tscn`, `road_test.tscn` |
 | `PLAN.md` | The nine steps |
 
 Module 10 additions for it (module 10's HANDOFF §13): the `rock` and `forest` terrains, the
@@ -281,3 +283,109 @@ plaza search. Fine for generation; scoring only cells near water first would cut
 - height or slope;
 - plaza shapes other than a rectangle;
 - the plaza is a floor, not cleared terrain: forest under it stays forest under the stone.
+
+---
+
+## 4. Step 3 — roads (2026-11-08)
+
+Decided:
+- **main roads run to the region's edge**;
+- the layout is **organic**;
+- **bridges where needed**.
+
+`EcsSitePicker._centre` calls **`EcsRoadPlanner.plan`** after the plaza. A site whose roads can't
+reach an exit fails, and the next is tried, so a picked or placed town always has roads.
+
+**`EcsSettlementDef`, Roads group:**
+- `exits` (2–4);
+- `main_width` 2, `lane_width` 1;
+- `road_floor` `road`, `bridge_floor` `wood`;
+- `road_costs` in kind order: grass 1, water 30, sand 1.2, rock 4, forest 3;
+- `reuse_cost` 0.3;
+- `lane_spacing` 12–20, `lane_length` 8–40, `lane_turn` 12°, `lane_branch_chance` 0.6;
+- `verge` 1;
+- `max_bridges` 3.
+
+**The site record gained:**
+- `roads` ({kind, points in L1, l2_points for main roads, width});
+- `exits`;
+- `road_cells` (cell → main, lane or bridge);
+- `cleared_cells`;
+- `bridges`.
+
+**The planner:**
+1. **Exits.** One Dijkstra from the site over the region gives every cell's cheapest cost. GDScript,
+   binary heap, 8-way. The edge, sampled every 4 cells, is split into `exits` sectors by angle (the
+   count and start angle seeded). Each sector takes its cheapest land edge cell. Sectors the sea cuts
+   off are dropped.
+2. **Main roads on L2,** nearest exit first: an `AStarGrid2D` route over the ground costs. Each
+   routed cell's weight is multiplied by `reuse_cost`, so the next road follows it out of town and
+   then forks. Routes are smoothed by two rounds of Chaikin. Tested: up to 70 region cells of trunk
+   shared.
+3. **Main roads on L1:** the line scaled 8×, wandering ±1.5 cells by noise read in region
+   coordinates, brushed `main_width` square, the plaza left as it is. A road cell on L1 water is a
+   bridge.
+   - `WaterAt` refines the 8×8 block under a cell only when its region cell or a neighbour is water.
+     Otherwise it is land, by step 1's rule.
+   - So a road across the whole region costs a few dozen tiny refines.
+4. **Lanes on L1,** in the town's area, on the area's refined ground:
+   - **Where they start:**
+     - off the main roads every `lane_spacing` cells, either side by chance, away from the plaza;
+     - off each side of the plaza by chance;
+     - one more level off a lane at half the chance and half the length.
+   - **How they walk:** a cell a step, turning by up to `lane_turn`. A diagonal step also takes a
+     side cell, so lanes are joined edge to edge. A lane starts on the road it leaves and walks out
+     through it, so its first cell touches it.
+   - **Where they stop:** at the area's edge, at water (lanes never bridge), at their length, or
+     beside another road within 2 cells, which they join with a short straight piece. They never
+     join the road they left within their first 12 cells; before that rule, most lanes rejoined
+     their own road at once.
+   - Lanes under 4 cells are dropped.
+5. **Floors and clearing.** Every road cell is a `SET_FLOOR` (road, or wood for a bridge) in the
+   site's commands. Road cells, and a `verge` round main road and bridge cells, go into
+   `cleared_cells`, which `EcsTerrainChunks.blocked` marks.
+
+The chunks needed nothing else: road floors are drawn by the overlay like the plaza, across chunk
+borders.
+
+**A bridge is a wood floor over water.** Module 10's walk costs take the floor's over the terrain's,
+so it is walkable with no new rule (tested through module 10's nav).
+
+**`EcsRoadCheck.problems(…)`** reports:
+- a main road not starting at the site or not ending on the region's edge;
+- more bridges than `max_bridges`;
+- a road cell on L1 water that isn't a bridge, or a bridge on land (the area's own ground inside it,
+  `WaterAt` outside);
+- road cells not joined to the plaza (a 4-way flood from the well);
+- given planned nodes, any on a road or verge.
+
+**Viewer:**
+- **Roads drawn over the region:** main roads dark and thick, lanes thin, bridge runs pale, exits
+  marked with a red cross. Lines keep a few screen pixels' width when zoomed out.
+- They fade out as L1 fades in, where the chunks draw the real floors.
+- The info panel gives exits, metres of main road, lanes and their metres, and bridges.
+- The cell panel says main road, lane or bridge on L1, and "a main road passes through" on L2.
+
+**Tests** (`road_test`, 11):
+- every town size over 6 seeds has sound roads and lanes;
+- a coast-only region has no exit on the sea and sound roads;
+- the same seed gives the same roads;
+- main roads share a trunk;
+- a bridge cell is water under wood and walkable in module 10's nav;
+- a hamlet's area with plaza, roads, lanes and 542 nodes: all 3,772 commands accepted, every road cell
+  floored, no node on a road or verge;
+- the roads cross 124 chunks, and each draws the town's floors on its cells and border.
+
+`site_test` now builds only the area's commands (main roads run past it) and keeps its nodes off road
+cells, as the chunks do.
+
+**Measured:** a town with its roads takes ~1.3 s for a hamlet or village and ~1.5 s for a town, on a
+worker. That's ~0.5 s more than the site alone: the Dijkstra and the A* weights over the region in
+GDScript. The check takes ~0.3–1 s.
+
+**Not yet:**
+- roads between settlements;
+- road ranks beyond main and lane;
+- slopes;
+- main roads drawn as 2-cell square brushes, so a diagonal road reads as a staircase at L1;
+- lanes 1 cell wide.
