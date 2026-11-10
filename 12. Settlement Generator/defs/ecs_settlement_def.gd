@@ -52,12 +52,19 @@ enum Water { LAKE, RIVER, COAST, RIVER_TO_SEA }
 @export var road_costs: PackedFloat32Array = PackedFloat32Array([1.0, 30.0, 1.2, 4.0, 3.0])
 ## A step onto a road already routed costs this share, so main roads share a trunk before forking.
 @export var reuse_cost: float = 0.3
-## L1 cells between lane branches along a road, lane lengths, and how far a lane may turn a step.
-@export var lane_spacing: Vector2i = Vector2i(12, 20)
-@export var lane_length: Vector2i = Vector2i(8, 40)
-@export var lane_turn: float = 12.0
-@export var lane_branch_chance: float = 0.6
 ## Node-free cells kept beside main roads.
 @export var verge: int = 1
 ## Most bridges a town's roads may have.
 @export var max_bridges: int = 3
+@export_group("Plots")
+## How many plots the town tries for, picked in this range.
+@export var plots: Vector2i = Vector2i(12, 18)
+## A footprint's sides in L1 cells, in this range near the plaza and in that one at the area's edge.
+@export var plot_size_centre: Vector2i = Vector2i(7, 10)
+@export var plot_size_edge: Vector2i = Vector2i(5, 8)
+## Cells kept between footprints, so a lane fits.
+@export var plot_gap: int = 2
+## Rings a yard may grow round its footprint.
+@export var yard_depth: int = 4
+## The dearest route a lane may take from a door to a road; a plot further out is dropped.
+@export var lane_reach: float = 80.0

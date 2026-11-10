@@ -26,3 +26,7 @@ var road_cells: Dictionary = {}
 var cleared_cells: Dictionary = {}
 ## Water crossings on the main roads.
 var bridges: int = 0
+## Plots: [{footprint: Rect2i, front: the side the door faces, door: L1 cell, yard: L1 cells}].
+var plots: Array[Dictionary] = []
+## L1 cell -> index into `plots`, for footprints and yards.
+var plot_at: Dictionary = {}

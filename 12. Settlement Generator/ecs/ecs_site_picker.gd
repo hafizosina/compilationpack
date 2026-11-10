@@ -4,7 +4,8 @@ extends RefCounted
 ## Pure and seeded: where a region's town goes, its centre and its roads. `pick` scores every region
 ## cell and takes the best whose centre and roads work out; `place` puts the town at a chosen cell.
 ## Either way the centre is laid out on L1 cells (a stone plaza with the well) from the same terrain
-## the chunks draw, so the town lands on the ground it was planned on; EcsRoadPlanner adds the roads.
+## the chunks draw, so the town lands on the ground it was planned on; EcsRoadPlanner adds the main roads,
+## EcsPlotPlanner the plots and their lanes.
 
 ## Best-scored sites tried, in order, before giving up.
 const TRIES: int = 20
@@ -180,8 +181,10 @@ static func _centre(parts: Dictionary, plan: Dictionary, region_def: EcsSettleme
 	site.commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, site.well, def.well, 0))
 	site.cleared.append(site.plaza.grow(def.clear_margin))
 	site.score = parts
-	if not EcsRoadPlanner.plan(site, plan, region_def, def, kinds, rng_seed, scale, catalog, shares):
+	if not EcsRoadPlanner.plan(site, plan, region_def, def, kinds, rng_seed, scale, shares):
 		return null
+	EcsPlotPlanner.plan(site, def, kinds, rng_seed)
+	EcsRoadPlanner.lay(site, def, catalog)
 	return site
 
 static func _touches_edge(label: PackedInt32Array, w: int, h: int, id: int) -> bool:

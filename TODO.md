@@ -39,9 +39,11 @@ Plans noted for later across modules 9 to 12.
       panel (2026-11-08).
 - [x] Step 2: the town's site, plaza and well; moved by right-click (2026-11-08).
 - [x] Step 3: main roads to the region's edge, organic lanes, bridges (2026-11-08).
-- [ ] Steps 4–9 on L1 (`PLAN.md`): plots, zoning, buildings, outdoors, whole-town check, viewer and
+- [x] Step 4: plots placed first, lanes routed from their doors, yards grown to meet them
+      (2026-11-10).
+- [ ] Steps 5–9 on L1 (`PLAN.md`): zoning, buildings, outdoors, whole-town check, viewer and
       measurements.
-- [ ] Open plan questions: layout style (organic or grid), crops on tilled soil (a module 10 rule
+- [ ] Open plan questions: crops on tilled soil (a module 10 rule
       change, or soil as a terrain), fences as objects or a structure with gates.
 - [ ] L3 world map, and height-based water: heightmap, Priority-Flood lakes, D8 rivers (the
       September L3/L2/L1 notes). The world is finite.

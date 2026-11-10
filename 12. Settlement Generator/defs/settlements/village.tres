@@ -127,3 +127,4 @@ water = 1
 water_share = 0.03
 nodes = Array[ExtResource("1_p00f2")]([SubResource("Resource_x0602"), SubResource("Resource_dj0fx"), SubResource("Resource_arnm3"), SubResource("Resource_vr3hu"), SubResource("Resource_g3bh4"), SubResource("Resource_28j04"), SubResource("Resource_1oj2v"), SubResource("Resource_iw8ri"), SubResource("Resource_1c411"), SubResource("Resource_nxgx8"), SubResource("Resource_ewk1h"), SubResource("Resource_ji253"), SubResource("Resource_ssu1n"), SubResource("Resource_wo0ur"), SubResource("Resource_fxw2q"), SubResource("Resource_4afnv")])
 plaza_size = Vector2i(12, 12)
+plots = Vector2i(30, 45)

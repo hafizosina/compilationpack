@@ -5,9 +5,10 @@ this file is what exists. Module 9's ECS and module 10's grid, build commands, p
 catalogs are **borrowed, never copied**; new terrains and blueprints went into module 10's
 catalogs, by decision (2026-11-08), so module 10's builder can place them too.
 
-**Status (2026-11-08):** step 1 (terrain and resource nodes, on an **L2 region** with **L1**
-streamed 8× into it in chunks), step 2 (the town's site, plaza and well, §3) and step 3 (its roads,
-§4) are done. Steps 4–9 work on L1 only, inside the town's area.
+**Status (2026-11-10):** step 1 (terrain and resource nodes, on an **L2 region** with **L1**
+streamed 8× into it in chunks), step 2 (the town's site, plaza and well, §3), step 3 (its main
+roads, §4) and step 4 (plots, then the lanes they need, §5) are done. Steps 5–9 work on L1 only,
+inside the town's area.
 
 ```bash
 # 38 checks, ~60 s; exit 0 only if all pass. Prints plan and load costs.
@@ -16,6 +17,8 @@ streamed 8× into it in chunks), step 2 (the town's site, plaza and well, §3) a
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/site_test.tscn"
 # Step 3: 11 checks, ~60 s. Prints how long a town with its roads takes.
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/road_test.tscn"
+# Step 4: 7 checks, ~50 s. Prints how long a town with its roads and plots takes.
+"$GODOT" --headless --path . "res://12. Settlement Generator/tests/plot_test.tscn"
 # The viewer: Generate makes the L2 region; the wheel zooms in until L1 streams in chunk by chunk.
 "$GODOT" --path . "res://12. Settlement Generator/generator.tscn"
 ```
@@ -27,9 +30,9 @@ streamed 8× into it in chunks), step 2 (the town's site, plaza and well, §3) a
 | Path | Role |
 |---|---|
 | `defs/` | `EcsSettlementDef` (a kind of map), `EcsNodeSpawnDef` (where a node grows); `settlements/`: `hamlet`, `village`, `town`, `region` |
-| `ecs/` | `EcsTerrainGenerator` (pure: `plan`, `refine`, and the chunk stages `refine_terrain`, `refine_nodes`), `EcsTerrainCheck` (pure: `problems`, `follows`), `EcsTerrainChunks` (the L1 chunks kept in memory, what to make next, and the town's overlay), `EcsSitePicker` and `EcsSiteCheck` (pure: the town's site and centre), `EcsRoadPlanner` and `EcsRoadCheck` (pure: its roads), `EcsSettlementSite` (the record) |
+| `ecs/` | `EcsTerrainGenerator` (pure: `plan`, `refine`, and the chunk stages `refine_terrain`, `refine_nodes`), `EcsTerrainCheck` (pure: `problems`, `follows`), `EcsTerrainChunks` (the L1 chunks kept in memory, what to make next, and the town's overlay), `EcsSitePicker` and `EcsSiteCheck` (pure: the town's site and centre), `EcsRoadPlanner` and `EcsRoadCheck` (pure: its roads), `EcsPlotPlanner` and `EcsPlotCheck` (pure: its plots and lanes), `EcsSettlementSite` (the record) |
 | `generator.tscn` | The viewer (`generator_view.gd`); its panel is built in code |
-| `tests/` | `terrain_test.tscn`, `site_test.tscn`, `road_test.tscn` |
+| `tests/` | `terrain_test.tscn`, `site_test.tscn`, `road_test.tscn`, `plot_test.tscn` |
 | `PLAN.md` | The nine steps |
 
 Module 10 additions for it (module 10's HANDOFF §13): the `rock` and `forest` terrains, the
@@ -288,6 +291,9 @@ plaza search. Fine for generation; scoring only cells near water first would cut
 
 ## 4. Step 3 — roads (2026-11-08)
 
+> **Lanes changed in step 4 (§5):** the lane walker in point 4 below is deleted; lanes are now
+> routed from plots. Main roads, exits and bridges are as described.
+
 Decided:
 - **main roads run to the region's edge**;
 - the layout is **organic**;
@@ -389,3 +395,71 @@ GDScript. The check takes ~0.3–1 s.
 - slopes;
 - main roads drawn as 2-cell square brushes, so a diagonal road reads as a staircase at L1;
 - lanes 1 cell wide.
+
+---
+
+## 5. Step 4 — plots, then the lanes they need (2026-11-10)
+
+Decided: **inside the town, buildings dictate the roads, not the other way round.** Plots are
+placed first, square to the grid (module 10's walls, rooms and doors are grid-aligned), and lanes
+are routed between them, so buildings stay square and roads stay natural. Then each plot's yard
+grows out to meet its lane.
+
+`EcsSitePicker._centre` now runs:
+1. `EcsRoadPlanner.plan`: exits and main roads only;
+2. **`EcsPlotPlanner.plan`**: plots, lanes, yards;
+3. `EcsRoadPlanner.lay`: every road cell's floor into the commands, road cells and verges into
+   `cleared_cells` (split out of `plan` so lanes are floored too).
+
+**`EcsSettlementDef`, Plots group:** `plots` (count: hamlet 12–18, village 30–45, town 70–100),
+`plot_size_centre` 7–10 and `plot_size_edge` 5–8 (sides, blended by distance from the plaza),
+`plot_gap` 2, `yard_depth` 4, `lane_reach` 80. The old `lane_spacing`, `lane_length`, `lane_turn`
+and `lane_branch_chance` are gone.
+
+**The site record gained** `plots` ([{footprint, front, door, yard}]) and `plot_at` (cell → plot,
+footprints and yards). Lanes are in `roads` and `road_cells` as before.
+
+**The planner** works on the area's refined ground, marking each cell free, road (main roads,
+bridges, plaza), water or footprint:
+1. **Plots.** Spots are drawn half beside main roads (nearer the plaza more often, 4–10 cells off
+   the road) and half round the plaza (radius biased inwards). A footprint fits when it is on free
+   land, has land round it, is `plot_gap` from other footprints and 3 cells from the area's edge.
+   Its **front** is the side whose door cell is fewest steps from a road (a 4-way BFS from roads,
+   done once); the **door** is that side's middle cell. Up to 40 attempts per plot wanted.
+2. **Lanes.** Plots nearest a road first. From the cell before the door, an 8-way A* (no corner
+   cutting, ground costs from `road_costs` plus noise so lanes bend, guided by the BFS steps) runs
+   to the **first road cell it reaches**, lanes already routed included — that is what merges
+   them, with no reuse cost. A diagonal step takes a side cell, so lanes join edge to edge. A door
+   already on a road needs no lane; a plot no lane reaches within `lane_reach` is dropped.
+3. **Yards.** All footprints grow at once, a ring at a time over free land, to `yard_depth`
+   rings; a cell goes to whichever plot reaches it first. Yards stop at roads, water and other
+   yards, and the door's lane always touches.
+
+Footprints and yards go into `cleared_cells`, so no node is planned on them. Nothing new is
+drawn by the chunks: lanes are road floors; plots are only a record until buildings (step 6).
+
+**`EcsPlotCheck.problems(…)`** reports a footprint outside the area, on water, a road, the plaza or
+another plot; a door not on its front side or facing no road; a yard cell taken twice, on a road
+or water, or cut off from its plot. `EcsRoadCheck` still checks every road cell, lanes included,
+joins the plaza.
+
+**Viewer:** footprints shaded brown with the door dark, yards tinted green, at both levels. The
+info panel counts plots; the cell panel names a plot's footprint, door or yard, its size and
+facing.
+
+**Tests** (`plot_test`, 7): every town size over 6 seeds has sound plots and roads, with at least
+80% of the plots wanted (measured: hamlet 88 for 72, village 204 for 180, town 447 for 420); the
+same seed gives the same plots; a hamlet's area through module 10's build system, every command
+accepted, every lane floored, no node on a footprint or yard.
+
+**Measured** (stages timed alone): plots and lanes take ~0.1 s for a hamlet, ~0.45 s for a village,
+~1.3 s for a town; the main roads' ~0.5–1.4 s is step 3's. Most of a town's plot time is placement
+attempts (100 plots × 40 tries over footprint-sized rects) and the yard and BFS passes over its
+110,000 cells.
+
+**Not yet:**
+- zones (step 5): sizes come from distance to the plaza;
+- lanes wider than 1 (`lane_width` is not read by the plot planner);
+- plots facing a road at a slant still face north, south, east or west: by design;
+- yards are irregular; fences round them are step 7's question.
+

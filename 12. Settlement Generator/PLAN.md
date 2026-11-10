@@ -231,6 +231,8 @@ Road and bridge floors are appended to `commands`, so the chunks' overlay needs 
   look them up.
 
 #### 3.6 Lanes on L1 (inside the town's area)
+> **Superseded by step 4 (2026-11-10):** lanes will be routed from plots, not walked off roads.
+
 - Grown from the main roads and the plaza's sides. Every `lane_spacing` cells along a main road
   inside the area, by `lane_branch_chance`, a lane leaves to one side or both.
 - A lane walks one cell at a time from its heading, turning at most `lane_turn` a step, nudged by
@@ -291,11 +293,89 @@ Road and bridge floors are appended to `commands`, so the chunks' overlay needs 
   area, all joined to the plaza, bridged only where they must be, drawn the same across chunks,
   kept clear of nodes, shown on both levels, and re-planned when the town moves.
 
-### Step 4 — Plots
-Plots line the roads (frontage), each one **facing its road**. The facing becomes the building's
-entrance side, which module 10's generator already takes. Plot size depends on the zone. Plots
-never overlap a road, water or another plot.
-- *Done when:* every plot touches a road on its facing side.
+### Step 4 — Plots, then the lanes they need ✅ (done 2026-11-10, `HANDOFF.md` §5)
+
+**Goal.** Inside the town, **buildings dictate the roads, not the other way round**: plots are
+placed first, square to the grid, and lanes are routed between them, so buildings stay square
+(module 10's walls, rooms and doors are all grid-aligned) and roads stay natural. Then each plot
+grows out to meet its lane.
+
+**Decided (2026-11-10):**
+- plots are placed before lanes; **plot-led lanes replace step 3's lane walker** (§3.6);
+- main roads, exits and bridges stay as step 3 built them: the spine, fixed before any plot;
+- a plot's building footprint is a grid-aligned rectangle; its yard may be irregular.
+
+#### 4.1 What it builds on
+- **Step 3:** main roads on L1, their verge, bridges, `road_cells`, `cleared_cells`, and
+  `EcsRoadCheck`'s flood from the well.
+- **Step 2:** the plaza, the town's L1 area and its refined ground.
+- **Module 10:** buildings take an entrance side; its generator fills a footprint.
+
+#### 4.2 Data
+**`EcsSettlementDef`, a Plots group:**
+- `plots` (count range: hamlet 12–18, village 30–45, town 70–100);
+- `plot_size_centre` (7–10) and `plot_size_edge` (5–8), L1 cells a side: blended by distance from
+  the plaza — a stand-in until step 5's zones;
+- `plot_gap` (2): cells kept between footprints, so a lane fits;
+- `yard_depth` (4): rings a yard may grow;
+- `lane_reach` (80): the dearest route a lane may take; a plot further out is dropped.
+
+Built differently from first planned: a count instead of a density (thinning comes from where
+spots are drawn), and no `lane_reuse_cost` — a lane stops at the first road it reaches, so lanes
+merge without one.
+
+**`EcsSettlementSite` gains:**
+- `plots`: [{footprint: Rect2i, front: N/E/S/W, door: L1 cell, yard: cells}];
+- lanes join `roads` as `kind: lane`, as before.
+
+#### 4.3 Placing plots — `EcsPlotPlanner` (pure; new file)
+1. Candidate spots are drawn round the plaza and along main roads, densest near the centre.
+2. Each gets a footprint size by its distance from the plaza.
+3. Its **front** is the side facing the plaza or the nearest main road; its **door** is a cell
+   on that side.
+4. It is kept only if the footprint plus `plot_gap` overlaps no road, verge, plaza, water or
+   other plot. Forest and rock under it are cleared, as roads clear them.
+
+#### 4.4 Lanes from the plots
+- Plots are taken nearest the network first. From the cell in front of each door, a path is
+  found (8-way A* on the area's ground, footprints and their gap blocked, water blocked: lanes
+  never bridge) to the nearest road cell.
+- Road cells cost `lane_reuse_cost`, so neighbours' paths merge into shared lanes; each lane
+  routed is road for the next.
+- Lanes are `lane_width` wide, floored `road_floor`, cleared like roads.
+- A plot whose door can't reach a road is dropped.
+
+#### 4.5 Plots meet the road
+- Each plot's yard grows from its footprint outwards, a ring at a time, over free cells, until it
+  touches its lane or a neighbour's yard. The footprint stays square inside it.
+- Cells no yard claims stay green space.
+- Yards are where step 7 puts fences and gardens.
+
+#### 4.6 Check — `EcsPlotCheck.problems(site, …)` (pure)
+- No footprint overlaps a road, water, the plaza or another footprint.
+- Every door has a road cell in front of it.
+- Every road cell is joined to the plaza (`EcsRoadCheck`'s flood).
+- Every yard touches its plot's lane, and no yard overlaps another.
+- The same seed gives the same plots.
+
+#### 4.7 Viewer and tests
+- **Viewer:** footprints outlined, doors marked, yards tinted; the info panel counts plots and
+  lane metres.
+- **Tests:** every town size over several seeds passes the check; plots and lanes through module
+  10's build system, every command accepted; the same seed, the same plots; measured cost.
+
+#### 4.8 Not in step 4
+- zones and building types (step 5): sizes come from distance for now;
+- buildings themselves (step 6);
+- fences and gardens on yards (step 7).
+
+#### 4.9 Open
+- **Yard shape:** irregular to meet a curved lane (proposed above), or grown as a rectangle until
+  it touches, the gap left as verge.
+- ~~Step 3's lane walker~~: deleted with step 4.
+
+- *Done when:* every plot's footprint is square and clear, its door faces a road cell, its yard
+  meets its lane, and every lane joins the plaza.
 
 ### Step 5 — Zoning: which building goes where
 Each building kind is a **`EcsSettlementRoleDef`**: its building type, how many (fixed or per

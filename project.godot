@@ -15,7 +15,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="CompilationPack"
-run/main_scene="uid://bxekho7s8ix1"
+run/main_scene="res://12. Settlement Generator/generator.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
 config/icon="res://icon.svg"
 
@@ -37,7 +37,7 @@ shapes/paths/geometry_color=Color(0.85, 0.1, 1, 0.4)
 
 window/size/viewport_width=1612
 window/size/viewport_height=720
-window/stretch/aspect="expand"
+window/stretch/aspect="ignore"
 window/handheld/orientation="sensor_landscape"
 
 [editor_plugins]

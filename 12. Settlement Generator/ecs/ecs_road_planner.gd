@@ -8,26 +8,18 @@ extends RefCounted
 ##      costing `reuse_cost`, so roads share a trunk before forking; smoothed so they curve.
 ##   3. Main roads on L1: the L2 line scaled, wandering a little, `main_width` wide, from the plaza's
 ##      edge; a cell on L1 water is a bridge.
-##   4. Lanes on L1, inside the town's area: branching off main roads and the plaza, walking a cell
-##      at a time, bending, stopping at the edge, water or another road (joining it).
-## Road and bridge floors go into the site's commands; road cells and verges into `cleared_cells`.
+## Lanes come from the plots (EcsPlotPlanner). `lay` then puts every road's floor into the site's
+## commands, and road cells and verges into `cleared_cells`.
 
 ## Region cells sampled along each sector of the edge.
 const EDGE_STEP: int = 4
 ## How far a refined main road wanders from its L2 line, in L1 cells.
 const JITTER: float = 1.5
-## A lane joins a road it comes this near; never the road it left before this many cells.
-const JOIN_REACH: int = 2
-const LEAVE: int = 12
-## Lanes shorter than this are dropped.
-const MIN_LANE: int = 4
-const SIDES: Array[Vector2i] = [Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT, Vector2i.UP]
 
-## Lays out `site`'s roads, `area_kinds` being its area's refined ground. False when no exit can
-## be reached.
+## Lays out `site`'s main roads, `area_kinds` being its area's refined ground. False when no exit
+## can be reached.
 static func plan(site: EcsSettlementSite, region_plan: Dictionary, region_def: EcsSettlementDef,
-		def: EcsSettlementDef, area_kinds: PackedByteArray, rng_seed: int, scale: int, catalog: EcsTownCatalog,
-		shares: Array) -> bool:
+		def: EcsSettlementDef, area_kinds: PackedByteArray, rng_seed: int, scale: int, shares: Array) -> bool:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash([rng_seed, site.l2_cell, &"roads"])
 	var kinds := region_plan["kinds"] as PackedByteArray
@@ -71,13 +63,17 @@ static func plan(site: EcsSettlementSite, region_plan: Dictionary, region_def: E
 	for line in mains:
 		var points := _draw_main(line, scale, def.main_width, jitter, site, bounds, main_cells)
 		site.roads.append({"kind": &"main", "points": points, "l2_points": line, "width": def.main_width})
-	var road_floor := catalog.floor_id(def.road_floor)
-	var bridge_floor := catalog.floor_id(def.bridge_floor)
 	for cell: Vector2i in main_cells:
 		var bridge := water.at(cell)
 		site.road_cells[cell] = &"bridge" if bridge else &"main"
 	site.bridges = _bridges(site.road_cells)
-	_lanes(site, def, area_kinds, rng)
+	return true
+
+## Every road cell of `site` floored in its commands (road, or wood for a bridge) and cleared, with
+## a `verge` round main roads and bridges.
+static func lay(site: EcsSettlementSite, def: EcsSettlementDef, catalog: EcsTownCatalog) -> void:
+	var road_floor := catalog.floor_id(def.road_floor)
+	var bridge_floor := catalog.floor_id(def.bridge_floor)
 	for cell: Vector2i in site.road_cells:
 		var kind: StringName = site.road_cells[cell]
 		site.commands.append(EcsBuildCommand.make(EcsBuildCommand.Kind.SET_FLOOR, cell, bridge_floor if kind == &"bridge" else road_floor))
@@ -86,7 +82,6 @@ static func plan(site: EcsSettlementSite, region_plan: Dictionary, region_def: E
 			for dy in range(-def.verge, def.verge + 1):
 				for dx in range(-def.verge, def.verge + 1):
 					site.cleared_cells[cell + Vector2i(dx, dy)] = true
-	return true
 
 ## The cheapest cost from `from` to every cell, stepping 8 ways over `weights`.
 static func _dijkstra(weights: PackedFloat32Array, w: int, h: int, from: Vector2i) -> PackedFloat32Array:
@@ -100,7 +95,7 @@ static func _dijkstra(weights: PackedFloat32Array, w: int, h: int, from: Vector2
 	while not heap_cost.is_empty():
 		var c := heap_cost[0]
 		var i := heap_cell[0]
-		_pop(heap_cost, heap_cell)
+		heap_pop(heap_cost, heap_cell)
 		if c > cost[i]:
 			continue
 		var x := i % w
@@ -117,10 +112,11 @@ static func _dijkstra(weights: PackedFloat32Array, w: int, h: int, from: Vector2
 				var step := weights[n] * (1.41421 if dx != 0 and dy != 0 else 1.0)
 				if c + step < cost[n]:
 					cost[n] = c + step
-					_push(heap_cost, heap_cell, c + step, n)
+					heap_push(heap_cost, heap_cell, c + step, n)
 	return cost
 
-static func _push(costs: PackedFloat32Array, cells: PackedInt32Array, c: float, cell: int) -> void:
+## Binary heap of cells by cost, in two parallel arrays: adds one.
+static func heap_push(costs: PackedFloat32Array, cells: PackedInt32Array, c: float, cell: int) -> void:
 	costs.append(c)
 	cells.append(cell)
 	var k := costs.size() - 1
@@ -131,7 +127,8 @@ static func _push(costs: PackedFloat32Array, cells: PackedInt32Array, c: float, 
 		_swap(costs, cells, k, parent)
 		k = parent
 
-static func _pop(costs: PackedFloat32Array, cells: PackedInt32Array) -> void:
+## Removes the cheapest.
+static func heap_pop(costs: PackedFloat32Array, cells: PackedInt32Array) -> void:
 	var last := costs.size() - 1
 	costs[0] = costs[last]
 	cells[0] = cells[last]
@@ -243,131 +240,6 @@ static func _bridges(road_cells: Dictionary) -> int:
 						seen[next] = true
 						stack.append(next)
 	return count
-
-## Lanes inside the town's area: off the main roads every `lane_spacing` cells and off the plaza's
-## sides, by chance, each walking and bending until the area's edge, water, its length, or a road
-## it joins; one more level off them at half the chance.
-static func _lanes(site: EcsSettlementSite, def: EcsSettlementDef, kinds: PackedByteArray, rng: RandomNumberGenerator) -> void:
-	var area := site.area
-	# Road or plaza per area cell: 0 none, 1 plaza or main road, 2 + n lane n.
-	var owner := PackedInt32Array()
-	owner.resize(area.size.x * area.size.y)
-	for cell: Vector2i in site.road_cells:
-		if area.has_point(cell):
-			owner[(cell.y - area.position.y) * area.size.x + cell.x - area.position.x] = 1
-	for y in range(site.plaza.position.y, site.plaza.end.y):
-		for x in range(site.plaza.position.x, site.plaza.end.x):
-			owner[(y - area.position.y) * area.size.x + x - area.position.x] = 1
-	var starts: Array = []
-	for road in site.roads:
-		var points := road["points"] as PackedVector2Array
-		var next := rng.randi_range(def.lane_spacing.x, def.lane_spacing.y) * 2
-		for k in range(1, points.size()):
-			if not area.grow(-2).has_point(Vector2i(points[k].round())) or site.plaza.grow(4).has_point(Vector2i(points[k].round())):
-				continue
-			next -= 1
-			if next > 0:
-				continue
-			next = rng.randi_range(def.lane_spacing.x, def.lane_spacing.y) * 2
-			var ahead := (points[k] - points[k - 1]).normalized()
-			for side in [-1.0, 1.0]:
-				if rng.randf() < def.lane_branch_chance:
-					starts.append([points[k], ahead.orthogonal() * side, 1.0])
-	for side in SIDES:
-		if rng.randf() < def.lane_branch_chance:
-			starts.append([Vector2(site.plaza.get_center()), Vector2(side), 1.0])
-	var lane := 0
-	while not starts.is_empty():
-		var start: Array = starts.pop_front()
-		lane += 1
-		var cells := _walk(start[0], start[1], int(rng.randi_range(def.lane_length.x, def.lane_length.y) * float(start[2])),
-			lane + 1, owner, kinds, area, def.lane_turn, rng)
-		if cells.size() < MIN_LANE:
-			for cell in cells:
-				owner[(cell.y - area.position.y) * area.size.x + cell.x - area.position.x] = 0
-			continue
-		var points := PackedVector2Array()
-		for cell in cells:
-			points.append(Vector2(cell))
-			if not site.road_cells.has(cell):
-				site.road_cells[cell] = &"lane"
-		site.roads.append({"kind": &"lane", "points": points, "width": def.lane_width})
-		if start[2] >= 1.0 and rng.randf() < def.lane_branch_chance * 0.5:
-			var from := Vector2(cells[rng.randi_range(0, cells.size() - 1)])
-			var along := (Vector2(cells[-1]) - Vector2(cells[0])).normalized()
-			starts.append([from, along.orthogonal() * (1.0 if rng.randf() < 0.5 else -1.0), 0.5])
-
-## One lane from `from` heading `heading`, at most `length` cells: 4-connected cells it takes. It
-## starts on the road or plaza it leaves and walks out through it, so its first cell touches it.
-static func _walk(from: Vector2, heading: Vector2, length: int, id: int, owner: PackedInt32Array,
-		kinds: PackedByteArray, area: Rect2i, turn: float, rng: RandomNumberGenerator) -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
-	var at := from
-	var last := Vector2i(at.round())
-	var aw := area.size.x
-	# What it starts on: the road or plaza it leaves, which it may not join straight back into.
-	var origin := owner[(last.y - area.position.y) * aw + last.x - area.position.x] if area.has_point(last) else 0
-	for step in length:
-		heading = heading.rotated(deg_to_rad(rng.randf_range(-turn, turn)))
-		at += heading
-		var cell := Vector2i(at.round())
-		if not area.grow(-1).has_point(cell):
-			break
-		# A diagonal step takes a side cell too, so the lane stays joined edge to edge.
-		var path: Array[Vector2i] = [cell]
-		if cell.x != last.x and cell.y != last.y:
-			path.push_front(Vector2i(cell.x, last.y))
-		for c in path:
-			var i := (c.y - area.position.y) * aw + c.x - area.position.x
-			if kinds[i] == EcsTerrainGenerator.WATER:
-				return cells
-			if owner[i] != 0 and owner[i] != id:
-				if cells.is_empty():
-					# Still leaving the road it starts on.
-					continue
-				return cells
-			owner[i] = id
-			cells.append(c)
-		last = cell
-		var skip := origin if cells.size() < LEAVE else -1
-		if cells.size() > 2 and _nearest_road(cell, id, owner, area, skip) != Vector2i(-1, -1):
-			# Joins the road it has come near.
-			var target := _nearest_road(cell, id, owner, area, skip)
-			for c in _straight(cell, target):
-				var i := (c.y - area.position.y) * aw + c.x - area.position.x
-				if owner[i] != 0 or kinds[i] == EcsTerrainGenerator.WATER:
-					break
-				owner[i] = id
-				cells.append(c)
-			return cells
-	return cells
-
-## A road cell within JOIN_REACH of `cell`, neither this lane's nor `skip`'s, or (-1, -1).
-static func _nearest_road(cell: Vector2i, id: int, owner: PackedInt32Array, area: Rect2i, skip: int) -> Vector2i:
-	for r in range(1, JOIN_REACH + 1):
-		for dy in range(-r, r + 1):
-			for dx in range(-r, r + 1):
-				var at := cell + Vector2i(dx, dy)
-				if not area.has_point(at):
-					continue
-				var o := owner[(at.y - area.position.y) * area.size.x + at.x - area.position.x]
-				if o != 0 and o != id and o != skip:
-					return at
-	return Vector2i(-1, -1)
-
-## The 4-connected cells from `a` (excluded) to `b` (excluded), x first.
-static func _straight(a: Vector2i, b: Vector2i) -> Array[Vector2i]:
-	var out: Array[Vector2i] = []
-	var at := a
-	while at.x != b.x:
-		at.x += signi(b.x - at.x)
-		if at != b:
-			out.append(at)
-	while at.y != b.y:
-		at.y += signi(b.y - at.y)
-		if at != b:
-			out.append(at)
-	return out
 
 
 ## Whether an L1 cell is water, refining only the 8×8 blocks near water: a cell whose region cell
