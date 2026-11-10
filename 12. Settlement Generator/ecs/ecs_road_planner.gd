@@ -18,7 +18,7 @@ const JITTER: float = 1.5
 
 ## Lays out `site`'s main roads, `area_kinds` being its area's refined ground. False when no exit
 ## can be reached.
-static func plan(site: EcsSettlementSite, region_plan: Dictionary, region_def: EcsSettlementDef,
+static func plan(site: EcsSettlementSite, region_plan: Dictionary, region_def: EcsLandDef,
 		def: EcsSettlementDef, area_kinds: PackedByteArray, rng_seed: int, scale: int, shares: Array) -> bool:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash([rng_seed, site.l2_cell, &"roads"])
@@ -55,7 +55,7 @@ static func plan(site: EcsSettlementSite, region_plan: Dictionary, region_def: E
 		site.exits.append(exit)
 	if mains.is_empty():
 		return false
-	var water := WaterAt.new(region_plan, region_def, def, rng_seed, scale, shares, site, area_kinds)
+	var water := WaterAt.new(region_plan, region_def, rng_seed, scale, shares, site, area_kinds)
 	var jitter := FastNoiseLite.new()
 	jitter.seed = hash([rng_seed, 8])
 	jitter.frequency = 0.05
@@ -247,8 +247,7 @@ static func _bridges(road_cells: Dictionary) -> int:
 ## and its neighbours are all land is land at L1 too (EcsTerrainCheck.follows holds it to that).
 class WaterAt:
 	var _plan: Dictionary
-	var _region: EcsSettlementDef
-	var _def: EcsSettlementDef
+	var _region: EcsLandDef
 	var _seed: int
 	var _scale: int
 	var _shares: Array
@@ -256,11 +255,10 @@ class WaterAt:
 	var _area_kinds: PackedByteArray
 	var _blocks: Dictionary = {}
 
-	func _init(plan: Dictionary, region: EcsSettlementDef, def: EcsSettlementDef, rng_seed: int, scale: int,
+	func _init(plan: Dictionary, region: EcsLandDef, rng_seed: int, scale: int,
 			shares: Array, site: EcsSettlementSite, area_kinds: PackedByteArray) -> void:
 		_plan = plan
 		_region = region
-		_def = def
 		_seed = rng_seed
 		_scale = scale
 		_shares = shares
@@ -281,7 +279,7 @@ class WaterAt:
 		if not near_water:
 			return false
 		if not _blocks.has(parent):
-			_blocks[parent] = EcsTerrainGenerator.refine_terrain(_plan, _region, Vector2i(_scale, _scale), _def.shore_width,
+			_blocks[parent] = EcsTerrainGenerator.refine_terrain(_plan, _region, Vector2i(_scale, _scale), _region.child.shore_width,
 				parent * _scale, _scale, _seed, 0, _shares)["kinds"]
 		var local := cell - parent * _scale
 		return (_blocks[parent] as PackedByteArray)[local.y * _scale + local.x] == EcsTerrainGenerator.WATER

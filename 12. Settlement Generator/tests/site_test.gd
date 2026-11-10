@@ -9,6 +9,7 @@ extends Node2D
 const CATALOG := preload("res://10. Town Generator/defs/town_catalog.tres")
 const ENTITIES := preload("res://10. Town Generator/defs/entity_catalog.tres")
 const DEFS := "res://12. Settlement Generator/defs/settlements/%s.tres"
+const REGION := "res://12. Settlement Generator/defs/lands/region.tres"
 const TOWNS: Array[StringName] = [&"hamlet", &"village", &"town"]
 const SEEDS: int = 10
 const ZOOM: int = 8
@@ -17,13 +18,13 @@ const CHUNK: int = 8
 
 var _checks: int = 0
 var _failures: int = 0
-var _region: EcsSettlementDef
+var _region: EcsLandDef
 ## Region plans by seed, and their blend shares.
 var _plans: Dictionary = {}
 
 func _ready() -> void:
 	CATALOG.number()
-	_region = load(DEFS % &"region") as EcsSettlementDef
+	_region = load(REGION) as EcsLandDef
 	_every_seed_and_size_gets_a_sound_town()
 	_a_town_moved_by_hand()
 	_the_centre_loads_through_the_build_system()
@@ -90,7 +91,7 @@ func _the_centre_loads_through_the_build_system() -> void:
 	var p := _plan(1)
 	var def := load(DEFS % &"hamlet") as EcsSettlementDef
 	var site := _pick(1, &"hamlet")
-	var terrain := EcsTerrainGenerator.refine_terrain(p["plan"], _region, site.area.size, def.shore_width, site.area.position,
+	var terrain := EcsTerrainGenerator.refine_terrain(p["plan"], _region, site.area.size, _region.child.shore_width, site.area.position,
 		ZOOM, 1, 0, p["shares"])
 	var blocked := PackedByteArray()
 	blocked.resize(site.area.size.x * site.area.size.y)
@@ -102,7 +103,7 @@ func _the_centre_loads_through_the_build_system() -> void:
 	for cell: Vector2i in site.cleared_cells:
 		if site.area.has_point(cell):
 			blocked[(cell.y - site.area.position.y) * site.area.size.x + cell.x - site.area.position.x] = 1
-	var nodes := EcsTerrainGenerator.refine_nodes(def, terrain["zones"], 1, site.area.position, ENTITIES, blocked)
+	var nodes := EcsTerrainGenerator.refine_nodes(_land(_region, site.area.size), terrain["zones"], 1, site.area.position, ENTITIES, blocked)
 	var commands := EcsTerrainGenerator.terrain_commands(terrain["kinds"], site.area.size, Vector2i.ZERO, CATALOG)
 	var whole: Array = []
 	for node: Dictionary in nodes:
@@ -153,8 +154,7 @@ func _a_plaza_split_across_chunks_draws_as_one() -> void:
 	for command in site.commands:
 		if command.kind == EcsBuildCommand.Kind.SET_FLOOR:
 			floor_of[command.cell] = command.value
-	var chunk_def := def.duplicate() as EcsSettlementDef
-	chunk_def.size = Vector2i(CHUNK, CHUNK)
+	var chunk_def := _land(_region, Vector2i(CHUNK, CHUNK))
 	var under := chunks.touching(site.plaza)
 	var same := true
 	var wells := 0
@@ -173,7 +173,7 @@ func _a_plaza_split_across_chunks_draws_as_one() -> void:
 				var global := at * CHUNK + Vector2i(x, y) - Vector2i.ONE
 				if floors[y * outer + x] != int(floor_of.get(global, 0)):
 					same = false
-		var terrain := EcsTerrainGenerator.refine_terrain(p["plan"], _region, Vector2i(CHUNK, CHUNK), def.shore_width, at * CHUNK,
+		var terrain := EcsTerrainGenerator.refine_terrain(p["plan"], _region, Vector2i(CHUNK, CHUNK), _region.child.shore_width, at * CHUNK,
 			ZOOM, 2, 1, p["shares"])
 		for node: Dictionary in EcsTerrainGenerator.refine_nodes(chunk_def, terrain["zones"], 2, at, ENTITIES, chunks.blocked(at)):
 			nodes.append({"cell": at * CHUNK + (node["cell"] as Vector2i), "size": node["size"]})
@@ -181,6 +181,12 @@ func _a_plaza_split_across_chunks_draws_as_one() -> void:
 	_check("the well is placed by exactly one chunk", wells == 1)
 	var problems := EcsSiteCheck.problems(site, p["plan"], _region, def, 2, ZOOM, p["shares"], nodes)
 	_check("no chunk plans a node on the cleared ground", problems.is_empty())
+
+## The region's L1 land, `size` cells: what a town's area or a chunk grows.
+func _land(region: EcsLandDef, size: Vector2i) -> EcsLandDef:
+	var land := region.child.duplicate() as EcsLandDef
+	land.size = size
+	return land
 
 func _check(what: String, passed: bool) -> void:
 	_checks += 1

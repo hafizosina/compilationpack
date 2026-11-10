@@ -41,7 +41,7 @@ const MARGIN: int = 5
 ## nodes: [{blueprint, cell, size}], counts: {blueprint: n}, rivers: [{points, radii}],
 ## river (1 per cell a river made water), coast_side, deposits: {ids (per cell, 0 none, else index
 ## + 1 into keys), keys, blobs: [{key, cell, radius}]}, usec: {stage: µs}}.
-static func plan(def: EcsSettlementDef, rng_seed: int, catalog: EcsTownCatalog, entities: EcsEntityCatalog) -> Dictionary:
+static func plan(def: EcsLandDef, rng_seed: int, catalog: EcsTownCatalog, entities: EcsEntityCatalog) -> Dictionary:
 	var w := def.size.x
 	var h := def.size.y
 	var kinds := PackedByteArray()
@@ -54,13 +54,13 @@ static func plan(def: EcsSettlementDef, rng_seed: int, catalog: EcsTownCatalog, 
 	var started := Time.get_ticks_usec()
 	var rng := _rng(rng_seed, 1)
 	match def.water:
-		EcsSettlementDef.Water.LAKE:
+		EcsLandDef.Water.LAKE:
 			_lake(def, kinds, rng)
-		EcsSettlementDef.Water.RIVER:
+		EcsLandDef.Water.RIVER:
 			rivers.append(_river(def, kinds, river, rng, w >= h))
-		EcsSettlementDef.Water.COAST:
+		EcsLandDef.Water.COAST:
 			coast_side = _coast(def, kinds, rng)
-		EcsSettlementDef.Water.RIVER_TO_SEA:
+		EcsLandDef.Water.RIVER_TO_SEA:
 			coast_side = _coast(def, kinds, rng)
 			rivers.append(_river(def, kinds, river, rng, coast_side.x != 0))
 	usec["water"] = _lap(started)
@@ -89,7 +89,7 @@ static func plan(def: EcsSettlementDef, rng_seed: int, catalog: EcsTownCatalog, 
 ## A child map of `def`'s size zoomed `scale` times into `parent`'s cells from `origin`: its
 ## terrain (`refine_terrain`), then nodes and commands as in `plan`. Neighbouring windows meet
 ## without a seam.
-static func refine(parent: Dictionary, parent_def: EcsSettlementDef, def: EcsSettlementDef, origin: Vector2i,
+static func refine(parent: Dictionary, parent_def: EcsLandDef, def: EcsLandDef, origin: Vector2i,
 		scale: int, rng_seed: int, catalog: EcsTownCatalog, entities: EcsEntityCatalog) -> Dictionary:
 	var terrain := refine_terrain(parent, parent_def, def.size, def.shore_width, origin * scale, scale, rng_seed)
 	var usec := terrain["usec"] as Dictionary
@@ -107,7 +107,7 @@ static func refine(parent: Dictionary, parent_def: EcsSettlementDef, def: EcsSet
 ## Each cell is in its parent cell's deposit.
 ## {kinds, river: with `border` cells round `size`, zones and deposits: `size` only, usec}. `shares` is
 ## `blend_shares(parent, …)` when the caller keeps it, else it is made here.
-static func refine_terrain(parent: Dictionary, parent_def: EcsSettlementDef, size: Vector2i, shore_width: int,
+static func refine_terrain(parent: Dictionary, parent_def: EcsLandDef, size: Vector2i, shore_width: int,
 		at: Vector2i, scale: int, rng_seed: int, border: int = 0, shares: Array = []) -> Dictionary:
 	var pw := parent_def.size.x
 	var ph := parent_def.size.y
@@ -158,7 +158,7 @@ static func refine_terrain(parent: Dictionary, parent_def: EcsSettlementDef, siz
 
 ## The deposits of a child area `size` from child cell `at`, each cell its parent cell's; empty
 ## when the parent has none.
-static func _child_deposits(parent: Dictionary, parent_def: EcsSettlementDef, size: Vector2i, at: Vector2i,
+static func _child_deposits(parent: Dictionary, parent_def: EcsLandDef, size: Vector2i, at: Vector2i,
 		scale: int) -> Dictionary:
 	var found: Dictionary = parent.get("deposits", {})
 	if found.is_empty() or (found["keys"] as Array).is_empty():
@@ -176,7 +176,7 @@ static func _child_deposits(parent: Dictionary, parent_def: EcsSettlementDef, si
 ## A parent's kinds as 0 or 1 per cell, one array per kind, for blending. A river cell counts as
 ## its sandy bank, so a child's river comes only from its smooth line, except where it meets other
 ## water, so the mouth stays joined. Keep it to refine many areas of one parent.
-static func blend_shares(parent: Dictionary, parent_def: EcsSettlementDef) -> Array[PackedFloat32Array]:
+static func blend_shares(parent: Dictionary, parent_def: EcsLandDef) -> Array[PackedFloat32Array]:
 	var pw := parent_def.size.x
 	var ph := parent_def.size.y
 	var parent_kinds := parent["kinds"] as PackedByteArray
@@ -203,7 +203,7 @@ static func blend_shares(parent: Dictionary, parent_def: EcsSettlementDef) -> Ar
 
 ## Nodes for a child area of `def`'s size from its `zones` and `deposits` (refine_terrain's), seeded
 ## by `key` (a window or chunk), none on a cell `blocked` marks (a town's cleared ground).
-static func refine_nodes(def: EcsSettlementDef, zones: PackedByteArray, rng_seed: int, key: Variant,
+static func refine_nodes(def: EcsLandDef, zones: PackedByteArray, rng_seed: int, key: Variant,
 		entities: EcsEntityCatalog, blocked: PackedByteArray = PackedByteArray(), deposits: Dictionary = {}) -> Array[Dictionary]:
 	return _nodes(def, zones, entities, _rng(hash([rng_seed, key]), 7), blocked, deposits)
 
@@ -217,7 +217,7 @@ static func _crop(cells: PackedByteArray, w: int, from: Vector2i, size: Vector2i
 	return out
 
 ## Nodes and commands for finished `kinds`, their zones made here when `zones` is empty.
-static func _finish(def: EcsSettlementDef, kinds: PackedByteArray, zones: PackedByteArray, rng: RandomNumberGenerator,
+static func _finish(def: EcsLandDef, kinds: PackedByteArray, zones: PackedByteArray, rng: RandomNumberGenerator,
 		catalog: EcsTownCatalog, entities: EcsEntityCatalog, usec: Dictionary, deposits: Dictionary = {}) -> Dictionary:
 	var w := def.size.x
 	var h := def.size.y
@@ -379,7 +379,7 @@ static func areas(member: PackedByteArray, w: int, h: int) -> Array:
 		sizes.append(size)
 	return [label, sizes]
 
-static func _lake(def: EcsSettlementDef, kinds: PackedByteArray, rng: RandomNumberGenerator) -> void:
+static func _lake(def: EcsLandDef, kinds: PackedByteArray, rng: RandomNumberGenerator) -> void:
 	var w := def.size.x
 	var h := def.size.y
 	var noise := _noise(rng, 3.0 / maxf(w, h))
@@ -403,7 +403,7 @@ static func _lake(def: EcsSettlementDef, kinds: PackedByteArray, rng: RandomNumb
 			kinds[i] = WATER
 
 ## A river from one edge to the opposite one, along x when `along_x`; its line, in cells.
-static func _river(def: EcsSettlementDef, kinds: PackedByteArray, river: PackedByteArray, rng: RandomNumberGenerator,
+static func _river(def: EcsLandDef, kinds: PackedByteArray, river: PackedByteArray, rng: RandomNumberGenerator,
 		along_x: bool) -> Dictionary:
 	var w := def.size.x
 	var h := def.size.y
@@ -443,7 +443,7 @@ static func _disc(kinds: PackedByteArray, river: PackedByteArray, w: int, h: int
 					river[i] = 1
 
 ## Sea along one random side; returns that side.
-static func _coast(def: EcsSettlementDef, kinds: PackedByteArray, rng: RandomNumberGenerator) -> Vector2i:
+static func _coast(def: EcsLandDef, kinds: PackedByteArray, rng: RandomNumberGenerator) -> Vector2i:
 	var w := def.size.x
 	var h := def.size.y
 	var side := SIDES[rng.randi_range(0, 3)]
@@ -459,7 +459,7 @@ static func _coast(def: EcsSettlementDef, kinds: PackedByteArray, rng: RandomNum
 			kinds[i] = WATER
 	return side
 
-static func _rock(def: EcsSettlementDef, kinds: PackedByteArray, from_water: PackedByteArray, rng: RandomNumberGenerator) -> void:
+static func _rock(def: EcsLandDef, kinds: PackedByteArray, from_water: PackedByteArray, rng: RandomNumberGenerator) -> void:
 	var w := def.size.x
 	var h := def.size.y
 	var values := _noise(rng, 5.0 / maxf(w, h)).get_image(w, h).get_data()
@@ -479,7 +479,7 @@ static func _rock(def: EcsSettlementDef, kinds: PackedByteArray, from_water: Pac
 		if label[i] != 0 and sizes[label[i]] >= MIN_ROCK_BLOB:
 			kinds[i] = ROCK
 
-static func _forest(def: EcsSettlementDef, kinds: PackedByteArray, rng: RandomNumberGenerator) -> void:
+static func _forest(def: EcsLandDef, kinds: PackedByteArray, rng: RandomNumberGenerator) -> void:
 	var w := def.size.x
 	var h := def.size.y
 	var values := _noise(rng, 6.0 / maxf(w, h)).get_image(w, h).get_data()
@@ -492,7 +492,7 @@ static func _forest(def: EcsSettlementDef, kinds: PackedByteArray, rng: RandomNu
 		if score[i] >= 0.0 and score[i] >= cut:
 			kinds[i] = FOREST
 
-static func _nodes(def: EcsSettlementDef, zones: PackedByteArray, entities: EcsEntityCatalog,
+static func _nodes(def: EcsLandDef, zones: PackedByteArray, entities: EcsEntityCatalog,
 		rng: RandomNumberGenerator, blocked: PackedByteArray = PackedByteArray(), deposits: Dictionary = {}) -> Array[Dictionary]:
 	var w := def.size.x
 	var h := def.size.y
@@ -545,7 +545,7 @@ static func _in_deposit(zones: PackedByteArray, deposits: Dictionary, key: Strin
 
 ## Deposit blobs for `def` on finished `kinds`: each a random cell of its ground grown to a disc of
 ## its radius over that ground, never over another deposit.
-static func _deposits(def: EcsSettlementDef, kinds: PackedByteArray, rng: RandomNumberGenerator) -> Dictionary:
+static func _deposits(def: EcsLandDef, kinds: PackedByteArray, rng: RandomNumberGenerator) -> Dictionary:
 	var w := def.size.x
 	var h := def.size.y
 	var ids := PackedByteArray()

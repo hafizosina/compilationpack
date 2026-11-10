@@ -7,7 +7,7 @@ extends RefCounted
 ## its verge.
 
 ## `nodes`: planned nodes in whole-region L1 cells, [{cell, size}].
-static func problems(site: EcsSettlementSite, region_plan: Dictionary, region_def: EcsSettlementDef,
+static func problems(site: EcsSettlementSite, region_plan: Dictionary, region_def: EcsLandDef,
 		def: EcsSettlementDef, rng_seed: int, scale: int, shares: Array, nodes: Array = []) -> Array[String]:
 	var out: Array[String] = []
 	if site == null:
@@ -39,11 +39,11 @@ static func problems(site: EcsSettlementSite, region_plan: Dictionary, region_de
 
 ## Every road cell is land or a bridge, and lanes never stand on water: read off the L1 ground,
 ## refined block by block under the roads.
-static func _ground(site: EcsSettlementSite, plan: Dictionary, region_def: EcsSettlementDef, def: EcsSettlementDef,
+static func _ground(site: EcsSettlementSite, plan: Dictionary, region_def: EcsLandDef, def: EcsSettlementDef,
 		rng_seed: int, scale: int, shares: Array) -> Array[String]:
 	# Outside the area the ground is refined block by block, only near water.
-	var ground := EcsRoadPlanner.WaterAt.new(plan, region_def, def, rng_seed, scale, shares, site, PackedByteArray())
-	var area := EcsTerrainGenerator.refine_terrain(plan, region_def, site.area.size, def.shore_width, site.area.position,
+	var ground := EcsRoadPlanner.WaterAt.new(plan, region_def, rng_seed, scale, shares, site, PackedByteArray())
+	var area := EcsTerrainGenerator.refine_terrain(plan, region_def, site.area.size, region_def.child.shore_width, site.area.position,
 		scale, rng_seed, 0, shares)["kinds"] as PackedByteArray
 	for cell: Vector2i in site.road_cells:
 		var water := false

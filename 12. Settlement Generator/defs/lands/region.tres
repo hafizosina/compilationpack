@@ -1,7 +1,8 @@
-[gd_resource type="Resource" script_class="EcsSettlementDef" format=3 uid="uid://cglq4g0uh5su"]
+[gd_resource type="Resource" script_class="EcsLandDef" format=3 uid="uid://cglq4g0uh5su"]
 
 [ext_resource type="Script" uid="uid://bt0vopbka5s5v" path="res://12. Settlement Generator/defs/ecs_node_spawn_def.gd" id="1_5tpvt"]
-[ext_resource type="Script" uid="uid://byp1jwtg3iiwk" path="res://12. Settlement Generator/defs/ecs_settlement_def.gd" id="2_b411x"]
+[ext_resource type="Script" path="res://12. Settlement Generator/defs/ecs_land_def.gd" id="2_b411x"]
+[ext_resource type="Resource" path="res://12. Settlement Generator/defs/lands/l1.tres" id="4_l1"]
 [ext_resource type="Script" uid="uid://duyn6yfnl1fci" path="res://12. Settlement Generator/defs/ecs_deposit_def.gd" id="3_dep"]
 
 [sub_resource type="Resource" id="Deposit_iron"]
@@ -46,4 +47,4 @@ forest_share = 0.3
 shore_width = 1
 river_width = Vector2i(2, 4)
 deposits = Array[ExtResource("3_dep")]([SubResource("Deposit_iron"), SubResource("Deposit_coal"), SubResource("Deposit_copper"), SubResource("Deposit_gold"), SubResource("Deposit_clay")])
-road_costs = null
+child = ExtResource("4_l1")

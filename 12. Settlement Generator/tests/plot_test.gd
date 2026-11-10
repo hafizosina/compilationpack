@@ -9,6 +9,7 @@ extends Node2D
 const CATALOG := preload("res://10. Town Generator/defs/town_catalog.tres")
 const ENTITIES := preload("res://10. Town Generator/defs/entity_catalog.tres")
 const DEFS := "res://12. Settlement Generator/defs/settlements/%s.tres"
+const REGION := "res://12. Settlement Generator/defs/lands/region.tres"
 const TOWNS: Array[StringName] = [&"hamlet", &"village", &"town"]
 const SEEDS: int = 6
 const ZOOM: int = 8
@@ -25,16 +26,16 @@ func _ready() -> void:
 	print("[plot] %d/%d checks passed" % [_checks - _failures, _checks])
 	get_tree().quit(1 if _failures > 0 else 0)
 
-func _region() -> EcsSettlementDef:
-	return load(DEFS % &"region") as EcsSettlementDef
+func _region() -> EcsLandDef:
+	return load(REGION) as EcsLandDef
 
-func _plan(region: EcsSettlementDef, rng_seed: int) -> Dictionary:
+func _plan(region: EcsLandDef, rng_seed: int) -> Dictionary:
 	if not _plans.has(rng_seed):
 		var plan := EcsTerrainGenerator.plan(region, rng_seed, CATALOG, ENTITIES)
 		_plans[rng_seed] = {"plan": plan, "shares": EcsTerrainGenerator.blend_shares(plan, region)}
 	return _plans[rng_seed]
 
-func _pick(region: EcsSettlementDef, rng_seed: int, town: StringName) -> EcsSettlementSite:
+func _pick(region: EcsLandDef, rng_seed: int, town: StringName) -> EcsSettlementSite:
 	var p := _plan(region, rng_seed)
 	return EcsSitePicker.pick(p["plan"], region, load(DEFS % town), rng_seed, ZOOM, CATALOG, p["shares"])
 
@@ -85,7 +86,7 @@ func _plots_load_through_the_build_system() -> void:
 	var def := load(DEFS % &"hamlet") as EcsSettlementDef
 	var site := _pick(region, 2, &"hamlet")
 	var area := site.area
-	var terrain := EcsTerrainGenerator.refine_terrain(p["plan"], region, area.size, def.shore_width, area.position, ZOOM, 2, 0, p["shares"])
+	var terrain := EcsTerrainGenerator.refine_terrain(p["plan"], region, area.size, region.child.shore_width, area.position, ZOOM, 2, 0, p["shares"])
 	var blocked := PackedByteArray()
 	blocked.resize(area.size.x * area.size.y)
 	for rect in site.cleared:
@@ -96,7 +97,7 @@ func _plots_load_through_the_build_system() -> void:
 	for cell: Vector2i in site.cleared_cells:
 		if area.has_point(cell):
 			blocked[(cell.y - area.position.y) * area.size.x + cell.x - area.position.x] = 1
-	var nodes := EcsTerrainGenerator.refine_nodes(def, terrain["zones"], 2, area.position, ENTITIES, blocked)
+	var nodes := EcsTerrainGenerator.refine_nodes(_land(region, area.size), terrain["zones"], 2, area.position, ENTITIES, blocked)
 	var commands := EcsTerrainGenerator.terrain_commands(terrain["kinds"], area.size, Vector2i.ZERO, CATALOG)
 	var on_plot := 0
 	for node: Dictionary in nodes:
@@ -134,6 +135,12 @@ func _plots_load_through_the_build_system() -> void:
 	_check("every one of %d lane cells has the road floor" % lanes, floored and lanes > 0)
 	_check("no node on a footprint or yard (%d plots, %d nodes planned)" % [site.plots.size(), nodes.size()], on_plot == 0)
 	root.free()
+
+## The region's L1 land, `size` cells: what a town's area or a chunk grows.
+func _land(region: EcsLandDef, size: Vector2i) -> EcsLandDef:
+	var land := region.child.duplicate() as EcsLandDef
+	land.size = size
+	return land
 
 func _check(what: String, passed: bool) -> void:
 	_checks += 1

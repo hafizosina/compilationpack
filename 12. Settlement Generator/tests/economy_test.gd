@@ -9,8 +9,9 @@ extends Node2D
 const CATALOG := preload("res://10. Town Generator/defs/town_catalog.tres")
 const ENTITIES := preload("res://10. Town Generator/defs/entity_catalog.tres")
 const DEFS := "res://12. Settlement Generator/defs/settlements/%s.tres"
+const REGION := "res://12. Settlement Generator/defs/lands/region.tres"
 const TOWNS: Array[StringName] = [&"hamlet", &"village", &"town"]
-const WATERS: Array[int] = [EcsSettlementDef.Water.RIVER_TO_SEA, EcsSettlementDef.Water.LAKE, EcsSettlementDef.Water.COAST]
+const WATERS: Array[int] = [EcsLandDef.Water.RIVER_TO_SEA, EcsLandDef.Water.LAKE, EcsLandDef.Water.COAST]
 const SEEDS: int = 4
 const ZOOM: int = 8
 
@@ -27,14 +28,14 @@ func _ready() -> void:
 	print("[economy] %d/%d checks passed" % [_checks - _failures, _checks])
 	get_tree().quit(1 if _failures > 0 else 0)
 
-func _region(water: int, deposits: bool = true) -> EcsSettlementDef:
-	var def := (load(DEFS % &"region") as EcsSettlementDef).duplicate() as EcsSettlementDef
+func _region(water: int, deposits: bool = true) -> EcsLandDef:
+	var def := (load(REGION) as EcsLandDef).duplicate() as EcsLandDef
 	def.water = water
 	if not deposits:
 		def.deposits = []
 	return def
 
-func _pick(region: EcsSettlementDef, rng_seed: int, town: StringName) -> EcsSettlementSite:
+func _pick(region: EcsLandDef, rng_seed: int, town: StringName) -> EcsSettlementSite:
 	var key := [region.water, region.deposits.size(), rng_seed]
 	if not _plans.has(key):
 		var plan := EcsTerrainGenerator.plan(region, rng_seed, CATALOG, ENTITIES)
@@ -118,15 +119,15 @@ func _side_lines_build_their_small_set(towns: Array[EcsSettlementSite]) -> void:
 	_check("%d towns mine on the side, each with a mine, and a toolsmith who smelts where iron or copper is" % mining, mining > 0 and whole)
 
 func _the_same_seed_gives_the_same_town() -> void:
-	var a := _pick(_region(EcsSettlementDef.Water.RIVER_TO_SEA), 1, &"village")
-	var b := _pick(_region(EcsSettlementDef.Water.RIVER_TO_SEA), 1, &"village")
+	var a := _pick(_region(EcsLandDef.Water.RIVER_TO_SEA), 1, &"village")
+	var b := _pick(_region(EcsLandDef.Water.RIVER_TO_SEA), 1, &"village")
 	_check("the same seed gives the same town", a.economy == b.economy and a.survey == b.survey)
 
 ## With no deposits in the region, nothing mines.
 func _no_deposits_means_no_mining() -> void:
 	var miners := 0
 	for s in SEEDS:
-		var site := _pick(_region(EcsSettlementDef.Water.RIVER_TO_SEA, false), s, &"village")
+		var site := _pick(_region(EcsLandDef.Water.RIVER_TO_SEA, false), s, &"village")
 		if site.economy["character"] == &"mining" or (site.economy["sides"] as Array).has(&"mining"):
 			miners += 1
 	_check("a region with no deposits has no mining town (%d seeds)" % SEEDS, miners == 0)

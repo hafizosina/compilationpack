@@ -5,12 +5,12 @@ extends RefCounted
 ## land, off roads, the plaza and other plots; every door is on its footprint's front and has a road
 ## cell before it; every yard is free land owned once, beside its footprint.
 
-static func problems(site: EcsSettlementSite, region_plan: Dictionary, region_def: EcsSettlementDef,
+static func problems(site: EcsSettlementSite, region_plan: Dictionary, region_def: EcsLandDef,
 		def: EcsSettlementDef, rng_seed: int, scale: int, shares: Array) -> Array[String]:
 	if site == null:
 		return ["no site"]
 	var area := site.area
-	var kinds := EcsTerrainGenerator.refine_terrain(region_plan, region_def, area.size, def.shore_width, area.position,
+	var kinds := EcsTerrainGenerator.refine_terrain(region_plan, region_def, area.size, region_def.child.shore_width, area.position,
 		scale, rng_seed, 0, shares)["kinds"] as PackedByteArray
 	var taken: Dictionary = {}
 	for k in site.plots.size():

@@ -1,139 +1,13 @@
 [gd_resource type="Resource" script_class="EcsSettlementDef" format=3 uid="uid://bvvugwo1avtvg"]
 
-[ext_resource type="Script" uid="uid://duyn6yfnl1fci" path="res://12. Settlement Generator/defs/ecs_deposit_def.gd" id="1_7ilhv"]
-[ext_resource type="Script" uid="uid://bt0vopbka5s5v" path="res://12. Settlement Generator/defs/ecs_node_spawn_def.gd" id="1_b66dv"]
 [ext_resource type="Script" uid="uid://byp1jwtg3iiwk" path="res://12. Settlement Generator/defs/ecs_settlement_def.gd" id="2_7ilhv"]
-
-[sub_resource type="Resource" id="Resource_i87ue"]
-script = ExtResource("1_b66dv")
-blueprint = &"pine"
-zone = 3
-density = 0.1
-cluster = 3
-min_count = 20
-
-[sub_resource type="Resource" id="Resource_nyb8v"]
-script = ExtResource("1_b66dv")
-blueprint = &"oak"
-zone = 1
-density = 0.07
-min_count = 20
-
-[sub_resource type="Resource" id="Resource_via66"]
-script = ExtResource("1_b66dv")
-blueprint = &"birch"
-zone = 2
-min_count = 10
-
-[sub_resource type="Resource" id="Resource_ld3ar"]
-script = ExtResource("1_b66dv")
-blueprint = &"berry_bush"
-zone = 2
-density = 0.02
-cluster = 2
-min_count = 5
-
-[sub_resource type="Resource" id="Resource_y2ma5"]
-script = ExtResource("1_b66dv")
-blueprint = &"mushrooms"
-zone = 3
-density = 0.01
-min_count = 2
-
-[sub_resource type="Resource" id="Resource_82qow"]
-script = ExtResource("1_b66dv")
-blueprint = &"fruit_tree"
-density = 0.0015
-cluster = 3
-min_count = 2
-
-[sub_resource type="Resource" id="Resource_ugt3d"]
-script = ExtResource("1_b66dv")
-blueprint = &"herb_bush"
-density = 0.003
-min_count = 3
-
-[sub_resource type="Resource" id="Resource_qkjmh"]
-script = ExtResource("1_b66dv")
-blueprint = &"boulder"
-density = 0.001
-keep_clear = 1
-
-[sub_resource type="Resource" id="Resource_x36pn"]
-script = ExtResource("1_b66dv")
-blueprint = &"reeds"
-zone = 7
-density = 0.12
-cluster = 3
-min_count = 10
-
-[sub_resource type="Resource" id="Resource_5u25e"]
-script = ExtResource("1_b66dv")
-blueprint = &"clay_pit"
-zone = 6
-density = 0.012
-keep_clear = 1
-deposit = &"clay"
-
-[sub_resource type="Resource" id="Resource_qcc31"]
-script = ExtResource("1_b66dv")
-blueprint = &"outcrop"
-zone = 5
-density = 0.015
-keep_clear = 1
-min_count = 2
-
-[sub_resource type="Resource" id="Resource_co6k8"]
-script = ExtResource("1_b66dv")
-blueprint = &"iron_vein"
-zone = 5
-density = 0.006
-cluster = 5
-deposit = &"iron"
-min_count = 3
-
-[sub_resource type="Resource" id="Resource_si6xo"]
-script = ExtResource("1_b66dv")
-blueprint = &"coal_vein"
-zone = 4
-density = 0.006
-cluster = 5
-deposit = &"coal"
-min_count = 3
-
-[sub_resource type="Resource" id="Resource_d8at4"]
-script = ExtResource("1_b66dv")
-blueprint = &"copper_vein"
-zone = 5
-density = 0.004
-cluster = 4
-deposit = &"copper"
-
-[sub_resource type="Resource" id="Resource_hnly7"]
-script = ExtResource("1_b66dv")
-blueprint = &"gold_vein"
-zone = 5
-density = 0.002
-cluster = 2
-deposit = &"gold"
-min_count = 0
-
-[sub_resource type="Resource" id="Resource_wf7ve"]
-script = ExtResource("1_b66dv")
-blueprint = &"boulder"
-zone = 4
-min_count = 5
 
 [resource]
 script = ExtResource("2_7ilhv")
 key = &"town"
 display_name = "Town"
 size = Vector2i(384, 288)
-water = 2
-water_share = 0.15
-nodes = Array[ExtResource("1_b66dv")]([SubResource("Resource_i87ue"), SubResource("Resource_nyb8v"), SubResource("Resource_via66"), SubResource("Resource_ld3ar"), SubResource("Resource_y2ma5"), SubResource("Resource_82qow"), SubResource("Resource_ugt3d"), SubResource("Resource_qkjmh"), SubResource("Resource_x36pn"), SubResource("Resource_5u25e"), SubResource("Resource_qcc31"), SubResource("Resource_co6k8"), SubResource("Resource_si6xo"), SubResource("Resource_d8at4"), SubResource("Resource_hnly7"), SubResource("Resource_wf7ve")])
 plaza_size = Vector2i(16, 16)
-road_costs = null
 plots = Vector2i(70, 100)
 tier = 2
 catchment = 80.0

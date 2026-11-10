@@ -16,8 +16,8 @@ extends Node2D
 ## tinted over the region and fade with the roads.
 
 const DEFS := "res://12. Settlement Generator/defs/settlements/"
-## The def L1 chunks take their shore and nodes from.
-const L1_DEF: StringName = &"town"
+## The region's land; its child is the L1 land chunks are made of.
+const REGION := "res://12. Settlement Generator/defs/lands/region.tres"
 ## Town sizes: the def that gives the town its area and plaza.
 const TOWNS: Array[StringName] = [&"hamlet", &"village", &"town"]
 const CHUNK_SIZES: Array[int] = [32, 64, 128]
@@ -87,7 +87,7 @@ var _generation: int = 0
 ## L1: the layer every chunk's root goes under, the chunks, and their L1 def.
 var _l1: Node2D
 var _chunks: EcsTerrainChunks
-var _chunk_def: EcsSettlementDef
+var _chunk_def: EcsLandDef
 var _in_l1: bool = false
 var _l1_tween: Tween
 ## Worker tasks: id -> job {kind, generation, chunk, stage, work result}.
@@ -304,7 +304,7 @@ func _build_detail_panel() -> void:
 func _pick(at: Vector2) -> void:
 	var l1 := EcsTownGrid.cell_at(at * ZOOM)
 	var chunk: Dictionary = _chunks.chunks.get(_chunks.chunk_at(l1), {})
-	var region := _region["def"] as EcsSettlementDef
+	var region := _region["def"] as EcsLandDef
 	var size := float(EcsTownGrid.CELL)
 	if _in_l1 and chunk.get("drawn", false):
 		_picked = {"level": 1, "cell": l1}
@@ -325,7 +325,7 @@ func _describe() -> void:
 	if _picked.is_empty():
 		return
 	var cell: Vector2i = _picked["cell"]
-	var region := _region["def"] as EcsSettlementDef
+	var region := _region["def"] as EcsLandDef
 	var plan := _region["plan"] as Dictionary
 	var lines := PackedStringArray()
 	if _picked["level"] == 2:
@@ -470,10 +470,10 @@ func _generate() -> void:
 	for job: Dictionary in _jobs.values():
 		if job["kind"] == &"region":
 			return
-	var def := (load(DEFS + "region.tres") as EcsSettlementDef).duplicate() as EcsSettlementDef
+	var def := (load(REGION) as EcsLandDef).duplicate() as EcsLandDef
 	if _water.selected > 0 and _water.selected - 1 != def.water:
 		def.water = _water.selected - 1
-		def.water_share = 0.03 if def.water == EcsSettlementDef.Water.RIVER else (0.18 if def.water == EcsSettlementDef.Water.RIVER_TO_SEA else 0.12)
+		def.water_share = 0.03 if def.water == EcsLandDef.Water.RIVER else (0.18 if def.water == EcsLandDef.Water.RIVER_TO_SEA else 0.12)
 	var rng_seed := int(_seed.value)
 	var town := _town_def()
 	_generation += 1
@@ -498,7 +498,7 @@ func _move_site(cell: Vector2i) -> void:
 		if job["kind"] == &"site" or job["kind"] == &"region":
 			return
 	var plan: Dictionary = _region["plan"]
-	var region: EcsSettlementDef = _region["def"]
+	var region: EcsLandDef = _region["def"]
 	var shares: Array = _region["shares"]
 	var rng_seed: int = _region["seed"]
 	var town := _town_def()
@@ -611,7 +611,7 @@ func _start_chunk(at: Vector2i, stage: int) -> void:
 	match stage:
 		EcsTerrainChunks.Stage.TERRAIN:
 			var parent: Dictionary = _region["plan"]
-			var region: EcsSettlementDef = _region["def"]
+			var region: EcsLandDef = _region["def"]
 			var shares: Array = _region["shares"]
 			var rng_seed: int = _region["seed"]
 			var shore := _chunk_def.shore_width
@@ -770,7 +770,7 @@ func _show_region(level: Dictionary) -> void:
 	_show_layers()
 
 ## The region's deposits as an image, a cell a pixel, each tinted by its key.
-func _deposit_tint(def: EcsSettlementDef, deposits: Dictionary) -> Image:
+func _deposit_tint(def: EcsLandDef, deposits: Dictionary) -> Image:
 	var image := Image.create(def.size.x, def.size.y, false, Image.FORMAT_RGBA8)
 	var ids := deposits["ids"] as PackedByteArray
 	var keys := deposits["keys"] as Array
@@ -790,8 +790,8 @@ func _reset_l1() -> void:
 	_l1 = Node2D.new()
 	_l1.modulate.a = 1.0 if _in_l1 else 0.0
 	_world_root.add_child(_l1)
-	_chunks = EcsTerrainChunks.new((_region["def"] as EcsSettlementDef).size, ZOOM, CHUNK_SIZES[_chunk_size.selected])
-	_chunk_def = (load(DEFS + "%s.tres" % L1_DEF) as EcsSettlementDef).duplicate() as EcsSettlementDef
+	_chunks = EcsTerrainChunks.new((_region["def"] as EcsLandDef).size, ZOOM, CHUNK_SIZES[_chunk_size.selected])
+	_chunk_def = ((_region["def"] as EcsLandDef).child).duplicate() as EcsLandDef
 	_chunk_def.size = Vector2i(_chunks.size, _chunks.size)
 	_chunks.site = _site
 	_outline_site()
@@ -838,7 +838,7 @@ func _tint(size: Vector2i, zones: PackedByteArray) -> Image:
 ## Zooms and centres the camera so the whole region fills the view right of the panel.
 func _frame() -> void:
 	var left := _panel.get_rect().end.x + 12.0
-	var span := Vector2((_region["def"] as EcsSettlementDef).size * EcsTownGrid.CELL)
+	var span := Vector2((_region["def"] as EcsLandDef).size * EcsTownGrid.CELL)
 	var view := get_viewport_rect().size
 	var room := Vector2(view.x - left, view.y)
 	var zoom := minf(room.x / span.x, room.y / span.y)
@@ -846,7 +846,7 @@ func _frame() -> void:
 	_camera.position = span * 0.5 - Vector2(left * 0.5 / zoom, 0)
 
 func _report() -> void:
-	var region := _region["def"] as EcsSettlementDef
+	var region := _region["def"] as EcsLandDef
 	var problems := _region["problems"] as Array[String]
 	var tally := _chunks.tally()
 	var lines := PackedStringArray([

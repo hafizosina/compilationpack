@@ -15,7 +15,7 @@ const MIN_ROOM: float = 0.7
 const RIVER_BONUS: float = 0.2
 
 ## The town for `def` on the region, or null when no site works.
-static func pick(region_plan: Dictionary, region_def: EcsSettlementDef, def: EcsSettlementDef, rng_seed: int,
+static func pick(region_plan: Dictionary, region_def: EcsLandDef, def: EcsSettlementDef, rng_seed: int,
 		scale: int, catalog: EcsTownCatalog, shares: Array) -> EcsSettlementSite:
 	var maps := _maps(region_plan, region_def, def, scale)
 	var scored: Array = []
@@ -39,7 +39,7 @@ static func pick(region_plan: Dictionary, region_def: EcsSettlementDef, def: Ecs
 	return null
 
 ## The town for `def` at region cell `cell`: {site} or {refused: why}.
-static func place(region_plan: Dictionary, region_def: EcsSettlementDef, def: EcsSettlementDef, cell: Vector2i,
+static func place(region_plan: Dictionary, region_def: EcsLandDef, def: EcsSettlementDef, cell: Vector2i,
 		rng_seed: int, scale: int, catalog: EcsTownCatalog, shares: Array) -> Dictionary:
 	if not Rect2i(Vector2i.ZERO, region_def.size).has_point(cell):
 		return {"refused": "outside the region"}
@@ -58,7 +58,7 @@ static func area_cells(cell: Vector2i, def: EcsSettlementDef, scale: int) -> Rec
 
 ## What every site's score reads: distances to water and river, running sums of open land and of
 ## land, and which land areas reach the region's edge.
-static func _maps(plan: Dictionary, region_def: EcsSettlementDef, def: EcsSettlementDef, scale: int) -> Dictionary:
+static func _maps(plan: Dictionary, region_def: EcsLandDef, def: EcsSettlementDef, scale: int) -> Dictionary:
 	var w := region_def.size.x
 	var h := region_def.size.y
 	var kinds := plan["kinds"] as PackedByteArray
@@ -96,7 +96,7 @@ static func _maps(plan: Dictionary, region_def: EcsSettlementDef, def: EcsSettle
 	}
 
 ## A site at `cell`: {cell, water, open, room, river, total} or {refused: why}.
-static func _score(maps: Dictionary, cell: Vector2i, region_def: EcsSettlementDef, def: EcsSettlementDef) -> Dictionary:
+static func _score(maps: Dictionary, cell: Vector2i, region_def: EcsLandDef, def: EcsSettlementDef) -> Dictionary:
 	var w := region_def.size.x
 	var i := cell.y * w + cell.x
 	if (maps["water"] as PackedByteArray)[i] == 0:
@@ -126,12 +126,12 @@ static func _score(maps: Dictionary, cell: Vector2i, region_def: EcsSettlementDe
 ## Lays out the centre of a town scored by `parts`: its L1 area, refined from the region, and the
 ## plaza with the fewest forest and rock cells near the site, on no water, whose land reaches the
 ## area's edge. Null when there is none.
-static func _centre(parts: Dictionary, plan: Dictionary, region_def: EcsSettlementDef, def: EcsSettlementDef,
+static func _centre(parts: Dictionary, plan: Dictionary, region_def: EcsLandDef, def: EcsSettlementDef,
 		rng_seed: int, scale: int, catalog: EcsTownCatalog, shares: Array) -> EcsSettlementSite:
 	var cell: Vector2i = parts["cell"]
 	var mid := cell * scale + Vector2i(scale / 2, scale / 2)
 	var origin := (mid - def.size / 2).clamp(Vector2i.ZERO, region_def.size * scale - def.size)
-	var terrain := EcsTerrainGenerator.refine_terrain(plan, region_def, def.size, def.shore_width, origin, scale, rng_seed, 0, shares)
+	var terrain := EcsTerrainGenerator.refine_terrain(plan, region_def, def.size, region_def.child.shore_width, origin, scale, rng_seed, 0, shares)
 	var kinds := terrain["kinds"] as PackedByteArray
 	var w := def.size.x
 	var h := def.size.y

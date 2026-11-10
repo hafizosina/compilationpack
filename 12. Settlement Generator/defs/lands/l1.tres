@@ -1,0 +1,130 @@
+[gd_resource type="Resource" script_class="EcsLandDef" format=3]
+
+[ext_resource type="Script" uid="uid://bt0vopbka5s5v" path="res://12. Settlement Generator/defs/ecs_node_spawn_def.gd" id="1_h1p0h"]
+[ext_resource type="Script" path="res://12. Settlement Generator/defs/ecs_land_def.gd" id="2_land"]
+
+[sub_resource type="Resource" id="Resource_7x65i"]
+script = ExtResource("1_h1p0h")
+blueprint = &"pine"
+zone = 3
+density = 0.1
+cluster = 3
+min_count = 20
+
+[sub_resource type="Resource" id="Resource_k6c7k"]
+script = ExtResource("1_h1p0h")
+blueprint = &"oak"
+zone = 1
+density = 0.07
+min_count = 20
+
+[sub_resource type="Resource" id="Resource_hhrl2"]
+script = ExtResource("1_h1p0h")
+blueprint = &"birch"
+zone = 2
+min_count = 10
+
+[sub_resource type="Resource" id="Resource_m4lwf"]
+script = ExtResource("1_h1p0h")
+blueprint = &"berry_bush"
+zone = 2
+density = 0.02
+cluster = 2
+min_count = 5
+
+[sub_resource type="Resource" id="Resource_ii645"]
+script = ExtResource("1_h1p0h")
+blueprint = &"mushrooms"
+zone = 3
+density = 0.01
+min_count = 2
+
+[sub_resource type="Resource" id="Resource_2sukx"]
+script = ExtResource("1_h1p0h")
+blueprint = &"fruit_tree"
+density = 0.0015
+cluster = 3
+min_count = 2
+
+[sub_resource type="Resource" id="Resource_aum8y"]
+script = ExtResource("1_h1p0h")
+blueprint = &"herb_bush"
+density = 0.003
+min_count = 3
+
+[sub_resource type="Resource" id="Resource_7mpx1"]
+script = ExtResource("1_h1p0h")
+blueprint = &"boulder"
+density = 0.001
+keep_clear = 1
+
+[sub_resource type="Resource" id="Resource_jcbr6"]
+script = ExtResource("1_h1p0h")
+blueprint = &"reeds"
+zone = 7
+density = 0.12
+cluster = 3
+min_count = 10
+
+[sub_resource type="Resource" id="Resource_0upwq"]
+script = ExtResource("1_h1p0h")
+blueprint = &"clay_pit"
+zone = 6
+density = 0.012
+keep_clear = 1
+deposit = &"clay"
+
+[sub_resource type="Resource" id="Resource_0oejp"]
+script = ExtResource("1_h1p0h")
+blueprint = &"outcrop"
+zone = 5
+density = 0.015
+keep_clear = 1
+min_count = 2
+
+[sub_resource type="Resource" id="Resource_4fmgp"]
+script = ExtResource("1_h1p0h")
+blueprint = &"iron_vein"
+zone = 5
+density = 0.006
+cluster = 5
+deposit = &"iron"
+min_count = 3
+
+[sub_resource type="Resource" id="Resource_uv4af"]
+script = ExtResource("1_h1p0h")
+blueprint = &"coal_vein"
+zone = 4
+density = 0.006
+cluster = 5
+deposit = &"coal"
+min_count = 3
+
+[sub_resource type="Resource" id="Resource_m0do4"]
+script = ExtResource("1_h1p0h")
+blueprint = &"copper_vein"
+zone = 5
+density = 0.004
+cluster = 4
+deposit = &"copper"
+
+[sub_resource type="Resource" id="Resource_u8scr"]
+script = ExtResource("1_h1p0h")
+blueprint = &"gold_vein"
+zone = 5
+density = 0.002
+cluster = 2
+deposit = &"gold"
+min_count = 0
+
+[sub_resource type="Resource" id="Resource_ihtsm"]
+script = ExtResource("1_h1p0h")
+blueprint = &"boulder"
+zone = 4
+min_count = 5
+
+[resource]
+script = ExtResource("2_land")
+key = &"l1"
+display_name = "L1 ground"
+nodes = Array[ExtResource("1_h1p0h")]([SubResource("Resource_7x65i"), SubResource("Resource_k6c7k"), SubResource("Resource_hhrl2"), SubResource("Resource_m4lwf"), SubResource("Resource_ii645"), SubResource("Resource_2sukx"), SubResource("Resource_aum8y"), SubResource("Resource_7mpx1"), SubResource("Resource_jcbr6"), SubResource("Resource_0upwq"), SubResource("Resource_0oejp"), SubResource("Resource_4fmgp"), SubResource("Resource_uv4af"), SubResource("Resource_m0do4"), SubResource("Resource_u8scr"), SubResource("Resource_ihtsm")])

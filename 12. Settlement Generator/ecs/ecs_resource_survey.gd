@@ -15,7 +15,7 @@ const PRESENT: float = 0.1
 ## Deposit cells in reach that score 1.
 const DEPOSIT_FULL: float = 24.0
 
-static func of(site: EcsSettlementSite, region_plan: Dictionary, region_def: EcsSettlementDef,
+static func of(site: EcsSettlementSite, region_plan: Dictionary, region_def: EcsLandDef,
 		def: EcsSettlementDef) -> Dictionary[StringName, float]:
 	var w := region_def.size.x
 	var h := region_def.size.y

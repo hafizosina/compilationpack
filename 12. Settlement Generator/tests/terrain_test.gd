@@ -10,6 +10,14 @@ extends Node2D
 const CATALOG := preload("res://10. Town Generator/defs/town_catalog.tres")
 const ENTITIES := preload("res://10. Town Generator/defs/entity_catalog.tres")
 const DEFS := "res://12. Settlement Generator/defs/settlements/%s.tres"
+const REGION := "res://12. Settlement Generator/defs/lands/region.tres"
+const L1 := "res://12. Settlement Generator/defs/lands/l1.tres"
+## Maps planned on their own, by size: [size, usual water, its share].
+const MAPS := {
+	&"hamlet": [Vector2i(160, 120), EcsLandDef.Water.LAKE, 0.12],
+	&"village": [Vector2i(256, 192), EcsLandDef.Water.RIVER, 0.03],
+	&"town": [Vector2i(384, 288), EcsLandDef.Water.COAST, 0.15],
+}
 const SIZES: Array[StringName] = [&"hamlet", &"village", &"town"]
 ## Seeds checked per water kind, by size: fewer on the big maps, which take longer.
 const SEEDS: Array[int] = [20, 10, 5]
@@ -25,7 +33,7 @@ func _ready() -> void:
 	_every_size_and_water_is_sound()
 	_the_same_seed_gives_the_same_map()
 	for key in SIZES:
-		var def := load(DEFS % key) as EcsSettlementDef
+		var def := _def(key, -1)
 		_a_map_loads_through_the_build_system(key, def, EcsTerrainGenerator.plan(def, 1, CATALOG, ENTITIES))
 	_a_region_is_sound()
 	_a_zoomed_window_follows_its_region()
@@ -36,12 +44,17 @@ func _ready() -> void:
 	print("[terrain] %d/%d checks passed" % [_checks - _failures, _checks])
 	get_tree().quit(1 if _failures > 0 else 0)
 
-## `key`'s def with its water set to `water`; a river's share is its width's, so it gets one to match.
-func _def(key: StringName, water: int) -> EcsSettlementDef:
-	var def := (load(DEFS % key) as EcsSettlementDef).duplicate() as EcsSettlementDef
-	if water != def.water:
+## L1 land planned on its own at `key`'s size, with its usual water or `water` (-1 keeps it); a
+## river's share is its width's, so it gets one to match.
+func _def(key: StringName, water: int) -> EcsLandDef:
+	var def := (load(L1) as EcsLandDef).duplicate() as EcsLandDef
+	var usual: Array = MAPS[key]
+	def.size = usual[0]
+	def.water = usual[1]
+	def.water_share = usual[2]
+	if water >= 0 and water != def.water:
 		def.water = water
-		def.water_share = 0.03 if water == EcsSettlementDef.Water.RIVER else 0.12
+		def.water_share = 0.03 if water == EcsLandDef.Water.RIVER else 0.12
 	return def
 
 ## Every size with every kind of water, over several seeds, passes EcsTerrainCheck.
@@ -68,7 +81,7 @@ func _every_size_and_water_is_sound() -> void:
 
 ## A seed gives the same commands every time; the next seed gives other ones.
 func _the_same_seed_gives_the_same_map() -> void:
-	var def := _def(&"hamlet", EcsSettlementDef.Water.LAKE)
+	var def := _def(&"hamlet", EcsLandDef.Water.LAKE)
 	var a := _fingerprint(EcsTerrainGenerator.plan(def, 7, CATALOG, ENTITIES))
 	var b := _fingerprint(EcsTerrainGenerator.plan(def, 7, CATALOG, ENTITIES))
 	var c := _fingerprint(EcsTerrainGenerator.plan(def, 8, CATALOG, ENTITIES))
@@ -77,7 +90,7 @@ func _the_same_seed_gives_the_same_map() -> void:
 
 ## The L2 region, a river into the sea, over several seeds passes EcsTerrainCheck.
 func _a_region_is_sound() -> void:
-	var region := load(DEFS % &"region") as EcsSettlementDef
+	var region := load(REGION) as EcsLandDef
 	var bad: Array[String] = []
 	for s in 10:
 		var problems := EcsTerrainCheck.problems(region, EcsTerrainGenerator.plan(region, s, CATALOG, ENTITIES))
@@ -91,8 +104,8 @@ func _a_region_is_sound() -> void:
 ## whose neighbourhood is one kind is all that kind below, nearly every block's most common kind
 ## is its parent's, and each window is sound. One loads through the build system.
 func _a_zoomed_window_follows_its_region() -> void:
-	var region := load(DEFS % &"region") as EcsSettlementDef
-	var town := load(DEFS % &"town") as EcsSettlementDef
+	var region := load(REGION) as EcsLandDef
+	var town := _land(region, MAPS[&"town"][0])
 	var window := town.size / ZOOM
 	for s in 3:
 		var parent := EcsTerrainGenerator.plan(region, s, CATALOG, ENTITIES)
@@ -116,10 +129,9 @@ func _a_zoomed_window_follows_its_region() -> void:
 ## The region's deposits lie on their ground, and L1 veins and clay pits grow only inside a deposit
 ## of their kind: plenty round each iron deposit, none on rock outside every deposit.
 func _veins_grow_only_in_their_deposits() -> void:
-	var region := load(DEFS % &"region") as EcsSettlementDef
+	var region := load(REGION) as EcsLandDef
 	const AREA := 64
-	var town := (load(DEFS % &"town") as EcsSettlementDef).duplicate() as EcsSettlementDef
-	town.size = Vector2i(AREA, AREA)
+	var town := _land(region, Vector2i(AREA, AREA))
 	var by_node := {}
 	for spawn in town.nodes:
 		if spawn.deposit != &"":
@@ -163,13 +175,13 @@ func _veins_grow_only_in_their_deposits() -> void:
 
 ## Two windows side by side are cell for cell the halves of one window twice as wide.
 func _neighbouring_windows_meet_without_a_seam() -> void:
-	var region := load(DEFS % &"region") as EcsSettlementDef
-	var town := load(DEFS % &"town") as EcsSettlementDef
+	var region := load(REGION) as EcsLandDef
+	var town := _land(region, MAPS[&"town"][0])
 	var parent := EcsTerrainGenerator.plan(region, 4, CATALOG, ENTITIES)
 	var points := ((parent["rivers"] as Array)[0] as Dictionary)["points"] as PackedVector2Array
 	var window := town.size / ZOOM
 	var origin := (Vector2i(points[points.size() / 2]) - window).clamp(Vector2i.ZERO, region.size - window * Vector2i(2, 1))
-	var wide := town.duplicate() as EcsSettlementDef
+	var wide := town.duplicate() as EcsLandDef
 	wide.size = Vector2i(town.size.x * 2, town.size.y)
 	var left := EcsTerrainGenerator.refine(parent, region, town, origin, ZOOM, 4, CATALOG, ENTITIES)["kinds"] as PackedByteArray
 	var right := EcsTerrainGenerator.refine(parent, region, town, origin + Vector2i(window.x, 0), ZOOM, 4, CATALOG, ENTITIES)["kinds"] as PackedByteArray
@@ -185,7 +197,7 @@ func _neighbouring_windows_meet_without_a_seam() -> void:
 ## A chunk's terrain with a one-cell border: its border cells are its neighbour's own, cell for
 ## cell, and both are the same cells as one area twice as wide.
 func _chunk_borders_are_their_neighbours_cells() -> void:
-	var region := load(DEFS % &"region") as EcsSettlementDef
+	var region := load(REGION) as EcsLandDef
 	var parent := EcsTerrainGenerator.plan(region, 5, CATALOG, ENTITIES)
 	var shares := EcsTerrainGenerator.blend_shares(parent, region)
 	var points := ((parent["rivers"] as Array)[0] as Dictionary)["points"] as PackedVector2Array
@@ -237,7 +249,7 @@ func _chunks_are_made_in_order_and_kept() -> void:
 
 ## A map through module 10's real pipeline: every command accepted, the grid's terrain the
 ## plan's, every node born on its cell.
-func _a_map_loads_through_the_build_system(key: StringName, def: EcsSettlementDef, plan: Dictionary) -> void:
+func _a_map_loads_through_the_build_system(key: StringName, def: EcsLandDef, plan: Dictionary) -> void:
 	var world := EcsWorld.new()
 	var grid := EcsTownGrid.make(def.size.x, def.size.y, CATALOG.terrain_id(&"grass"))
 	world.add_singleton(grid)
@@ -297,6 +309,12 @@ func _sum(usec: Dictionary) -> int:
 	for stage in usec:
 		total += int(usec[stage])
 	return total
+
+## The region's L1 land, `size` cells: what a town's area or a chunk grows.
+func _land(region: EcsLandDef, size: Vector2i) -> EcsLandDef:
+	var land := region.child.duplicate() as EcsLandDef
+	land.size = size
+	return land
 
 func _check(what: String, passed: bool) -> void:
 	_checks += 1

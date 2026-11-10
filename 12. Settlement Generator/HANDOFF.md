@@ -32,7 +32,7 @@ plots don't yet follow the list (step 5b).
 
 | Path | Role |
 |---|---|
-| `defs/` | `EcsSettlementDef` (a kind of map; a town tier), `EcsNodeSpawnDef` (where a node grows), `EcsDepositDef` (an ore or clay deposit), `EcsSettlementRoleDef` and `EcsSettlementCharacterDef` in `EcsEconomyCatalog` (`economy.tres`); `settlements/`: `hamlet`, `village`, `town`, `region` |
+| `defs/` | `EcsLandDef` (what the land is: size, water, shares, shore, nodes, deposits, its L1 `child`), `EcsSettlementDef` (a tier of town: area, plaza, site, roads, economy, plots), `EcsNodeSpawnDef` (where a node grows), `EcsDepositDef` (an ore or clay deposit), `EcsSettlementRoleDef` and `EcsSettlementCharacterDef` in `EcsEconomyCatalog` (`economy.tres`); `lands/`: `region` (L2), `l1` (its child); `settlements/`: `hamlet`, `village`, `town` |
 | `ecs/` | `EcsTerrainGenerator` (pure: `plan`, `refine`, and the chunk stages `refine_terrain`, `refine_nodes`), `EcsTerrainCheck` (pure: `problems`, `follows`), `EcsTerrainChunks` (the L1 chunks kept in memory, what to make next, and the town's overlay), `EcsSitePicker` and `EcsSiteCheck` (pure: the town's site and centre), `EcsRoadPlanner` and `EcsRoadCheck` (pure: its roads), `EcsPlotPlanner` and `EcsPlotCheck` (pure: its plots and lanes), `EcsResourceSurvey` and `EcsTownEconomy` (pure: what is in reach, what the town lives on and builds), `EcsSettlementSite` (the record) |
 | `generator.tscn` | The viewer (`generator_view.gd`); its panel is built in code |
 | `tests/` | `terrain_test.tscn`, `site_test.tscn`, `road_test.tscn`, `plot_test.tscn`, `economy_test.tscn` |
@@ -52,7 +52,7 @@ check a hand-built town check a generated one. The same def and seed give the sa
 each stage (water, rock, forest, nodes, refine noise) has its own seed.
 
 **`EcsTerrainGenerator.plan(def, seed, …)`**, a whole map:
-1. **Water**, by `EcsSettlementDef.Water`:
+1. **Water**, by `EcsLandDef.Water`:
    - a **lake**: a noise blob round a random centre, cut at the share, largest piece kept;
    - a **river** edge to edge: a noise-bent centreline, painted as discs every half cell along
      straight segments between points;
@@ -100,12 +100,17 @@ kind, and at least 90% of blocks' most common kind is their parent cell's.
 
 **Defs:**
 
-| Def | Size | Water | Notes |
+| Land (`lands/`) | Size | Water | Notes |
 |---|---|---|---|
-| `hamlet` | 160×120 | lake | |
-| `village` | 256×192 | river | |
-| `town` | 384×288 | coast | also the size, shore and nodes of every L1 window |
-| `region` | 256×192 | river to the sea | the L2 map. 8 m a cell, so 2 km × 1.5 km; an L1 window is 48×36 of its cells. No nodes, since they are L1 things |
+| `region` | 256×192 | river to the sea | the L2 map. 8 m a cell, so 2 km × 1.5 km; an L1 window is 48×36 of its cells. No nodes, since they are L1 things; its deposits; `child` is `l1` |
+| `l1` | (set by the caller) | — | the shore width and nodes of every L1 chunk and town area |
+
+`terrain_test` also plans L1 land on its own at the three town sizes (160×120 lake, 256×192 river,
+384×288 coast) from `l1`.
+
+**Split (2026-11-10):** these were all `EcsSettlementDef`s, one class serving as the L2 recipe, the
+L1 recipe and the town tier. Land is now `EcsLandDef` and a settlement has no water or nodes; a
+town's L1 shore width is `region.child.shore_width`, the same land the chunks draw.
 
 The cell sizes follow the September L3/L2/L1 notes: L1 is 1 m a cell (a module 10 cell holds a
 chair), L2 8 m. L3 isn't built. **The world is finite** (decided 2026-11-08), so a future L3 can

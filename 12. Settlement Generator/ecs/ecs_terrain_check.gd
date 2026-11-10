@@ -17,7 +17,7 @@ const FOLLOW_SHARE: float = 0.9
 
 ## `refined`: a child of a refine, whose water, shares and counts are its parent's; only its
 ## nodes' zones and the land staying open are checked (`follows` checks the rest).
-static func problems(def: EcsSettlementDef, plan: Dictionary, refined: bool = false) -> Array[String]:
+static func problems(def: EcsLandDef, plan: Dictionary, refined: bool = false) -> Array[String]:
 	var out: Array[String] = []
 	if refined:
 		out.append_array(_out_of_zone(def, plan))
@@ -35,17 +35,17 @@ static func problems(def: EcsSettlementDef, plan: Dictionary, refined: bool = fa
 		water[i] = 1 if kinds[i] == EcsTerrainGenerator.WATER else 0
 	var bodies := EcsTerrainGenerator.areas(water, w, h)
 	var body_count := (bodies[1] as PackedInt32Array).size() - 1
-	if def.water == EcsSettlementDef.Water.RIVER:
+	if def.water == EcsLandDef.Water.RIVER:
 		if not _spans(bodies[0], w, h):
 			out.append("the river doesn't reach both edges")
 	elif body_count != 1:
 		out.append("water is %d bodies, not one" % body_count)
-	if def.water == EcsSettlementDef.Water.RIVER_TO_SEA and not _touches(kinds, w, h, -(plan["coast_side"] as Vector2i)):
+	if def.water == EcsLandDef.Water.RIVER_TO_SEA and not _touches(kinds, w, h, -(plan["coast_side"] as Vector2i)):
 		out.append("the river doesn't reach the edge across from the sea")
 	var shares := {"water": [EcsTerrainGenerator.WATER, def.water_share], "rock": [EcsTerrainGenerator.ROCK, def.rock_share],
 		"forest": [EcsTerrainGenerator.FOREST, def.forest_share]}
 	for name: String in shares:
-		if name == "water" and def.water != EcsSettlementDef.Water.LAKE and def.water != EcsSettlementDef.Water.COAST:
+		if name == "water" and def.water != EcsLandDef.Water.LAKE and def.water != EcsLandDef.Water.COAST:
 			continue
 		var want: float = shares[name][1]
 		var got := float(counts[shares[name][0]]) / (w * h)
@@ -65,7 +65,7 @@ static func problems(def: EcsSettlementDef, plan: Dictionary, refined: bool = fa
 ## What is wrong with `child`, refined `scale` times from `parent`'s cells at `origin`: every
 ## parent cell whose whole neighbourhood is one kind has a child block all of that kind, and
 ## nearly every block's most common kind is its parent cell's.
-static func follows(parent: Dictionary, parent_def: EcsSettlementDef, child: Dictionary, def: EcsSettlementDef,
+static func follows(parent: Dictionary, parent_def: EcsLandDef, child: Dictionary, def: EcsLandDef,
 		origin: Vector2i, scale: int) -> Array[String]:
 	var pw := parent_def.size.x
 	var ph := parent_def.size.y
@@ -127,7 +127,7 @@ static func _spans(label: PackedInt32Array, w: int, h: int) -> bool:
 			return true
 	return false
 
-static func _out_of_zone(def: EcsSettlementDef, plan: Dictionary) -> Array[String]:
+static func _out_of_zone(def: EcsLandDef, plan: Dictionary) -> Array[String]:
 	var out: Array[String] = []
 	var zones := plan["zones"] as PackedByteArray
 	var zone_of: Dictionary = {}
@@ -141,7 +141,7 @@ static func _out_of_zone(def: EcsSettlementDef, plan: Dictionary) -> Array[Strin
 	return out
 
 ## Each land area (cut off by water) keeps OPEN_SHARE of its walkable cells in one piece.
-static func _walled_off(def: EcsSettlementDef, plan: Dictionary) -> Array[String]:
+static func _walled_off(def: EcsLandDef, plan: Dictionary) -> Array[String]:
 	var w := def.size.x
 	var h := def.size.y
 	var kinds := plan["kinds"] as PackedByteArray

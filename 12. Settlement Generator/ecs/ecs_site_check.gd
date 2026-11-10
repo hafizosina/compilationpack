@@ -7,7 +7,7 @@ extends RefCounted
 ## ground.
 
 ## `nodes`: planned nodes in whole-region L1 cells, [{cell, size}], to check against the clearing.
-static func problems(site: EcsSettlementSite, region_plan: Dictionary, region_def: EcsSettlementDef,
+static func problems(site: EcsSettlementSite, region_plan: Dictionary, region_def: EcsLandDef,
 		def: EcsSettlementDef, rng_seed: int, scale: int, shares: Array, nodes: Array = []) -> Array[String]:
 	var out: Array[String] = []
 	if site == null:
@@ -20,7 +20,7 @@ static func problems(site: EcsSettlementSite, region_plan: Dictionary, region_de
 		out.append("the plaza leaves the town's area")
 	if not site.plaza.has_point(site.well):
 		out.append("the well isn't in the plaza")
-	var terrain := EcsTerrainGenerator.refine_terrain(region_plan, region_def, site.area.size, def.shore_width,
+	var terrain := EcsTerrainGenerator.refine_terrain(region_plan, region_def, site.area.size, region_def.child.shore_width,
 		site.area.position, scale, rng_seed, 0, shares)
 	var kinds := terrain["kinds"] as PackedByteArray
 	var w := site.area.size.x
