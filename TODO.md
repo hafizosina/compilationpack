@@ -55,6 +55,15 @@ Plans noted for later across modules 9 to 12.
 - [ ] Chunks: a cap on chunks kept in memory; objects that can cross a chunk edge.
 - [ ] Faster L1 chunks if they are streamed while playing (the blend and the command lists).
 - [ ] The coast's sand is thin on big maps.
+- [ ] Texture LOD for a better zoom experience.
+- [ ] Later, when the levels merge: lock zoom to L3, L2 and L1, with a transition animation
+      between levels.
+- [ ] Final polish, later: a dynamic building generator so each place is unique, with each culture
+      building in its own style.
+  - Shapes: square, circle, stadium; extended or rounded corners; a jagged style.
+  - Different room requirements per culture.
+  - Materials from where they live.
+  - Steppe culture: tents with leather walls.
 
 ## Module 11 — EcsControl
 - [ ] Animals.
