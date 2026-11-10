@@ -12,10 +12,13 @@ extends RefCounted
 const ENTITIES := preload("res://10. Town Generator/defs/entity_catalog.tres")
 
 ## Builds every walled plot of `site`; the roles whose building type the catalog lacks.
-static func build(site: EcsSettlementSite, def: EcsSettlementDef, catalog: EcsTownCatalog, rng_seed: int) -> Array[StringName]:
+static func build(site: EcsSettlementSite, def: EcsSettlementDef, catalog: EcsTownCatalog, rng_seed: int,
+		progress: EcsProgress = null) -> Array[StringName]:
 	var lacking: Array[StringName] = []
 	for k in site.plots.size():
 		var plot := site.plots[k]
+		EcsProgress.say(progress, "Building: %s, %d of %d" % [EcsTownEconomy.CATALOG.role(plot["role"]).display_name, k + 1,
+			site.plots.size()], 0.87 + 0.1 * k / site.plots.size())
 		if plot.has("field"):
 			_sow(site, plot["field"], def, catalog)
 		var role := EcsTownEconomy.CATALOG.role(plot["role"])

@@ -15,9 +15,10 @@ const MIN_ROOM: float = 0.7
 ## Added to a site whose water is a river within reach: mills and docks want one.
 const RIVER_BONUS: float = 0.2
 
-## The town for `def` on the region, or null when no site works.
+## The town for `def` on the region, or null when no site works. Its stages are told to `progress`.
 static func pick(region_plan: Dictionary, region_def: EcsLandDef, def: EcsSettlementDef, rng_seed: int,
-		scale: int, catalog: EcsTownCatalog, shares: Array) -> EcsSettlementSite:
+		scale: int, catalog: EcsTownCatalog, shares: Array, progress: EcsProgress = null) -> EcsSettlementSite:
+	EcsProgress.say(progress, "Scoring every region cell as a site", 0.0)
 	var maps := _maps(region_plan, region_def, def, scale)
 	var scored: Array = []
 	for i in region_def.size.x * region_def.size.y:
@@ -34,20 +35,21 @@ static func pick(region_plan: Dictionary, region_def: EcsLandDef, def: EcsSettle
 			return da < db
 		return (a["cell"] as Vector2i) < (b["cell"] as Vector2i))
 	for k in mini(scored.size(), TRIES):
-		var site := _centre(scored[k], region_plan, region_def, def, rng_seed, scale, catalog, shares)
+		var site := _centre(scored[k], region_plan, region_def, def, rng_seed, scale, catalog, shares, progress,
+			"" if k == 0 else " (site %d)" % (k + 1))
 		if site != null:
 			return site
 	return null
 
 ## The town for `def` at region cell `cell`: {site} or {refused: why}.
 static func place(region_plan: Dictionary, region_def: EcsLandDef, def: EcsSettlementDef, cell: Vector2i,
-		rng_seed: int, scale: int, catalog: EcsTownCatalog, shares: Array) -> Dictionary:
+		rng_seed: int, scale: int, catalog: EcsTownCatalog, shares: Array, progress: EcsProgress = null) -> Dictionary:
 	if not Rect2i(Vector2i.ZERO, region_def.size).has_point(cell):
 		return {"refused": "outside the region"}
 	var parts := _score(_maps(region_plan, region_def, def, scale), cell, region_def, def)
 	if parts.has("refused"):
 		return parts
-	var site := _centre(parts, region_plan, region_def, def, rng_seed, scale, catalog, shares)
+	var site := _centre(parts, region_plan, region_def, def, rng_seed, scale, catalog, shares, progress)
 	if site == null:
 		return {"refused": "no room for the plaza there"}
 	return {"site": site}
@@ -128,7 +130,9 @@ static func _score(maps: Dictionary, cell: Vector2i, region_def: EcsLandDef, def
 ## plaza with the fewest forest and rock cells near the site, on no water, whose land reaches the
 ## area's edge. Null when there is none.
 static func _centre(parts: Dictionary, plan: Dictionary, region_def: EcsLandDef, def: EcsSettlementDef,
-		rng_seed: int, scale: int, catalog: EcsTownCatalog, shares: Array) -> EcsSettlementSite:
+		rng_seed: int, scale: int, catalog: EcsTownCatalog, shares: Array, progress: EcsProgress = null,
+		attempt: String = "") -> EcsSettlementSite:
+	EcsProgress.say(progress, "Refining the town's ground and finding its plaza" + attempt, 0.12)
 	var cell: Vector2i = parts["cell"]
 	var mid := cell * scale + Vector2i(scale / 2, scale / 2)
 	var origin := (mid - def.size / 2).clamp(Vector2i.ZERO, region_def.size * scale - def.size)
@@ -182,12 +186,16 @@ static func _centre(parts: Dictionary, plan: Dictionary, region_def: EcsLandDef,
 	site.commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, site.well, def.well, 0))
 	site.cleared.append(site.plaza.grow(def.clear_margin))
 	site.score = parts
+	EcsProgress.say(progress, "Routing main roads to the region's edge" + attempt, 0.2)
 	if not EcsRoadPlanner.plan(site, plan, region_def, def, kinds, rng_seed, scale, shares):
 		return null
+	EcsProgress.say(progress, "Surveying what is in reach and what the town lives on", 0.55)
 	site.survey = EcsResourceSurvey.of(site, plan, region_def, def)
 	site.economy = EcsTownEconomy.plan(site.survey, def, rng_seed, cell)
-	EcsPlotPlanner.plan(site, def, terrain, {"plan": plan, "region_def": region_def, "scale": scale, "shares": shares, "seed": rng_seed})
-	site.economy["unbuilt"] = EcsTownBuilder.build(site, def, catalog, rng_seed)
+	EcsPlotPlanner.plan(site, def, terrain, {"plan": plan, "region_def": region_def, "scale": scale, "shares": shares,
+		"seed": rng_seed, "progress": progress})
+	site.economy["unbuilt"] = EcsTownBuilder.build(site, def, catalog, rng_seed, progress)
+	EcsProgress.say(progress, "Laying road and bridge floors", 0.98)
 	EcsRoadPlanner.lay(site, def, catalog)
 	return site
 

@@ -739,3 +739,26 @@ A farmhouse has a **field**: dirt ground with crop rows, beside it.
   with its fields and crops is accepted by module 10 (4,562 commands). Fewer buildings came up
   short than without fields: village 2, town 6.
 
+---
+
+## 9. Viewer: progress bar (2026-11-10)
+
+A bar and a line under **Generate** say what is being made and how far along it is.
+- **`EcsProgress`** (`ecs/`) is a small mutex-guarded record: `report(stage, part)` from the
+  worker, `read()` from the viewer each frame, and `within(from, to)` maps the reports that follow
+  onto a share of the bar.
+- **Optional `progress` parameters:** `EcsTerrainGenerator.plan`, `EcsSitePicker.pick` and
+  `place`, `EcsPlotPlanner.plan` (through `ctx`) and `EcsTownBuilder.build` take one and report
+  through `EcsProgress.say`, which does nothing without one. So the tests are unchanged.
+- **Stages:**
+  - the region: water, shore, rocky ground, forest, deposits, nodes and commands;
+  - the region's tiles, then the terrain check;
+  - the town: scoring sites, refining its ground and plaza (and which site is being tried), main
+    roads, the survey, each plot by name and count, lanes (per outlying work), yards, each building
+    by name and count, road floors.
+- **Shares** follow measured time: the region plan 5%, its tiles 37%, the town 58%. Within the
+  town, its main roads and site scoring are the long parts.
+- **Moving the town** (right-click or Town size) shows the town's stages over the whole bar.
+- **At L1, with no job running,** it counts the chunks in view that are made ("Streaming L1 ground
+  into view: n of m chunks made") and hides when they all are.
+

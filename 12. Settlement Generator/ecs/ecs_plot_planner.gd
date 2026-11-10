@@ -61,7 +61,11 @@ static func plan(site: EcsSettlementSite, def: EcsSettlementDef, terrain: Dictio
 	var windows: Array[Grid] = []
 	var short: Dictionary = {}
 	var grows := 0
-	for role in _entries(site):
+	var progress: EcsProgress = ctx.get("progress")
+	var entries := _entries(site)
+	for n in entries.size():
+		var role := entries[n]
+		EcsProgress.say(progress, "Placing plots: %s, %d of %d" % [role.display_name, n + 1, entries.size()], 0.56 + 0.14 * n / entries.size())
 		var placed := _place_in(site, def, core, role, rng)
 		if not placed and _resource_of(role, site.survey) != &"":
 			placed = _go_out(site, def, role, windows, core, ctx, rng)
@@ -78,7 +82,9 @@ static func plan(site: EcsSettlementSite, def: EcsSettlementDef, terrain: Dictio
 	var grids: Array[Grid] = [core]
 	grids.append_array(windows)
 	var dropped: Dictionary = {}
-	for grid in grids:
+	for g in grids.size():
+		EcsProgress.say(progress, "Routing lanes from every door%s" % ("" if g == 0 else ", outlying work %d" % g), 0.7 + 0.15 * g / grids.size())
+		var grid := grids[g]
 		grid.reach = _reach(grid.use, grid.rect.size)
 		_lanes(site, def, grid, ctx["seed"], dropped)
 	for k in dropped:
@@ -90,6 +96,7 @@ static func plan(site: EcsSettlementSite, def: EcsSettlementDef, terrain: Dictio
 		if not dropped.has(k):
 			kept.append(site.plots[k])
 	site.plots = kept
+	EcsProgress.say(progress, "Growing yards", 0.86)
 	for grid in grids:
 		_yards(site, def, grid)
 	for k in site.plots.size():

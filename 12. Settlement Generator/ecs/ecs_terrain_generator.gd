@@ -40,8 +40,10 @@ const MARGIN: int = 5
 ## The map for `def` and `rng_seed`: {commands, kinds, zones (bit per EcsNodeSpawnDef.Zone),
 ## nodes: [{blueprint, cell, size}], counts: {blueprint: n}, rivers: [{points, radii}],
 ## river (1 per cell a river made water), coast_side, deposits: {ids (per cell, 0 none, else index
-## + 1 into keys), keys, blobs: [{key, cell, radius}]}, usec: {stage: µs}}.
-static func plan(def: EcsLandDef, rng_seed: int, catalog: EcsTownCatalog, entities: EcsEntityCatalog) -> Dictionary:
+## + 1 into keys), keys, blobs: [{key, cell, radius}]}, usec: {stage: µs}}. Its stages are told to
+## `progress` when given.
+static func plan(def: EcsLandDef, rng_seed: int, catalog: EcsTownCatalog, entities: EcsEntityCatalog,
+		progress: EcsProgress = null) -> Dictionary:
 	var w := def.size.x
 	var h := def.size.y
 	var kinds := PackedByteArray()
@@ -53,6 +55,7 @@ static func plan(def: EcsLandDef, rng_seed: int, catalog: EcsTownCatalog, entiti
 	var usec: Dictionary = {}
 	var started := Time.get_ticks_usec()
 	var rng := _rng(rng_seed, 1)
+	EcsProgress.say(progress, "Laying the water", 0.0)
 	match def.water:
 		EcsLandDef.Water.LAKE:
 			_lake(def, kinds, rng)
@@ -64,21 +67,26 @@ static func plan(def: EcsLandDef, rng_seed: int, catalog: EcsTownCatalog, entiti
 			coast_side = _coast(def, kinds, rng)
 			rivers.append(_river(def, kinds, river, rng, coast_side.x != 0))
 	usec["water"] = _lap(started)
+	EcsProgress.say(progress, "Sand along the shore", 0.3)
 	started = Time.get_ticks_usec()
 	var from_water := distance_from(kinds, w, h, WATER, false)
 	for i in w * h:
 		if kinds[i] == GRASS and from_water[i] <= def.shore_width:
 			kinds[i] = SAND
 	usec["shore"] = _lap(started)
+	EcsProgress.say(progress, "Rocky ground", 0.4)
 	started = Time.get_ticks_usec()
 	_rock(def, kinds, from_water, _rng(rng_seed, 2))
 	usec["rock"] = _lap(started)
+	EcsProgress.say(progress, "Forest", 0.55)
 	started = Time.get_ticks_usec()
 	_forest(def, kinds, _rng(rng_seed, 3))
 	usec["forest"] = _lap(started)
+	EcsProgress.say(progress, "Ore and clay deposits", 0.7)
 	started = Time.get_ticks_usec()
 	var deposits := _deposits(def, kinds, _rng(rng_seed, 8))
 	usec["deposits"] = _lap(started)
+	EcsProgress.say(progress, "Resource nodes and build commands", 0.8)
 	var out := _finish(def, kinds, PackedByteArray(), _rng(rng_seed, 4), catalog, entities, usec, deposits)
 	out["deposits"] = deposits
 	out["rivers"] = rivers

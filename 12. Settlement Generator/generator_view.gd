@@ -1,6 +1,7 @@
 extends Node2D
 
-## The terrain generator's viewer: an L2 region and, zoomed in, its L1 ground in chunks.
+## The terrain generator's viewer: an L2 region and, zoomed in, its L1 ground in chunks. A bar and
+## a line under Generate say what is being made and how far along it is.
 ## Generate plans the region (8 m a cell). The wheel zooms toward the mouse; past a zoom where L1
 ## cells are big enough to see (1 m a cell, drawn at 1/8 over the region), the chunks in view and a
 ## ring round them are made, each in turn: terrain planned, terrain drawn, objects planned, objects
@@ -67,6 +68,10 @@ var _town_size: OptionButton
 var _water: OptionButton
 var _seed: SpinBox
 var _generate_button: Button
+## What the region or town job is doing, shown as a bar and a line under Generate.
+var _progress := EcsProgress.new()
+var _progress_bar: ProgressBar
+var _progress_label: Label
 var _info: Label
 var _detail_panel: PanelContainer
 var _detail: Label
@@ -138,6 +143,7 @@ func _process(_delta: float) -> void:
 			var job: Dictionary = _jobs[task]
 			_jobs.erase(task)
 			_arrived(job)
+	_show_progress()
 	if _region.is_empty():
 		return
 	var zoom := _camera.zoom.x
@@ -256,6 +262,14 @@ func _build_panel() -> void:
 	_generate_button.text = "Generate"
 	_generate_button.pressed.connect(_generate)
 	box.add_child(_generate_button)
+	_progress_label = Label.new()
+	_progress_label.theme_type_variation = &"DockLabel"
+	_progress_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_progress_label.visible = false
+	box.add_child(_progress_label)
+	_progress_bar = ProgressBar.new()
+	_progress_bar.visible = false
+	box.add_child(_progress_bar)
 	var nodes := CheckBox.new()
 	nodes.text = "Nodes"
 	nodes.button_pressed = true
@@ -520,13 +534,24 @@ func _generate() -> void:
 	var town := _town_def()
 	_generation += 1
 	_generate_button.disabled = true
+	var progress := EcsProgress.new()
+	_progress = progress
 	_start({"kind": &"region"}, func() -> Dictionary:
-		var plan := EcsTerrainGenerator.plan(def, rng_seed, catalog, entity_catalog)
+		# Shares of the bar by measured time: the plan ~0.2 s, the region's tiles ~2 s, the town ~3.5 s.
+		progress.within(0.0, 0.05)
+		var plan := EcsTerrainGenerator.plan(def, rng_seed, catalog, entity_catalog, progress)
+		progress.within(0.05, 0.42)
+		progress.report("Building the region's tiles")
 		var level := _make_level(def.size, plan["commands"], Vector2.ZERO, 1.0, false)
+		progress.report("Checking the terrain", 0.95)
 		var shares := EcsTerrainGenerator.blend_shares(plan, def)
-		level.merge({"def": def, "plan": plan, "seed": rng_seed, "problems": EcsTerrainCheck.problems(def, plan),
-			"shares": shares, "tint": _tint(def.size, plan["zones"]),
-			"site": EcsSitePicker.pick(plan, def, town, rng_seed, ZOOM, catalog, shares)})
+		var problems := EcsTerrainCheck.problems(def, plan)
+		var tint := _tint(def.size, plan["zones"])
+		progress.within(0.42, 1.0)
+		var site := EcsSitePicker.pick(plan, def, town, rng_seed, ZOOM, catalog, shares, progress)
+		progress.within(0.0, 1.0)
+		progress.report("Showing the region", 1.0)
+		level.merge({"def": def, "plan": plan, "seed": rng_seed, "problems": problems, "shares": shares, "tint": tint, "site": site})
 		return level)
 
 func _town_def() -> EcsSettlementDef:
@@ -545,11 +570,13 @@ func _move_site(cell: Vector2i) -> void:
 	var rng_seed: int = _region["seed"]
 	var town := _town_def()
 	_site_note = "Placing the town…"
+	var progress := EcsProgress.new()
+	_progress = progress
 	_start({"kind": &"site"}, func() -> Dictionary:
 		if cell == Vector2i(-1, -1):
-			var site := EcsSitePicker.pick(plan, region, town, rng_seed, ZOOM, catalog, shares)
+			var site := EcsSitePicker.pick(plan, region, town, rng_seed, ZOOM, catalog, shares, progress)
 			return {"site": site} if site != null else {"refused": "no site on this region"}
-		return EcsSitePicker.place(plan, region, town, cell, rng_seed, ZOOM, catalog, shares))
+		return EcsSitePicker.place(plan, region, town, cell, rng_seed, ZOOM, catalog, shares, progress))
 
 ## Puts `site` over the chunks: those under the old or new town, its outlying windows and its roads
 ## lose their objects and drawing (their terrain stays) and are made again with it; any of their
@@ -846,6 +873,31 @@ func _deposit_tint(def: EcsLandDef, deposits: Dictionary) -> Image:
 			var tint: Color = DEPOSIT_TINTS.get(keys[ids[i] - 1], Color.MAGENTA)
 			image.set_pixel(i % def.size.x, i / def.size.x, Color(tint, 0.7))
 	return image
+
+## The bar and line under Generate: the region or town job's stage while one runs, else, at L1,
+## how many chunks in view are made; hidden when nothing is under way.
+func _show_progress() -> void:
+	var stage := ""
+	var done := 0.0
+	var working := false
+	for job: Dictionary in _jobs.values():
+		working = working or job["kind"] == &"region" or job["kind"] == &"site"
+	if working:
+		var read := _progress.read()
+		stage = read[0] if read[0] != "" else "Starting"
+		done = read[1]
+	elif _in_l1 and _chunks != null:
+		var visible := _chunks.around(_view_cells(), 0)
+		var made := 0
+		for at in visible:
+			made += 1 if (_chunks.chunks.get(at, {}) as Dictionary).get("objects_drawn", false) else 0
+		if made < visible.size():
+			stage = "Streaming L1 ground into view: %d of %d chunks made" % [made, visible.size()]
+			done = float(made) / visible.size()
+	_progress_label.visible = stage != ""
+	_progress_bar.visible = stage != ""
+	_progress_label.text = stage
+	_progress_bar.value = done * 100.0
 
 ## Drops every chunk and starts L1 afresh, for a new region or chunk size.
 func _reset_l1() -> void:
