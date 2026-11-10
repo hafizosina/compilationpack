@@ -25,6 +25,11 @@ extends Resource
 @export var optional_chance: Array[float] = [0.0, 0.5, 1.0]
 ## Chance of one extra inner door, making a loop.
 @export var loop_chance: float = 0.3
+## Shape -> weight for a building of more than one room: plain, l, t (a wing out of the back) or
+## u (a notch in the back). Empty, or one room, is plain.
+@export var shapes: Dictionary[StringName, float] = {}
+## A shape's cut, as a share of the side it cuts: smallest and largest.
+@export var notch: Vector2 = Vector2(0.3, 0.5)
 
 ## The entry for `wealth` in a by-wealth list.
 static func by_wealth(list: Array, wealth: int) -> Variant:

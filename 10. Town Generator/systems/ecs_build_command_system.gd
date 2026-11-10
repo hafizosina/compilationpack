@@ -247,7 +247,7 @@ func _kill(world: EcsWorld, grid: EcsTownGridSingleton, id: int, owner: int) -> 
 func _create_building(world: EcsWorld, grid: EcsTownGridSingleton, command: EcsBuildCommand) -> StringName:
 	var rect := command.rect
 	var token := _reserve(world, grid, &"building", (Vector2(rect.position) + Vector2(rect.size) * 0.5) * EcsTownGrid.CELL,
-		{"building": {"footprint": rect, "closed": command.value == 1}})
+		{"building": {"footprint": rect, "closed": command.value == 1, "cut": command.cut}})
 	if token == EcsTownGridSingleton.NO_ID:
 		return &"no_lifecycle"
 	_fill(grid, rect, EcsTownGridSingleton.NO_ID, token)

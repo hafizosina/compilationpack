@@ -689,6 +689,60 @@ Module 12's generator places them; they live here so the builder can too (decide
 
 ---
 
+## 13b. Shaped buildings, cut sides and settlement content (2026-11-10, for module 12)
+
+Module 12's step 6 builds a town's buildings with this generator. It needed:
+
+**Shapes.** A building of more than one room may take a natural shape. `EcsBuildingTypeDef`
+gained:
+- `shapes`: shape → weight. The shapes are plain, `l` (a back corner cut), `t` (both back
+  corners cut, leaving a wing) and `u` (a notch in the middle of the back).
+- `notch`: the cut, as a share of the side.
+
+The front, the facing side, stays whole. `EcsBuildingGenerator._shape` makes the shape as walled
+**parts**. Two parts that touch share a wall line, which becomes an inner wall. Rooms split inside
+each part, and a door between parts comes from the same spanning tree.
+
+**No change to room detection or roofs was needed.** A cut corner is open ground inside the
+footprint: a flood from it reaches the footprint's edge, so it is "open, not a room", and roofs
+cover only rooms and their walls. A cut that would leave a part smaller than a room, or more parts
+than rooms, falls back to plain. `plan` also returns `shape` and `cells`, the shape's cells.
+
+**Preferred entrance.** `generate` and `plan` take `door`: the entrance is that cell when it can
+be one, else the valid one nearest it.
+
+**Cut sides.** `EcsBuildCommand.cut` and `EcsBuildingComponent.cut` (`CUT_LEFT`, `CUT_UP`,
+`CUT_RIGHT`, `CUT_DOWN`) mark the sides where a building goes on past its grid, as module 12's
+chunks each hold a clipped part of one. Room detection treats a step across a cut side as a wall,
+not a leak. Unmarked, a room cut by the grid's edge leaks and loses its room and roof.
+
+**Content:**
+- **9 building types:** manor, tavern, chapel, hall, farmhouse, barn, storehouse, mill, hut. House
+  and workshop gained shapes too.
+- **14 room types:** hall, study, common room, forge, carpentry, lumber store, bakehouse, nave,
+  stalls, hay store, mill room, grain store, fishery, miner's room. Each is typed by a key piece
+  no other room uses.
+- **24 furniture blueprints:** forge, quench barrel, tool rack, oven, kneading table, flour sack,
+  millstone, grain sack, bar counter, desk, bookshelf, altar, high seat, trough, hay pile, net
+  rack, fish rack, pick rack, pew, ore cart, lumber pile, sawhorse, crate, sack.
+- Their art is the new `furniture.png` sheet, made by `make_placeholders.py`.
+
+**Tests** (`generator_test`, 111 now): all 11 types at 1,000 seeds each, all sound and every room
+typed as its role.
+
+| Type | Plain | L | T | U |
+|---|---|---|---|---|
+| manor | 274 | 293 | 293 | 140 |
+| tavern | 413 | 431 | 156 | — |
+| farmhouse | 509 | 491 | — | — |
+| house | 773 | 169 | 58 | — |
+
+No cut corner is ever a room. A building cut in two keeps all 1,050 of its interior cells in
+rooms with its cut side marked; unmarked it loses 708. The generator takes 0.3 ms for a hut and
+2.5 ms for a manor on average, 7 ms at worst.
+
+---
+
 ## 14. Open for discussion
 
 - **What "closed" means** (flagged 2026-11-05). `CLOSE_BUILDING` sets `EcsBuildingComponent.closed`,

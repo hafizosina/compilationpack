@@ -16,3 +16,4 @@ doors = Array[StringName]([&"wood", &"stone", &"stone"])
 floors = Array[StringName]([&"", &"stone", &"stone"])
 optional_chance = Array[float]([0.0, 0.5, 1.0])
 loop_chance = 0.2
+shapes = Dictionary[StringName, float]({&"plain": 0.5, &"l": 0.5})

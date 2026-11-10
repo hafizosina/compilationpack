@@ -52,6 +52,9 @@ extends Resource
 ## The main trade's core counts are multiplied by this.
 @export var trade_scale: float = 1.0
 @export_group("Plots")
+## A field's ground and what grows on it, in rows with a path between.
+@export var field_terrain: StringName = &"dirt"
+@export var field_crop: StringName = &"crop"
 ## Cells kept between footprints, so a lane fits.
 @export var plot_gap: int = 2
 ## Rings a yard may grow round its footprint.

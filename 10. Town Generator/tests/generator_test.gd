@@ -22,6 +22,7 @@ func _ready() -> void:
 	CATALOG.number()
 	for type in CATALOG.building_types:
 		_check_type(type)
+	_check_cut_sides()
 	print("[gen] %d/%d checks passed" % [_checks - _failures, _checks])
 	get_tree().quit(1 if _failures > 0 else 0)
 
@@ -44,6 +45,8 @@ func _check_type(type: EcsBuildingTypeDef) -> void:
 	var rooms: int = 0
 	var generate_usec: int = 0
 	var worst_usec: int = 0
+	var shapes: Dictionary = {}
+	var cut_rooms: int = 0
 	for n in SEEDS:
 		var input := _inputs(type, n)
 		var started := Time.get_ticks_usec()
@@ -67,6 +70,13 @@ func _check_type(type: EcsBuildingTypeDef) -> void:
 				bad[kind] = []
 			(bad[kind] as Array).append("seed %d: %s" % [n, problem])
 		missing += (plan.missing as Array).size()
+		shapes[plan.shape] = int(shapes.get(plan.shape, 0)) + 1
+		var in_shape: Dictionary = {}
+		for cell: Vector2i in plan.cells:
+			in_shape[cell] = true
+		for cell in EcsBuildRules.cells(Rect2i(Vector2i.ONE, input.size)):
+			if not in_shape.has(cell) and grid.room_id[EcsTownGrid.index(grid, cell)] != EcsTownGridSingleton.NO_ID:
+				cut_rooms += 1
 		var building := (t.world as EcsWorld).get_component(building_id, EcsBuildingComponent) as EcsBuildingComponent
 		rooms += plan.rooms.size()
 		for room: Dictionary in plan.rooms:
@@ -91,8 +101,50 @@ func _check_type(type: EcsBuildingTypeDef) -> void:
 	_check("%s: the same seed gives the same building%s" % [name, "" if drifted.is_empty() else " (not seeds %s)" % [drifted.slice(0, 5)]],
 		drifted.is_empty())
 	_check("%s: every room typed as its role by room detection (%d rooms, %d mistyped)" % [name, rooms, mistyped], mistyped == 0)
+	var shaped := shapes.keys().filter(func(k: StringName) -> bool: return k != &"plain").size()
+	_check("%s: shapes %s; no cut corner is a room" % [name, shapes], cut_rooms == 0 and (type.shapes.size() <= 1 or shaped > 0))
 	print("[gen] measure: %s, %d buildings: generator %.0f µs each on average, %d µs at worst; %d rooms; %d optional pieces had no room" % [
 		name, SEEDS, float(generate_usec) / SEEDS, worst_usec, rooms, missing])
+
+## A building cut in two, as in a chunk: its left part alone, with its right side marked cut,
+## keeps every interior cell on that side in a room or sealed region; unmarked, the cut rooms leak.
+func _check_cut_sides() -> void:
+	var type := CATALOG.building_types[0]
+	var kept := 0
+	var leaked := 0
+	var cells := 0
+	for n in 50:
+		var size := Vector2i(12, 9)
+		var plan := EcsBuildingGenerator.plan(type, size, 2, Vector2i.UP, n, CATALOG, ENTITIES, Vector2i.ONE)
+		var half := Rect2i(Vector2i.ONE, Vector2i(size.x / 2, size.y))
+		var walled: Dictionary = {}
+		for command: EcsBuildCommand in plan.commands:
+			if command.kind == EcsBuildCommand.Kind.PLACE_WALL or command.kind == EcsBuildCommand.Kind.PLACE_DOOR:
+				walled[command.cell] = true
+		for marked in [true, false]:
+			var commands: Array[EcsBuildCommand] = [EcsBuildCommand.create_building(half, false, EcsBuildingComponent.CUT_RIGHT if marked else 0)]
+			for command: EcsBuildCommand in plan.commands:
+				if command.kind != EcsBuildCommand.Kind.CREATE_BUILDING and command.kind != EcsBuildCommand.Kind.PLACE_OBJECT \
+						and half.has_point(command.cell):
+					commands.append(command)
+			var t := _build(half.end + Vector2i.ONE, commands)
+			var grid := t.grid as EcsTownGridSingleton
+			var building := (t.world as EcsWorld).get_component(grid.building_id[EcsTownGrid.index(grid, Vector2i.ONE)], EcsBuildingComponent) as EcsBuildingComponent
+			var covered: Dictionary = {}
+			for room: Dictionary in building.rooms:
+				for cell: Vector2i in room["cells"]:
+					covered[cell] = true
+			for cell in EcsBuildRules.cells(half):
+				if walled.has(cell) or not (plan.cells as Array).has(cell):
+					continue
+				if marked:
+					cells += 1
+					kept += 1 if covered.has(cell) else 0
+				elif not covered.has(cell):
+					leaked += 1
+			(t.root as Node).free()
+	_check("a building cut in two keeps %d of %d interior cells in rooms with its cut side marked (%d lost unmarked)" % [kept, cells, leaked],
+		kept == cells and leaked > 0)
 
 func _first(found: Array) -> String:
 	return "" if found.is_empty() else " (%d, first: %s)" % [found.size(), found[0]]

@@ -18,6 +18,8 @@ var value: int = 0
 var blueprint: StringName = &""
 ## CREATE_BUILDING's footprint.
 var rect: Rect2i = Rect2i()
+## CREATE_BUILDING: the sides where the building goes on past this grid, as CUT_* bits.
+var cut: int = 0
 ## The building it is about: CLOSE_BUILDING's, or one PLACE_WALL must belong to. After
 ## CREATE_BUILDING, the reservation token for the building it asked for. -1 = none.
 var building: int = -1
@@ -36,9 +38,10 @@ static func place(kind: Kind, cell: Vector2i, blueprint: StringName, turns: int 
 	command.blueprint = blueprint
 	return command
 
-static func create_building(rect: Rect2i, closed: bool = false) -> EcsBuildCommand:
+static func create_building(rect: Rect2i, closed: bool = false, cut: int = 0) -> EcsBuildCommand:
 	var command := EcsBuildCommand.new()
 	command.kind = Kind.CREATE_BUILDING
 	command.rect = rect
 	command.value = 1 if closed else 0
+	command.cut = cut
 	return command

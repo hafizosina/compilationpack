@@ -5,7 +5,8 @@ extends RefCounted
 ## cell and takes the best whose centre and roads work out; `place` puts the town at a chosen cell.
 ## Either way the centre is laid out on L1 cells (a stone plaza with the well) from the same terrain
 ## the chunks draw, so the town lands on the ground it was planned on; EcsRoadPlanner adds the main roads,
-## EcsResourceSurvey and EcsTownEconomy what the town is, EcsPlotPlanner the plots and their lanes.
+## EcsResourceSurvey and EcsTownEconomy what the town is, EcsPlotPlanner the plots and their lanes,
+## EcsTownBuilder their buildings.
 
 ## Best-scored sites tried, in order, before giving up.
 const TRIES: int = 20
@@ -186,6 +187,7 @@ static func _centre(parts: Dictionary, plan: Dictionary, region_def: EcsLandDef,
 	site.survey = EcsResourceSurvey.of(site, plan, region_def, def)
 	site.economy = EcsTownEconomy.plan(site.survey, def, rng_seed, cell)
 	EcsPlotPlanner.plan(site, def, terrain, {"plan": plan, "region_def": region_def, "scale": scale, "shares": shares, "seed": rng_seed})
+	site.economy["unbuilt"] = EcsTownBuilder.build(site, def, catalog, rng_seed)
 	EcsRoadPlanner.lay(site, def, catalog)
 	return site
 

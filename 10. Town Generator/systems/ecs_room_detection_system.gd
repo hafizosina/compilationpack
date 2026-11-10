@@ -49,7 +49,7 @@ func _detect(world: EcsWorld, grid: EcsTownGridSingleton, building: EcsBuildingC
 			var local := (y - rect.position.y) * rect.size.x + (x - rect.position.x)
 			if seen[local] or grid.structure[y * grid.width + x] != EcsTownGridSingleton.NONE:
 				continue
-			var region := _fill(grid, rect, Vector2i(x, y), seen)
+			var region := _fill(grid, rect, Vector2i(x, y), seen, building.cut)
 			if region.is_empty():
 				continue
 			var sealed: bool = (region["door_cells"] as Array).is_empty()
@@ -91,8 +91,8 @@ func _type_of(world: EcsWorld, grid: EcsTownGridSingleton, cells: Array) -> EcsR
 	return best
 
 ## The 4-connected open cells from `start`, and the doors on their boundary; empty if the
-## fill leaves the footprint.
-func _fill(grid: EcsTownGridSingleton, rect: Rect2i, start: Vector2i, seen: PackedByteArray) -> Dictionary:
+## fill leaves the footprint across a side that isn't `cut`.
+func _fill(grid: EcsTownGridSingleton, rect: Rect2i, start: Vector2i, seen: PackedByteArray, cut: int = 0) -> Dictionary:
 	var cells: Array[Vector2i] = [start]
 	var doors: Dictionary = {}
 	var leaks := false
@@ -104,7 +104,9 @@ func _fill(grid: EcsTownGridSingleton, rect: Rect2i, start: Vector2i, seen: Pack
 		for side in EcsDualGrid.SIDES:
 			var next: Vector2i = cell + side
 			if not rect.has_point(next):
-				leaks = true
+				# Across a cut side the building goes on in another grid: a wall here, not a leak.
+				if not cut & _side_bit(side):
+					leaks = true
 				continue
 			var structure := grid.structure[EcsTownGrid.index(grid, next)]
 			if structure == EcsTownGridSingleton.DOOR:
@@ -120,3 +122,13 @@ func _fill(grid: EcsTownGridSingleton, rect: Rect2i, start: Vector2i, seen: Pack
 	for door: Vector2i in doors:
 		door_cells.append(door)
 	return {"cells": cells, "door_cells": door_cells}
+
+static func _side_bit(side: Vector2i) -> int:
+	if side == Vector2i.LEFT:
+		return EcsBuildingComponent.CUT_LEFT
+	if side == Vector2i.UP:
+		return EcsBuildingComponent.CUT_UP
+	if side == Vector2i.RIGHT:
+		return EcsBuildingComponent.CUT_RIGHT
+	return EcsBuildingComponent.CUT_DOWN
+

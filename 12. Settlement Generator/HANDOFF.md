@@ -8,8 +8,9 @@ catalogs, by decision (2026-11-08), so module 10's builder can place them too.
 **Status (2026-11-10):** step 1 (terrain and resource nodes, on an **L2 region** with **L1**
 streamed 8× into it in chunks), step 2 (the town's site, plaza and well, §3), step 3 (its main
 roads, §4) and step 4 (plots, then the lanes they need, §5) are done. Steps 5–9 work on L1 only,
-inside the town's area. Step 5 (what the town lives on and its building list, §6) and step 5b
-(each building places its own plot, works out at their resource, §7) are done.
+inside the town's area. Step 5 (what the town lives on and its building list, §6), step 5b
+(each building places its own plot, works out at their resource, §7) and step 6 (its buildings,
+§8) are done.
 
 ```bash
 # 41 checks, ~60 s; exit 0 only if all pass. Prints plan and load costs.
@@ -18,7 +19,9 @@ inside the town's area. Step 5 (what the town lives on and its building list, §
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/site_test.tscn"
 # Step 3: 11 checks, ~60 s. Prints how long a town with its roads takes.
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/road_test.tscn"
-# Steps 4 and 5b: 9 checks, ~70 s. Prints how long a town takes and what came up short.
+# Step 6: 4 checks, ~60 s. Builds every town's buildings through module 10 and checks them.
+"$GODOT" --headless --path . "res://12. Settlement Generator/tests/building_test.tscn"
+# Steps 4, 5b and fields: 10 checks, ~70 s. Prints how long a town takes and what came up short.
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/plot_test.tscn"
 # Step 5: 7 checks, ~90 s. Prints what each town lives on and its mean survey.
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/economy_test.tscn"
@@ -33,9 +36,9 @@ inside the town's area. Step 5 (what the town lives on and its building list, §
 | Path | Role |
 |---|---|
 | `defs/` | `EcsLandDef` (what the land is: size, water, shares, shore, nodes, deposits, its L1 `child`), `EcsSettlementDef` (a tier of town: area, plaza, site, roads, economy, plot gap and yards), `EcsNodeSpawnDef` (where a node grows), `EcsDepositDef` (an ore or clay deposit), `EcsSettlementRoleDef` and `EcsSettlementCharacterDef` in `EcsEconomyCatalog` (`economy.tres`); `lands/`: `region` (L2), `l1` (its child); `settlements/`: `hamlet`, `village`, `town` |
-| `ecs/` | `EcsTerrainGenerator` (pure: `plan`, `refine`, and the chunk stages `refine_terrain`, `refine_nodes`), `EcsTerrainCheck` (pure: `problems`, `follows`), `EcsTerrainChunks` (the L1 chunks kept in memory, what to make next, and the town's overlay), `EcsSitePicker` and `EcsSiteCheck` (pure: the town's site and centre), `EcsRoadPlanner` and `EcsRoadCheck` (pure: its roads), `EcsPlotPlanner` and `EcsPlotCheck` (pure: its plots and lanes), `EcsResourceSurvey` and `EcsTownEconomy` (pure: what is in reach, what the town lives on and builds), `EcsSettlementSite` (the record) |
+| `ecs/` | `EcsTerrainGenerator` (pure: `plan`, `refine`, and the chunk stages `refine_terrain`, `refine_nodes`), `EcsTerrainCheck` (pure: `problems`, `follows`), `EcsTerrainChunks` (the L1 chunks kept in memory, what to make next, and the town's overlay), `EcsSitePicker` and `EcsSiteCheck` (pure: the town's site and centre), `EcsRoadPlanner` and `EcsRoadCheck` (pure: its roads), `EcsPlotPlanner` and `EcsPlotCheck` (pure: its plots and lanes), `EcsResourceSurvey` and `EcsTownEconomy` (pure: what is in reach, what the town lives on and builds), `EcsTownBuilder` (pure: its buildings), `EcsSettlementSite` (the record) |
 | `generator.tscn` | The viewer (`generator_view.gd`); its panel is built in code |
-| `tests/` | `terrain_test.tscn`, `site_test.tscn`, `road_test.tscn`, `plot_test.tscn`, `economy_test.tscn` |
+| `tests/` | `terrain_test.tscn`, `site_test.tscn`, `road_test.tscn`, `plot_test.tscn`, `economy_test.tscn`, `building_test.tscn` |
 | `PLAN.md` | The nine steps |
 
 Module 10 additions for it (module 10's HANDOFF §13): the `rock` and `forest` terrains, the
@@ -641,4 +644,98 @@ machine was slower than at step 4.
 - a few works still come up short in big towns (no fit in 6 windows) and get no third try;
 - lanes route with dictionaries in GDScript; they are the first thing to speed up;
 - fields, pens and docks are only yards until step 7.
+
+---
+
+## 8. Step 6 — buildings (2026-11-10)
+
+Decided:
+- **rooms by role**, on few building types;
+- **buildings split across chunks**;
+- **module 10's generator takes the door cell**;
+- **a building of more than one room isn't just a rectangle**.
+
+Module 10's side is its HANDOFF §13b: shapes, the preferred entrance, cut sides, 9 building types,
+14 room types and 24 furniture placeholders.
+
+**Roles** (`EcsSettlementRoleDef`) gained:
+- `rooms`: room roles that replace the building type's;
+- `wealth`: −1 takes it from the place.
+
+The `building` keys now name module 10 types. Market, mine, quarry, lumber camp, clay pit, harbour
+and shrine have none: they are outdoor works for step 7. House, headman, merchant house, tavern,
+inn and farmhouse grew, so their footprints have room for a shape.
+
+**`EcsTownBuilder.build(site, catalog, seed)`** runs in `EcsSitePicker._centre` after the plots
+and before `EcsRoadPlanner.lay`. For each walled plot:
+1. Its type: a copy whose `roles` are the role's `rooms`, when it lists any.
+2. Its wealth: the role's, or rich, middling or poor by the `centre` rule at ⅔ and ⅓.
+3. `EcsBuildingGenerator.plan` on the footprint, facing the front, the door cell preferred. The
+   commands go into `site.commands`.
+4. The plot gains `building`: {type, wealth, entrance, shape, cells}.
+5. When the entrance isn't the door cell, the lane is carried along the front to it, `door`
+   becomes the entrance, and yard cells the carried lane cut off are dropped.
+
+Roles whose type the catalog lacks go to `economy.unbuilt`.
+
+**Chunks** (`EcsTerrainChunks.clip(site, own, border, objects)`, which `overlay` and the tests share):
+- CREATE_BUILDING is clipped to the chunk's cells plus border, its sides that go on marked
+  **cut**.
+- Walls, doors and floors go to every chunk holding them.
+- Furniture goes only to the chunk holding its origin. A piece is at most 2 cells, so it stays
+  within that chunk's border.
+- The viewer's chunk worlds now run room detection and roofs, and their roofs draw above pieces
+  and walls. The border trim erases roof tiles too. The **Roofs** box shows or hides them. Plot
+  tints fade as L1 shows the real buildings, and the cell panel names a cell's building (type,
+  wealth, shape) and room.
+
+**Tests** (`building_test`, 4), 3 seeds each:
+
+| Size | Buildings | Plain | L | T |
+|---|---|---|---|---|
+| hamlet | 38 | 36 | 2 | 0 |
+| village | 100 | 88 | 11 | 1 |
+| town | 258 | 221 | 36 | 1 |
+
+- every building's commands are accepted by module 10 in a world of the town's area or window;
+- every building passes `EcsBuildingCheck`;
+- every building is entered from a road;
+- a chapel across 2 chunks: every clipped command accepted, and walls, floors and roof the same
+  per chunk as built whole, on all 72 roofed cells.
+
+`plot_test`, `site_test` and `road_test` now build the area through `clip`, which keeps a
+building's rect; their floor checks read floors only. Module 10's `town_test` (142) and
+`generator_test` (111) pass.
+
+**Measured:** a whole town pick (region plan included) took ~2.3 s for a hamlet, ~2.6 s for a
+village and ~4.1 s for a town. The generator adds 0.3–2.5 ms a building, ~0.3 s for a town.
+
+**Not yet:**
+- most houses are plain: a poor house has one room, and only multi-room buildings take shapes;
+- a few more buildings come up short than in step 5b (village 6, town 12), as farmhouses and
+  houses grew;
+- outdoor works, fences and gardens: step 7.
+
+### Farm fields (2026-11-10, pulled forward from step 7)
+
+A farmhouse has a **field**: dirt ground with crop rows, beside it.
+- **Data:** `EcsSettlementRoleDef.field_min` and `field_max` (farmhouse 8×6 to 14×10; zero means
+  none). `EcsSettlementDef.field_terrain` is `dirt` and `field_crop` is `crop`.
+- **Placing** (`EcsPlotPlanner._field_for`): a farmhouse spot is taken only when a field fits
+  beside it.
+  - The field goes on a side other than its front, one cell clear of the house so a yard path
+    runs between, its long side along the house.
+  - It is the largest of three sizes in the range that fits on any side, sides in random order.
+  - It must be on free land, a cell clear of every footprint and field.
+  - Fields are `Use.FIELD`, which blocks plots, lanes and yards.
+  - The plot gains `field`, and its cells go into `plot_at` and `cleared_cells`.
+- **Building** (`EcsTownBuilder._sow`): SET_TERRAIN dirt on every cell, then a crop on every other
+  row along the long side. No module 10 rule changed: a crop may not stand on a floor, but dirt is
+  terrain.
+- **Check:** every farmhouse has a field, within its ground, beside it and not by its door, on cells
+  no road, water, plaza or other plot takes.
+- **Viewer:** fields tinted over the region; the cell panel names a plot's field.
+- **Tests** (`plot_test`, 10 now): all 171 farmhouses over 18 towns have a field; a hamlet's area
+  with its fields and crops is accepted by module 10 (4,562 commands). Fewer buildings came up
+  short than without fields: village 2, town 6.
 

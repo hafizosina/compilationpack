@@ -181,12 +181,8 @@ func _roads_load_through_the_build_system() -> void:
 	for node: Dictionary in nodes:
 		commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, node["cell"], node["blueprint"], 0))
 		whole.append({"cell": area.position + (node["cell"] as Vector2i), "size": node["size"]})
-	for command in site.commands:
-		if not area.has_point(command.cell):
-			continue
-		var local := command.cell - area.position
-		commands.append(EcsBuildCommand.place(command.kind, local, command.blueprint, command.value) if command.kind == EcsBuildCommand.Kind.PLACE_OBJECT
-			else EcsBuildCommand.make(command.kind, local, command.value))
+	# The town's commands on the area's cells; main roads and outlying works run on past it.
+	commands.append_array(EcsTerrainChunks.clip(site, area, 0, true))
 	var world := EcsWorld.new()
 	var grid := EcsTownGrid.make(area.size.x, area.size.y, CATALOG.terrain_id(&"grass"))
 	grid.commands.append_array(commands)
@@ -232,7 +228,8 @@ func _roads_draw_the_same_across_chunks() -> void:
 		var floors := PackedInt32Array()
 		floors.resize(outer * outer)
 		for command in chunks.overlay(at, false):
-			floors[command.cell.y * outer + command.cell.x] = command.value
+			if command.kind == EcsBuildCommand.Kind.SET_FLOOR:
+				floors[command.cell.y * outer + command.cell.x] = command.value
 		for y in outer:
 			for x in outer:
 				if floors[y * outer + x] != int(floor_of.get(at * CHUNK + Vector2i(x, y) - Vector2i.ONE, 0)):

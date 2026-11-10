@@ -12,7 +12,8 @@ extends Node2D
 ## The town (EcsSitePicker) is picked with the region, sized by the Town option, outlined, and drawn
 ## into the chunks it covers; a right click moves it to that region cell. Its roads show as lines
 ## over the region, fading as L1 fades in, where the chunks draw them as floors. Its plots show as
-## shaded footprints with their doors, and tinted yards, at both levels. Ore and clay deposits are
+## shaded footprints with their doors, and tinted yards, over the region, fading as L1 shows their
+## buildings: walls, rooms, furniture and roofs, which the Roofs box hides. Ore and clay deposits are
 ## tinted over the region and fade with the roads.
 
 const DEFS := "res://12. Settlement Generator/defs/settlements/"
@@ -83,6 +84,7 @@ var _road_l2_cells: Dictionary = {}
 var _plots_layer: Node2D
 var _zones_on: bool = false
 var _nodes_on: bool = true
+var _roofs_on: bool = true
 ## The region shown: {root, world, scheduler, tile_sync, zones, def, plan, shares, seed, problems}.
 var _region: Dictionary = {}
 ## Counts regions made, so a chunk job for an old one is thrown away.
@@ -161,6 +163,7 @@ func _process(_delta: float) -> void:
 		line.width = 2.5 / _camera.zoom.x
 	if _l1 != null:
 		_roads_layer.modulate.a = 1.0 - _l1.modulate.a
+		_plots_layer.modulate.a = 1.0 - _l1.modulate.a
 		if _region.has("deposits"):
 			(_region["deposits"] as Sprite2D).modulate.a = 1.0 - _l1.modulate.a
 	for line: Line2D in _roads_layer.get_children():
@@ -258,6 +261,11 @@ func _build_panel() -> void:
 	nodes.button_pressed = true
 	nodes.toggled.connect(func(on: bool) -> void: _nodes_on = on; _show_layers())
 	box.add_child(nodes)
+	var roofs := CheckBox.new()
+	roofs.text = "Roofs"
+	roofs.button_pressed = _roofs_on
+	roofs.toggled.connect(func(on: bool) -> void: _roofs_on = on; _show_layers())
+	box.add_child(roofs)
 	var zones := CheckBox.new()
 	zones.text = "Zone tint"
 	zones.toggled.connect(func(on: bool) -> void: _zones_on = on; _show_layers())
@@ -370,8 +378,15 @@ func _describe() -> void:
 			var rect: Rect2i = plot["footprint"]
 			var role := EcsTownEconomy.CATALOG.role(plot["role"])
 			lines.append("Town: plot %d, %s: its %s; footprint %d×%d, door at %s facing %s" % [k, role.display_name,
-				"door" if cell == plot["door"] else ("footprint" if rect.has_point(cell) else "yard"), rect.size.x, rect.size.y,
+				"door" if cell == plot["door"] else ("footprint" if rect.has_point(cell) else
+					("field" if (plot.get("field", Rect2i()) as Rect2i).has_point(cell) else "yard")), rect.size.x, rect.size.y,
 				plot["door"], {Vector2i.RIGHT: "east", Vector2i.DOWN: "south", Vector2i.LEFT: "west", Vector2i.UP: "north"}[plot["front"]]])
+			if plot.has("building"):
+				var built: Dictionary = plot["building"]
+				lines.append("Building: %s, %s, %s shape" % [built["type"], ["poor", "middling", "rich"][built["wealth"]], built["shape"]])
+				var room := _room_name(cell)
+				if room != "":
+					lines.append("Room: " + room)
 		elif _site != null and _site.road_cells.has(cell):
 			lines.append("Town: %s" % {&"main": "main road", &"lane": "lane", &"track": "track to an outlying work", &"bridge": "bridge (wood over water)"}[_site.road_cells[cell]])
 		elif _site != null:
@@ -394,6 +409,24 @@ func _describe() -> void:
 				made.append(step[0])
 		lines.append("Chunk made: %s" % (", ".join(made) if not made.is_empty() else "nothing yet"))
 	_detail.text = "\n".join(lines)
+
+## The room L1 detected at `cell` in its chunk's world, or "".
+func _room_name(cell: Vector2i) -> String:
+	var at := _chunks.chunk_at(cell)
+	var chunk: Dictionary = _chunks.chunks.get(at, {})
+	if not chunk.has("level"):
+		return ""
+	var level: Dictionary = chunk["level"]
+	var grid := level["grid"] as EcsTownGridSingleton
+	var local := cell - at * _chunks.size + Vector2i.ONE
+	var building := (level["world"] as EcsWorld).get_component(grid.building_id[EcsTownGrid.index(grid, local)], EcsBuildingComponent) \
+		as EcsBuildingComponent if grid.building_id[EcsTownGrid.index(grid, local)] > EcsWorld.NO_ENTITY else null
+	if building == null:
+		return ""
+	for room: Dictionary in building.rooms:
+		if (room["cells"] as Array).has(local):
+			return room["label"] if room["label"] != "" else ("sealed" if room["sealed"] else "untyped")
+	return ""
 
 func _town_line() -> String:
 	var note := "" if _site_note == "" else "\n" + _site_note
@@ -607,6 +640,9 @@ func _draw_plots() -> void:
 	for plot: Dictionary in _site.plots:
 		for cell: Vector2i in plot["yard"]:
 			_plots_layer.draw_rect(Rect2(Vector2(cell) * px, Vector2(px, px)), Color(0.55, 0.75, 0.3, 0.35))
+		if plot.has("field"):
+			var field: Rect2i = plot["field"]
+			_plots_layer.draw_rect(Rect2(Vector2(field.position) * px, Vector2(field.size) * px), Color(0.72, 0.6, 0.3, 0.6))
 		var rect: Rect2i = plot["footprint"]
 		var group := EcsTownEconomy.CATALOG.role(plot["role"]).group
 		_plots_layer.draw_rect(Rect2(Vector2(rect.position) * px, Vector2(rect.size) * px), Color(GROUP_TINTS.get(group, Color.MAGENTA), 0.8))
@@ -700,14 +736,19 @@ func _make_level(size: Vector2i, commands: Array[EcsBuildCommand], at: Vector2, 
 		.add(EcsLifecycleSystem.new(EcsEntityManager.new(entities), entity_catalog)) \
 		.add(EcsBuildCommandSystem.new(catalog, entity_catalog)) \
 		.add(EcsTownNavSystem.new(catalog)) \
+		.add(EcsRoomDetectionSystem.new(catalog)) \
+		.add(EcsRoofSystem.new(catalog)) \
 		.add(tile_sync)
 	for tick in SETTLE:
 		scheduler.run_all(world, 1.0 / 60.0)
 	# Every chunk's ground reaches half a cell into its neighbours, so pieces draw above all ground.
 	for layer: TileMapLayer in [tile_sync.furniture_layer(), tile_sync.wall_layer(), tile_sync.attachment_layer()]:
 		layer.z_index = 1
+	# Roofs cover the building, pieces and walls included, when shown.
+	for layer in tile_sync.roof_layers():
+		layer.z_index = 2
 	if trim:
-		for layer in tile_sync.terrain_layers() + tile_sync.floor_layers():
+		for layer in tile_sync.terrain_layers() + tile_sync.floor_layers() + tile_sync.roof_layers():
 			for x in size.x + 1:
 				layer.erase_cell(Vector2i(x, 0))
 				layer.erase_cell(Vector2i(x, size.y))
@@ -846,6 +887,7 @@ func _show_layers() -> void:
 		var sync := level["tile_sync"] as EcsTileSyncSystem
 		sync.furniture_layer().visible = _nodes_on
 		sync.attachment_layer().visible = _nodes_on
+		sync.roofs_visible = _roofs_on
 	if _region.has("zones"):
 		(_region["zones"] as Sprite2D).visible = _zones_on
 

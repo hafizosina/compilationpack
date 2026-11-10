@@ -12,9 +12,17 @@ var rooms: Array = []
 var children: Array[int] = []
 ## Marked finished by CLOSE_BUILDING; needs no room.
 var closed: bool = false
+## Sides where it goes on past its grid (a part of a building in one chunk), as
+## EcsBuildingComponent.CUT_* bits: room detection treats a step across one as a wall.
+var cut: int = 0
 var quality: int = 0
 var owner_id: int = EcsWorld.NO_ENTITY
 var builder_id: int = EcsWorld.NO_ENTITY
+
+const CUT_LEFT: int = 1
+const CUT_UP: int = 2
+const CUT_RIGHT: int = 4
+const CUT_DOWN: int = 8
 
 func key() -> StringName:
 	return &"building"

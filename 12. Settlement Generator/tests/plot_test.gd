@@ -92,7 +92,8 @@ func _every_town_gets_sound_plots() -> void:
 			first.is_empty() and plots >= wanted * 0.9)
 		print("[plot]   %s: a town with its roads and plots takes %d ms on average; short: %s" % [town, usec / SEEDS / 1000, short_by])
 
-## Where buildings land: the manor faces the plaza, and houses stand nearer the plaza than farmhouses.
+## Where buildings land: the manor faces the plaza, every farmhouse has its field, and houses stand
+## nearer the plaza than farmhouses.
 func _buildings_stand_where_their_rules_say() -> void:
 	var manors := 0
 	var on_plaza := 0
@@ -111,6 +112,14 @@ func _buildings_stand_where_their_rules_say() -> void:
 				&"farmhouse":
 					farms[0] += d
 					farms[1] += 1
+	var fields := 0
+	var farmhouses := 0
+	for site in _sites:
+		for plot in site.plots:
+			if plot["role"] == &"farmhouse":
+				farmhouses += 1
+				fields += 1 if plot.has("field") else 0
+	_check("%d of %d farmhouses have a field beside them" % [fields, farmhouses], farmhouses > 0 and fields == farmhouses)
 	var house_d: float = houses[0] / maxi(houses[1], 1)
 	var farm_d: float = farms[0] / maxi(farms[1], 1)
 	_check("%d of %d manors face the plaza" % [on_plaza, manors], manors > 0 and on_plaza == manors)
@@ -152,12 +161,8 @@ func _plots_load_through_the_build_system() -> void:
 		for y in range(rect.position.y, rect.end.y):
 			for x in range(rect.position.x, rect.end.x):
 				on_plot += 1 if site.plot_at.has(Vector2i(x, y)) else 0
-	for command in site.commands:
-		if not area.has_point(command.cell):
-			continue
-		var local := command.cell - area.position
-		commands.append(EcsBuildCommand.place(command.kind, local, command.blueprint, command.value) if command.kind == EcsBuildCommand.Kind.PLACE_OBJECT
-			else EcsBuildCommand.make(command.kind, local, command.value))
+	# The town's commands on the area's cells; main roads and outlying works run on past it.
+	commands.append_array(EcsTerrainChunks.clip(site, area, 0, true))
 	var world := EcsWorld.new()
 	var grid := EcsTownGrid.make(area.size.x, area.size.y, CATALOG.terrain_id(&"grass"))
 	grid.commands.append_array(commands)
@@ -169,8 +174,9 @@ func _plots_load_through_the_build_system() -> void:
 	scheduler.add(EcsLifecycleSystem.new(EcsEntityManager.new(root), ENTITIES)).add(EcsBuildCommandSystem.new(CATALOG, ENTITIES))
 	for tick in 3:
 		scheduler.run_all(world, 1.0 / 60.0)
-	var accepted := commands.filter(func(c: EcsBuildCommand) -> bool: return c.result == &"ok").size()
-	_check("all %d commands of the hamlet's area accepted by the build system" % commands.size(), accepted == commands.size())
+	var refused := commands.filter(func(c: EcsBuildCommand) -> bool: return c.result != &"ok")
+	var first := "" if refused.is_empty() else "  first: %s at %s %s" % [EcsBuildCommand.Kind.keys()[refused[0].kind], refused[0].cell + area.position, refused[0].result]
+	_check("all %d commands of the hamlet's area accepted by the build system (%d refused)%s" % [commands.size(), refused.size(), first], refused.is_empty())
 	var road := CATALOG.floor_id(def.road_floor)
 	var lanes := 0
 	var floored := true

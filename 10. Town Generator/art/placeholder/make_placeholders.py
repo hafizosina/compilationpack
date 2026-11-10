@@ -254,6 +254,50 @@ def ui_icons():
     icon("none", lambda d: (d.ellipse([5, 5, 27, 27], outline=ink, width=2), d.line([(9, 23), (23, 9)], fill=ink, width=2)))
 
 
+def furniture_atlas(name):
+    """Workplace and hall furniture on a 32 px grid, 8x4. Layout in README.md."""
+    img = Image.new("RGBA", (CELL * 8, CELL * 4), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    ink = (42, 32, 22, 255)
+    wood, dark_wood, iron, stone = (150, 101, 58, 255), (110, 72, 40, 255), (75, 75, 82, 255), (135, 132, 126, 255)
+    sack_c, hay = (205, 185, 140, 255), (215, 190, 90, 255)
+    def r(cx, cy, x0, y0, x1, y1, **kw):
+        d.rectangle([cx * CELL + x0, cy * CELL + y0, cx * CELL + x1, cy * CELL + y1], outline=ink, **kw)
+    def e(cx, cy, x0, y0, x1, y1, **kw):
+        d.ellipse([cx * CELL + x0, cy * CELL + y0, cx * CELL + x1, cy * CELL + y1], outline=ink, **kw)
+    def line(cx, cy, x0, y0, x1, y1, **kw):
+        d.line([cx * CELL + x0, cy * CELL + y0, cx * CELL + x1, cy * CELL + y1], **kw)
+    r(0, 0, 2, 3, 61, 24, fill=stone); e(0, 0, 22, 8, 41, 22, fill=(230, 110, 40, 255)); e(0, 0, 27, 11, 36, 19, fill=(250, 210, 80, 255))  # forge 2x1
+    e(2, 0, 5, 5, 26, 26, fill=wood); e(2, 0, 9, 9, 22, 22, fill=(60, 90, 140, 255))  # quench barrel
+    r(3, 0, 3, 3, 28, 10, fill=dark_wood)  # tool rack
+    for k in range(4): line(3, 0, 7 + k * 6, 10, 7 + k * 6, 22, fill=iron, width=2)
+    r(4, 0, 3, 3, 28, 28, fill=stone); e(4, 0, 8, 12, 23, 27, fill=(40, 30, 25, 255)); e(4, 0, 12, 17, 19, 24, fill=(230, 110, 40, 255))  # oven
+    r(5, 0, 3, 6, 60, 25, fill=wood); e(5, 0, 18, 10, 30, 21, fill=(235, 225, 200, 255))  # kneading table 2x1
+    e(7, 0, 6, 5, 25, 27, fill=(235, 230, 220, 255)); line(7, 0, 10, 9, 21, 9, fill=ink, width=2)  # flour sack
+    e(0, 1, 4, 4, 59, 59, fill=stone); e(0, 1, 14, 14, 49, 49, fill=(150, 147, 140, 255)); e(0, 1, 28, 28, 35, 35, fill=ink)  # millstone 2x2
+    e(2, 1, 6, 5, 25, 27, fill=sack_c); line(2, 1, 10, 9, 21, 9, fill=ink, width=2)  # grain sack
+    r(3, 1, 2, 3, 61, 14, fill=dark_wood); r(3, 1, 2, 14, 61, 26, fill=wood)  # bar counter 2x1
+    r(5, 1, 4, 6, 27, 25, fill=dark_wood); r(5, 1, 8, 9, 16, 15, fill=(235, 230, 210, 255))  # desk
+    r(6, 1, 3, 3, 28, 12, fill=dark_wood)  # bookshelf
+    for k in range(5): r(6, 1, 5 + k * 4, 4, 7 + k * 4, 11, fill=[(140, 40, 40, 255), (40, 90, 140, 255), (60, 120, 60, 255), (150, 120, 60, 255), (90, 60, 120, 255)][k])
+    r(7, 1, 3, 3, 28, 16, fill=(235, 230, 215, 255)); r(7, 1, 13, 5, 18, 14, fill=(200, 170, 60, 255))  # altar
+    r(0, 2, 4, 3, 27, 20, fill=dark_wood); r(0, 2, 7, 18, 24, 28, fill=(140, 40, 40, 255))  # high seat
+    r(2, 2, 2, 8, 61, 24, fill=wood); r(2, 2, 6, 11, 57, 21, fill=(70, 110, 150, 255))  # trough 2x1
+    e(4, 2, 3, 6, 28, 27, fill=hay); e(4, 2, 9, 10, 22, 22, fill=(230, 210, 120, 255))  # hay pile
+    r(5, 2, 3, 3, 28, 10, fill=dark_wood)  # net rack
+    for k in range(4): line(5, 2, 6 + k * 6, 10, 9 + k * 6, 27, fill=(150, 140, 110, 255), width=1)
+    r(6, 2, 4, 8, 27, 24, fill=dark_wood)  # fish rack
+    for k in range(3): e(6, 2, 7 + k * 6, 11, 11 + k * 6, 21, fill=(170, 180, 190, 255))
+    r(7, 2, 3, 3, 28, 10, fill=dark_wood); line(7, 2, 10, 10, 10, 26, fill=iron, width=3); line(7, 2, 20, 10, 20, 26, fill=iron, width=3)  # pick rack
+    r(0, 3, 2, 9, 61, 22, fill=wood); r(0, 3, 2, 9, 61, 12, fill=dark_wood)  # pew 2x1
+    r(2, 3, 5, 9, 26, 25, fill=iron); e(2, 3, 9, 11, 22, 21, fill=(120, 90, 70, 255))  # ore cart
+    for k in range(3): r(3, 3, 3, 5 + k * 7, 60, 10 + k * 7, fill=wood)  # lumber pile 2x1
+    r(5, 3, 4, 12, 27, 17, fill=wood); line(5, 3, 7, 17, 5, 27, fill=ink, width=2); line(5, 3, 24, 17, 26, 27, fill=ink, width=2)  # sawhorse
+    r(6, 3, 4, 4, 27, 27, fill=wood); line(6, 3, 4, 4, 27, 27, fill=ink); line(6, 3, 27, 4, 4, 27, fill=ink)  # crate
+    e(7, 3, 6, 5, 25, 27, fill=(170, 140, 100, 255))  # sack
+    img.save(os.path.join(HERE, name))
+
+
 ui_icons()
 dual_sheet("terrain_grass.png", "grass", "#5E8A2E")
 dual_sheet("terrain_dirt.png", "dirt", "#7A5A38")
@@ -271,4 +315,5 @@ door_sheet("door_states.png")
 objects_atlas("objects.png")
 attachments_atlas("attachments.png")
 nodes_atlas("nodes.png")
+furniture_atlas("furniture.png")
 print("done")

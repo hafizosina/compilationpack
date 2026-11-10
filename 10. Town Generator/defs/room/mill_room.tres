@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="EcsRoomTypeDef" format=3]
+
+[ext_resource type="Script" uid="uid://r2c8hwr8jq2f" path="res://10. Town Generator/defs/ecs_room_type_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"mill_room"
+display_name = "Mill room"
+needs = Array[StringName]([&"millstone"])
+priority = 6
+required = Array[StringName]([&"millstone"])
+optional = Array[StringName]([&"grain_sack", &"flour_sack"])

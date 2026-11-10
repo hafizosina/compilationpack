@@ -70,20 +70,35 @@ func far(view: Rect2i, keep: int) -> Array[Vector2i]:
 			out.append(at)
 	return out
 
-## The town's commands for chunk `at`, moved onto the chunk's own grid (its border one cell in):
-## floors on its cells and border, so a floor split across chunks joins; objects, when asked, only
-## on its own cells, so none is placed twice.
+## The town's commands for chunk `at`, moved onto the chunk's own grid (its border one cell in).
 func overlay(at: Vector2i, objects: bool) -> Array[EcsBuildCommand]:
-	var out: Array[EcsBuildCommand] = []
 	if site == null:
-		return out
-	var own := Rect2i(at * size, Vector2i(size, size))
+		return []
+	return clip(site, Rect2i(at * size, Vector2i(size, size)), 1, objects)
+
+## `site`'s commands for the cells of `own` and `border` cells round it, moved so `own` starts at
+## (border, border): floors, walls and doors on those cells, so one split across grids joins; a
+## building clipped to them, its sides that go on past them marked cut; objects, when asked, only
+## on `own`'s cells, so none is placed twice (a piece is at most 2 cells, so it stays in the border).
+static func clip(site: EcsSettlementSite, own: Rect2i, border: int, objects: bool) -> Array[EcsBuildCommand]:
+	var out: Array[EcsBuildCommand] = []
+	var outer := own.grow(border)
+	var shift := Vector2i(border, border) - own.position
 	for command in site.commands:
-		var local := command.cell - own.position + Vector2i.ONE
-		if command.kind == EcsBuildCommand.Kind.PLACE_OBJECT:
+		var local := command.cell + shift
+		if command.kind == EcsBuildCommand.Kind.CREATE_BUILDING:
+			var part := command.rect.intersection(outer)
+			if part.has_area():
+				var cut := 0
+				cut |= EcsBuildingComponent.CUT_LEFT if command.rect.position.x < part.position.x else 0
+				cut |= EcsBuildingComponent.CUT_UP if command.rect.position.y < part.position.y else 0
+				cut |= EcsBuildingComponent.CUT_RIGHT if command.rect.end.x > part.end.x else 0
+				cut |= EcsBuildingComponent.CUT_DOWN if command.rect.end.y > part.end.y else 0
+				out.append(EcsBuildCommand.create_building(Rect2i(part.position + shift, part.size), false, cut))
+		elif command.kind == EcsBuildCommand.Kind.PLACE_OBJECT:
 			if objects and own.has_point(command.cell):
 				out.append(EcsBuildCommand.place(command.kind, local, command.blueprint, command.value))
-		elif own.grow(1).has_point(command.cell):
+		elif outer.has_point(command.cell):
 			out.append(EcsBuildCommand.make(command.kind, local, command.value))
 	return out
 

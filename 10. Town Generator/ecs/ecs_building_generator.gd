@@ -4,34 +4,54 @@ extends RefCounted
 ## Pure and seeded: lays out a building of a type, wealth and size and gives back the build
 ## commands the player's tools send, so everything downstream is the tested path. The same
 ## inputs always give the same commands.
-##   1. Rooms: the footprint split by binary space partition, never below the type's smallest room.
-##   2. Walls: the perimeter and the splits.
-##   3. Doors: the entrance on the facing side; inner doors along a spanning tree of the rooms,
-##      so every room is reachable, and by chance one more, making a loop.
+##   0. Shape: with more than one room, by the type's `shapes`, the footprint's back is cut into
+##      an L, a T (a wing) or a U; the front stays whole. Each part is walled, and the cut is open
+##      ground inside the footprint, which room detection and roofs already leave out.
+##   1. Rooms: each part, then the largest room, split by binary space partition, never below the
+##      type's smallest room.
+##   2. Walls: every part's perimeter and the splits.
+##   3. Doors: the entrance on the facing side, at `door` when that can be one; inner doors along
+##      a spanning tree of the rooms, so every room is reachable, and by chance one more, making a loop.
 ##   4. Roles from the type's list, largest room first.
 ##   5. Floor by wealth; the poorest has none.
 ##   6. Furniture by role, turned to fit, against a wall or free-standing, never on a door's
 ##      inside neighbour and never cutting a room in two.
 
-## The commands for a building of `type` with its top-left at `at`.
+## The commands for a building of `type` with its top-left at `at`; `door`, a cell at `at` on the
+## facing side, is the entrance when it can be.
 static func generate(type: EcsBuildingTypeDef, size: Vector2i, wealth: int, facing: Vector2i,
-		rng_seed: int, catalog: EcsTownCatalog, entities: EcsEntityCatalog, at: Vector2i = Vector2i.ZERO) -> Array[EcsBuildCommand]:
-	return plan(type, size, wealth, facing, rng_seed, catalog, entities, at)["commands"]
+		rng_seed: int, catalog: EcsTownCatalog, entities: EcsEntityCatalog, at: Vector2i = Vector2i.ZERO,
+		door: Vector2i = Vector2i(-1, -1)) -> Array[EcsBuildCommand]:
+	return plan(type, size, wealth, facing, rng_seed, catalog, entities, at, door)["commands"]
 
-## The layout behind `generate`, for checks and viewers: {commands, rooms: [{rect, role}],
-## entrance, doors, missing: [blueprints that found no place]}, all cells at `at`.
+## The layout behind `generate`, for checks and viewers: {commands, shape, cells (the walled
+## shape's cells), rooms: [{rect, role}], entrance, doors, missing: [blueprints that found no
+## place]}, all cells at `at`.
 static func plan(type: EcsBuildingTypeDef, size: Vector2i, wealth: int, facing: Vector2i,
-		rng_seed: int, catalog: EcsTownCatalog, entities: EcsEntityCatalog, at: Vector2i = Vector2i.ZERO) -> Dictionary:
+		rng_seed: int, catalog: EcsTownCatalog, entities: EcsEntityCatalog, at: Vector2i = Vector2i.ZERO,
+		door: Vector2i = Vector2i(-1, -1)) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = rng_seed
+	var shaped := _shape(type, size, wealth, facing, rng)
+	var parts: Array[Rect2i] = shaped["parts"]
 	var walls: Dictionary = {}
-	for y in size.y:
-		for x in size.x:
-			if x == 0 or y == 0 or x == size.x - 1 or y == size.y - 1:
-				walls[Vector2i(x, y)] = true
-	var rooms := _split(Rect2i(Vector2i.ONE, size - Vector2i(2, 2)), type, wealth, rng, walls)
+	var cells: Array[Vector2i] = []
+	var inside: Array[Rect2i] = []
+	for part in parts:
+		inside.append(part.grow(-1))
+		for y in range(part.position.y, part.end.y):
+			for x in range(part.position.x, part.end.x):
+				if x == part.position.x or y == part.position.y or x == part.end.x - 1 or y == part.end.y - 1:
+					walls[Vector2i(x, y)] = true
+	var in_shape: Dictionary = {}
+	for part in parts:
+		for cell in EcsBuildRules.cells(part):
+			if not in_shape.has(cell):
+				in_shape[cell] = true
+				cells.append(at + cell)
+	var rooms := _split(inside, type, wealth, rng, walls)
 	var room_of := _room_map(rooms)
-	var entrance := _entrance(size, facing, room_of, walls, rng)
+	var entrance := _entrance(size, facing, room_of, walls, rng, door - at if door != Vector2i(-1, -1) else door)
 	var doors: Array[Vector2i] = []
 	if entrance != Vector2i(-1, -1):
 		doors.append(entrance)
@@ -67,14 +87,91 @@ static func plan(type: EcsBuildingTypeDef, size: Vector2i, wealth: int, facing: 
 	var placed_doors: Array[Vector2i] = []
 	for cell in doors:
 		placed_doors.append(at + cell)
-	return {"commands": out, "rooms": listed, "entrance": at + entrance if entrance != Vector2i(-1, -1) else entrance,
-		"doors": placed_doors, "missing": missing}
+	return {"commands": out, "shape": shaped["shape"], "cells": cells, "rooms": listed,
+		"entrance": at + entrance if entrance != Vector2i(-1, -1) else entrance, "doors": placed_doors, "missing": missing}
 
-## Splits `inside` into rooms, the largest splittable first, until the type's count for
-## `wealth`; each split's wall line goes into `walls`.
-static func _split(inside: Rect2i, type: EcsBuildingTypeDef, wealth: int, rng: RandomNumberGenerator,
+## The building's parts, each walled on its perimeter, two touching parts sharing a wall line:
+## {shape, parts}. With more than one room the type's `shapes` may cut the back (away from
+## `facing`): an L cuts a back corner, a T both (leaving a wing), a U the middle. A cut that
+## would leave a part smaller than a room, or more parts than rooms, is plain.
+static func _shape(type: EcsBuildingTypeDef, size: Vector2i, wealth: int, facing: Vector2i,
+		rng: RandomNumberGenerator) -> Dictionary:
+	var plain := {"shape": &"plain", "parts": [Rect2i(Vector2i.ZERO, size)] as Array[Rect2i]}
+	var want: int = EcsBuildingTypeDef.by_wealth(type.rooms, wealth)
+	if want < 2 or type.shapes.is_empty():
+		return plain
+	var total := 0.0
+	for key: StringName in type.shapes:
+		total += type.shapes[key]
+	var roll := rng.randf() * total
+	var shape := &"plain"
+	for key: StringName in type.shapes:
+		roll -= type.shapes[key]
+		if roll < 0.0:
+			shape = key
+			break
+	# Frame: u along the front, v from the front (0) to the back (depth - 1).
+	var across := size.x if facing.y != 0 else size.y
+	var depth := size.y if facing.y != 0 else size.x
+	var part_w := type.min_room.x + 2
+	var part_d := type.min_room.y + 2
+	var cut_d := rng.randi_range(ceili(depth * type.notch.x), floori(depth * type.notch.y))
+	cut_d = clampi(cut_d, part_d - 1, depth - part_d)
+	if cut_d < part_d - 1 or depth - cut_d < part_d:
+		return plain
+	var front := Rect2i(0, 0, across, depth - cut_d)
+	var back_y := depth - cut_d - 1
+	var frame: Array[Rect2i] = []
+	match shape:
+		&"l":
+			var cut_w := clampi(rng.randi_range(ceili(across * type.notch.x), floori(across * type.notch.y)), 2, across - part_w)
+			if across - cut_w < part_w or cut_w < 2:
+				return plain
+			var left := rng.randf() < 0.5
+			frame = [front, Rect2i(cut_w if left else 0, back_y, across - cut_w, cut_d + 1)]
+		&"t":
+			var narrow := across - 2 * floori(across * type.notch.y)
+			var wide := across - 2 * ceili(across * type.notch.x)
+			var wing := clampi(rng.randi_range(mini(narrow, wide), maxi(narrow, wide)), part_w, across - 4)
+			if wing < part_w or across - wing < 4:
+				return plain
+			var from := rng.randi_range(2, across - wing - 2)
+			frame = [front, Rect2i(from, back_y, wing, cut_d + 1)]
+		&"u":
+			if want < 3:
+				return plain
+			var gap := clampi(rng.randi_range(ceili(across * type.notch.x), floori(across * type.notch.y)), 2, across - part_w * 2)
+			if across - gap < part_w * 2 or gap < 2:
+				return plain
+			var left_w := rng.randi_range(part_w, across - gap - part_w)
+			frame = [front, Rect2i(0, back_y, left_w, cut_d + 1), Rect2i(left_w + gap, back_y, across - left_w - gap, cut_d + 1)]
+		_:
+			return plain
+	var parts: Array[Rect2i] = []
+	for rect in frame:
+		parts.append(_from_frame(rect, size, facing))
+	return {"shape": shape, "parts": parts}
+
+## A rect in the facing frame (u along the front, v back from it) as cells of a `size` footprint.
+static func _from_frame(rect: Rect2i, size: Vector2i, facing: Vector2i) -> Rect2i:
+	var a := _frame_cell(rect.position, size, facing)
+	var b := _frame_cell(rect.end - Vector2i.ONE, size, facing)
+	return Rect2i(Vector2i(mini(a.x, b.x), mini(a.y, b.y)), (a - b).abs() + Vector2i.ONE)
+
+static func _frame_cell(cell: Vector2i, size: Vector2i, facing: Vector2i) -> Vector2i:
+	if facing == Vector2i.UP:
+		return cell
+	if facing == Vector2i.DOWN:
+		return Vector2i(size.x - 1 - cell.x, size.y - 1 - cell.y)
+	if facing == Vector2i.LEFT:
+		return Vector2i(cell.y, cell.x)
+	return Vector2i(size.x - 1 - cell.y, cell.x)
+
+## Splits the `inside` of each part into rooms, the largest splittable first, until the type's
+## count for `wealth`; each split's wall line goes into `walls`.
+static func _split(inside: Array[Rect2i], type: EcsBuildingTypeDef, wealth: int, rng: RandomNumberGenerator,
 		walls: Dictionary) -> Array[Rect2i]:
-	var rooms: Array[Rect2i] = [inside]
+	var rooms: Array[Rect2i] = inside.duplicate()
 	var want: int = EcsBuildingTypeDef.by_wealth(type.rooms, wealth)
 	var least := type.min_room
 	while rooms.size() < want:
@@ -112,9 +209,10 @@ static func _room_map(rooms: Array[Rect2i]) -> Dictionary:
 			room_of[cell] = k
 	return room_of
 
-## A perimeter cell on the `facing` side with a room right inside it, or (-1, -1).
+## A perimeter cell on the `facing` side with a room right inside it: `door` when it is one,
+## else the one nearest it, else one at random; (-1, -1) when there is none.
 static func _entrance(size: Vector2i, facing: Vector2i, room_of: Dictionary, walls: Dictionary,
-		rng: RandomNumberGenerator) -> Vector2i:
+		rng: RandomNumberGenerator, door: Vector2i = Vector2i(-1, -1)) -> Vector2i:
 	var options: Array[Vector2i] = []
 	var along := Vector2i(absi(facing.y), absi(facing.x))
 	var edge := Vector2i(size.x - 1 if facing.x > 0 else 0, size.y - 1 if facing.y > 0 else 0)
@@ -123,7 +221,15 @@ static func _entrance(size: Vector2i, facing: Vector2i, room_of: Dictionary, wal
 		var cell := Vector2i(k, edge.y) if along.x != 0 else Vector2i(edge.x, k)
 		if room_of.has(cell - facing) and walls.has(cell - along) and walls.has(cell + along):
 			options.append(cell)
-	return options[rng.randi() % options.size()] if not options.is_empty() else Vector2i(-1, -1)
+	if options.is_empty():
+		return Vector2i(-1, -1)
+	if door != Vector2i(-1, -1):
+		var best := options[0]
+		for cell in options:
+			if Vector2(cell).distance_squared_to(Vector2(door)) < Vector2(best).distance_squared_to(Vector2(door)):
+				best = cell
+		return best
+	return options[rng.randi() % options.size()]
 
 ## Inner doors: a random spanning tree over rooms that share a straight stretch of wall, grown
 ## from the entrance room, and by the type's loop chance one more door on a pair it skipped.

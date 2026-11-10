@@ -6,8 +6,12 @@ extends Resource
 
 @export var key: StringName = &""
 @export var display_name: String = ""
-## The module 10 building type it is built as (step 6 adds the ones missing).
+## The module 10 building type it is built as; empty for an outdoor work with no walls (step 7).
 @export var building: StringName = &"house"
+## Its rooms' roles, largest first, in place of the building type's; empty keeps the type's.
+@export var rooms: Array[StringName] = []
+## Its wealth: 0 poor, 1 middling, 2 rich; -1 takes it from where it stands (rich by the plaza).
+@export_range(-1, 2) var wealth: int = -1
 ## The smallest tier it appears in: 0 hamlet, 1 village, 2 town, 3 city, 4 great city.
 @export_enum("Hamlet", "Village", "Town", "City", "Great City") var min_tier: int = 0
 ## Survey facts that must all be present, and facts of which one must be (EcsResourceSurvey keys).
@@ -31,5 +35,8 @@ extends Resource
 ## Rules that must all score at least 0.5 at its spot, and rules of which one must.
 @export var must: Array[StringName] = []
 @export var must_any: Array[StringName] = []
+## Its field's smallest and largest size, in L1 cells; zero for none (a farmhouse has one).
+@export var field_min: Vector2i = Vector2i.ZERO
+@export var field_max: Vector2i = Vector2i.ZERO
 ## Rings its yard may grow; 0 takes the settlement's.
 @export var yard_depth: int = 0

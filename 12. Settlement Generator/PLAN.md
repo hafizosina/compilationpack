@@ -654,12 +654,171 @@ This replaces the "reported short" outcome for anything its catchment has.
   at its resource with a track to the town, or is reported short for lack of the resource; lanes,
   tracks and yards pass step 3 and 4's checks.
 
-### Step 6 — Buildings
-Each assigned plot calls module 10's `EcsBuildingGenerator` with the role's type, wealth, plot
-size and facing. Every new type, its room types and its furniture are listed under **Content to
-add** below.
-- *Done when:* every building passes module 10's `EcsBuildingCheck` (sound, every room reachable
-  from its entrance).
+### Step 6 — Buildings ✅ (done 2026-11-10, `HANDOFF.md` §8)
+
+**Goal.** Every plot from step 5b gets its building: module 10's `EcsBuildingGenerator`, run on
+the plot's footprint, facing its door, at a wealth, with rooms fit for its role. The town is then
+real walls, doors, floors and furniture, drawn chunk by chunk and walkable by module 10's nav.
+
+**Decided (2026-11-10):**
+- **rooms by role**: few building types, and each role lists its rooms (6.3);
+- **buildings are split across chunks**, not kept inside one (6.6);
+- **module 10's generator takes the door cell** as its preferred entrance (6.5);
+- **a building with more than one room isn't just a rectangle**: L, T and U shapes and wings
+  (6.5b).
+
+#### 6.1 What it builds on
+- **Step 5b:** `site.plots` [{role, footprint, front, door, yard}]. The footprint is the
+  building's size, and the front is its `facing`.
+- **Module 10:** `EcsBuildingGenerator.generate(type, size, wealth, facing, seed, catalog,
+  entities, at)` gives build commands, the same the player's tools send. `EcsBuildingCheck`
+  checks a built building: no sealed room, every room and door reachable from the entrance, no
+  furniture on a door's inside cell. It already handles any size and 1–4 rooms; `generator_test`
+  runs 1,000 seeds per type.
+- **The chunks:** the site's commands are handed to each chunk through `overlay`.
+
+#### 6.2 Which roles get walls
+- **Walled (step 6):** every role but those below. That is 41 of 48.
+- **Outdoor (step 7):** market, mine, quarry, lumber camp, clay pit, harbour and shrine. Their
+  plots stay, with no building yet.
+
+#### 6.3 Building types — few types, rooms by role
+Decided: **a building type says what it is built of and how it splits; the role says what its
+rooms are for.** `EcsSettlementRoleDef` gains:
+- `rooms` (Array[StringName], optional): its room roles, largest first. These replace the type's
+  `roles` for that building.
+
+This keeps the types few and keeps each trade's knowledge on its role, not in a shared type. A
+blacksmith and a cobbler share `workshop`, and differ by `rooms`.
+
+| Type (module 10) | New? | Rooms by wealth | Built of (poor → rich) | Roles that use it, and their `rooms` |
+|---|---|---|---|---|
+| `house` | exists | 1/3/4 | wood → stone | house, headman, merchant house |
+| `workshop` | exists | 1/2/3 | wood → stone | blacksmith, toolsmith, smelter [forge, store]; carpenter [carpentry, lumber store]; bakery [bakehouse, store]; the other crafts [workshop, store] |
+| `manor` | new | 4/5/6 | stone | manor [hall, bedroom, kitchen, study, bedroom, store] |
+| `tavern` | new | 3/4/5 | wood → stone | tavern [common room, kitchen, store]; inn and waystation add bedrooms |
+| `chapel` | new | 1/1/2 | stone | chapel [nave]; church [nave, vestry] |
+| `hall` | new | 2/3/3 | stone | town hall [hall, study, store] |
+| `farmhouse` | new | 2/3/3 | wood | farmhouse [kitchen, bedroom, store] |
+| `barn` | new | 1/2/2 | wood, few inner walls | barn [hay store]; stable [stalls, hay store] |
+| `storehouse` | new | 1/2/3 | wood → stone | granary, warehouse [store …] |
+| `mill` | new | 2/2/2 | wood → stone | watermill, windmill, sawmill [mill room, grain store] |
+| `hut` | new | 1/1/2 | wood | woodcutter [woodshed]; herder [hut room]; fishing hut, net maker, smokehouse [fishery]; miner's hut [miner's room]; charcoal [hut room] |
+
+Role `building` keys change to these, and the bakery, inn, storehouse, herder hut and fishing hut
+keys fold into the table above.
+
+#### 6.4 Wealth
+`EcsSettlementRoleDef` gains `wealth` (−1 = from its place):
+- the manor, church and town hall are rich;
+- crafts and trades are middling;
+- huts, barns and farmhouses are poor;
+- **houses take it from where they stand:** rich by the plaza, middling in the inner ring, poor at
+  the edge (the `centre` rule at ⅔ and ⅓).
+
+#### 6.5 Generating
+- **When:** after plots, lanes and yards, in `EcsSitePicker._centre`, before
+  `EcsRoadPlanner.lay`.
+- **For each walled plot:**
+  - `generate(type, footprint.size, wealth, front, hash([seed, plot index]), …, at = footprint.position)`;
+  - the role's `rooms` are passed by a type copy whose `roles` are the role's;
+  - the commands go into `site.commands`;
+  - the plan's entrance is kept on the plot, as `entrance`.
+- **The entrance is the plot's door cell,** so the lane meets it. This is a small module 10
+  change: `generate` and `plan` take an optional preferred entrance cell. `_entrance` uses it when
+  it is valid (on the facing side, not a corner, a room inside), and otherwise picks one as now.
+  The splits are drawn first, so the door's inside cell can be a split line. In that case the
+  nearest valid cell is used and the lane is extended to it.
+- **Footprint and yard cells are already node-free.**
+
+#### 6.5b Shaped buildings (a module 10 generator change)
+Decided: a building with more than one room takes a **natural shape**, not the plot's rectangle.
+One-room buildings (huts, chapels, barns) stay rectangular.
+- **Module 10 already allows it.** Room detection calls a flood that reaches the footprint's
+  edge "open, not a room", and roofs cover only rooms and the walls round them. So walls traced
+  along an L inside the footprint leave the cut corner as open ground, with no room and no roof,
+  with no change to rooms or roofs. Only the generator changes.
+- **`EcsBuildingTypeDef` gains `shapes`**: shape → weight, by wealth (plain, L, T, U, wing), plus
+  `notch`, the smallest and largest cut as a share of each side.
+  - A house is mostly plain or L.
+  - A manor takes T, U or wings.
+  - A tavern and a farmhouse take L or a wing.
+- **The generator, before splitting,** cuts the footprint into its shape:
+  - **L:** a corner rectangle cut away.
+  - **T:** both corners of one side cut.
+  - **U:** a notch from the middle of one side.
+  - **Wing:** a narrower rectangle added to a side, so the main block is cut back to make room
+    for it.
+  - Every part left keeps at least `min_room` + walls. The facing side must keep a wall stretch
+    with a room inside it for the entrance, or the shape is redrawn.
+- **Then as now, per part:** BSP rooms inside each part; walls on the shape's outline and the
+  splits; a door between parts as an inner door, along the same spanning tree. The entrance is on
+  the facing side, at the plot's door cell when that is on the outline, else the nearest outline
+  cell facing that way, with the lane extended to it (6.5).
+- **Furniture** is placed only inside rooms, as now, so never in a cut corner.
+- **Module 12:** the plot's footprint is still the building's rect. Its cut corners are open
+  ground owned by the building. The viewer draws the building's walls and roof, and the yard runs
+  round the rect as now. The plot record gains `building_cells` (the shape's cells), for the
+  viewer and for step 7's gardens.
+- **Tests:** module 10's `generator_test` runs every shape over its 1,000 seeds per type. The
+  check is unchanged: no sealed room, every room and door reachable. Also checked: a cut corner is
+  never a room and never roofed.
+
+#### 6.6 Buildings and chunks — split, clipped per chunk
+Decided: **a building may cross chunk lines.** Each chunk is its own module 10 world, so each gets
+its part of the building, clipped by `EcsTerrainChunks.overlay` with no change to module 10's build
+system:
+- **CREATE_BUILDING** is clipped to the chunk's own cells plus its border ring (`own.grow(1)`). The
+  build system fills only that, so rooms flood within the clipped footprint.
+- **One module 10 change is needed for it:** room detection calls a flood that reaches the
+  footprint's edge open, so a room cut by the chunk line would lose its room and roof. The
+  clipped CREATE_BUILDING carries the sides where the building continues past the grid
+  (`EcsBuildingComponent.cut`). A step across a cut side counts as a wall for room detection,
+  not a leak.
+- **Walls, doors and floors** go to every chunk whose cells or border hold them, as floors already
+  do. A wall or door on the border is in both chunks, so the cut lines up.
+- **Furniture and attachments** go only to the chunk holding their origin, as nodes and the well
+  already do. Pieces are at most 2 cells, so a piece whose origin is in the chunk lies within its
+  border ring and is never refused.
+- **Roofs:** the cut edge of a clipped footprint would draw a roof edge. The chunk's trim, which
+  already erases its ring of ground tiles, also erases its ring of roof tiles, so the roof reads
+  as one across the line.
+- **Each chunk has its own copy of the building**, a separate entity, as a chunk is a separate
+  world. Its rooms are typed by the furniture that chunk holds. That is display only. The whole
+  building is checked in one world in the tests (6.8).
+
+#### 6.7 Content (module 10's catalogs)
+- **9 building types** (table above), in `defs/building_type/` and the catalog's
+  `building_types`.
+- **Room types:** hall, study, common room, forge, carpentry, lumber store, bakehouse, nave,
+  vestry, stalls, hay store, mill room, grain store, woodshed, fishery, miner's room, hut room.
+  Each is typed by its key piece (see Content to add).
+- **Furniture:** about 23 placeholder blueprints: forge, quench barrel, tool rack, oven, kneading
+  table, flour sack, grain sack, millstone, bar counter, desk, bookshelf, pew, altar, trough, hay
+  pile, net rack, fish rack, pick rack, ore cart, lumber pile, sawhorse, crate, sack. Their art
+  goes on a new `furniture.png` sheet from `make_placeholders.py`.
+
+#### 6.8 Check, viewer and tests
+- **Check:** every walled plot has a building, generated without refusal; every building passes
+  `EcsBuildingCheck`; every entrance faces its plot's lane.
+- **Viewer:** L1 chunks draw the buildings through module 10. The cell panel names a cell's
+  building and room.
+- **Tests:**
+  - module 10's `generator_test` takes the 9 new types, 1,000 seeds each;
+  - module 12's new `building_test` covers every town size over seeds: the town's area and
+    outlying windows built through module 10's pipeline, every command accepted, every building
+    checked, every entrance on a lane;
+  - a building crossing chunk lines: every chunk's clipped commands are accepted, and its walls,
+    floors and roof cells are the whole building's on each chunk's cells and border;
+  - measured cost per town.
+
+#### 6.9 Not in step 6
+- Outdoor works (step 7): market stalls, mine entrance, quarry pit, harbour, shrine.
+- Fences and gardens on yards (step 7). **Farm fields were pulled forward** (2026-11-10,
+  `HANDOFF.md` §8): dirt with crop rows beside each farmhouse.
+
+- *Done when:* every walled plot has a building that passes `EcsBuildingCheck`, with its entrance
+  on its lane, and a building crossing chunks draws as one.
 
 ### Step 7 — Outdoors
 Outdoor areas are **yards**: a plot with no walls, filled by its own small layout rule.

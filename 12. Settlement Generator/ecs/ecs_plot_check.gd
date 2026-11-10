@@ -5,7 +5,7 @@ extends RefCounted
 ## role list and stands where that role's `must` rules hold; every footprint is inside the area or
 ## an outlying window, on land, off roads, the plaza and other plots; every door is on its
 ## footprint's front and has a road cell before it; every yard is free land owned once, beside its
-## footprint.
+## footprint; a field is free land beside its own footprint, off its front.
 
 static func problems(site: EcsSettlementSite, region_plan: Dictionary, region_def: EcsLandDef,
 		_def: EcsSettlementDef, rng_seed: int, scale: int, shares: Array) -> Array[String]:
@@ -44,6 +44,20 @@ static func problems(site: EcsSettlementSite, region_plan: Dictionary, region_de
 			return ["plot %d's door %s faces no road" % [k, door]]
 		if not EcsPlotPlanner.musts_hold(site, grid, role, rect, front):
 			return ["plot %d, a %s, stands where its rules don't hold" % [k, role.key]]
+		if role.field_max != Vector2i.ZERO and not plot.has("field"):
+			return ["plot %d, a %s, has no field" % [k, role.key]]
+		if plot.has("field"):
+			var field: Rect2i = plot["field"]
+			if not grid.rect.encloses(field):
+				return ["plot %d's field %s leaves its ground" % [k, field]]
+			if not field.intersects(rect.grow(2)) or field.intersects(Rect2i(door + front, Vector2i.ONE).grow(1)):
+				return ["plot %d's field %s isn't beside it, off its front" % [k, field]]
+			for y in range(field.position.y, field.end.y):
+				for x in range(field.position.x, field.end.x):
+					var why := _taken(site, grid, taken, Vector2i(x, y))
+					if why != "":
+						return ["plot %d's field is %s at %s" % [k, why, Vector2i(x, y)]]
+					taken[Vector2i(x, y)] = k
 	for k in site.plots.size():
 		for cell: Vector2i in site.plots[k]["yard"]:
 			var grid: EcsPlotPlanner.Grid = null

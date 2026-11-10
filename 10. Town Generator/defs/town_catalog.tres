@@ -31,6 +31,30 @@
 [ext_resource type="Resource" uid="uid://du3o3361f2fqc" path="res://10. Town Generator/defs/wall/wood.tres" id="w1"]
 [ext_resource type="Resource" uid="uid://b6fx676kshdux" path="res://10. Town Generator/defs/wall/stone.tres" id="w2"]
 
+[ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/manor.tres" id="bt_manor"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/tavern.tres" id="bt_tavern"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/chapel.tres" id="bt_chapel"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/hall.tres" id="bt_hall"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/farmhouse.tres" id="bt_farmhouse"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/barn.tres" id="bt_barn"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/storehouse.tres" id="bt_storehouse"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/mill.tres" id="bt_mill"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/hut.tres" id="bt_hut"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/hall.tres" id="rt_hall"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/study.tres" id="rt_study"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/common_room.tres" id="rt_common_room"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/forge.tres" id="rt_forge"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/carpentry.tres" id="rt_carpentry"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/lumber_store.tres" id="rt_lumber_store"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/bakehouse.tres" id="rt_bakehouse"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/nave.tres" id="rt_nave"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/stalls.tres" id="rt_stalls"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/hay_store.tres" id="rt_hay_store"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/mill_room.tres" id="rt_mill_room"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/grain_store.tres" id="rt_grain_store"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/fishery.tres" id="rt_fishery"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/miner_room.tres" id="rt_miner_room"]
+
 [resource]
 script = ExtResource("1")
 terrains = Array[ExtResource("t")]([ExtResource("t1"), ExtResource("t2"), ExtResource("t3"), ExtResource("t4"), ExtResource("t5"), ExtResource("t6")])
@@ -38,5 +62,5 @@ floors = Array[ExtResource("f")]([ExtResource("f1"), ExtResource("f2"), ExtResou
 walls = Array[ExtResource("w")]([ExtResource("w1"), ExtResource("w2")])
 doors = Array[ExtResource("d")]([ExtResource("d1"), ExtResource("d2")])
 roofs = Array[ExtResource("r")]([ExtResource("r1")])
-room_types = Array[ExtResource("rt")]([ExtResource("rt_bedroom"), ExtResource("rt_kitchen"), ExtResource("rt_workshop"), ExtResource("rt_dining"), ExtResource("rt_store")])
-building_types = Array[ExtResource("bt")]([ExtResource("bt_house"), ExtResource("bt_workshop")])
+room_types = Array[ExtResource("rt")]([ExtResource("rt_bedroom"), ExtResource("rt_kitchen"), ExtResource("rt_workshop"), ExtResource("rt_dining"), ExtResource("rt_store"), ExtResource("rt_hall"), ExtResource("rt_study"), ExtResource("rt_common_room"), ExtResource("rt_forge"), ExtResource("rt_carpentry"), ExtResource("rt_lumber_store"), ExtResource("rt_bakehouse"), ExtResource("rt_nave"), ExtResource("rt_stalls"), ExtResource("rt_hay_store"), ExtResource("rt_mill_room"), ExtResource("rt_grain_store"), ExtResource("rt_fishery"), ExtResource("rt_miner_room")])
+building_types = Array[ExtResource("bt")]([ExtResource("bt_house"), ExtResource("bt_workshop"), ExtResource("bt_manor"), ExtResource("bt_tavern"), ExtResource("bt_chapel"), ExtResource("bt_hall"), ExtResource("bt_farmhouse"), ExtResource("bt_barn"), ExtResource("bt_storehouse"), ExtResource("bt_mill"), ExtResource("bt_hut")])

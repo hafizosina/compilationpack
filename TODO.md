@@ -48,8 +48,10 @@ Plans noted for later across modules 9 to 12.
       (2026-11-10).
 - [x] Step 5b: plots placed by role, each where its site rules say; works out at their resource with a
       track (2026-11-10).
+- [x] Step 6: a building on every walled plot, shaped (L, T, U), rooms by role, split across chunks
+      (2026-11-10).
 - [ ] Speed up lanes (the largest part of a town's plots), and test the area growing.
-- [ ] Steps 6–9 on L1 (`PLAN.md`): buildings, outdoors, whole-town check, viewer and measurements.
+- [ ] Steps 7–9 on L1 (`PLAN.md`): outdoors, whole-town check, viewer and measurements.
 - [ ] Open plan questions: crops on tilled soil (a module 10 rule
       change, or soil as a terrain), fences as objects or a structure with gates.
 - [ ] L3 world map, and height-based water: heightmap, Priority-Flood lakes, D8 rivers (the

@@ -45,6 +45,31 @@
 [ext_resource type="Resource" uid="uid://cydruo8ttqn2m" path="res://10. Town Generator/defs/blueprints/gold_vein.tres" id="bp_gold_vein"]
 [ext_resource type="Resource" uid="uid://dshsy4rwj8p2f" path="res://10. Town Generator/defs/blueprints/clay_pit.tres" id="bp_clay_pit"]
 
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/forge.tres" id="bp_forge"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/quench_barrel.tres" id="bp_quench_barrel"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/tool_rack.tres" id="bp_tool_rack"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/oven.tres" id="bp_oven"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/kneading_table.tres" id="bp_kneading_table"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/flour_sack.tres" id="bp_flour_sack"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/millstone.tres" id="bp_millstone"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/grain_sack.tres" id="bp_grain_sack"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/bar_counter.tres" id="bp_bar_counter"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/desk.tres" id="bp_desk"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/bookshelf.tres" id="bp_bookshelf"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/altar.tres" id="bp_altar"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/high_seat.tres" id="bp_high_seat"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/trough.tres" id="bp_trough"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/hay_pile.tres" id="bp_hay_pile"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/net_rack.tres" id="bp_net_rack"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/fish_rack.tres" id="bp_fish_rack"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/pick_rack.tres" id="bp_pick_rack"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/pew.tres" id="bp_pew"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/ore_cart.tres" id="bp_ore_cart"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/lumber_pile.tres" id="bp_lumber_pile"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/sawhorse.tres" id="bp_sawhorse"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/crate.tres" id="bp_crate"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/blueprints/sack.tres" id="bp_sack"]
+
 [resource]
 script = ExtResource("cat")
-defs = Array[ExtResource("def")]([ExtResource("bp_building"), ExtResource("bp_door"), ExtResource("bp_bed"), ExtResource("bp_double_bed"), ExtResource("bp_table"), ExtResource("bp_long_table"), ExtResource("bp_chair"), ExtResource("bp_stove"), ExtResource("bp_chest"), ExtResource("bp_workbench"), ExtResource("bp_shelf"), ExtResource("bp_barrel"), ExtResource("bp_sawmill"), ExtResource("bp_anvil"), ExtResource("bp_well"), ExtResource("bp_hearth"), ExtResource("bp_crop"), ExtResource("bp_tree"), ExtResource("bp_bush"), ExtResource("bp_wall_lamp"), ExtResource("bp_candle"), ExtResource("bp_plate"), ExtResource("bp_book"), ExtResource("bp_mug"), ExtResource("bp_banner"), ExtResource("bp_rubble"), ExtResource("bp_villager"), ExtResource("bp_oak"), ExtResource("bp_pine"), ExtResource("bp_birch"), ExtResource("bp_fruit_tree"), ExtResource("bp_berry_bush"), ExtResource("bp_herb_bush"), ExtResource("bp_mushrooms"), ExtResource("bp_reeds"), ExtResource("bp_boulder"), ExtResource("bp_outcrop"), ExtResource("bp_iron_vein"), ExtResource("bp_copper_vein"), ExtResource("bp_coal_vein"), ExtResource("bp_gold_vein"), ExtResource("bp_clay_pit")])
+defs = Array[ExtResource("def")]([ExtResource("bp_building"), ExtResource("bp_door"), ExtResource("bp_bed"), ExtResource("bp_double_bed"), ExtResource("bp_table"), ExtResource("bp_long_table"), ExtResource("bp_chair"), ExtResource("bp_stove"), ExtResource("bp_chest"), ExtResource("bp_workbench"), ExtResource("bp_shelf"), ExtResource("bp_barrel"), ExtResource("bp_sawmill"), ExtResource("bp_anvil"), ExtResource("bp_well"), ExtResource("bp_hearth"), ExtResource("bp_crop"), ExtResource("bp_tree"), ExtResource("bp_bush"), ExtResource("bp_wall_lamp"), ExtResource("bp_candle"), ExtResource("bp_plate"), ExtResource("bp_book"), ExtResource("bp_mug"), ExtResource("bp_banner"), ExtResource("bp_rubble"), ExtResource("bp_villager"), ExtResource("bp_oak"), ExtResource("bp_pine"), ExtResource("bp_birch"), ExtResource("bp_fruit_tree"), ExtResource("bp_berry_bush"), ExtResource("bp_herb_bush"), ExtResource("bp_mushrooms"), ExtResource("bp_reeds"), ExtResource("bp_boulder"), ExtResource("bp_outcrop"), ExtResource("bp_iron_vein"), ExtResource("bp_copper_vein"), ExtResource("bp_coal_vein"), ExtResource("bp_gold_vein"), ExtResource("bp_clay_pit"), ExtResource("bp_forge"), ExtResource("bp_quench_barrel"), ExtResource("bp_tool_rack"), ExtResource("bp_oven"), ExtResource("bp_kneading_table"), ExtResource("bp_flour_sack"), ExtResource("bp_millstone"), ExtResource("bp_grain_sack"), ExtResource("bp_bar_counter"), ExtResource("bp_desk"), ExtResource("bp_bookshelf"), ExtResource("bp_altar"), ExtResource("bp_high_seat"), ExtResource("bp_trough"), ExtResource("bp_hay_pile"), ExtResource("bp_net_rack"), ExtResource("bp_fish_rack"), ExtResource("bp_pick_rack"), ExtResource("bp_pew"), ExtResource("bp_ore_cart"), ExtResource("bp_lumber_pile"), ExtResource("bp_sawhorse"), ExtResource("bp_crate"), ExtResource("bp_sack")])

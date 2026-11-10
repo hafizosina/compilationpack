@@ -11,9 +11,11 @@ extends RefCounted
 ##   2. Lanes: in the area and each window, from the cell before each door to the nearest road,
 ##      nearest plot first, so lanes merge. A plot no lane reaches is dropped, and reported short.
 ##   3. Yards: every plot grows from its footprint over free land to its role's yard depth.
+## A role with a field (a farmhouse) takes a spot only where its field fits beside it, off its
+## front and a cell clear of it, so a yard path runs between; fields block plots, lanes and yards.
 ## Footprints and yards go into `cleared_cells`; floors are left to EcsRoadPlanner.lay.
 
-enum Use { FREE, ROAD, WATER, FOOTPRINT }
+enum Use { FREE, ROAD, WATER, FOOTPRINT, FIELD }
 
 const SIDES: Array[Vector2i] = [Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT, Vector2i.UP]
 ## Site rules a role may weigh, each scored 0–1 at a spot; a deposit key (iron, clay…) is one too.
@@ -100,6 +102,11 @@ static func plan(site: EcsSettlementSite, def: EcsSettlementDef, terrain: Dictio
 		for cell: Vector2i in site.plots[k]["yard"]:
 			site.plot_at[cell] = k
 			site.cleared_cells[cell] = true
+		var field: Rect2i = site.plots[k].get("field", Rect2i())
+		for y in range(field.position.y, field.end.y):
+			for x in range(field.position.x, field.end.x):
+				site.plot_at[Vector2i(x, y)] = k
+				site.cleared_cells[Vector2i(x, y)] = true
 	for window in windows:
 		site.outlying.append({"rect": window.rect, "resource": window.resource,
 			"terrain": {"kinds": window.kinds, "river": window.river, "deposits": window.deposits}})
@@ -149,6 +156,10 @@ static func grid_of(site: EcsSettlementSite, rect: Rect2i, terrain: Dictionary) 
 		for y in range(part.position.y, part.end.y):
 			for x in range(part.position.x, part.end.x):
 				grid.use[grid.i(Vector2i(x, y))] = Use.FOOTPRINT
+		var field := (plot.get("field", Rect2i()) as Rect2i).intersection(rect)
+		for y in range(field.position.y, field.end.y):
+			for x in range(field.position.x, field.end.x):
+				grid.use[grid.i(Vector2i(x, y))] = Use.FIELD
 	grid.reach = _reach(grid.use, rect.size)
 	return grid
 
@@ -206,19 +217,78 @@ static func _place_in(site: EcsSettlementSite, def: EcsSettlementDef, grid: Grid
 		for front in _fronts(rect, grid):
 			if not _musts(site, grid, role, rect, front):
 				continue
+			var field := Rect2i()
+			if role.field_max != Vector2i.ZERO:
+				field = _field_for(rect, front, grid, role, rng)
+				if not field.has_area():
+					continue
 			var score := noise
 			for rule: StringName in role.sites:
 				score += role.sites[rule] * score_rule(site, grid, rule, rect, front)
 			if score > best_score:
 				best_score = score
-				best = {"footprint": rect, "front": front}
+				best = {"footprint": rect, "front": front, "field": field}
 	if best.is_empty():
 		return false
 	var rect: Rect2i = best["footprint"]
 	for y in range(rect.position.y, rect.end.y):
 		for x in range(rect.position.x, rect.end.x):
 			grid.use[grid.i(Vector2i(x, y))] = Use.FOOTPRINT
-	site.plots.append({"role": role.key, "footprint": rect, "front": best["front"], "door": _door(rect, best["front"]), "yard": []})
+	var plot := {"role": role.key, "footprint": rect, "front": best["front"], "door": _door(rect, best["front"]), "yard": []}
+	var field: Rect2i = best["field"]
+	if field.has_area():
+		plot["field"] = field
+		for y in range(field.position.y, field.end.y):
+			for x in range(field.position.x, field.end.x):
+				grid.use[grid.i(Vector2i(x, y))] = Use.FIELD
+	site.plots.append(plot)
+	return true
+
+## A field for `role` beside `rect` on a side other than its `front`, a cell clear of it: the
+## largest of three sizes from the role's range that fits on a side, the sides in random order;
+## empty when none fits.
+static func _field_for(rect: Rect2i, front: Vector2i, grid: Grid, role: EcsSettlementRoleDef, rng: RandomNumberGenerator) -> Rect2i:
+	var inner := grid.rect.grow(-EDGE)
+	var sides: Array[Vector2i] = []
+	for side in SIDES:
+		if side != front:
+			sides.append(side)
+	for k in range(sides.size() - 1, 0, -1):
+		var j := rng.randi_range(0, k)
+		var swap := sides[k]
+		sides[k] = sides[j]
+		sides[j] = swap
+	var shift := rng.randi_range(-2, 2)
+	for step in 3:
+		var t := step / 2.0
+		var size := Vector2i(roundi(lerpf(role.field_max.x, role.field_min.x, t)), roundi(lerpf(role.field_max.y, role.field_min.y, t)))
+		for side in sides:
+			# The field's long side lies along the house.
+			var turned := size if side.y != 0 else Vector2i(size.y, size.x)
+			var pos := Vector2i.ZERO
+			if side.x != 0:
+				pos.y = rect.position.y + rect.size.y / 2 - turned.y / 2 + shift
+				pos.x = rect.end.x + 1 if side.x > 0 else rect.position.x - 1 - turned.x
+			else:
+				pos.x = rect.position.x + rect.size.x / 2 - turned.x / 2 + shift
+				pos.y = rect.end.y + 1 if side.y > 0 else rect.position.y - 1 - turned.y
+			var field := Rect2i(pos, turned)
+			if inner.encloses(field) and _field_fits(field, grid):
+				return field
+	return Rect2i()
+
+## Whether `field` lies on free land a cell clear of every footprint and field.
+static func _field_fits(field: Rect2i, grid: Grid) -> bool:
+	for y in range(field.position.y, field.end.y):
+		for x in range(field.position.x, field.end.x):
+			if grid.use[grid.i(Vector2i(x, y))] != Use.FREE:
+				return false
+	var ring := field.grow(1).intersection(grid.rect)
+	for y in range(ring.position.y, ring.end.y):
+		for x in range(ring.position.x, ring.end.x):
+			var u := grid.use[grid.i(Vector2i(x, y))]
+			if u == Use.FOOTPRINT or u == Use.FIELD:
+				return false
 	return true
 
 ## A `size` footprint flush against a random side of `plaza`, its middle within the plaza's span.
@@ -564,7 +634,8 @@ static func _fits(rect: Rect2i, grid: Grid, gap: int) -> bool:
 	var room := rect.grow(gap).intersection(grid.rect)
 	for y in range(room.position.y, room.end.y):
 		for x in range(room.position.x, room.end.x):
-			if grid.use[grid.i(Vector2i(x, y))] == Use.FOOTPRINT:
+			var u := grid.use[grid.i(Vector2i(x, y))]
+			if u == Use.FOOTPRINT or u == Use.FIELD:
 				return false
 	return true
 

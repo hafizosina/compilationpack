@@ -109,13 +109,8 @@ func _the_centre_loads_through_the_build_system() -> void:
 	for node: Dictionary in nodes:
 		commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, node["cell"], node["blueprint"], 0))
 		whole.append({"cell": site.area.position + (node["cell"] as Vector2i), "size": node["size"]})
-	for command in site.commands:
-		# Main roads run on past the area to the region's edge; only the area is built here.
-		if not site.area.has_point(command.cell):
-			continue
-		var local := command.cell - site.area.position
-		commands.append(EcsBuildCommand.place(command.kind, local, command.blueprint, command.value) if command.kind == EcsBuildCommand.Kind.PLACE_OBJECT
-			else EcsBuildCommand.make(command.kind, local, command.value))
+	# The town's commands on the area's cells; main roads and outlying works run on past it.
+	commands.append_array(EcsTerrainChunks.clip(site, site.area, 0, true))
 	var world := EcsWorld.new()
 	var grid := EcsTownGrid.make(site.area.size.x, site.area.size.y, CATALOG.terrain_id(&"grass"))
 	grid.commands.append_array(commands)
@@ -164,9 +159,9 @@ func _a_plaza_split_across_chunks_draws_as_one() -> void:
 		var floors := PackedInt32Array()
 		floors.resize(outer * outer)
 		for command in chunks.overlay(at, true):
-			if command.kind == EcsBuildCommand.Kind.PLACE_OBJECT:
+			if command.kind == EcsBuildCommand.Kind.PLACE_OBJECT and command.blueprint == &"well":
 				wells += 1
-			else:
+			elif command.kind == EcsBuildCommand.Kind.SET_FLOOR:
 				floors[command.cell.y * outer + command.cell.x] = command.value
 		for y in outer:
 			for x in outer:
