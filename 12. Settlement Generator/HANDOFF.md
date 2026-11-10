@@ -8,10 +8,11 @@ catalogs, by decision (2026-11-08), so module 10's builder can place them too.
 **Status (2026-11-10):** step 1 (terrain and resource nodes, on an **L2 region** with **L1**
 streamed 8× into it in chunks), step 2 (the town's site, plaza and well, §3), step 3 (its main
 roads, §4) and step 4 (plots, then the lanes they need, §5) are done. Steps 5–9 work on L1 only,
-inside the town's area.
+inside the town's area. Step 5 (what the town lives on and its building list, §6) is done; its
+plots don't yet follow the list (step 5b).
 
 ```bash
-# 38 checks, ~60 s; exit 0 only if all pass. Prints plan and load costs.
+# 41 checks, ~60 s; exit 0 only if all pass. Prints plan and load costs.
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/terrain_test.tscn"
 # Step 2: 14 checks, ~60 s. Prints how long picking a site takes.
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/site_test.tscn"
@@ -19,6 +20,8 @@ inside the town's area.
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/road_test.tscn"
 # Step 4: 7 checks, ~50 s. Prints how long a town with its roads and plots takes.
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/plot_test.tscn"
+# Step 5: 7 checks, ~90 s. Prints what each town lives on and its mean survey.
+"$GODOT" --headless --path . "res://12. Settlement Generator/tests/economy_test.tscn"
 # The viewer: Generate makes the L2 region; the wheel zooms in until L1 streams in chunk by chunk.
 "$GODOT" --path . "res://12. Settlement Generator/generator.tscn"
 ```
@@ -29,10 +32,10 @@ inside the town's area.
 
 | Path | Role |
 |---|---|
-| `defs/` | `EcsSettlementDef` (a kind of map), `EcsNodeSpawnDef` (where a node grows); `settlements/`: `hamlet`, `village`, `town`, `region` |
-| `ecs/` | `EcsTerrainGenerator` (pure: `plan`, `refine`, and the chunk stages `refine_terrain`, `refine_nodes`), `EcsTerrainCheck` (pure: `problems`, `follows`), `EcsTerrainChunks` (the L1 chunks kept in memory, what to make next, and the town's overlay), `EcsSitePicker` and `EcsSiteCheck` (pure: the town's site and centre), `EcsRoadPlanner` and `EcsRoadCheck` (pure: its roads), `EcsPlotPlanner` and `EcsPlotCheck` (pure: its plots and lanes), `EcsSettlementSite` (the record) |
+| `defs/` | `EcsSettlementDef` (a kind of map; a town tier), `EcsNodeSpawnDef` (where a node grows), `EcsDepositDef` (an ore or clay deposit), `EcsSettlementRoleDef` and `EcsSettlementCharacterDef` in `EcsEconomyCatalog` (`economy.tres`); `settlements/`: `hamlet`, `village`, `town`, `region` |
+| `ecs/` | `EcsTerrainGenerator` (pure: `plan`, `refine`, and the chunk stages `refine_terrain`, `refine_nodes`), `EcsTerrainCheck` (pure: `problems`, `follows`), `EcsTerrainChunks` (the L1 chunks kept in memory, what to make next, and the town's overlay), `EcsSitePicker` and `EcsSiteCheck` (pure: the town's site and centre), `EcsRoadPlanner` and `EcsRoadCheck` (pure: its roads), `EcsPlotPlanner` and `EcsPlotCheck` (pure: its plots and lanes), `EcsResourceSurvey` and `EcsTownEconomy` (pure: what is in reach, what the town lives on and builds), `EcsSettlementSite` (the record) |
 | `generator.tscn` | The viewer (`generator_view.gd`); its panel is built in code |
-| `tests/` | `terrain_test.tscn`, `site_test.tscn`, `road_test.tscn`, `plot_test.tscn` |
+| `tests/` | `terrain_test.tscn`, `site_test.tscn`, `road_test.tscn`, `plot_test.tscn`, `economy_test.tscn` |
 | `PLAN.md` | The nine steps |
 
 Module 10 additions for it (module 10's HANDOFF §13): the `rock` and `forest` terrains, the
@@ -462,4 +465,74 @@ attempts (100 plots × 40 tries over footprint-sized rects) and the yard and BFS
 - lanes wider than 1 (`lane_width` is not read by the plot planner);
 - plots facing a road at a slant still face north, south, east or west: by design;
 - yards are irregular; fences round them are step 7's question.
+
+---
+
+## 6. Step 5 — what the town is: deposits, survey, character, buildings (2026-11-10)
+
+Decided: the building list is worked out before anything is placed, from what the town lives on
+(its **character**), how big it is (its **tier**) and what is within reach. Tiers are Hamlet,
+Village, Town, City, Great City (City and up later). **The character is always derived**, never
+chosen.
+
+**Deposits on L2 (a step 1 change).** Veins used to grow wherever their zone was, so every rocky
+area had iron. Now:
+- `EcsDepositDef` (key, ground, count, radius); the region def lists five: iron, coal, copper,
+  gold on rock, clay on sand. `plan` adds `deposits` {ids per cell, keys, blobs}, on its own seed
+  stage (8), so nothing else in a plan changed.
+- `refine_terrain` returns the child's `deposits`: each cell its parent cell's.
+- `EcsNodeSpawnDef.deposit` names the deposit a spawn grows in; `refine_nodes` takes `deposits`
+  and clears every zone bit outside that deposit for that spawn, so neither starts nor a clump's
+  walk leave it. The vein and clay pit spawns of hamlet, village and town name theirs.
+- A map planned on its own (no region) has no deposits, so its veins grow anywhere in their zone
+  as before.
+- Viewer: deposits tinted over L2, fading with the roads; the cell panel names a cell's deposit.
+- `terrain_test` (41 now): deposits lie on their ground; round each iron deposit L1 grows 111–148
+  iron veins; none grows outside a deposit of its kind.
+
+**`EcsResourceSurvey.of(site, …)`** (pure): the catchment is every region cell a walk of
+`def.catchment` (hamlet 40, village 60, town 80, by `road_costs`) reaches, using the route costs
+the road planner already made (`site.costs`). Scores 0–1: `arable`, `pasture`, `forest`, `rock`
+(shares of the land), `fish`, `open_water`, `sea` and `river` (counted from land in reach that
+touches water: a walk barely enters water, so counting water cells saw almost none), `trade`
+(exits, plus sea or river), and one per deposit key (cells in reach / 24). A fact is present at
+0.1; `holds(facts, all, any, absent)` is the one test of requirements.
+
+**`EcsTownEconomy.plan(facts, def, seed, cell)`** (pure, seeded):
+1. every character its tier allows and its facts hold is scored (weights × survey); the best is
+   the main trade;
+2. others at their `side_at` or more are side lines, at most 2, those clearing it furthest first;
+3. roles: the tier's `base_roles`, the main trade's `core` × `trade_scale`, each side line's `side`
+   set; a role the tier or facts don't allow is listed in `left_out`;
+4. food: while residents outnumber what the roles feed, the first allowed of `food_roles`
+   (farmhouse, fishing hut, herder) is added; a trading town buys 30%.
+
+Result on `site.economy`: {character, scores, sides, roles [{role, count, from}], left_out,
+population, fed}. It runs in `EcsSitePicker._centre` after the main roads, before the plots.
+
+**Data** (`defs/economy.tres`): 48 roles (key, building type, min tier, requires / requires_any /
+absent facts, residents, feeds) and 9 characters (farming, herding, fishing, timber, mining,
+quarrying, pottery, trading, port), each with weights, requirements, core and side sets. A
+windmill is `absent: river`, so a river town gets a watermill instead. Most roles name building
+types module 10 doesn't have yet (step 6).
+
+**Viewer:** the info panel gives what the town lives on, its people and food, the facts in reach
+and its buildings.
+
+**Tests** (`economy_test`, 7): 3 sizes × 3 kinds of water × 4 seeds — every town's main trade is
+one its facts allow, its core is built, every role is allowed, everyone is fed; 5 main trades
+among them (farming, fishing, timber, mining, trading); 3 towns mine on the side, each with a
+mine, and a toolsmith who smelts where iron or copper is; same seed, same town; no deposits, no
+mining.
+
+**Measured:** survey and economy 5–17 ms a town (they took ~370 ms before reusing the road
+planner's route costs).
+
+**Not yet:**
+- plots don't follow the list: their count is still `plots`, and nothing says which plot is which
+  building (step 5b, role-led placement);
+- herding, quarrying and port were never the main trade in the test's 36 towns; pottery was before
+  the weights were tuned. The weights are a first pass;
+- the info panel runs off the screen for a town's long building list;
+- City and Great City.
 

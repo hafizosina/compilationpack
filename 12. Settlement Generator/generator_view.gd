@@ -12,7 +12,8 @@ extends Node2D
 ## The town (EcsSitePicker) is picked with the region, sized by the Town option, outlined, and drawn
 ## into the chunks it covers; a right click moves it to that region cell. Its roads show as lines
 ## over the region, fading as L1 fades in, where the chunks draw them as floors. Its plots show as
-## shaded footprints with their doors, and tinted yards, at both levels.
+## shaded footprints with their doors, and tinted yards, at both levels. Ore and clay deposits are
+## tinted over the region and fade with the roads.
 
 const DEFS := "res://12. Settlement Generator/defs/settlements/"
 ## The def L1 chunks take their shore and nodes from.
@@ -38,6 +39,9 @@ const RING: int = 1
 const KEEP: int = 3
 ## Ticks a new world is run on the worker before it is shown, so everything is born and drawn.
 const SETTLE: int = 3
+## Deposit tint by key.
+const DEPOSIT_TINTS := {&"iron": Color(0.75, 0.35, 0.2), &"coal": Color(0.1, 0.1, 0.1), &"copper": Color(0.85, 0.5, 0.15),
+	&"gold": Color(1.0, 0.85, 0.1), &"clay": Color(0.7, 0.45, 0.35)}
 ## Zone tint, most specific zone first: [zone, colour].
 const TINTS := [
 	[EcsNodeSpawnDef.Zone.SHALLOW, Color(0.3, 0.9, 1.0)], [EcsNodeSpawnDef.Zone.SHORE, Color(1.0, 0.9, 0.3)],
@@ -154,6 +158,8 @@ func _process(_delta: float) -> void:
 		line.width = 2.5 / _camera.zoom.x
 	if _l1 != null:
 		_roads_layer.modulate.a = 1.0 - _l1.modulate.a
+		if _region.has("deposits"):
+			(_region["deposits"] as Sprite2D).modulate.a = 1.0 - _l1.modulate.a
 	for line: Line2D in _roads_layer.get_children():
 		line.width = maxf(line.get_meta(&"width", 4.0), line.get_meta(&"screen", 2.0) / _camera.zoom.x)
 
@@ -331,6 +337,9 @@ func _describe() -> void:
 		lines.append("Zones: %s" % _zone_names((plan["zones"] as PackedByteArray)[i]))
 		lines.append("Walk cost: %s" % _walk_cost(kind))
 		lines.append("Holds L1 cells %s to %s" % [cell * ZOOM, cell * ZOOM + Vector2i(ZOOM - 1, ZOOM - 1)])
+		var deposit: int = (plan["deposits"]["ids"] as PackedByteArray)[i]
+		if deposit != 0:
+			lines.append("Deposit: %s" % plan["deposits"]["keys"][deposit - 1])
 		if _road_l2_cells.has(cell):
 			lines.append("A main road passes through")
 		if _site != null and cell == _site.l2_cell:
@@ -370,6 +379,9 @@ func _describe() -> void:
 				lines.append("Town: cleared ground round the plaza")
 			elif _site.area.has_point(cell):
 				lines.append("Town: in its area")
+		var parent_deposit: int = (plan["deposits"]["ids"] as PackedByteArray)[parent.y * region.size.x + parent.x]
+		if parent_deposit != 0:
+			lines.append("In a %s deposit" % plan["deposits"]["keys"][parent_deposit - 1])
 		lines.append("In L2 cell %s: %s" % [parent, EcsTerrainGenerator.TERRAIN_KEYS[(plan["kinds"] as PackedByteArray)[parent.y * region.size.x + parent.x]]])
 		var made := PackedStringArray()
 		for step: Array in [["terrain", chunk.has("terrain")], ["drawn", chunk.get("drawn", false)],
@@ -388,9 +400,32 @@ func _town_line() -> String:
 	for kind: StringName in _site.road_cells.values():
 		counts[kind] += 1
 	var lanes := _site.roads.filter(func(r: Dictionary) -> bool: return r["kind"] == &"lane").size()
-	return "Town at region cell %s, score %.2f (water %.2f, open %.2f, room %.2f, river %.2f)\nRoads: %d exits, %d m of main road, %d lanes (%d m), %d bridge%s\nPlots: %d%s" % [_site.l2_cell,
+	return "Town at region cell %s, score %.2f (water %.2f, open %.2f, room %.2f, river %.2f)\nRoads: %d exits, %d m of main road, %d lanes (%d m), %d bridge%s\nPlots: %d%s%s" % [_site.l2_cell,
 		score["total"], score["water"], score["open"], score["room"], score["river"], _site.exits.size(),
-		counts[&"main"] / _town_def().main_width, lanes, counts[&"lane"], _site.bridges, "" if _site.bridges == 1 else "s", _site.plots.size(), note]
+		counts[&"main"] / _town_def().main_width, lanes, counts[&"lane"], _site.bridges, "" if _site.bridges == 1 else "s", _site.plots.size(), _economy_line(), note]
+
+## What the town is and has, for the info panel.
+func _economy_line() -> String:
+	var economy := _site.economy
+	if economy.is_empty():
+		return ""
+	var catalog := EcsTownEconomy.CATALOG
+	var names := func(key: StringName) -> String:
+		for c in catalog.characters:
+			if c.key == key:
+				return c.display_name
+		return "none"
+	var sides := (economy["sides"] as Array).map(names)
+	var built := PackedStringArray()
+	for entry: Dictionary in economy["roles"]:
+		built.append("%d %s" % [entry["count"], catalog.role(entry["role"]).display_name])
+	var survey := PackedStringArray()
+	for key: StringName in _site.survey:
+		if _site.survey[key] >= EcsResourceSurvey.PRESENT:
+			survey.append("%s %.1f" % [key, _site.survey[key]])
+	return "\nLives on: %s%s; %d people, food for %d\nIn reach: %s\nBuildings: %s" % [names.call(economy["character"]),
+		"" if sides.is_empty() else ", with " + ", ".join(sides), economy["population"], economy["fed"],
+		", ".join(survey), ", ".join(built)]
 
 func _zone_names(bits: int) -> String:
 	var names := PackedStringArray()
@@ -601,12 +636,13 @@ func _start_chunk(at: Vector2i, stage: int) -> void:
 				return _make_level(outer, commands, origin, 1.0 / ZOOM, true))
 		EcsTerrainChunks.Stage.OBJECTS:
 			var zones: PackedByteArray = chunk["terrain"]["zones"]
+			var deposits: Dictionary = chunk["terrain"]["deposits"]
 			var def := _chunk_def
 			var rng_seed: int = _region["seed"]
 			var blocked := _chunks.blocked(at)
 			chunk["busy"] = true
 			_start(job, func() -> Dictionary:
-				return {"nodes": EcsTerrainGenerator.refine_nodes(def, zones, rng_seed, at, entity_catalog, blocked)})
+				return {"nodes": EcsTerrainGenerator.refine_nodes(def, zones, rng_seed, at, entity_catalog, blocked, deposits)})
 
 func _start(job: Dictionary, work: Callable) -> void:
 	job["generation"] = _generation
@@ -717,6 +753,14 @@ func _show_region(level: Dictionary) -> void:
 	zones.scale = Vector2(EcsTownGrid.CELL, EcsTownGrid.CELL)
 	(level["root"] as Node2D).add_child(zones)
 	level["zones"] = zones
+	var deposits := Sprite2D.new()
+	deposits.texture = ImageTexture.create_from_image(_deposit_tint(level["def"], level["plan"]["deposits"]))
+	deposits.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	deposits.centered = false
+	deposits.z_index = 21
+	deposits.scale = Vector2(EcsTownGrid.CELL, EcsTownGrid.CELL)
+	(level["root"] as Node2D).add_child(deposits)
+	level["deposits"] = deposits
 	_region = level
 	_world_root.add_child(level["root"])
 	_site = level["site"]
@@ -724,6 +768,17 @@ func _show_region(level: Dictionary) -> void:
 	_reset_l1()
 	_frame()
 	_show_layers()
+
+## The region's deposits as an image, a cell a pixel, each tinted by its key.
+func _deposit_tint(def: EcsSettlementDef, deposits: Dictionary) -> Image:
+	var image := Image.create(def.size.x, def.size.y, false, Image.FORMAT_RGBA8)
+	var ids := deposits["ids"] as PackedByteArray
+	var keys := deposits["keys"] as Array
+	for i in ids.size():
+		if ids[i] != 0:
+			var tint: Color = DEPOSIT_TINTS.get(keys[ids[i] - 1], Color.MAGENTA)
+			image.set_pixel(i % def.size.x, i / def.size.x, Color(tint, 0.7))
+	return image
 
 ## Drops every chunk and starts L1 afresh, for a new region or chunk size.
 func _reset_l1() -> void:

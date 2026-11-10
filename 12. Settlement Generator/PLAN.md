@@ -377,37 +377,165 @@ merge without one.
 - *Done when:* every plot's footprint is square and clear, its door faces a road cell, its yard
   meets its lane, and every lane joins the plaza.
 
-### Step 5 — Zoning: which building goes where
-Each building kind is a **`EcsSettlementRoleDef`**: its building type, how many (fixed or per
-population), its plot size, where it likes to stand, and its wealth.
+### Step 5 — What the town is: character, tier, resources, building list ✅ (done 2026-11-10, `HANDOFF.md` §6)
 
-| Role | Count | Where it stands | Wealth |
+**Goal.** Before any building is placed, work out what the town *is*, and from that which
+buildings it must or may have:
+1. its **character**, what it lives on (farming, mining, fishing…);
+2. its **tier**, how big it is;
+3. the **resources** within reach;
+4. so its **building list**.
+
+For example, a farming village with iron nearby gets a small mine and a toolsmith who smelts. A
+town by a river or the sea gets a small fishing operation.
+
+**Decided (2026-11-10):**
+- tiers are Hamlet, Village, Town, **City, Great City**;
+- **ore deposits on L2**: today veins are sprinkled on L1 by zone density, so every rocky area has
+  iron and "iron nearby" means nothing. The region plan gains a few seeded deposits per ore (and
+  clay) on rock, and L1 places a vein mainly inside its deposit, so a child level still follows its
+  parent. This is a change to step 1;
+- the character is **always derived** from the survey, with no override.
+
+Built as data: `EcsSettlementCharacterDef` and `EcsSettlementRoleDef` in one catalog
+(`defs/economy.tres`), and two pure files, `EcsResourceSurvey` and `EcsTownEconomy`.
+`EcsSettlementSite` gains `survey` and `economy`; the viewer shows them. **The tier is not its own
+def:** `hamlet`, `village` and `town` already are the tiers (area, plaza, plots), so their
+`EcsSettlementDef` gained an Economy group (tier, catchment, base roles, trade scale). The first
+role set is 48 roles, not all of 5.0's list; the rest are added as they are needed.
+
+- *Done when:* every seed's town has a character its survey supports, its core roles, side
+  operations only for resources within reach, and a building list that feeds its population.
+
+#### 5.0 Every building a medieval settlement might have
+Lowest tier: H hamlet, V village, T town, C city, G great city. "Needs" = survey fact.
+
+**Homes:** peasant hut (H), cottage / house (H), longhouse (H), townhouse (T), merchant's house (T),
+manor house (V), guildhall-house (T), tenement (C), noble's palace (C).
+
+**Food & farming:** farmhouse + field (H, arable), barn (H), granary (V), animal pen / fold (H,
+pasture), stable (V), dovecote (V), beehives / apiary (H), orchard (H), vineyard + winepress (V,
+warm slopes), watermill (V, river), windmill (V, open ground), bakery (V), brewery / alehouse (V),
+malthouse (T), butcher / shambles (T), smokehouse (V, fish or game), dairy (V, pasture),
+fishmonger (T).
+
+**Water & fishing:** well (H), fishing hut (H, shore), dock / jetty (H, shore), net & boat shed (V,
+shore), fish weir (V, river), harbour (T, sea), boatwright / shipyard (T, sea or lake), ferry
+house (V, wide river), bathhouse (T), cistern / fountain (C).
+
+**Wood:** woodcutter's hut (H, forest), lumber camp (V, forest), sawmill (T, forest + river),
+carpenter (V), cooper (T), wheelwright / cartwright (V), charcoal burner's clearing (V, forest),
+bowyer / fletcher (T).
+
+**Stone, clay & earth:** quarry (V, rock), stonemason (V), potter + kiln (V, clay), brickworks (T,
+clay), lime kiln (T, rock), salt works (T, sea or salt spring).
+
+**Metal:** mine entrance + miner's hut (V, ore deposit), smelter / bloomery (V, ore + charcoal),
+blacksmith (V), toolsmith (V), farrier (V, horses), armourer / weaponsmith (T), goldsmith /
+jeweller (C, gold), bellfounder (C), mint (G).
+
+**Cloth & leather:** weaver (V, wool or flax), dyer (T, river), fuller / fulling mill (T, river),
+tailor (T), tannery (V, livestock; downwind, by water), cobbler / shoemaker (V), saddler (T),
+rope maker (T, hemp or near docks), chandler (candles, T).
+
+**Trade & travel:** market square (V), market stalls (V), market hall (T), inn (V), tavern (V),
+warehouse (T), merchant's counting house (T), customs / toll house (T, main road or river),
+waystation / coaching inn (V, main road), bridge-keeper's house (V, bridge), caravan yard (C).
+
+**Faith:** wayside shrine (H), chapel (V), parish church + graveyard (T), monastery / abbey (T,
+own grounds), cathedral (C), almshouse (T), hospital / infirmary (T).
+
+**Rule & law:** headman's house (H), manor (V), town hall / moot hall (T), guildhall (T), courthouse
+(C), gaol / stocks (V), tax house (T), keep (T), castle (C), palace (G).
+
+**Defence:** palisade (V), watchtower (V), town wall + gatehouse (T), barracks (C), armoury (C),
+garrison fort (border region, later).
+
+**Learning & craft:** scribe (T), apothecary / herbalist (V, herbs), physician (T), school (C),
+university (G), library (G), printer / bookbinder (G).
+
+**Outdoor works (no walls):** fields, pastures, orchard rows, log piles, chopping block, stone
+pile, clay pit, quarry pit, drying racks (fish or hides), compost / midden, cemetery.
+
+#### 5.1 Character — what the town lives on
+One **primary** character, always derived from the survey, plus **side operations** for
+every other resource that is strong enough.
+
+| Character | Lives on | Needs (survey) | Core buildings |
 |---|---|---|---|
-| Manor | 1 | Next to the plaza, the largest plot, with a garden | rich |
-| House | per population | Rings round the centre | falls with distance from the centre |
-| Tavern / inn | 1 (2 in a town) | On the plaza or a main road | middling |
-| Market | 1 | On the plaza: stalls, no building | — |
-| Blacksmith | 1–2 | On a main road, away from the houses' rings | middling |
-| Carpenter | 1–2 | On a main road, near the forest side | middling |
-| Bakery | 1 per ~20 houses | Near the plaza, close to the mill's road | middling |
-| Storehouse / granary | 1–2 | Between the fields and the centre | — |
-| Farmhouse | per population | The outskirts, with a **farm plot** beside it | poor–middling |
-| Barn / stable | 1 per 2–3 farms | Beside a farm plot, with an **animal pen** | poor |
-| Mill | 1 | A **watermill** on a river bank, else a **windmill** on open ground at the outskirts | middling |
-| Fishing hut | 1–3 | On the **shoreline**, with a **dock** | poor |
-| Gathering hut | 1–2 | At the forest's edge | poor |
-| Hunting hut | 1 | At the forest's edge, away from the centre | poor |
-| Lumber camp | 1 | Inside the forest's edge: a log pile and a chopping block, no walls | — |
-| Miner's hut | 1 (village and up) | At the rocky ground's edge, by the mine entrance | poor |
-| Quarry | 1 | On rocky ground: stone nodes cleared to a pit, a stone pile, no walls | — |
-| Chapel | 1 (village and up) | Near the plaza, on its own plot | middling |
-| Well | 1 + 1 per district | The plaza, then district centres | — |
+| Farming | grain | open grass; river or lake helps | farmhouses + fields, mill (water or wind), granary, barn |
+| Herding | livestock, wool | open grass, little forest | herder huts + pens, barns, tannery, weaver |
+| Fishing | fish | coast or a large lake, shallow water | fishing huts + docks, smokehouse, net maker |
+| Timber | wood | lots of forest | lumber camp, sawmill (on a river), carpenter, charcoal burner |
+| Mining | ore | an ore deposit in rock | mine entrance, miners' huts, smelter, smithy, charcoal |
+| Quarrying | stone | rock, a stone outcrop | quarry, stonemason, cart shed |
+| Pottery | clay | clay pits, river or shore | clay pit, potter, kiln / brickworks |
+| Trading | passing trade | main roads meeting (3–4 exits), a river mouth or a coast | market, inn, warehouses, merchant houses, stables |
+| Port (town+) | sea trade | coast + trading | harbour, docks, warehouses, boatwright |
 
-Site rules are a small fixed set, each a score: near the centre, near water, at the forest's
-edge, on a main road, on the outskirts. A role lists the ones it wants with weights. Plots are
-handed out in role priority order, each to its best-scoring free plot.
-- *Done when:* every role's count is met (or reported short), and every hut is where its rule
-  says.
+Later, needing more than one region (L3): Monastery / pilgrim, Garrison / border fort.
+
+**Side operation** = a small operation for a resource the town doesn't live on. A resource above a lower threshold that isn't the
+primary character adds a *small* set, sized to the town's own needs:
+- iron → a small mine + a toolsmith who smelts;
+- fish → 1–2 fishing huts + a dock;
+- forest → a woodcutter hut;
+- clay → a potter.
+
+#### 5.2 Tier — how big it is
+| Tier | Buildings | Area (L1 cells) | What it adds |
+|---|---|---|---|
+| Hamlet | ~5–15 | 160×120 | houses, a well; its core trade only, tiny |
+| Village | ~20–50 | 256×192 | + chapel, tavern, smithy, mill |
+| Town | ~60–150 | 384×288 | + market, inn, guild shops, granary, more of everything |
+| City | ~200–500 | ~640×480 | + districts, walls, church, keep, several markets |
+| Great City | 500+ | ~1024×768 | + castle, cathedral, palace quarter |
+
+City and above come later (area, districts, walls). The region's L1 is 2048×1536, so they fit.
+
+#### 5.3 Resource survey — what is within reach
+A pure `EcsResourceSurvey` over the site's **catchment**: L2 cells within walking cost N of the
+site. It reuses the Dijkstra that `EcsRoadPlanner` already runs (`_dijkstra`), and N grows with
+the tier. It returns 0–1 scores and facts:
+- **Land:** arable (grass), pasture (grass far from forest), forest, rock.
+- **Water:** river (yes/no, and distance), lake, sea, shallow-water cells (fish).
+- **Deposits:** per ore (iron, coal, copper, gold) and clay, in L2 deposits within reach (new,
+  see Context).
+- **Trade:** main-road exits, whether the river reaches the sea, coast length.
+
+#### 5.4 From all that to a building list
+Data, not code: each building is an **`EcsSettlementRoleDef`**:
+- its module 10 building type;
+- the lowest tier it can appear at;
+- **requires**: survey facts, e.g. watermill needs a river, dock needs sea or lake;
+- **count**: fixed, or per population, by tier;
+- **site rules**: near the centre, near water, forest's edge, on a main road, outskirts; used
+  later by placement.
+
+Each character def lists its **core** roles (must, scaled by tier) and **side** roles (small set).
+Each tier def lists its **base** roles (houses, well, chapel…) and a population range.
+
+`EcsTownEconomy.plan(survey, tier, def) -> {character, sides, roles: [{role, count}]}`, pure and
+seeded:
+1. Score every character from the survey; the best is primary.
+2. Every other resource above its side threshold → that side operation.
+3. Roles = tier base + primary core × tier scale + sides, each filtered by its `requires`.
+4. **Food rule:** a town must feed its population. If neither farming nor fishing covers it, add
+   farms or fishing huts on the outskirts until it does. Trade towns can make up part of the gap
+   with a market.
+
+Example: a farming village by a river with an iron deposit 600 m off:
+- base: 12 houses, well, chapel, tavern;
+- core: 6 farmhouses + fields, watermill, granary, barn;
+- side, from the iron: small mine, toolsmith-smelter.
+
+The fish in the river aren't strong enough for a side operation, so there are no fishing huts.
+
+#### 5.5 What follows (later steps, not this one)
+- **Step 5b, role-led plots:** step 4's placement goes through the role list in priority order.
+  Each role finds its best spot by its site rules at its own size, so a mill lands on the bank and
+  a quarry on rock. Then lanes and yards run as now (`EcsPlotPlanner`).
+- **Step 6:** module 10 building types for the new roles (most are 1–2 room huts).
 
 ### Step 6 — Buildings
 Each assigned plot calls module 10's `EcsBuildingGenerator` with the role's type, wealth, plot

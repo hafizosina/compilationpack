@@ -29,7 +29,8 @@ static func plan(site: EcsSettlementSite, region_plan: Dictionary, region_def: E
 	weights.resize(w * h)
 	for i in w * h:
 		weights[i] = def.road_costs[kinds[i]]
-	var reach := _dijkstra(weights, w, h, site.l2_cell)
+	var reach := costs_from(weights, w, h, site.l2_cell)
+	site.costs = reach
 	var exits := _exits(reach, kinds, w, h, site.l2_cell, rng.randi_range(def.exits.x, def.exits.y), rng.randf() * TAU)
 	if exits.is_empty():
 		return false
@@ -84,7 +85,7 @@ static func lay(site: EcsSettlementSite, def: EcsSettlementDef, catalog: EcsTown
 					site.cleared_cells[cell + Vector2i(dx, dy)] = true
 
 ## The cheapest cost from `from` to every cell, stepping 8 ways over `weights`.
-static func _dijkstra(weights: PackedFloat32Array, w: int, h: int, from: Vector2i) -> PackedFloat32Array:
+static func costs_from(weights: PackedFloat32Array, w: int, h: int, from: Vector2i) -> PackedFloat32Array:
 	var cost := PackedFloat32Array()
 	cost.resize(w * h)
 	cost.fill(INF)

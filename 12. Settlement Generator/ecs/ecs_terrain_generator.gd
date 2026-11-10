@@ -8,7 +8,8 @@ extends RefCounted
 ##   2. Shore: land near the water becomes sand.
 ##   3. Rock: blobs of rocky ground away from the water.
 ##   4. Forest: the rest of the land, by noise.
-##   5. Nodes: each spawn def scattered or clumped over its zone, in def order.
+##   5. Deposits: blobs of ore and clay on their ground, which veins grow in.
+##   6. Nodes: each spawn def scattered or clumped over its zone, in def order.
 ## `refine` zooms into a window of a parent plan: the child adds detail but never contradicts it.
 ## Every stage has its own seed, so changing one stage leaves the others as they were.
 
@@ -38,7 +39,8 @@ const MARGIN: int = 5
 
 ## The map for `def` and `rng_seed`: {commands, kinds, zones (bit per EcsNodeSpawnDef.Zone),
 ## nodes: [{blueprint, cell, size}], counts: {blueprint: n}, rivers: [{points, radii}],
-## river (1 per cell a river made water), coast_side, usec: {stage: µs}}.
+## river (1 per cell a river made water), coast_side, deposits: {ids (per cell, 0 none, else index
+## + 1 into keys), keys, blobs: [{key, cell, radius}]}, usec: {stage: µs}}.
 static func plan(def: EcsSettlementDef, rng_seed: int, catalog: EcsTownCatalog, entities: EcsEntityCatalog) -> Dictionary:
 	var w := def.size.x
 	var h := def.size.y
@@ -74,7 +76,11 @@ static func plan(def: EcsSettlementDef, rng_seed: int, catalog: EcsTownCatalog, 
 	started = Time.get_ticks_usec()
 	_forest(def, kinds, _rng(rng_seed, 3))
 	usec["forest"] = _lap(started)
-	var out := _finish(def, kinds, PackedByteArray(), _rng(rng_seed, 4), catalog, entities, usec)
+	started = Time.get_ticks_usec()
+	var deposits := _deposits(def, kinds, _rng(rng_seed, 8))
+	usec["deposits"] = _lap(started)
+	var out := _finish(def, kinds, PackedByteArray(), _rng(rng_seed, 4), catalog, entities, usec, deposits)
+	out["deposits"] = deposits
 	out["rivers"] = rivers
 	out["river"] = river
 	out["coast_side"] = coast_side
@@ -87,7 +93,8 @@ static func refine(parent: Dictionary, parent_def: EcsSettlementDef, def: EcsSet
 		scale: int, rng_seed: int, catalog: EcsTownCatalog, entities: EcsEntityCatalog) -> Dictionary:
 	var terrain := refine_terrain(parent, parent_def, def.size, def.shore_width, origin * scale, scale, rng_seed)
 	var usec := terrain["usec"] as Dictionary
-	var out := _finish(def, terrain["kinds"], terrain["zones"], _rng(hash([rng_seed, origin]), 7), catalog, entities, usec)
+	var out := _finish(def, terrain["kinds"], terrain["zones"], _rng(hash([rng_seed, origin]), 7), catalog, entities, usec,
+		terrain["deposits"])
 	out["rivers"] = []
 	out["river"] = terrain["river"]
 	out["coast_side"] = parent["coast_side"]
@@ -97,7 +104,8 @@ static func refine(parent: Dictionary, parent_def: EcsSettlementDef, def: EcsSet
 ## the parent's kinds blended up with detail noise, its rivers redrawn along their own lines so
 ## they run smooth, then the shore. Noise is read in whole-map coordinates and the work is done
 ## MARGIN cells wider each side, so any two areas agree cell for cell where they overlap.
-## {kinds, river: with `border` cells round `size`, zones: `size` only, usec}. `shares` is
+## Each cell is in its parent cell's deposit.
+## {kinds, river: with `border` cells round `size`, zones and deposits: `size` only, usec}. `shares` is
 ## `blend_shares(parent, …)` when the caller keeps it, else it is made here.
 static func refine_terrain(parent: Dictionary, parent_def: EcsSettlementDef, size: Vector2i, shore_width: int,
 		at: Vector2i, scale: int, rng_seed: int, border: int = 0, shares: Array = []) -> Dictionary:
@@ -146,7 +154,24 @@ static func refine_terrain(parent: Dictionary, parent_def: EcsSettlementDef, siz
 	var outer := size + Vector2i(border, border) * 2
 	usec["shore"] = _lap(started)
 	return {"kinds": _crop(kinds, w, Vector2i(MARGIN, MARGIN), outer), "river": _crop(river, w, Vector2i(MARGIN, MARGIN), outer),
-		"zones": zones, "usec": usec}
+		"zones": zones, "deposits": _child_deposits(parent, parent_def, size, at, scale), "usec": usec}
+
+## The deposits of a child area `size` from child cell `at`, each cell its parent cell's; empty
+## when the parent has none.
+static func _child_deposits(parent: Dictionary, parent_def: EcsSettlementDef, size: Vector2i, at: Vector2i,
+		scale: int) -> Dictionary:
+	var found: Dictionary = parent.get("deposits", {})
+	if found.is_empty() or (found["keys"] as Array).is_empty():
+		return {}
+	var parent_ids := found["ids"] as PackedByteArray
+	var ids := PackedByteArray()
+	ids.resize(size.x * size.y)
+	for y in size.y:
+		var py := clampi(floori((at.y + y) / float(scale)), 0, parent_def.size.y - 1)
+		for x in size.x:
+			var px := clampi(floori((at.x + x) / float(scale)), 0, parent_def.size.x - 1)
+			ids[y * size.x + x] = parent_ids[py * parent_def.size.x + px]
+	return {"ids": ids, "keys": found["keys"]}
 
 ## A parent's kinds as 0 or 1 per cell, one array per kind, for blending. A river cell counts as
 ## its sandy bank, so a child's river comes only from its smooth line, except where it meets other
@@ -176,11 +201,11 @@ static func blend_shares(parent: Dictionary, parent_def: EcsSettlementDef) -> Ar
 		shares.append(share)
 	return shares
 
-## Nodes for a child area of `def`'s size from its `zones`, seeded by `key` (a window or chunk),
-## none on a cell `blocked` marks (a town's cleared ground).
+## Nodes for a child area of `def`'s size from its `zones` and `deposits` (refine_terrain's), seeded
+## by `key` (a window or chunk), none on a cell `blocked` marks (a town's cleared ground).
 static func refine_nodes(def: EcsSettlementDef, zones: PackedByteArray, rng_seed: int, key: Variant,
-		entities: EcsEntityCatalog, blocked: PackedByteArray = PackedByteArray()) -> Array[Dictionary]:
-	return _nodes(def, zones, entities, _rng(hash([rng_seed, key]), 7), blocked)
+		entities: EcsEntityCatalog, blocked: PackedByteArray = PackedByteArray(), deposits: Dictionary = {}) -> Array[Dictionary]:
+	return _nodes(def, zones, entities, _rng(hash([rng_seed, key]), 7), blocked, deposits)
 
 ## The `size` window at `from` of a `w`-wide grid.
 static func _crop(cells: PackedByteArray, w: int, from: Vector2i, size: Vector2i) -> PackedByteArray:
@@ -193,13 +218,13 @@ static func _crop(cells: PackedByteArray, w: int, from: Vector2i, size: Vector2i
 
 ## Nodes and commands for finished `kinds`, their zones made here when `zones` is empty.
 static func _finish(def: EcsSettlementDef, kinds: PackedByteArray, zones: PackedByteArray, rng: RandomNumberGenerator,
-		catalog: EcsTownCatalog, entities: EcsEntityCatalog, usec: Dictionary) -> Dictionary:
+		catalog: EcsTownCatalog, entities: EcsEntityCatalog, usec: Dictionary, deposits: Dictionary = {}) -> Dictionary:
 	var w := def.size.x
 	var h := def.size.y
 	var started := Time.get_ticks_usec()
 	if zones.is_empty():
 		zones = zones_of(kinds, w, h)
-	var placed := _nodes(def, zones, entities, rng)
+	var placed := _nodes(def, zones, entities, rng, PackedByteArray(), deposits)
 	usec["nodes"] = _lap(started)
 	started = Time.get_ticks_usec()
 	var commands := terrain_commands(kinds, def.size, Vector2i.ZERO, catalog)
@@ -468,7 +493,7 @@ static func _forest(def: EcsSettlementDef, kinds: PackedByteArray, rng: RandomNu
 			kinds[i] = FOREST
 
 static func _nodes(def: EcsSettlementDef, zones: PackedByteArray, entities: EcsEntityCatalog,
-		rng: RandomNumberGenerator, blocked: PackedByteArray = PackedByteArray()) -> Array[Dictionary]:
+		rng: RandomNumberGenerator, blocked: PackedByteArray = PackedByteArray(), deposits: Dictionary = {}) -> Array[Dictionary]:
 	var w := def.size.x
 	var h := def.size.y
 	var lists: Array[PackedInt32Array] = []
@@ -489,16 +514,69 @@ static func _nodes(def: EcsSettlementDef, zones: PackedByteArray, entities: EcsE
 		var size := place.size if place != null else Vector2i.ONE
 		var bit := 1 << spawn.zone
 		var cells := lists[spawn.zone]
+		var where := zones
+		if spawn.deposit != &"" and not deposits.is_empty():
+			where = _in_deposit(zones, deposits, spawn.deposit)
+			var kept := PackedInt32Array()
+			for i in cells:
+				if where[i] & bit:
+					kept.append(i)
+			cells = kept
 		var count := 0
 		for start in cells:
 			if rng.randf() < spawn.density:
-				count += _clump(spawn, start, size, bit, zones, taken, w, h, rng, placed)
+				count += _clump(spawn, start, size, bit, where, taken, w, h, rng, placed)
 		# Too few by chance: more clumps at random cells of the zone, while it has room.
 		var tries := 0
 		while count < spawn.min_count and tries < 200 and not cells.is_empty():
 			tries += 1
-			count += _clump(spawn, cells[rng.randi_range(0, cells.size() - 1)], size, bit, zones, taken, w, h, rng, placed)
+			count += _clump(spawn, cells[rng.randi_range(0, cells.size() - 1)], size, bit, where, taken, w, h, rng, placed)
 	return placed
+
+## `zones` with every bit cleared outside the deposits keyed `key`.
+static func _in_deposit(zones: PackedByteArray, deposits: Dictionary, key: StringName) -> PackedByteArray:
+	var id := (deposits["keys"] as Array).find(key) + 1
+	var ids := deposits["ids"] as PackedByteArray
+	var out := zones.duplicate()
+	for i in out.size():
+		if ids[i] != id:
+			out[i] = 0
+	return out
+
+## Deposit blobs for `def` on finished `kinds`: each a random cell of its ground grown to a disc of
+## its radius over that ground, never over another deposit.
+static func _deposits(def: EcsSettlementDef, kinds: PackedByteArray, rng: RandomNumberGenerator) -> Dictionary:
+	var w := def.size.x
+	var h := def.size.y
+	var ids := PackedByteArray()
+	ids.resize(w * h)
+	var keys: Array[StringName] = []
+	var blobs: Array[Dictionary] = []
+	for deposit in def.deposits:
+		keys.append(deposit.key)
+		var id := keys.size()
+		var ground := PackedInt32Array()
+		for i in w * h:
+			if kinds[i] == deposit.ground:
+				ground.append(i)
+		if ground.is_empty():
+			continue
+		for n in rng.randi_range(deposit.count.x, deposit.count.y):
+			var at := ground[rng.randi_range(0, ground.size() - 1)]
+			if ids[at] != 0:
+				continue
+			var centre := Vector2i(at % w, at / w)
+			var radius := rng.randi_range(deposit.radius.x, deposit.radius.y)
+			for dy in range(-radius, radius + 1):
+				for dx in range(-radius, radius + 1):
+					var cell := centre + Vector2i(dx, dy)
+					if cell.x < 0 or cell.y < 0 or cell.x >= w or cell.y >= h or Vector2(dx, dy).length() > radius + 0.5:
+						continue
+					var i := cell.y * w + cell.x
+					if kinds[i] == deposit.ground and ids[i] == 0:
+						ids[i] = id
+			blobs.append({"key": deposit.key, "cell": centre, "radius": radius})
+	return {"ids": ids, "keys": keys, "blobs": blobs}
 
 ## One clump of `spawn` grown by random walk from cell `start`; how many nodes it placed.
 static func _clump(spawn: EcsNodeSpawnDef, start: int, size: Vector2i, bit: int, zones: PackedByteArray,

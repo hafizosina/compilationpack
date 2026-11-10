@@ -15,5 +15,8 @@ enum Zone { MEADOW, FOREST, FOREST_EDGE, DEEP_FOREST, ROCK, ROCK_INNER, SHORE, S
 @export var cluster: int = 1
 ## Free cells kept round each node, so nodes never wall a way off.
 @export var keep_clear: int = 0
+## The deposit it grows in (EcsDepositDef.key), or empty for anywhere in its zone. On a map
+## with no deposits (one planned on its own) it grows anywhere in its zone.
+@export var deposit: StringName = &""
 ## Fewest the map must have: the generator tops up to it while the zone has room.
 @export var min_count: int = 1

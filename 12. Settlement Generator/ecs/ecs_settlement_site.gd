@@ -26,6 +26,11 @@ var road_cells: Dictionary = {}
 var cleared_cells: Dictionary = {}
 ## Water crossings on the main roads.
 var bridges: int = 0
+## Route cost from the site to every region cell over the def's road costs (EcsRoadPlanner's).
+var costs: PackedFloat32Array = PackedFloat32Array()
+## What is within reach (EcsResourceSurvey), and what the town is and has (EcsTownEconomy).
+var survey: Dictionary = {}
+var economy: Dictionary = {}
 ## Plots: [{footprint: Rect2i, front: the side the door faces, door: L1 cell, yard: L1 cells}].
 var plots: Array[Dictionary] = []
 ## L1 cell -> index into `plots`, for footprints and yards.

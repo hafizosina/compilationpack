@@ -22,6 +22,8 @@ enum Water { LAKE, RIVER, COAST, RIVER_TO_SEA }
 @export var river_width: Vector2i = Vector2i(3, 6)
 ## What grows where, placed in this order.
 @export var nodes: Array[EcsNodeSpawnDef] = []
+## Deposits of ore and clay, placed as blobs on their ground; a region's are what its L1 veins grow in.
+@export var deposits: Array[EcsDepositDef] = []
 
 @export_group("Town")
 ## The plaza at the town's centre, in L1 cells, its floor, and the well in its middle.
@@ -56,6 +58,15 @@ enum Water { LAKE, RIVER, COAST, RIVER_TO_SEA }
 @export var verge: int = 1
 ## Most bridges a town's roads may have.
 @export var max_bridges: int = 3
+@export_group("Economy")
+## How big a settlement it is: what roles it may have and how much of its trade it builds.
+@export_enum("Hamlet", "Village", "Town", "City", "Great City") var tier: int = 0
+## How far its people walk for what they live on, as a route cost over `road_costs` (grass 1 a region cell).
+@export var catchment: float = 40.0
+## Role key -> count range every settlement of this tier has.
+@export var base_roles: Dictionary[StringName, Vector2i] = {}
+## The main trade's core counts are multiplied by this.
+@export var trade_scale: float = 1.0
 @export_group("Plots")
 ## How many plots the town tries for, picked in this range.
 @export var plots: Vector2i = Vector2i(12, 18)

@@ -29,6 +29,7 @@ func _ready() -> void:
 		_a_map_loads_through_the_build_system(key, def, EcsTerrainGenerator.plan(def, 1, CATALOG, ENTITIES))
 	_a_region_is_sound()
 	_a_zoomed_window_follows_its_region()
+	_veins_grow_only_in_their_deposits()
 	_neighbouring_windows_meet_without_a_seam()
 	_chunk_borders_are_their_neighbours_cells()
 	_chunks_are_made_in_order_and_kept()
@@ -111,6 +112,54 @@ func _a_zoomed_window_follows_its_region() -> void:
 				spent / 1000, "" if problems.is_empty() else "  " + " ".join(problems)], problems.is_empty())
 			if s == 0 and name == "on the river":
 				_a_map_loads_through_the_build_system(&"L1 window", town, child)
+
+## The region's deposits lie on their ground, and L1 veins and clay pits grow only inside a deposit
+## of their kind: plenty round each iron deposit, none on rock outside every deposit.
+func _veins_grow_only_in_their_deposits() -> void:
+	var region := load(DEFS % &"region") as EcsSettlementDef
+	const AREA := 64
+	var town := (load(DEFS % &"town") as EcsSettlementDef).duplicate() as EcsSettlementDef
+	town.size = Vector2i(AREA, AREA)
+	var by_node := {}
+	for spawn in town.nodes:
+		if spawn.deposit != &"":
+			by_node[spawn.blueprint] = spawn.deposit
+	for s in 3:
+		var parent := EcsTerrainGenerator.plan(region, s, CATALOG, ENTITIES)
+		var deposits := parent["deposits"] as Dictionary
+		var ids := deposits["ids"] as PackedByteArray
+		var kinds := parent["kinds"] as PackedByteArray
+		var grounds := {}
+		for d in region.deposits:
+			grounds[d.key] = d.ground
+		var on_ground := true
+		var cells := {}
+		for i in ids.size():
+			if ids[i] != 0:
+				var key: StringName = deposits["keys"][ids[i] - 1]
+				on_ground = on_ground and kinds[i] == grounds[key]
+				cells[key] = int(cells.get(key, 0)) + 1
+		var shares := EcsTerrainGenerator.blend_shares(parent, region)
+		var veins := 0
+		var stray := 0
+		for blob: Dictionary in deposits["blobs"]:
+			if blob["key"] != &"iron":
+				continue
+			var at := (blob["cell"] as Vector2i) * ZOOM + Vector2i(ZOOM, ZOOM) / 2 - Vector2i(AREA, AREA) / 2
+			var terrain := EcsTerrainGenerator.refine_terrain(parent, region, Vector2i(AREA, AREA), town.shore_width, at, ZOOM, s, 0, shares)
+			var nodes := EcsTerrainGenerator.refine_nodes(town, terrain["zones"], s, at, ENTITIES, PackedByteArray(), terrain["deposits"])
+			for node: Dictionary in nodes:
+				if not by_node.has(node["blueprint"]):
+					continue
+				var cell: Vector2i = (at + (node["cell"] as Vector2i)) / ZOOM
+				var id := ids[cell.y * region.size.x + cell.x]
+				if id == 0 or deposits["keys"][id - 1] != by_node[node["blueprint"]]:
+					stray += 1
+				elif node["blueprint"] == &"iron_vein":
+					veins += 1
+		_check("seed %d: deposits on their ground (%s), %d iron veins round its iron deposits, %d veins outside a deposit of their kind" % [s,
+			", ".join(cells.keys().map(func(k: StringName) -> String: return "%s %d cells" % [k, cells[k]])), veins, stray],
+			on_ground and cells.has(&"iron") and veins > 0 and stray == 0)
 
 ## Two windows side by side are cell for cell the halves of one window twice as wide.
 func _neighbouring_windows_meet_without_a_seam() -> void:
