@@ -298,6 +298,41 @@ def furniture_atlas(name):
     img.save(os.path.join(HERE, name))
 
 
+def outdoor_atlas(name):
+    """Outdoor objects on a 32 px grid, 8x3. Layout in README.md."""
+    img = Image.new("RGBA", (CELL * 8, CELL * 3), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    ink = (42, 32, 22, 255)
+    wood, dark_wood, stone, straw = (150, 101, 58, 255), (110, 72, 40, 255), (135, 132, 126, 255), (215, 190, 90, 255)
+    def r(cx, cy, x0, y0, x1, y1, **kw):
+        d.rectangle([cx * CELL + x0, cy * CELL + y0, cx * CELL + x1, cy * CELL + y1], outline=ink, **kw)
+    def e(cx, cy, x0, y0, x1, y1, **kw):
+        d.ellipse([cx * CELL + x0, cy * CELL + y0, cx * CELL + x1, cy * CELL + y1], outline=ink, **kw)
+    def p(cx, cy, points, **kw):
+        d.polygon([(cx * CELL + x, cy * CELL + y) for x, y in points], outline=ink, **kw)
+    r(0, 0, 0, 10, 31, 13, fill=wood); r(0, 0, 0, 19, 31, 22, fill=wood); r(0, 0, 12, 7, 19, 25, fill=dark_wood)  # fence, rails along x
+    r(1, 0, 14, 4, 17, 30, fill=dark_wood); r(1, 0, 4, 10, 27, 13, fill=dark_wood); e(1, 0, 10, 1, 21, 11, fill=straw)  # scarecrow
+    e(2, 0, 3, 5, 28, 28, fill=straw); e(2, 0, 9, 10, 22, 22, fill=(230, 210, 120, 255))  # haystack
+    r(3, 0, 2, 4, 61, 27, fill=wood); r(3, 0, 2, 4, 61, 12, fill=(170, 50, 45, 255))  # market stall 2x1, awning at the back
+    for k in range(4): r(3, 0, 6 + k * 14, 16, 14 + k * 14, 23, fill=[(200, 80, 60, 255), (230, 200, 90, 255), (110, 160, 70, 255), (180, 120, 70, 255)][k])
+    r(5, 0, 4, 3, 27, 20, fill=wood); r(5, 0, 7, 6, 24, 17, fill=(235, 230, 210, 255)); r(5, 0, 14, 20, 17, 30, fill=dark_wood)  # notice board
+    e(6, 0, 6, 6, 25, 25, fill=wood); e(6, 0, 11, 11, 20, 20, fill=(185, 140, 90, 255)); d.line([6 * CELL + 16, 6, 6 * CELL + 24, 18], fill=(150, 150, 155, 255), width=2)  # chopping block
+    e(7, 0, 8, 8, 23, 23, fill=wood); e(7, 0, 12, 12, 19, 19, fill=(185, 140, 90, 255))  # stump
+    for x0, y0 in ((4, 14), (14, 8), (16, 18)): p(0, 1, [(x0, y0 + 10), (x0 + 3, y0), (x0 + 11, y0 + 1), (x0 + 12, y0 + 10)], fill=stone)  # stone pile
+    p(1, 1, [(2, 60), (6, 20), (20, 4), (44, 4), (58, 20), (61, 60)], fill=(110, 108, 104, 255)); r(1, 1, 18, 26, 45, 60, fill=(30, 25, 20, 255)); r(1, 1, 16, 22, 47, 27, fill=dark_wood)  # mine entrance 2x2
+    r(3, 1, 3, 6, 28, 9, fill=dark_wood); r(3, 1, 3, 22, 28, 25, fill=dark_wood)  # drying rack
+    for k in range(4): r(3, 1, 5 + k * 6, 9, 9 + k * 6, 22, fill=(170, 110, 75, 255))
+    p(4, 1, [(3, 16), (10, 6), (54, 6), (61, 16), (54, 26), (10, 26)], fill=wood); r(4, 1, 14, 10, 50, 22, fill=dark_wood)  # boat 2x1
+    e(6, 1, 11, 11, 20, 20, fill=dark_wood); d.arc([6 * CELL + 6, CELL + 6, 6 * CELL + 25, CELL + 25], 200, 340, fill=(200, 180, 120, 255), width=2)  # mooring post
+    e(7, 1, 2, 2, 29, 29, fill=wood); e(7, 1, 11, 11, 20, 20, fill=dark_wood)  # water wheel
+    for k in range(8):
+        import math
+        a = k * math.pi / 4
+        d.line([7 * CELL + 16 + 5 * math.cos(a), CELL + 16 + 5 * math.sin(a), 7 * CELL + 16 + 13 * math.cos(a), CELL + 16 + 13 * math.sin(a)], fill=ink, width=2)
+    r(0, 2, 8, 6, 23, 28, fill=stone); p(0, 2, [(6, 8), (16, 1), (25, 8)], fill=(150, 60, 50, 255)); e(0, 2, 13, 13, 18, 18, fill=(250, 210, 80, 255))  # shrine
+    img.save(os.path.join(HERE, name))
+
+
 ui_icons()
 dual_sheet("terrain_grass.png", "grass", "#5E8A2E")
 dual_sheet("terrain_dirt.png", "dirt", "#7A5A38")
@@ -316,4 +351,5 @@ objects_atlas("objects.png")
 attachments_atlas("attachments.png")
 nodes_atlas("nodes.png")
 furniture_atlas("furniture.png")
+outdoor_atlas("outdoor.png")
 print("done")

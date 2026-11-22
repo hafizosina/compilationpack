@@ -92,7 +92,8 @@ func _every_town_gets_sound_plots() -> void:
 			first.is_empty() and plots >= wanted * 0.9)
 		print("[plot]   %s: a town with its roads and plots takes %d ms on average; short: %s" % [town, usec / SEEDS / 1000, short_by])
 
-## Where buildings land: the manor faces the plaza, every farmhouse has its field, and houses stand
+## Where buildings land: the manor faces the plaza, every farmhouse its field and every herder, barn
+## and stable its pen, and houses stand
 ## nearer the plaza than farmhouses.
 func _buildings_stand_where_their_rules_say() -> void:
 	var manors := 0
@@ -112,14 +113,15 @@ func _buildings_stand_where_their_rules_say() -> void:
 				&"farmhouse":
 					farms[0] += d
 					farms[1] += 1
-	var fields := 0
-	var farmhouses := 0
+	var annexes := 0
+	var wanted := 0
 	for site in _sites:
 		for plot in site.plots:
-			if plot["role"] == &"farmhouse":
-				farmhouses += 1
-				fields += 1 if plot.has("field") else 0
-	_check("%d of %d farmhouses have a field beside them" % [fields, farmhouses], farmhouses > 0 and fields == farmhouses)
+			var annex := EcsTownEconomy.CATALOG.role(plot["role"]).annex
+			if annex == &"field" or annex == &"pen":
+				wanted += 1
+				annexes += 1 if plot.get("annex_kind", &"") == annex else 0
+	_check("%d of %d farmhouses, herders, barns and stables have their field or pen beside them" % [annexes, wanted], wanted > 0 and annexes == wanted)
 	var house_d: float = houses[0] / maxi(houses[1], 1)
 	var farm_d: float = farms[0] / maxi(farms[1], 1)
 	_check("%d of %d manors face the plaza" % [on_plaza, manors], manors > 0 and on_plaza == manors)

@@ -10,7 +10,8 @@ streamed 8× into it in chunks), step 2 (the town's site, plaza and well, §3), 
 roads, §4) and step 4 (plots, then the lanes they need, §5) are done. Steps 5–9 work on L1 only,
 inside the town's area. Step 5 (what the town lives on and its building list, §6), step 5b
 (each building places its own plot, works out at their resource, §7) and step 6 (its buildings,
-§8) are done.
+§8) are done. Step 7a (outdoor works, fenced fields and pens, docks, wheels, §10) is done; 7b (plaza
+dressing, gardens, house yards, dirt paths) is next.
 
 ```bash
 # 41 checks, ~60 s; exit 0 only if all pass. Prints plan and load costs.
@@ -19,6 +20,8 @@ inside the town's area. Step 5 (what the town lives on and its building list, §
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/site_test.tscn"
 # Step 3: 11 checks, ~60 s. Prints how long a town with its roads takes.
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/road_test.tscn"
+# Step 7a: 7 checks, ~60 s. Outdoor works, fences with gates, docks, wheels, every entrance walkable.
+"$GODOT" --headless --path . "res://12. Settlement Generator/tests/outdoor_test.tscn"
 # Step 6: 4 checks, ~60 s. Builds every town's buildings through module 10 and checks them.
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/building_test.tscn"
 # Steps 4, 5b and fields: 10 checks, ~70 s. Prints how long a town takes and what came up short.
@@ -36,9 +39,9 @@ inside the town's area. Step 5 (what the town lives on and its building list, §
 | Path | Role |
 |---|---|
 | `defs/` | `EcsLandDef` (what the land is: size, water, shares, shore, nodes, deposits, its L1 `child`), `EcsSettlementDef` (a tier of town: area, plaza, site, roads, economy, plot gap and yards), `EcsNodeSpawnDef` (where a node grows), `EcsDepositDef` (an ore or clay deposit), `EcsSettlementRoleDef` and `EcsSettlementCharacterDef` in `EcsEconomyCatalog` (`economy.tres`); `lands/`: `region` (L2), `l1` (its child); `settlements/`: `hamlet`, `village`, `town` |
-| `ecs/` | `EcsTerrainGenerator` (pure: `plan`, `refine`, and the chunk stages `refine_terrain`, `refine_nodes`), `EcsTerrainCheck` (pure: `problems`, `follows`), `EcsTerrainChunks` (the L1 chunks kept in memory, what to make next, and the town's overlay), `EcsSitePicker` and `EcsSiteCheck` (pure: the town's site and centre), `EcsRoadPlanner` and `EcsRoadCheck` (pure: its roads), `EcsPlotPlanner` and `EcsPlotCheck` (pure: its plots and lanes), `EcsResourceSurvey` and `EcsTownEconomy` (pure: what is in reach, what the town lives on and builds), `EcsTownBuilder` (pure: its buildings), `EcsSettlementSite` (the record) |
+| `ecs/` | `EcsTerrainGenerator` (pure: `plan`, `refine`, and the chunk stages `refine_terrain`, `refine_nodes`), `EcsTerrainCheck` (pure: `problems`, `follows`), `EcsTerrainChunks` (the L1 chunks kept in memory, what to make next, and the town's overlay), `EcsSitePicker` and `EcsSiteCheck` (pure: the town's site and centre), `EcsRoadPlanner` and `EcsRoadCheck` (pure: its roads), `EcsPlotPlanner` and `EcsPlotCheck` (pure: its plots and lanes), `EcsResourceSurvey` and `EcsTownEconomy` (pure: what is in reach, what the town lives on and builds), `EcsTownBuilder` (pure: its buildings, annexes, docks), `EcsOutdoorBuilder` (pure: a rule per outdoor work), `EcsProgress` (the viewer's progress record), `EcsSettlementSite` (the record) |
 | `generator.tscn` | The viewer (`generator_view.gd`); its panel is built in code |
-| `tests/` | `terrain_test.tscn`, `site_test.tscn`, `road_test.tscn`, `plot_test.tscn`, `economy_test.tscn`, `building_test.tscn` |
+| `tests/` | `terrain_test.tscn`, `site_test.tscn`, `road_test.tscn`, `plot_test.tscn`, `economy_test.tscn`, `building_test.tscn`, `outdoor_test.tscn` |
 | `PLAN.md` | The nine steps |
 
 Module 10 additions for it (module 10's HANDOFF §13): the `rock` and `forest` terrains, the
@@ -761,4 +764,79 @@ A bar and a line under **Generate** say what is being made and how far along it 
 - **Moving the town** (right-click or Town size) shows the town's stages over the whole bar.
 - **At L1, with no job running,** it counts the chunks in view that are made ("Streaming L1 ground
   into view: n of m chunks made") and hides when they all are.
+
+---
+
+## 10. Step 7a — outdoor works, fences, pens, docks, wheels (2026-11-10)
+
+Decided:
+- **a small rule per outdoor work**, in code;
+- a **dirt path floor**, and **house yards fenced and gardened by wealth** (both 7b);
+- **7 in two halves.**
+
+**Annexes** generalise step 6's fields. `EcsSettlementRoleDef.annex` is `field`, `pen` or `dock`,
+with `annex_min` and `annex_max`:
+- farmhouse: field;
+- herder, barn and stable: pen, 6×5 to 9×7;
+- fishing hut, boatwright and harbour: dock.
+
+A field or pen is placed as fields were (`_annex_for`). The plot gains `annex` and `annex_kind`
+(the old `field` key is gone).
+
+`EcsTownBuilder._annex`:
+- A **fence** (module 10 objects, one a cell, turned along its edge) runs round the edge, but for
+  a **2-cell gate** in the middle of the side facing the house. The cells inside the gate are kept
+  clear.
+- A **field** is dirt, with a scarecrow at its middle, a haystack in a corner, and crops on every
+  other row inside the fence.
+- A **pen** holds a trough at its back and hay in a corner.
+
+**Docks** (`EcsPlotPlanner._dock`, after yards). Sides are tried back, sides, then front. From the
+middle of a side, the walk goes out up to 8 cells over land no footprint or annex takes until both
+cells of a 2-wide pair are water. Then the pier runs out while the water allows, up to 6. Under 2
+pairs, that side is skipped.
+- The plot gains `dock` {cells, boat, boat_turns, post}.
+- The builder lays a wood floor (`bridge_floor`), so module 10's nav walks it as it walks bridges.
+- A mooring post goes on the pier's end, and a 2×1 boat past it along its run when that is water.
+
+**The watermill's wheel** (`_wheel`) is the river cell nearest its footprint within 6, as its
+`river` rule lets it stand ~5 away. The builder places a `water_wheel` there.
+
+**Outdoor works** (`EcsOutdoorBuilder.lay`, one `match` arm per work). The rules are built from a
+`Lot`'s helpers: `ring` (along the back and sides every n cells), `middle` (or nearest spot back
+from the way in), `at_back`, `scatter`, `beside_door`, `lay_floor`, `lay_ground`. The door's cell
+and the one inside it are never used.
+
+| Work | Ground | Pieces |
+|---|---|---|
+| market | stone | stalls in the ring, crates, a notice board |
+| mine | — | entrance at the back, ore cart, stone piles |
+| quarry | — | stone piles in the ring, a sawhorse, crates |
+| lumber camp | dirt | log piles in the ring, chopping block, stumps |
+| clay pit | dirt | clay pits, drying racks |
+| harbour | — | crates and mooring posts (plus its dock) |
+| shrine | stone | the shrine |
+
+A work with no rule goes to `economy.unbuilt`.
+
+**Module 10 content:** 14 objects on a new `outdoor.png` sheet: fence, scarecrow, haystack, market
+stall (2×1), notice board, chopping block, stump, stone pile, mine entrance (2×2), drying rack,
+boat (2×1), mooring post, water wheel, shrine. Trough, hay pile, crate, ore cart, lumber pile and
+sawhorse are step 6's.
+
+**Viewer:** pens tinted green, fields gold and docks brown over the region; the cell panel names a
+plot's field or pen.
+
+**Tests** (`outdoor_test`, 7), over 9 towns:
+- the outdoor works found (5 markets, a mine, a quarry) are laid with their way in clear;
+- every work's rule, on a plot facing every way, lays its pieces (278) inside it, none on the way
+  in. This covers works the towns lacked;
+- 99 of 99 fields and pens are fenced with a 2-cell gate by their house;
+- 5 of 5 docks are laid, and 47 of 47 pier cells (all but the posts) are water under wood and
+  walkable by module 10's nav;
+- 7 of 7 watermills have a wheel;
+- every command of the 9 towns' areas, with terrain, is accepted by module 10;
+- **390 of 390 entrances can be walked to from the well past every fence.**
+
+`plot_test` now checks all 201 farmhouses, herders, barns and stables have their field or pen.
 

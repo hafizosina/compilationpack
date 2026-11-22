@@ -35,8 +35,11 @@ extends Resource
 ## Rules that must all score at least 0.5 at its spot, and rules of which one must.
 @export var must: Array[StringName] = []
 @export var must_any: Array[StringName] = []
-## Its field's smallest and largest size, in L1 cells; zero for none (a farmhouse has one).
-@export var field_min: Vector2i = Vector2i.ZERO
-@export var field_max: Vector2i = Vector2i.ZERO
+## What it has beside it: &"field" (a farmhouse), &"pen" (a herder, barn or stable), &"dock" (by
+## water), or empty for nothing.
+@export var annex: StringName = &""
+## A field's or pen's smallest and largest size, in L1 cells.
+@export var annex_min: Vector2i = Vector2i.ZERO
+@export var annex_max: Vector2i = Vector2i.ZERO
 ## Rings its yard may grow; 0 takes the settlement's.
 @export var yard_depth: int = 0

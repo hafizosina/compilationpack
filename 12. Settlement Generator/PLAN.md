@@ -820,24 +820,98 @@ system:
 - *Done when:* every walled plot has a building that passes `EcsBuildingCheck`, with its entrance
   on its lane, and a building crossing chunks draws as one.
 
-### Step 7 — Outdoors
-Outdoor areas are **yards**: a plot with no walls, filled by its own small layout rule.
-- **Farm plots** beside farmhouses: rows of crops with a 1-cell path between rows, a fence round
-  the edge with a gap facing the farmhouse, a scarecrow and a haystack.
-- **Animal pens** beside barns: fenced, with a trough.
-- **Shoreline:** sand along the water. A fishing hut gets a **dock**, a wooden floor laid over
-  water, which module 10's walk costs already treat as walkable, with a boat moored beside it.
-- **The mill:** a watermill straddles a river bank with a water wheel on the water side; a
-  windmill stands alone on open ground.
-- **The market:** stalls and crates round the plaza's edge, leaving the middle and the well
-  clear.
-- **The manor's garden:** a hedge round it, bushes, a bench.
-- **Lumber camp:** a log pile and a chopping block at the forest's edge.
-- **A short dirt path** from each entrance to its road.
-- **Wells** at the plaza and district centres; **lamp posts** along main roads; a **notice
-  board** on the plaza.
-- **Trees** kept in the forest and cleared from plots and roads.
-- *Done when:* nothing outdoors blocks an entrance, a road, a field row or a dock.
+### Step 7 — Outdoors (7a ✅ done 2026-11-10, `HANDOFF.md` §10; 7b to do)
+
+**Goal.** Everything outside the walls:
+- the seven **outdoor works** that have plots but no building yet;
+- the **annexes** beside buildings: fields (done in step 6), pens and docks;
+- **dressing** for yards and the plaza.
+
+All of it is module 10 objects, floors and terrain, sent as build commands and drawn by the chunks
+as everything else is.
+
+**Decided (2026-11-10):**
+- **a small rule per outdoor work**, in code, not a data list of pieces (7.2);
+- **a dirt path floor** for lanes and tracks (7.4);
+- **house yards fenced and gardened by wealth** (7.4);
+- **two halves**:
+  - **7a:** outdoor works, fences on fields, pens, docks, the water wheel;
+  - **7b:** plaza dressing, the manor's garden, house yards, dirt paths.
+
+#### 7.1 What it builds on
+- **Plots (5b):** an outdoor work's footprint, front and door; every plot's yard.
+- **Fields (6):** an annex on a free side of a farmhouse, one cell clear, blocking plots, lanes and
+  yards (`_field_for`, `Use.FIELD`). Pens and docks reuse this machinery.
+- **Module 10:** objects stand on terrain, and a plant never on a floor. A wood floor over water is
+  walkable (the bridges). Objects at most 2 cells keep chunk clipping simple (6.6). Walls must be
+  inside a building, so **fences and hedges are objects**, one a cell.
+
+#### 7.2 Outdoor works — a small rule each (7a)
+Decided: each outdoor work has its own small layout rule in `EcsOutdoorBuilder`, picked by the
+role's key, as `layout` names. A role with no `building` and no rule is reported.
+- The rules share helpers: a piece by the edge, round the ring leaving the front clear, at the
+  centre, scattered.
+- A piece never stands on the door's cell or the cell inside it, and the free cells stay one
+  area, as module 10's furniture rule does.
+
+| Role | Ground | Pieces |
+|---|---|---|
+| market | stone floor | stalls (2×1) round the ring, crates scattered, a notice board by the front |
+| mine | rock ground | mine entrance (2×2) at the centre, ore cart, stone pile |
+| quarry | rock ground, stone cleared | stone piles round the edge, a sawhorse, crates |
+| lumber camp | dirt | log piles round the edge, a chopping block, stumps scattered |
+| clay pit | dirt | clay pits (the node) at the centre, drying racks round it |
+| harbour | — | a dock (7.4), boats, mooring posts, crates |
+| shrine | stone floor | a shrine at the centre, candles |
+
+#### 7.3 Annexes: fields, pens, docks (7a)
+One rule, generalised from fields. A role names its **annex** (`field`, `pen` or `dock`) and its
+size range. The annex is placed beside the building, off its front, a cell clear.
+- **Field (done):** dirt, crop rows. **Adds** a fence round its edge with a gap facing the
+  farmhouse, a scarecrow and a haystack.
+- **Pen** (herder, barn, stable): grass, a fence round it with a gate gap facing the building,
+  a trough and a hay pile inside.
+- **Dock** (fishing hut, boatwright, harbour): a pier, not a fenced plot.
+  - It runs from the plot's yard edge nearest water straight out over water, 2 wide, 3–6 cells,
+    as a wood floor.
+  - A boat is moored beside its end and a mooring post on it.
+  - Its side and length are the first of the 4 sides where it reaches water within 3 cells of
+    the yard. When none does, there is no dock and it is reported.
+- **Watermill:** a water wheel object on the first river cell beside its wall.
+
+#### 7.4 Dressing (7b)
+- **The plaza:** benches and a notice board round its edge, keeping the well's ring clear and
+  never on a road's mouth. Lamp posts every ~12 cells along main roads inside the area, on the
+  verge.
+- **The manor's garden:** a hedge round its yard with a gap at its lane, bushes and a bench inside.
+- **House yards (decided, by wealth):** a chance of a fence round the yard (gate at the lane) and a
+  garden bed in it. Richer houses are likelier to have them, and poor yards mostly stay open.
+- **Paths (decided):** lanes are 1 cell of road floor today. A new **dirt path** floor (module 10),
+  cheaper to walk than grass, for lanes and tracks. Main roads keep the road floor.
+
+#### 7.5 Content (module 10)
+New placeholders on an `outdoor.png` sheet:
+- fence and hedge (1×1, turned for direction, a post where they meet);
+- scarecrow, haystack, vegetable bed (2×1);
+- market stall (2×1), notice board, bench, lamp post;
+- log pile (lumber pile reused), chopping block, stump, stone pile;
+- mine entrance (2×2), drying rack, boat (2×1), mooring post, water wheel, shrine.
+
+Plus a dirt path floor sheet.
+
+#### 7.6 Check and tests
+- **The rule:** nothing outdoors blocks an entrance, a road, a field row's path or a dock. Every
+  building's entrance is still walkable from the plaza through module 10's nav, gates included.
+- **Tests (`outdoor_test`):**
+  - every outdoor work laid with its pieces;
+  - every field and pen fenced with a gate;
+  - every dock on water and walkable;
+  - the town's area through module 10, every command accepted;
+  - every entrance reachable from the well by nav;
+  - chunks draw fences and docks the same across lines.
+
+- *Done when:* every outdoor work, annex and dressing is laid, nothing blocks an entrance, road,
+  path or dock, and every building can still be walked to.
 
 ### Step 8 — The whole-town check and tests
 `EcsSettlementCheck`, pure like `EcsBuildingCheck`:

@@ -7,7 +7,10 @@ extends RefCounted
 ## edge. The generator builds on the plot's footprint, facing its front, with the entrance at its
 ## door when that can be one; otherwise the lane is carried along the front to the entrance. The
 ## commands go into the site's, and each plot gains `building`: {type, wealth, entrance, shape, cells}.
-## A plot's field is laid as `def.field_terrain` with `def.field_crop` in rows, a path row between.
+## A plot's annex: a field (dirt, crop rows, a fence with a gate facing the house, a scarecrow and a
+## haystack) or a pen (a fence with a gate, a trough and hay). A dock is a wood floor over water with
+## a boat and a mooring post; a watermill's wheel stands on its river. A plot with no walls is laid
+## by EcsOutdoorBuilder.
 
 const ENTITIES := preload("res://10. Town Generator/defs/entity_catalog.tres")
 
@@ -19,10 +22,18 @@ static func build(site: EcsSettlementSite, def: EcsSettlementDef, catalog: EcsTo
 		var plot := site.plots[k]
 		EcsProgress.say(progress, "Building: %s, %d of %d" % [EcsTownEconomy.CATALOG.role(plot["role"]).display_name, k + 1,
 			site.plots.size()], 0.87 + 0.1 * k / site.plots.size())
-		if plot.has("field"):
-			_sow(site, plot["field"], def, catalog)
+		if plot.has("annex"):
+			_annex(site, plot, def, catalog)
+		if plot.has("dock"):
+			_dock(site, plot["dock"], def, catalog)
+		if plot.has("wheel"):
+			site.commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, plot["wheel"], &"water_wheel", 0))
 		var role := EcsTownEconomy.CATALOG.role(plot["role"])
-		if role == null or role.building == &"":
+		if role == null:
+			continue
+		if role.building == &"":
+			if not EcsOutdoorBuilder.lay(site, plot, def, catalog, hash([rng_seed, site.l2_cell, k])) and not lacking.has(role.key):
+				lacking.append(role.key)
 			continue
 		var type := _type(catalog, role.building)
 		if type == null:
@@ -73,18 +84,65 @@ static func _keep_joined(site: EcsSettlementSite, plot: Dictionary) -> void:
 			site.plot_at.erase(cell)
 	plot["yard"] = kept
 
-## A field: its ground turned to `def.field_terrain`, crops on every other row along its long side.
-static func _sow(site: EcsSettlementSite, field: Rect2i, def: EcsSettlementDef, catalog: EcsTownCatalog) -> void:
-	var ground := catalog.terrain_id(def.field_terrain)
-	var across := field.size.x >= field.size.y
-	for y in range(field.position.y, field.end.y):
-		for x in range(field.position.x, field.end.x):
-			site.commands.append(EcsBuildCommand.make(EcsBuildCommand.Kind.SET_TERRAIN, Vector2i(x, y), ground))
-	for y in range(field.position.y, field.end.y):
-		for x in range(field.position.x, field.end.x):
-			var row := (y - field.position.y) if across else (x - field.position.x)
-			if row % 2 == 0:
-				site.commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, Vector2i(x, y), def.field_crop, 0))
+## A plot's field or pen: fenced round its edge with a 2-cell gate on the side facing the house;
+## a field is dirt with a scarecrow at its middle, a haystack in a corner and crops on every other
+## row along its long side; a pen holds a trough and hay.
+static func _annex(site: EcsSettlementSite, plot: Dictionary, def: EcsSettlementDef, catalog: EcsTownCatalog) -> void:
+	var annex: Rect2i = plot["annex"]
+	var field: bool = plot["annex_kind"] == &"field"
+	var home := Vector2((plot["footprint"] as Rect2i).get_center() - annex.get_center())
+	var facing := Vector2i(signi(roundi(home.x)), 0) if absf(home.x) >= absf(home.y) else Vector2i(0, signi(roundi(home.y)))
+	var gate := _gate(annex, facing)
+	if field:
+		var ground := catalog.terrain_id(def.field_terrain)
+		for cell in EcsBuildRules.cells(annex):
+			site.commands.append(EcsBuildCommand.make(EcsBuildCommand.Kind.SET_TERRAIN, cell, ground))
+	var inside := annex.grow(-1)
+	for cell in EcsBuildRules.cells(annex):
+		if inside.has_point(cell) or gate.has(cell):
+			continue
+		# Rails along the top and bottom rows run across, the sides' run down.
+		var turns := 0 if cell.y == annex.position.y or cell.y == annex.end.y - 1 else 1
+		site.commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, cell, &"fence", turns))
+	var taken: Dictionary = {}
+	# The cells inside the gate stay clear, so the way in is never blocked.
+	for cell: Vector2i in gate:
+		taken[cell - facing] = true
+	if field:
+		var middle := inside.position + inside.size / 2
+		var corner := inside.position if not taken.has(inside.position) else inside.end - Vector2i.ONE
+		for pair in [[middle, &"scarecrow"], [corner, &"haystack"]]:
+			if not taken.has(pair[0]):
+				site.commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, pair[0], pair[1], 0))
+				taken[pair[0]] = true
+		var across := inside.size.x >= inside.size.y
+		for cell in EcsBuildRules.cells(inside):
+			var row := (cell.y - inside.position.y) if across else (cell.x - inside.position.x)
+			if row % 2 == 0 and not taken.has(cell):
+				site.commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, cell, def.field_crop, 0))
+	else:
+		var trough := (inside.position + inside.size / 2 - facing * (maxi(inside.size.x, inside.size.y) / 3)).clamp(inside.position, inside.end - Vector2i(2, 1))
+		site.commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, trough, &"trough", 0))
+		var hay := inside.end - Vector2i.ONE
+		if not taken.has(hay) and not Rect2i(trough, Vector2i(2, 1)).has_point(hay):
+			site.commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, hay, &"hay_pile", 0))
+
+## The 2 cells in the middle of `annex`'s side facing `facing`, left open as its gate.
+static func _gate(annex: Rect2i, facing: Vector2i) -> Array[Vector2i]:
+	var mid := annex.position + annex.size / 2
+	var edge := Vector2i(annex.end.x - 1 if facing.x > 0 else annex.position.x, annex.end.y - 1 if facing.y > 0 else annex.position.y)
+	if facing.x != 0:
+		return [Vector2i(edge.x, mid.y - 1), Vector2i(edge.x, mid.y)]
+	return [Vector2i(mid.x - 1, edge.y), Vector2i(mid.x, edge.y)]
+
+## A dock: wood floor on its cells, the boat moored past its end, a post on it.
+static func _dock(site: EcsSettlementSite, dock: Dictionary, def: EcsSettlementDef, catalog: EcsTownCatalog) -> void:
+	var wood := catalog.floor_id(def.bridge_floor)
+	for cell: Vector2i in dock["cells"]:
+		site.commands.append(EcsBuildCommand.make(EcsBuildCommand.Kind.SET_FLOOR, cell, wood))
+	site.commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, dock["post"], &"mooring_post", 0))
+	if dock["boat"] != Vector2i(-1, -1):
+		site.commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, dock["boat"], &"boat", dock["boat_turns"]))
 
 static func _type(catalog: EcsTownCatalog, key: StringName) -> EcsBuildingTypeDef:
 	for type in catalog.building_types:

@@ -476,8 +476,9 @@ sites = Dictionary[StringName, float]({
 })
 yard_depth = 8
 wealth = 0
-field_min = Vector2i(8, 6)
-field_max = Vector2i(14, 10)
+annex = &"field"
+annex_min = Vector2i(8, 6)
+annex_max = Vector2i(14, 10)
 
 [sub_resource type="Resource" id="Role_barn"]
 script = ExtResource("1_role")
@@ -495,6 +496,9 @@ sites = Dictionary[StringName, float]({
 })
 rooms = Array[StringName]([&"hay_store"])
 wealth = 0
+annex = &"pen"
+annex_min = Vector2i(6, 5)
+annex_max = Vector2i(9, 7)
 
 [sub_resource type="Resource" id="Role_watermill"]
 script = ExtResource("1_role")
@@ -554,6 +558,9 @@ sites = Dictionary[StringName, float]({
 yard_depth = 6
 rooms = Array[StringName]([&"bedroom"])
 wealth = 0
+annex = &"pen"
+annex_min = Vector2i(6, 5)
+annex_max = Vector2i(9, 7)
 
 [sub_resource type="Resource" id="Role_stable"]
 script = ExtResource("1_role")
@@ -571,6 +578,9 @@ sites = Dictionary[StringName, float]({
 })
 rooms = Array[StringName]([&"stalls", &"hay_store"])
 wealth = 0
+annex = &"pen"
+annex_min = Vector2i(6, 5)
+annex_max = Vector2i(9, 7)
 
 [sub_resource type="Resource" id="Role_tannery"]
 script = ExtResource("1_role")
@@ -625,6 +635,7 @@ sites = Dictionary[StringName, float]({
 must = Array[StringName]([&"water"])
 rooms = Array[StringName]([&"fishery"])
 wealth = 0
+annex = &"dock"
 
 [sub_resource type="Resource" id="Role_smokehouse"]
 script = ExtResource("1_role")
@@ -987,6 +998,7 @@ sites = Dictionary[StringName, float]({
 })
 must = Array[StringName]([&"water"])
 wealth = 0
+annex = &"dock"
 
 [sub_resource type="Resource" id="Role_boatwright"]
 script = ExtResource("1_role")
@@ -1003,6 +1015,7 @@ sites = Dictionary[StringName, float]({
 })
 must = Array[StringName]([&"water"])
 wealth = 1
+annex = &"dock"
 
 [resource]
 script = ExtResource("3_cat")

@@ -727,6 +727,10 @@ not a leak. Unmarked, a room cut by the grid's edge leaks and loses its room and
   rack, fish rack, pick rack, pew, ore cart, lumber pile, sawhorse, crate, sack.
 - Their art is the new `furniture.png` sheet, made by `make_placeholders.py`.
 
+**Outdoor objects (7a):** 14 more on an `outdoor.png` sheet: fence, scarecrow, haystack, market
+stall, notice board, chopping block, stump, stone pile, mine entrance, drying rack, boat, mooring
+post, water wheel, shrine. Module 12 places them on terrain, and boats on water; no rule changed.
+
 **Tests** (`generator_test`, 111 now): all 11 types at 1,000 seeds each, all sound and every room
 typed as its role.
 

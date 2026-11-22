@@ -393,7 +393,7 @@ func _describe() -> void:
 			var role := EcsTownEconomy.CATALOG.role(plot["role"])
 			lines.append("Town: plot %d, %s: its %s; footprint %d×%d, door at %s facing %s" % [k, role.display_name,
 				"door" if cell == plot["door"] else ("footprint" if rect.has_point(cell) else
-					("field" if (plot.get("field", Rect2i()) as Rect2i).has_point(cell) else "yard")), rect.size.x, rect.size.y,
+					(String(plot.get("annex_kind", "yard")) if (plot.get("annex", Rect2i()) as Rect2i).has_point(cell) else "yard")), rect.size.x, rect.size.y,
 				plot["door"], {Vector2i.RIGHT: "east", Vector2i.DOWN: "south", Vector2i.LEFT: "west", Vector2i.UP: "north"}[plot["front"]]])
 			if plot.has("building"):
 				var built: Dictionary = plot["building"]
@@ -667,9 +667,13 @@ func _draw_plots() -> void:
 	for plot: Dictionary in _site.plots:
 		for cell: Vector2i in plot["yard"]:
 			_plots_layer.draw_rect(Rect2(Vector2(cell) * px, Vector2(px, px)), Color(0.55, 0.75, 0.3, 0.35))
-		if plot.has("field"):
-			var field: Rect2i = plot["field"]
-			_plots_layer.draw_rect(Rect2(Vector2(field.position) * px, Vector2(field.size) * px), Color(0.72, 0.6, 0.3, 0.6))
+		if plot.has("annex"):
+			var annex: Rect2i = plot["annex"]
+			var tint := Color(0.72, 0.6, 0.3, 0.6) if plot["annex_kind"] == &"field" else Color(0.55, 0.7, 0.35, 0.6)
+			_plots_layer.draw_rect(Rect2(Vector2(annex.position) * px, Vector2(annex.size) * px), tint)
+		if plot.has("dock"):
+			for cell: Vector2i in plot["dock"]["cells"]:
+				_plots_layer.draw_rect(Rect2(Vector2(cell) * px, Vector2(px, px)), Color(0.6, 0.42, 0.25, 0.9))
 		var rect: Rect2i = plot["footprint"]
 		var group := EcsTownEconomy.CATALOG.role(plot["role"]).group
 		_plots_layer.draw_rect(Rect2(Vector2(rect.position) * px, Vector2(rect.size) * px), Color(GROUP_TINTS.get(group, Color.MAGENTA), 0.8))

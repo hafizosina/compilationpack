@@ -50,6 +50,9 @@ There are no build scripts; the editor is the tool chain. The tests are module 9
 # Module 12's step 3: main roads to the region's edge, organic lanes, bridges, into the chunks. 11 checks, ~60 s.
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/road_test.tscn"
 
+# Module 12's step 7a: outdoor works laid, fields and pens fenced with gates, docks over water, wheels, every
+# entrance walkable from the well. 7 checks, ~60 s.
+"$GODOT" --headless --path . "res://12. Settlement Generator/tests/outdoor_test.tscn"
 # Module 12's step 6: a building on every walled plot, built through module 10 in the town's area and windows,
 # each checked, entered from a road; one across chunk lines drawn the same per chunk. 4 checks, ~60 s.
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/building_test.tscn"

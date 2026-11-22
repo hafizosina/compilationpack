@@ -11,8 +11,9 @@ extends RefCounted
 ##   2. Lanes: in the area and each window, from the cell before each door to the nearest road,
 ##      nearest plot first, so lanes merge. A plot no lane reaches is dropped, and reported short.
 ##   3. Yards: every plot grows from its footprint over free land to its role's yard depth.
-## A role with a field (a farmhouse) takes a spot only where its field fits beside it, off its
-## front and a cell clear of it, so a yard path runs between; fields block plots, lanes and yards.
+## A role with a field or pen (an annex) takes a spot only where it fits beside it, off its front
+## and a cell clear of it, so a yard path runs between; annexes block plots, lanes and yards. A
+## role with a dock gets one out over the water nearest it, and a watermill its wheel on the river.
 ## Footprints and yards go into `cleared_cells`; floors are left to EcsRoadPlanner.lay.
 
 enum Use { FREE, ROAD, WATER, FOOTPRINT, FIELD }
@@ -37,6 +38,10 @@ const WINDOW: int = 32
 const MAX_WINDOWS: int = 6
 const GROW: int = 16
 const MAX_GROWS: int = 4
+## How far a dock's pier may start from its plot, and how long it runs; how far a wheel's river may be.
+const DOCK_REACH: int = 8
+const DOCK_LENGTH: int = 6
+const WHEEL_REACH: int = 6
 
 ## The ground a plot is placed on: the town's area or an outlying window.
 class Grid:
@@ -99,6 +104,17 @@ static func plan(site: EcsSettlementSite, def: EcsSettlementDef, terrain: Dictio
 	EcsProgress.say(progress, "Growing yards", 0.86)
 	for grid in grids:
 		_yards(site, def, grid)
+	for plot in site.plots:
+		var role := EcsTownEconomy.CATALOG.role(plot["role"])
+		var grid := _grid_holding(grids, plot["footprint"])
+		if role.annex == &"dock":
+			var dock := _dock(site, plot, grid)
+			if not dock.is_empty():
+				plot["dock"] = dock
+		if role.key == &"watermill":
+			var wheel := _wheel(plot, grid)
+			if wheel != Vector2i(-1, -1):
+				plot["wheel"] = wheel
 	for k in site.plots.size():
 		site.plots[k].erase("yard_done")
 		var rect: Rect2i = site.plots[k]["footprint"]
@@ -109,7 +125,7 @@ static func plan(site: EcsSettlementSite, def: EcsSettlementDef, terrain: Dictio
 		for cell: Vector2i in site.plots[k]["yard"]:
 			site.plot_at[cell] = k
 			site.cleared_cells[cell] = true
-		var field: Rect2i = site.plots[k].get("field", Rect2i())
+		var field: Rect2i = site.plots[k].get("annex", Rect2i())
 		for y in range(field.position.y, field.end.y):
 			for x in range(field.position.x, field.end.x):
 				site.plot_at[Vector2i(x, y)] = k
@@ -163,7 +179,7 @@ static func grid_of(site: EcsSettlementSite, rect: Rect2i, terrain: Dictionary) 
 		for y in range(part.position.y, part.end.y):
 			for x in range(part.position.x, part.end.x):
 				grid.use[grid.i(Vector2i(x, y))] = Use.FOOTPRINT
-		var field := (plot.get("field", Rect2i()) as Rect2i).intersection(rect)
+		var field := (plot.get("annex", Rect2i()) as Rect2i).intersection(rect)
 		for y in range(field.position.y, field.end.y):
 			for x in range(field.position.x, field.end.x):
 				grid.use[grid.i(Vector2i(x, y))] = Use.FIELD
@@ -225,8 +241,8 @@ static func _place_in(site: EcsSettlementSite, def: EcsSettlementDef, grid: Grid
 			if not _musts(site, grid, role, rect, front):
 				continue
 			var field := Rect2i()
-			if role.field_max != Vector2i.ZERO:
-				field = _field_for(rect, front, grid, role, rng)
+			if role.annex == &"field" or role.annex == &"pen":
+				field = _annex_for(rect, front, grid, role, rng)
 				if not field.has_area():
 					continue
 			var score := noise
@@ -244,17 +260,18 @@ static func _place_in(site: EcsSettlementSite, def: EcsSettlementDef, grid: Grid
 	var plot := {"role": role.key, "footprint": rect, "front": best["front"], "door": _door(rect, best["front"]), "yard": []}
 	var field: Rect2i = best["field"]
 	if field.has_area():
-		plot["field"] = field
+		plot["annex"] = field
+		plot["annex_kind"] = role.annex
 		for y in range(field.position.y, field.end.y):
 			for x in range(field.position.x, field.end.x):
 				grid.use[grid.i(Vector2i(x, y))] = Use.FIELD
 	site.plots.append(plot)
 	return true
 
-## A field for `role` beside `rect` on a side other than its `front`, a cell clear of it: the
-## largest of three sizes from the role's range that fits on a side, the sides in random order;
+## A field or pen for `role` beside `rect` on a side other than its `front`, a cell clear of it:
+## the largest of three sizes from the role's range that fits on a side, the sides in random order;
 ## empty when none fits.
-static func _field_for(rect: Rect2i, front: Vector2i, grid: Grid, role: EcsSettlementRoleDef, rng: RandomNumberGenerator) -> Rect2i:
+static func _annex_for(rect: Rect2i, front: Vector2i, grid: Grid, role: EcsSettlementRoleDef, rng: RandomNumberGenerator) -> Rect2i:
 	var inner := grid.rect.grow(-EDGE)
 	var sides: Array[Vector2i] = []
 	for side in SIDES:
@@ -268,9 +285,9 @@ static func _field_for(rect: Rect2i, front: Vector2i, grid: Grid, role: EcsSettl
 	var shift := rng.randi_range(-2, 2)
 	for step in 3:
 		var t := step / 2.0
-		var size := Vector2i(roundi(lerpf(role.field_max.x, role.field_min.x, t)), roundi(lerpf(role.field_max.y, role.field_min.y, t)))
+		var size := Vector2i(roundi(lerpf(role.annex_max.x, role.annex_min.x, t)), roundi(lerpf(role.annex_max.y, role.annex_min.y, t)))
 		for side in sides:
-			# The field's long side lies along the house.
+			# The annex's long side lies along the house.
 			var turned := size if side.y != 0 else Vector2i(size.y, size.x)
 			var pos := Vector2i.ZERO
 			if side.x != 0:
@@ -811,3 +828,75 @@ static func _yards(site: EcsSettlementSite, def: EcsSettlementDef, grid: Grid) -
 					(site.plots[k]["yard"] as Array[Vector2i]).append(next)
 					next_ring.append(next)
 		ring = next_ring
+
+static func _grid_holding(grids: Array[Grid], rect: Rect2i) -> Grid:
+	for grid in grids:
+		if grid.rect.encloses(rect):
+			return grid
+	return grids[0]
+
+## A pier from the plot out over the water nearest it: the first side (back, then the sides, then
+## the front) whose middle reaches water within DOCK_REACH cells over land no footprint or annex
+## takes; 2 wide, as long as the water allows up to DOCK_LENGTH. {cells, boat, boat_turns, post},
+## or {} when no side reaches water.
+static func _dock(site: EcsSettlementSite, plot: Dictionary, grid: Grid) -> Dictionary:
+	var rect: Rect2i = plot["footprint"]
+	var front: Vector2i = plot["front"]
+	var sides: Array[Vector2i] = [-front, Vector2i(front.y, front.x), Vector2i(-front.y, -front.x), front]
+	for side in sides:
+		var across := Vector2i(absi(side.y), absi(side.x))
+		var at := _door(rect, side)
+		var shore := Vector2i(-1, -1)
+		for step in range(1, DOCK_REACH + 1):
+			var cell := at + side * step
+			if not grid.rect.has_point(cell) or not grid.rect.has_point(cell + across):
+				break
+			var u := grid.use[grid.i(cell)]
+			if u == Use.WATER and grid.use[grid.i(cell + across)] == Use.WATER:
+				shore = cell
+				break
+			if u == Use.FOOTPRINT or u == Use.FIELD:
+				break
+		if shore == Vector2i(-1, -1):
+			continue
+		var cells: Array[Vector2i] = []
+		var end := shore
+		for step in DOCK_LENGTH:
+			var cell := shore + side * step
+			if not _water_pair(grid, site, cell, across):
+				break
+			cells.append_array([cell, cell + across])
+			end = cell
+		if cells.size() < 4:
+			continue
+		# Moored past the pier's end, lying along it: a 2x1 boat turned to the pier's run.
+		var boat_turns := 0 if side.x != 0 else 1
+		var boat := end + side if side.x > 0 or side.y > 0 else end + side * 2
+		var boat_cells := [boat, boat + (Vector2i.RIGHT if boat_turns == 0 else Vector2i.DOWN)]
+		var boat_ok := boat_cells.all(func(c: Vector2i) -> bool:
+			return grid.rect.has_point(c) and grid.use[grid.i(c)] == Use.WATER and not site.road_cells.has(c))
+		return {"cells": cells, "boat": boat if boat_ok else Vector2i(-1, -1), "boat_turns": boat_turns, "post": end + across}
+	return {}
+
+static func _water_pair(grid: Grid, site: EcsSettlementSite, cell: Vector2i, across: Vector2i) -> bool:
+	for c in [cell, cell + across]:
+		if not grid.rect.has_point(c) or grid.use[grid.i(c)] != Use.WATER or site.road_cells.has(c):
+			return false
+	return true
+
+## The river cell nearest the watermill's footprint within WHEEL_REACH, for its wheel, or (-1, -1).
+static func _wheel(plot: Dictionary, grid: Grid) -> Vector2i:
+	var rect: Rect2i = plot["footprint"]
+	var best := Vector2i(-1, -1)
+	var nearest := INF
+	var around := rect.grow(WHEEL_REACH).intersection(grid.rect)
+	for y in range(around.position.y, around.end.y):
+		for x in range(around.position.x, around.end.x):
+			var cell := Vector2i(x, y)
+			if grid.river[grid.i(cell)] == 0 or grid.use[grid.i(cell)] != Use.WATER:
+				continue
+			var gap := Vector2(maxi(maxi(rect.position.x - x, x - rect.end.x + 1), 0), maxi(maxi(rect.position.y - y, y - rect.end.y + 1), 0)).length()
+			if gap < nearest:
+				nearest = gap
+				best = cell
+	return best

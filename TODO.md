@@ -24,6 +24,18 @@ Plans noted for later across modules 9 to 12.
 - [ ] A simple in-game calendar (days and seasons), like Stardew Valley's.
 - [ ] ONI study notes (`9. EcsSystem/ONI_STUDY.md`), kept as a note for now.
 - [ ] Songs of Syx study notes (`9. EcsSystem/SYX_STUDY.md`), kept as a note for now.
+- [ ] C++ GDExtension for the hot loops (planned 2026-11-10; `SYX_STUDY.md` §12). Move what runs every
+      tick for every entity, and its data with it; cross into C++ once per run, never once per entity.
+  - First a spike at 5,000 entities: the hot component data, movement and MultiMesh drawing in a
+    GDExtension, against raylib + EnTT in `~/Project/CPP/GameEngine`. 60 FPS in Godot keeps Godot.
+  - Then decide the storage question (HANDOFF §15) with those numbers.
+  - Then, in order: collision and perception on an integer grid (drops the `Area2D`s and Godot's
+    2.2 ms physics step); need bars and timers; spatial queries (world index, counts per cluster);
+    module 10 pathfinding; module 12 L1 chunk streaming if it streams during play.
+  - Stays in GDScript: decisions (brain, planning, utility) on slow clocks, reading C++ data in batches;
+    edit, inspector, saves, composer, HUD, overlay; one-off generation; `.tres` defs; tests.
+  - Setup: godot-cpp for 4.7 via SCons, an arm64 Android build (NDK 30); the inspector needs the C++
+    store to expose fields so `EcsInspectSystem` stays component-blind.
 
 ## Module 10 — Town Generator
 - [ ] Discuss your plan for the "closed" building flag (`CLOSE_BUILDING`).
