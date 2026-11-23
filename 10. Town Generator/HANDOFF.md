@@ -826,6 +826,20 @@ up or down by noise so the edge line is ragged (`jag`), sharpened (`sharp`) for 
 terrain change rewrites one pixel. Floors and roofs stay on the dual grid with hard edges. Known gap: the
 blend stops at a module 12 chunk's border, since a chunk knows only its own cells.
 
+## 13f. Fences and gates: linked pieces (2026-11-23, `docs/WALLS_PLAN.md` steps 4–6)
+
+**A piece can join like a wall without being one.** `EcsTileComponent.link` names a link group; the tile
+sync draws such a piece by the mask of its four side neighbours whose object shares the link, from a
+16-shape sheet in the walls' side layout (`EcsDualGrid.side_layout`, cached per source), with no turn. A
+2-tile sheet is a gate's: across when it joins left or right, else down. An object change also redraws its
+four neighbours' linked pieces, so joins follow. Fences stay furniture, so a fenced field never becomes a
+room. **Gates** carry their fence's link, so the fence runs into them, and are walkable:
+`EcsFurnitureComponent.walkable`, read by the nav once the piece is born. Blueprints: `fence` (bamboo
+rail), `fence_woven`, `fence_hedge`, `fence_brick_wall`, and `gate_bamboo_rail`, `gate_woven`, `gate_hedge`,
+`gate_brick` (candi bentar); art from `Global/Asset/Structure/make_fences.py`. Module 12 picks them from
+`EcsSettlementDef`'s Fences group. **Gates are drawn closed only**; the decided open state (drawn
+see-through while someone passes, like a door) is not built.
+
 ---
 
 ## 14. Open for discussion

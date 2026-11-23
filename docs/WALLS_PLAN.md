@@ -78,6 +78,18 @@ Each step: a mock-up for you to review (in-engine screenshot, before and after),
 | 5 | The other fences and gates (woven, hedge, brick wall + split gate) | a yard of each, a rich compound |
 | 6 | Module 12 places them from the settlement def | a whole town |
 
+Done (2026-11-23, not yet seen in the engine; screenshots still to take):
+
+- [x] **4** `EcsTileComponent.link`; the tile sync draws a linked piece by which side neighbours share its link (a
+  16-shape sheet in the walls' side layout, or a 2-tile across/down sheet for a gate) and redraws the neighbours when
+  one changes. `fence` is now the bamboo rail fence; `gate_bamboo_rail` is walkable (`EcsFurnitureComponent.walkable`,
+  read by the nav). Art from `Global/Asset/Structure/make_fences.py`.
+- [x] **5** `fence_woven`, `fence_hedge`, `fence_brick_wall` and their gates `gate_woven`, `gate_hedge`, `gate_brick`
+  (candi bentar), registered in `entity_catalog.tres`. All gates drawn closed (D4's see-through open state not built).
+- [x] **6** `EcsSettlementDef` names the fence for fields, pens, yards by wealth, compounds and temples, and a gate per
+  fence (`gates`); the town builder places them with no turns, gates in the field and pen gate, the compound's gate
+  cells, and at each fence end by a yard's opening. Compounds keep a 2-cell gate (two split gates), not 3.
+
 ## 5. Decisions (2026-11-23)
 
 - **D1 Wall view:** straight from above, **drawn in RimWorld's art style** (its material textures, soft shading,
