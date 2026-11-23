@@ -96,23 +96,42 @@ float box_distance(vec2 q, vec2 lo, vec2 hi) {
 	return length(max(max(lo - q, q - hi), vec2(0.0)));
 }
 
-// Signed distance (cells) from `q` to the outline of the floors in `mask`, positive inside, from the 3x3 cells round
-// it, a wall or door cell by its quarters; 1.5 when none differs.
-float sd_mask(vec2 q, int mask, ivec2 size) {
-	bool inside = has(mask, shown(q, size));
+// Whether a cell `at` showing floor `r` is in the region of the floors in `mask`. With `own` >= 0, a floor other
+// than `own` counts only when a side neighbour holds `own`: a lower floor runs under a higher one it touches, no further.
+bool member(ivec2 at, int r, int mask, int own, ivec2 size) {
+	if (!has(mask, r)) {
+		return false;
+	}
+	if (own < 0 || r == own) {
+		return true;
+	}
+	ivec2 sides[4] = {ivec2(1, 0), ivec2(-1, 0), ivec2(0, 1), ivec2(0, -1)};
+	for (int k = 0; k < 4; k++) {
+		int v = raw(at + sides[k], size);
+		if (v < 128 && v - 1 == own) {
+			return true;
+		}
+	}
+	return false;
+}
+
+// Signed distance (cells) from `q` to the outline of the floors in `mask` (see member() for `own`), positive inside,
+// from the 3x3 cells round it, a wall or door cell by its quarters; 1.5 when none differs.
+float sd_mask(vec2 q, int mask, int own, ivec2 size) {
 	ivec2 c = ivec2(floor(q));
+	bool inside = member(c, shown(q, size), mask, own, size);
 	float best = 1.5;
 	for (int k = 0; k < 9; k++) {
 		ivec2 at = c + ivec2(k % 3 - 1, k / 3 - 1);
 		int v = raw(at, size);
 		if (v < 128) {
-			if (has(mask, v - 1) != inside) {
+			if (member(at, v - 1, mask, own, size) != inside) {
 				best = min(best, box_distance(q, vec2(at), vec2(at) + 1.0));
 			}
 		} else {
 			for (int h = 0; h < 4; h++) {
 				vec2 lo = vec2(at) + vec2(float(h % 2), float(h / 2)) * 0.5;
-				if (has(mask, shown(lo + 0.25, size)) != inside) {
+				if (member(at, shown(lo + 0.25, size), mask, own, size) != inside) {
 					best = min(best, box_distance(q, lo, lo + 0.5));
 				}
 			}
@@ -133,11 +152,11 @@ vec4 piece(vec2 qw, int f) {
 bool cover(vec2 q, vec2 qw, int f, bool plain, ivec2 size, out float sd) {
 	int mask = above(f);
 	if (plain) {
-		sd = sd_mask(q, mask, size);
+		sd = sd_mask(q, mask, f, size);
 		return sd > 0.0;
 	}
 	vec4 k = piece(qw, f);
-	sd = sd_mask(q + (k.rg - 0.5) * 2.0, mask, size);
+	sd = sd_mask(q + (k.rg - 0.5) * 2.0, mask, f, size);
 	if (!has(earthy_mask, f)) {
 		return sd > 0.0;
 	}
@@ -242,10 +261,10 @@ void fragment() {
 			// Earth under everything: a jagged bed round earthy floors, a light ring round every built one.
 			float bed = 0.0;
 			if ((hard & earthy_mask) != 0) {
-				float se = sd_mask(p, hard_mask() & earthy_mask, size);
+				float se = sd_mask(p, hard_mask() & earthy_mask, -1, size);
 				bed = clamp((se + 0.45 + jn * 0.30) / 0.10, 0.0, 1.0) * 0.85 * fade;
 			}
-			float sh = sd_mask(p, hard_mask(), size);
+			float sh = sd_mask(p, hard_mask(), -1, size);
 			float ring = clamp((sh + 0.22 + jn * 0.16) / 0.10, 0.0, 1.0) * 0.45 * fade;
 			col = vec4(dirt, max(bed, ring));
 		}
@@ -268,7 +287,7 @@ void fragment() {
 						s = mix(s, dirt, clamp(1.0 - sd / 0.35, 0.0, 1.0) * 0.25 * grain);
 					}
 					if (has(hem_mask, f)) {
-						float e = sd_mask(p, above(f), size);
+						float e = sd_mask(p, above(f), f, size);
 						if (e > 0.0 && e < 0.10) {
 							s *= stripe < 0.5 ? 0.62 : 0.72;
 						}
