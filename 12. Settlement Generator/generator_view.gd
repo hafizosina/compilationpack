@@ -798,13 +798,13 @@ func _make_level(size: Vector2i, commands: Array[EcsBuildCommand], at: Vector2, 
 	for tick in SETTLE:
 		scheduler.run_all(world, 1.0 / 60.0)
 	# Every chunk's ground reaches half a cell into its neighbours, so pieces draw above all ground.
-	for layer: TileMapLayer in [tile_sync.furniture_layer(), tile_sync.wall_layer(), tile_sync.attachment_layer()]:
+	for layer: TileMapLayer in [tile_sync.furniture_layer(), tile_sync.door_layer(), tile_sync.wall_layer(), tile_sync.attachment_layer()]:
 		layer.z_index = 1
 	# Roofs cover the building, pieces and walls included, when shown.
 	for layer in tile_sync.roof_layers():
 		layer.z_index = 2
 	if trim:
-		for layer in tile_sync.floor_layers() + tile_sync.roof_layers():
+		for layer in tile_sync.roof_layers():
 			for x in size.x + 1:
 				layer.erase_cell(Vector2i(x, 0))
 				layer.erase_cell(Vector2i(x, size.y))

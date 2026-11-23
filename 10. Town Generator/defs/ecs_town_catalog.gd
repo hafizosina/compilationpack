@@ -21,6 +21,8 @@ var _tile_sets: Dictionary = {}
 var _wall_tile_set: TileSet
 ## Every terrain's ground, one layer each in list order, made the first time it is asked for.
 var _grounds: Texture2DArray
+## Every floor's surface likewise, a layer per floor in list order.
+var _surfaces: Texture2DArray
 ## Pixels a side of a ground texture: 8 cells at EcsTownGrid.ART.
 const GROUND_SIZE: int = 512
 
@@ -50,13 +52,23 @@ func tiles(def: EcsTileDef) -> TileSet:
 ## The terrains' grounds as one array, a layer per terrain in list order, each GROUND_SIZE square;
 ## a terrain with no `ground` repeats its sheet's full tile.
 func grounds() -> Texture2DArray:
-	if _grounds != null:
-		return _grounds
+	if _grounds == null:
+		_grounds = _stack(terrains, func(def: EcsTerrainDef) -> Texture2D: return def.ground)
+	return _grounds
+
+## The floors' surfaces as one array, a layer per floor in list order, as `grounds()`.
+func surfaces() -> Texture2DArray:
+	if _surfaces == null:
+		_surfaces = _stack(floors, func(def: EcsFloorDef) -> Texture2D: return def.surface)
+	return _surfaces
+
+func _stack(defs: Array, large: Callable) -> Texture2DArray:
 	var images: Array[Image] = []
-	for def in terrains:
+	for def: EcsTileDef in defs:
+		var texture: Texture2D = large.call(def)
 		var image: Image
-		if def.ground != null:
-			image = def.ground.get_image()
+		if texture != null:
+			image = texture.get_image()
 			if image.is_compressed():
 				image.decompress()
 			image.convert(Image.FORMAT_RGBA8)
@@ -65,11 +77,11 @@ func grounds() -> Texture2DArray:
 			image = _repeat_full_tile(def)
 		image.generate_mipmaps()
 		images.append(image)
-	_grounds = Texture2DArray.new()
-	_grounds.create_from_images(images)
-	return _grounds
+	var array := Texture2DArray.new()
+	array.create_from_images(images)
+	return array
 
-func _repeat_full_tile(def: EcsTerrainDef) -> Image:
+func _repeat_full_tile(def: EcsTileDef) -> Image:
 	var image := Image.create_empty(GROUND_SIZE, GROUND_SIZE, false, Image.FORMAT_RGBA8)
 	var set := tiles(def)
 	if set == null:

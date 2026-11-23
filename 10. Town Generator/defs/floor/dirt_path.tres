@@ -2,10 +2,13 @@
 
 [ext_resource type="Script" uid="uid://cfhfq0d55ey50" path="res://10. Town Generator/defs/ecs_floor_def.gd" id="1"]
 [ext_resource type="Texture2D" path="res://10. Town Generator/art/placeholder/floor_dirt_path.png" id="2_tiles"]
+[ext_resource type="Texture2D" path="res://Global/Asset/Floor/surface_dirt_path.png" id="3_surface"]
 
 [resource]
 script = ExtResource("1")
 key = &"dirt_path"
 display_name = "dirt path"
 texture = ExtResource("2_tiles")
+surface = ExtResource("3_surface")
+soft = true
 walk_cost = 0.8

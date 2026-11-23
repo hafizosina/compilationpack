@@ -66,10 +66,11 @@
 [ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/pounding_shed.tres" id="bt_pounding_shed"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/rice_barn.tres" id="bt_rice_barn"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/floor/dirt_path.tres" id="f_dirt_path"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/floor/bamboo.tres" id="f_bamboo"]
 [resource]
 script = ExtResource("1")
 terrains = Array[ExtResource("t")]([ExtResource("t1"), ExtResource("t2"), ExtResource("t3"), ExtResource("t4"), ExtResource("t5"), ExtResource("t6")])
-floors = Array[ExtResource("f")]([ExtResource("f1"), ExtResource("f2"), ExtResource("f3"), ExtResource("f4"), ExtResource("f_dirt_path")])
+floors = Array[ExtResource("f")]([ExtResource("f1"), ExtResource("f2"), ExtResource("f3"), ExtResource("f4"), ExtResource("f_dirt_path"), ExtResource("f_bamboo")])
 walls = Array[ExtResource("w")]([ExtResource("w1"), ExtResource("w2"), ExtResource("w_bamboo"), ExtResource("w_brick")])
 doors = Array[ExtResource("d")]([ExtResource("d1"), ExtResource("d2"), ExtResource("d3")])
 roofs = Array[ExtResource("r")]([ExtResource("r1")])

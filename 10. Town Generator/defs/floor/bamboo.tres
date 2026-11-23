@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="EcsFloorDef" format=3]
+
+[ext_resource type="Script" uid="uid://cfhfq0d55ey50" path="res://10. Town Generator/defs/ecs_floor_def.gd" id="1"]
+[ext_resource type="Texture2D" path="res://Global/Asset/Floor/surface_bamboo.png" id="2_surface"]
+
+[resource]
+script = ExtResource("1")
+key = &"bamboo"
+display_name = "bamboo"
+surface = ExtResource("2_surface")

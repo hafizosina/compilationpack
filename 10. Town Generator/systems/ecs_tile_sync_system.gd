@@ -3,13 +3,18 @@ extends EcsSystem
 
 ## Draws the grid, one way, under its root: the ground, one sprite whose texture holds each cell's
 ## terrain and whose shader (art/ground.gdshader) shows the terrains' large textures with soft
-## edges; then a TileMapLayer per floor and roof type from the def's TileSet, half a cell up and left
-## for the dual grid, in list order, a type's layer also filling under every later type so edges
-## blend; then furniture, walls and attachments on the cell grid, their sheets added as sources. Walls use one atlas source
-## per wall type, joined to their building's neighbouring walls. The root is its own: the
-## first run clears it, builds and draws all; after that only what changed is redrawn.
+## edges; the floors likewise (art/floor.gdshader: rigid edges, a path's ragged, a floor running
+## under walls to their middle); then furniture, doors (their own layer, under the walls), walls and
+## attachments on the cell grid, their sheets added as sources; then a TileMapLayer per roof type,
+## half a cell up and left for the dual grid, in list order, a type's layer also filling under every
+## later type. Walls use one atlas source per wall type, joined to their building's neighbouring
+## walls. The root is its own: the first run clears it, builds and draws all; after that only what
+## changed is redrawn.
 
 const GROUND_SHADER := preload("res://10. Town Generator/art/ground.gdshader")
+const FLOOR_SHADER := preload("res://10. Town Generator/art/floor.gdshader")
+## Added to a floor pixel on a wall or door cell: the shader shows the floor round it there, not its own.
+const WALLED: int = 128
 
 ## A tile's transform flags for 0-3 quarter turns clockwise.
 const TURN_FLAGS: Array[int] = [
@@ -23,12 +28,14 @@ var _layers_root: Node
 var _catalog: EcsTownCatalog
 var _built: bool = false
 ## Per group, in draw order: defs, their layers, and each layer's corner layout.
-var _floor_defs: Array[EcsTileDef] = []
 ## The ground: one pixel a cell, its terrain's draw order + 1.
 var _ground: Sprite2D
 var _ground_image: Image
 var _ground_texture: ImageTexture
-var _floor_layers: Array[TileMapLayer] = []
+## The floors: one pixel a cell, its floor's draw order + 1, WALLED added under a wall or door.
+var _floors: Sprite2D
+var _floor_image: Image
+var _floor_texture: ImageTexture
 var _roof_defs: Array[EcsTileDef] = []
 var _roof_layers: Array[TileMapLayer] = []
 var _layouts: Dictionary = {}
@@ -37,6 +44,8 @@ var _terrain_rank: Dictionary = {}
 var _floor_rank: Dictionary = {}
 var _roof_rank: Dictionary = {}
 var _wall_layer: TileMapLayer
+## Doors, on their own layer just under the walls, so a door always lies under the posts either side.
+var _door_layer: TileMapLayer
 var _furniture_layer: TileMapLayer
 var _attachment_layer: TileMapLayer
 ## Wall type id -> [source id, side layout].
@@ -90,8 +99,30 @@ func ground_rank_at(cell: Vector2i) -> int:
 		return -1
 	return roundi(_ground_image.get_pixelv(cell).r * 255.0) - 1
 
-func floor_layers() -> Array[TileMapLayer]:
-	return _floor_layers
+## The floors sprite: its texture is one pixel a cell.
+func floors() -> Sprite2D:
+	return _floors
+
+## The draw order of the floor shown at `point` (in cells), as the floor shader decides it: a wall's
+## quarter takes the highest floor of the open cells round its corner; -1 for none.
+func floor_shown_at(point: Vector2) -> int:
+	var c := Vector2i(point.floor())
+	var v := _floor_raw(c)
+	if v < WALLED:
+		return v - 1
+	var f := point - Vector2(c)
+	var d := Vector2i(-1 if f.x < 0.5 else 1, -1 if f.y < 0.5 else 1)
+	var best := -1
+	for n: Vector2i in [c + Vector2i(d.x, 0), c + Vector2i(0, d.y), c + d]:
+		var w := _floor_raw(n)
+		if w < WALLED:
+			best = maxi(best, w - 1)
+	return best
+
+func _floor_raw(cell: Vector2i) -> int:
+	if _floor_image == null or not Rect2i(Vector2i.ZERO, _floor_image.get_size()).has_point(cell):
+		return 0
+	return roundi(_floor_image.get_pixelv(cell).r * 255.0)
 
 func roof_layers() -> Array[TileMapLayer]:
 	return _roof_layers
@@ -99,13 +130,16 @@ func roof_layers() -> Array[TileMapLayer]:
 func wall_layer() -> TileMapLayer:
 	return _wall_layer
 
+func door_layer() -> TileMapLayer:
+	return _door_layer
+
 func furniture_layer() -> TileMapLayer:
 	return _furniture_layer
 
 func attachment_layer() -> TileMapLayer:
 	return _attachment_layer
 
-## Which quarters the tile at `at` on a terrain or floor layer fills; 0 when empty.
+## Which quarters the tile at `at` on a roof layer fills; 0 when empty.
 func mask_at(layer: TileMapLayer, at: Vector2i) -> int:
 	if layer.get_cell_source_id(at) == -1:
 		return 0
@@ -113,10 +147,10 @@ func mask_at(layer: TileMapLayer, at: Vector2i) -> int:
 
 ## The door tile at `cell` as [source id, atlas coords], or [] when there is none.
 func door_tile_at(cell: Vector2i) -> Array:
-	var source := _wall_layer.get_cell_source_id(cell)
+	var source := _door_layer.get_cell_source_id(cell)
 	for def in _catalog.doors:
 		if source == def.closed_source_id or source == def.open_source_id:
-			return [source, _wall_layer.get_cell_atlas_coords(cell)]
+			return [source, _door_layer.get_cell_atlas_coords(cell)]
 	return []
 
 ## Which sides the wall at `cell` joins; -1 when there is none.
@@ -133,8 +167,9 @@ func _build(grid: EcsTownGridSingleton) -> void:
 		_layers_root.remove_child(child)
 		child.queue_free()
 	_make_ground(grid)
-	_collect(_catalog.floors, _floor_defs, _floor_layers, _floor_rank, "Floor")
+	_make_floors(grid)
 	_furniture_layer = _make_layer("Furniture", _cell_tile_set(), false)
+	_door_layer = _make_layer("Doors", _catalog.wall_tiles(), false)
 	_wall_layer = _make_layer("Walls", _catalog.wall_tiles(), false)
 	_attachment_layer = _make_layer("Attachments", _cell_tile_set(), false)
 	_collect(_catalog.roofs, _roof_defs, _roof_layers, _roof_rank, "Roof")
@@ -169,20 +204,50 @@ func _make_ground(grid: EcsTownGridSingleton) -> void:
 		_terrain_rank[_catalog.terrains[k].id] = k
 	_ground_image = Image.create_empty(grid.width, grid.height, false, Image.FORMAT_R8)
 	_ground_texture = ImageTexture.create_from_image(_ground_image)
+	_ground = _map_sprite("Ground", _ground_texture, GROUND_SHADER, {
+		&"grounds": _catalog.grounds(), &"count": _catalog.terrains.size()})
+
+## The floors sprite, like the ground's, drawn by the floor shader.
+func _make_floors(grid: EcsTownGridSingleton) -> void:
+	var soft := 0
+	for k in _catalog.floors.size():
+		_floor_rank[_catalog.floors[k].id] = k
+		if _catalog.floors[k].soft:
+			soft |= 1 << k
+	_floor_image = Image.create_empty(grid.width, grid.height, false, Image.FORMAT_R8)
+	_floor_texture = ImageTexture.create_from_image(_floor_image)
+	_floors = _map_sprite("Floors", _floor_texture, FLOOR_SHADER, {
+		&"map": _floor_texture, &"surfaces": _catalog.surfaces(), &"count": _catalog.floors.size(), &"soft_mask": soft})
+
+## A sprite of `texture` (a pixel a cell) scaled up to the grid, drawn by `shader` with `params`.
+func _map_sprite(sprite_name: String, texture: ImageTexture, shader: Shader, params: Dictionary) -> Sprite2D:
 	var material := ShaderMaterial.new()
-	material.shader = GROUND_SHADER
-	material.set_shader_parameter(&"grounds", _catalog.grounds())
-	material.set_shader_parameter(&"count", _catalog.terrains.size())
+	material.shader = shader
 	material.set_shader_parameter(&"cell", float(EcsTownGrid.CELL))
 	material.set_shader_parameter(&"cells_per_texture", float(EcsTownCatalog.GROUND_SIZE) / EcsTownGrid.ART)
-	_ground = Sprite2D.new()
-	_ground.name = "Ground"
-	_ground.texture = _ground_texture
-	_ground.centered = false
-	_ground.scale = Vector2(EcsTownGrid.CELL, EcsTownGrid.CELL)
-	_ground.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_ground.material = material
-	_layers_root.add_child(_ground)
+	for key: StringName in params:
+		material.set_shader_parameter(key, params[key])
+	var sprite := Sprite2D.new()
+	sprite.name = sprite_name
+	sprite.texture = texture
+	sprite.centered = false
+	sprite.scale = Vector2(EcsTownGrid.CELL, EcsTownGrid.CELL)
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	sprite.material = material
+	_layers_root.add_child(sprite)
+	return sprite
+
+## Writes `cell`'s floor, and whether a wall or door stands on it, into the floor image; true when it changed.
+func _put_floor(grid: EcsTownGridSingleton, cell: Vector2i) -> bool:
+	var i := EcsTownGrid.index(grid, cell)
+	var id := grid.floor[i]
+	var value := int(_floor_rank.get(id, -1)) + 1 if id != 0 else 0
+	if grid.structure[i] != EcsTownGridSingleton.NONE:
+		value += WALLED
+	if _floor_raw(cell) == value:
+		return false
+	_floor_image.set_pixelv(cell, Color(value / 255.0, 0, 0))
+	return true
 
 ## Writes `cell`'s terrain into the ground image; true when it changed.
 func _put_ground(grid: EcsTownGridSingleton, cell: Vector2i) -> bool:
@@ -226,9 +291,11 @@ func _draw_all(grid: EcsTownGridSingleton) -> void:
 			if _put_ground(grid, Vector2i(x, y)):
 				redrawn += 1
 	_ground_texture.update(_ground_image)
-	for y in grid.height + 1:
-		for x in grid.width + 1:
-			_draw_at(grid, Vector2i(x, y), false)
+	for y in grid.height:
+		for x in grid.width:
+			if _put_floor(grid, Vector2i(x, y)):
+				redrawn += 1
+	_floor_texture.update(_floor_image)
 	for y in grid.height:
 		for x in grid.width:
 			_draw_wall(grid, Vector2i(x, y))
@@ -236,7 +303,7 @@ func _draw_all(grid: EcsTownGridSingleton) -> void:
 
 func _draw_dirty(grid: EcsTownGridSingleton) -> void:
 	var ground_changed := false
-	var floor_tiles: Dictionary = {}
+	var floors_changed := false
 	var roof_tiles: Dictionary = {}
 	var wall_cells: Dictionary = {}
 	var object_cells: Dictionary = {}
@@ -246,26 +313,23 @@ func _draw_dirty(grid: EcsTownGridSingleton) -> void:
 		if bits & EcsTownGridSingleton.CHANGED_TERRAIN and _put_ground(grid, cell):
 			ground_changed = true
 			redrawn += 1
+		if bits & (EcsTownGridSingleton.CHANGED_FLOOR | EcsTownGridSingleton.CHANGED_STRUCTURE) and _put_floor(grid, cell):
+			floors_changed = true
+			redrawn += 1
 		for corner in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
-			if bits & EcsTownGridSingleton.CHANGED_FLOOR:
-				floor_tiles[cell + corner] = true
 			if bits & EcsTownGridSingleton.CHANGED_ROOF:
 				roof_tiles[cell + corner] = true
 		if bits & EcsTownGridSingleton.CHANGED_OBJECT:
 			wall_cells[cell] = true
 			object_cells[cell] = true
 		if bits & EcsTownGridSingleton.CHANGED_STRUCTURE:
-			# A floor runs under walls, so a wall coming or going beside a floor redraws it.
-			if _floor_near(grid, cell):
-				for corner in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
-					floor_tiles[cell + corner] = true
 			wall_cells[cell] = true
 			for side in EcsDualGrid.SIDES:
 				wall_cells[cell + side] = true
 	if ground_changed:
 		_ground_texture.update(_ground_image)
-	for at: Vector2i in floor_tiles:
-		_draw_at(grid, at, true)
+	if floors_changed:
+		_floor_texture.update(_floor_image)
 	for at: Vector2i in roof_tiles:
 		var around := _around(grid, at, grid.roof, _roof_rank)
 		for k in _roof_layers.size():
@@ -275,13 +339,6 @@ func _draw_dirty(grid: EcsTownGridSingleton) -> void:
 			_draw_wall(grid, cell)
 	for cell: Vector2i in object_cells:
 		_draw_objects(grid, cell)
-
-## Redraws render tile `at` on the floor layers. `erase` clears tiles whose mask became
-## empty; a first draw has nothing to clear.
-func _draw_at(grid: EcsTownGridSingleton, at: Vector2i, erase: bool) -> void:
-	var around := _under_walls(grid, at, _around(grid, at, grid.floor, _floor_rank))
-	for k in _floor_layers.size():
-		_put(_floor_layers[k], at, _mask(around, k), erase)
 
 ## Draw order of the four cells around render tile `at`, TL, TR, BL, BR; -1 for none, and off the map.
 func _around(grid: EcsTownGridSingleton, at: Vector2i, cells: PackedInt32Array, rank: Dictionary) -> PackedInt32Array:
@@ -295,34 +352,6 @@ func _around(grid: EcsTownGridSingleton, at: Vector2i, cells: PackedInt32Array, 
 		var id := cells[EcsTownGrid.index(grid, cell)]
 		out[q] = int(rank.get(id, -1)) if id != 0 else -1
 	return out
-
-## A floor runs under its walls: a wall or door cell is drawn, in this render tile, with the
-## highest floor of the open cells beside it — never its own, which stays in the grid for when
-## the wall goes — so the floor's edge lies under the wall's middle: not short of it inside,
-## not past it outside.
-func _under_walls(grid: EcsTownGridSingleton, at: Vector2i, around: PackedInt32Array) -> PackedInt32Array:
-	var walled: Array[int] = []
-	var best := -1
-	for q in 4:
-		var cell: Vector2i = at + EcsDualGrid.CORNERS[q]
-		if not EcsTownGrid.in_bounds(grid, cell):
-			continue
-		if grid.structure[EcsTownGrid.index(grid, cell)] != EcsTownGridSingleton.NONE:
-			walled.append(q)
-		else:
-			best = maxi(best, around[q])
-	for q in walled:
-		around[q] = best
-	return around
-
-## Whether `cell` or any of its eight neighbours has a floor.
-func _floor_near(grid: EcsTownGridSingleton, cell: Vector2i) -> bool:
-	for dy in range(-1, 2):
-		for dx in range(-1, 2):
-			var next := cell + Vector2i(dx, dy)
-			if EcsTownGrid.in_bounds(grid, next) and grid.floor[EcsTownGrid.index(grid, next)] != 0:
-				return true
-	return false
 
 ## Quarters whose cell's type draws at or after layer `k`.
 func _mask(around: PackedInt32Array, k: int) -> int:
@@ -348,8 +377,13 @@ func _draw_wall(grid: EcsTownGridSingleton, cell: Vector2i) -> void:
 		return
 	var i := EcsTownGrid.index(grid, cell)
 	if grid.structure[i] == EcsTownGridSingleton.DOOR:
+		if _wall_layer.get_cell_source_id(cell) != -1:
+			_wall_layer.erase_cell(cell)
 		_draw_door(grid, cell, i)
 		return
+	if _door_layer.get_cell_source_id(cell) != -1:
+		_door_layer.erase_cell(cell)
+		redrawn += 1
 	var entry: Array = _wall_sources.get(grid.wall_type[i], [])
 	if grid.structure[i] != EcsTownGridSingleton.WALL or entry.is_empty():
 		if _wall_layer.get_cell_source_id(cell) != -1:
@@ -372,7 +406,7 @@ func _draw_wall(grid: EcsTownGridSingleton, cell: Vector2i) -> void:
 func _draw_door(grid: EcsTownGridSingleton, cell: Vector2i, i: int) -> void:
 	var def := _catalog.door(grid.wall_type[i])
 	if def == null:
-		_wall_layer.erase_cell(cell)
+		_door_layer.erase_cell(cell)
 		return
 	var horizontal := false
 	for side in [Vector2i.LEFT, Vector2i.RIGHT]:
@@ -385,9 +419,9 @@ func _draw_door(grid: EcsTownGridSingleton, cell: Vector2i, i: int) -> void:
 	var door := _world.get_component(id, EcsDoorComponent) as EcsDoorComponent \
 		if _world != null and id > EcsWorld.NO_ENTITY else null
 	if door != null and door.is_open:
-		_wall_layer.set_cell(cell, def.open_source_id, def.open_horizontal if horizontal else def.open_vertical)
+		_door_layer.set_cell(cell, def.open_source_id, def.open_horizontal if horizontal else def.open_vertical)
 	else:
-		_wall_layer.set_cell(cell, def.closed_source_id, def.closed_horizontal if horizontal else def.closed_vertical)
+		_door_layer.set_cell(cell, def.closed_source_id, def.closed_horizontal if horizontal else def.closed_vertical)
 	redrawn += 1
 
 ## The furniture or plant covering `cell` — its slice of the piece's tiles — and the

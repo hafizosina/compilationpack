@@ -81,7 +81,6 @@ func _setup(size: Vector2i) -> Dictionary:
 	scheduler.add(EcsLifecycleSystem.new(EcsEntityManager.new(entities), ENTITIES)).add(build) \
 		.add(rooms).add(EcsRoofSystem.new(CATALOG)).add(sync)
 	scheduler.run_all(world, 0.0)
-	_sync_for_mask = sync
 	return {"world": world, "grid": world.get_singleton(EcsTownGridSingleton), "build": build, "rooms": rooms,
 		"sync": sync, "scheduler": scheduler, "root": root}
 
@@ -115,8 +114,7 @@ func _a_change_redraws_only_its_corners() -> void:
 	_send(t, [_cmd(EcsBuildCommand.Kind.SET_TERRAIN, Vector2i(5, 5), DIRT)])
 	_check("one terrain cell rewrites one pixel of the ground", sync.redrawn == 1)
 	_send(t, [_cmd(EcsBuildCommand.Kind.SET_FLOOR, Vector2i(5, 5), WOOD)])
-	_check("one floor cell redraws its 4 corners on each floor layer only",
-		sync.redrawn == 4 * CATALOG.floors.size())
+	_check("one floor cell rewrites one pixel of the floors", sync.redrawn == 1)
 	_send(t, [_cmd(EcsBuildCommand.Kind.SET_FLOOR, Vector2i(5, 5), WOOD)])
 	_check("setting what is already there redraws nothing", sync.redrawn == 0)
 	t.root.queue_free()
@@ -149,23 +147,22 @@ func _a_floor_never_bleeds_past_its_cells() -> void:
 	plan.append(_cmd(EcsBuildCommand.Kind.SET_FLOOR, Vector2i(9, 9), WOOD))
 	plan.append(_cmd(EcsBuildCommand.Kind.SET_FLOOR, Vector2i(3, 3), RUG))
 	_send(t, plan)
-	var wood := sync.floor_layers()[0]
 	var exact := true
 	for y in grid.height + 1:
 		for x in grid.width + 1:
 			var at := Vector2i(x, y)
-			var drawn := _mask(wood, at)
+			var drawn := _floor_mask(sync, at)
 			for q in 4:
 				var cell: Vector2i = at + EcsDualGrid.CORNERS[q]
 				var has := EcsTownGrid.in_bounds(grid, cell) and grid.floor[EcsTownGrid.index(grid, cell)] != 0
 				if has != bool(drawn & EcsDualGrid.BITS[q]):
 					exact = false
 	_check("wood covers its cells exactly, never past them", exact)
-	_check("cells touching only at a corner draw the diagonal tile",
-		wood.get_cell_atlas_coords(Vector2i(9, 9)) == Vector2i(5, 0))
+	_check("cells touching only at a corner meet only at that corner",
+		_floor_mask(sync, Vector2i(9, 9)) == EcsDualGrid.TL | EcsDualGrid.BR)
 	_send(t, [_cmd(EcsBuildCommand.Kind.CLEAR_FLOOR, Vector2i(8, 8)), _cmd(EcsBuildCommand.Kind.CLEAR_FLOOR, Vector2i(9, 9))])
-	_check("clearing a floor erases its tiles", wood.get_cell_source_id(Vector2i(9, 9)) == -1
-		and wood.get_cell_source_id(Vector2i(10, 10)) == -1)
+	_check("clearing a floor clears it", _floor_mask(sync, Vector2i(9, 9)) == 0
+		and _floor_mask(sync, Vector2i(10, 10)) == 0)
 	t.root.queue_free()
 
 ## Prints tile sync and command costs; checks only that idle runs cost nothing.
@@ -202,7 +199,6 @@ func _measure() -> void:
 		_check("an idle %d² grid redraws nothing" % side, sync.redrawn == 0)
 		t.root.queue_free()
 
-var _sync_for_mask: EcsTileSyncSystem
 
 ## Prints room recompute time after one wall changes, by building size.
 func _measure_rooms() -> void:
@@ -222,40 +218,46 @@ func _measure_rooms() -> void:
 	print("[town] room recompute after one wall, by building size:%s" % line)
 	t.root.queue_free()
 
-func _mask(layer: TileMapLayer, at: Vector2i) -> int:
-	return _sync_for_mask.mask_at(layer, at)
+## Which quarters round corner `at` show a floor, as a dual-grid mask, from what the floor shader draws.
+func _floor_mask(sync: EcsTileSyncSystem, at: Vector2i) -> int:
+	var mask := 0
+	for q in 4:
+		var point := Vector2(at) + (Vector2(EcsDualGrid.CORNERS[q]) + Vector2(0.5, 0.5)) * 0.5
+		if sync.floor_shown_at(point) >= 0:
+			mask |= EcsDualGrid.BITS[q]
+	return mask
 
-## The layers are the scene's: the author's grass and WoodFloor, placeholders where there
-## is no art; draw order is scene order; layouts come from peering bits or transparency.
+## The layers are the scene's, each from its def's sheet; draw order is scene order; layouts come
+## from peering bits or transparency, the author's old WoodFloor included.
 func _the_authors_art_is_used_and_its_layout_read() -> void:
 	var t := _setup(Vector2i(4, 4))
 	var sync := t.sync as EcsTileSyncSystem
-	var sheet := func(layer: TileMapLayer) -> String:
-		return (layer.tile_set.get_source(layer.tile_set.get_source_id(0)) as TileSetAtlasSource).texture.resource_path
-	var names: Array[String] = []
-	for layer in sync.floor_layers():
-		names.append(String(layer.name))
-	_check("it builds the ground, then a layer per floor type from its def's tiles, in catalog order",
-		sync.ground().get_index() == 0
-		and names == ["Floor_wood", "Floor_stone", "Floor_road", "Floor_rug", "Floor_dirt_path"])
+	var surfaces := (sync.floors().material as ShaderMaterial).get_shader_parameter(&"surfaces") as Texture2DArray
+	_check("it builds the ground, then the floors, each floor's surface a layer in catalog order",
+		sync.ground().get_index() == 0 and sync.floors().get_index() == 1
+		and surfaces.get_layers() == CATALOG.floors.size())
 	var main := MAIN.instantiate()
 	_check("and the scene holds none: main.tscn's TilemapGroup is empty",
 		main.get_node("World/TilemapGroup").get_child_count() == 0)
 	main.free()
-	_check("wood is the author's WoodFloor", sheet.call(sync.floor_layers()[0]).ends_with("placeholder/WoodFloor.png"))
+	_check("wood's surface is in Global/Asset/Floor", CATALOG.floors[0].surface.resource_path.ends_with("Floor/surface_wood.png"))
 	var complete := true
-	for layer in sync.floor_layers():
-		if EcsDualGrid.corner_layout(layer.tile_set.get_source(layer.tile_set.get_source_id(0))).size() != 15:
+	for def in CATALOG.floors + CATALOG.roofs:
+		if def.texture == null:
+			continue
+		var tiles := CATALOG.tiles(def)
+		if EcsDualGrid.corner_layout(tiles.get_source(tiles.get_source_id(0))).size() != 15:
 			complete = false
-	_check("every layer's layout reads complete, 15 masks", complete)
-	var wood_set := sync.floor_layers()[0].tile_set
+	_check("every dual-grid sheet's layout reads complete, 15 masks", complete)
+	var wood_set := EcsDualGrid.make_tile_set(load("res://10. Town Generator/art/placeholder/WoodFloor.png"), 32)
 	var wood := EcsDualGrid.corner_layout(wood_set.get_source(wood_set.get_source_id(0)))
 	_check("WoodFloor, a bare sheet, reads from its pixels as the table its painted peering bits gave",
 		_same_layout(wood, EcsDualGrid.CORNER_ATLAS))
 	var once := CATALOG.tiles(CATALOG.terrains[0]) == CATALOG.tiles(CATALOG.terrains[0])
 	var started := Time.get_ticks_usec()
 	for def in CATALOG.terrains + CATALOG.floors + CATALOG.roofs:
-		EcsDualGrid.corner_layout(EcsDualGrid.make_tile_set(def.texture, def.tile_size).get_source(0))
+		if def.texture != null:
+			EcsDualGrid.corner_layout(EcsDualGrid.make_tile_set(def.texture, def.tile_size).get_source(0))
 	print("[town] measure: every dual-grid TileSet made from its sheet and read: %d µs" % (Time.get_ticks_usec() - started))
 	_check("a def's TileSet is made once a run, then reused", once)
 	var grass_set := CATALOG.tiles(CATALOG.terrains[0])
@@ -301,21 +303,20 @@ func _a_floor_runs_under_its_walls() -> void:
 			plan.append(_cmd(EcsBuildCommand.Kind.SET_FLOOR, Vector2i(x, y), WOOD))
 	_send(t, plan)
 	_send(t, [])
-	var wood := sync.floor_layers()[0]
 	# Render tile (3, 3) is on wall (2, 2)'s corner and floor (3, 3); (4, 5) on the door's inner side.
 	_check("by a wall the floor fills whole tiles: the wall's quarters take the floor beside them",
-		sync.mask_at(wood, Vector2i(3, 3)) == EcsDualGrid.FULL and sync.mask_at(wood, Vector2i(6, 3)) == EcsDualGrid.FULL
-		and sync.mask_at(wood, Vector2i(4, 5)) == EcsDualGrid.FULL)
-	_check("and outside the walls, past their middle, it stops", sync.mask_at(wood, Vector2i(2, 2)) == 0
-		and sync.mask_at(wood, Vector2i(7, 4)) == 0 and sync.mask_at(wood, Vector2i(4, 6)) == 0)
+		_floor_mask(sync, Vector2i(3, 3)) == EcsDualGrid.FULL and _floor_mask(sync, Vector2i(6, 3)) == EcsDualGrid.FULL
+		and _floor_mask(sync, Vector2i(4, 5)) == EcsDualGrid.FULL)
+	_check("and outside the walls, past their middle, it stops", _floor_mask(sync, Vector2i(2, 2)) == 0
+		and _floor_mask(sync, Vector2i(7, 4)) == 0 and _floor_mask(sync, Vector2i(4, 6)) == 0)
 	# Floor laid first, then the wall built over it: the floor still stops at the wall's middle.
 	_send(t, [_cmd(EcsBuildCommand.Kind.SET_FLOOR, Vector2i(2, 3), WOOD), _cmd(EcsBuildCommand.Kind.SET_FLOOR, Vector2i(2, 4), WOOD)])
 	_check("floored before the wall went up, it still stops at the wall's middle, not past it outside",
-		sync.mask_at(wood, Vector2i(2, 4)) == 0 and sync.mask_at(wood, Vector2i(3, 4)) == EcsDualGrid.FULL)
+		_floor_mask(sync, Vector2i(2, 4)) == 0 and _floor_mask(sync, Vector2i(3, 4)) == EcsDualGrid.FULL)
 	_send(t, [_cmd(EcsBuildCommand.Kind.REMOVE_STRUCTURE, Vector2i(6, 3))])
 	# The gap is bare ground now; the wall below it still takes the floor beside it.
 	_check("a wall taken out redraws the floor's edge where it stood",
-		sync.mask_at(wood, Vector2i(6, 4)) == EcsDualGrid.TL | EcsDualGrid.BL | EcsDualGrid.BR)
+		_floor_mask(sync, Vector2i(6, 4)) == EcsDualGrid.TL | EcsDualGrid.BL | EcsDualGrid.BR)
 	t.root.queue_free()
 
 func _walls_join_their_neighbours() -> void:
