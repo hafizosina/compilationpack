@@ -6,8 +6,8 @@ extends EcsComponent
 ## is drawn centred on it.
 
 @export var texture: Texture2D
-## Tile size in the sheet, in pixels.
-@export var tile_size: int = 32
+## Tile size in the sheet, in pixels, at EcsTownGrid.ART pixels a cell.
+@export var tile_size: int = 64
 @export var atlas: Vector2i = Vector2i.ZERO
 
 func key() -> StringName:

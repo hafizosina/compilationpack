@@ -28,7 +28,7 @@ func _ready() -> void:
 	_the_authors_art_is_used_and_its_layout_read()
 	_commands_are_validated()
 	_a_change_redraws_only_its_corners()
-	_terrain_blends_and_lower_types_fill_under()
+	_the_ground_holds_each_cells_terrain()
 	_a_floor_never_bleeds_past_its_cells()
 	_walls_join_their_neighbours()
 	_a_floor_runs_under_its_walls()
@@ -110,11 +110,10 @@ func _commands_are_validated() -> void:
 func _a_change_redraws_only_its_corners() -> void:
 	var t := _setup(Vector2i(16, 16))
 	var sync := t.sync as EcsTileSyncSystem
-	_check("the first run draws the whole base layer",
-		sync.terrain_layers()[0].get_used_cells().size() == 17 * 17)
+	_check("the first run writes every cell into the ground, a pixel a cell",
+		sync.ground().texture.get_size() == Vector2(16, 16) and sync.ground_rank_at(Vector2i(15, 15)) == 0)
 	_send(t, [_cmd(EcsBuildCommand.Kind.SET_TERRAIN, Vector2i(5, 5), DIRT)])
-	_check("one terrain cell redraws its 4 corners on each terrain layer",
-		sync.redrawn == 4 * CATALOG.terrains.size())
+	_check("one terrain cell rewrites one pixel of the ground", sync.redrawn == 1)
 	_send(t, [_cmd(EcsBuildCommand.Kind.SET_FLOOR, Vector2i(5, 5), WOOD)])
 	_check("one floor cell redraws its 4 corners on each floor layer only",
 		sync.redrawn == 4 * CATALOG.floors.size())
@@ -122,20 +121,17 @@ func _a_change_redraws_only_its_corners() -> void:
 	_check("setting what is already there redraws nothing", sync.redrawn == 0)
 	t.root.queue_free()
 
-func _terrain_blends_and_lower_types_fill_under() -> void:
+func _the_ground_holds_each_cells_terrain() -> void:
 	var t := _setup(Vector2i(10, 10))
 	var sync := t.sync as EcsTileSyncSystem
 	_send(t, [_cmd(EcsBuildCommand.Kind.SET_TERRAIN, Vector2i(4, 4), WATER)])
-	var grass := sync.terrain_layers()[0]
-	var water := sync.terrain_layers()[3]
-	_check("water's corner tiles each show one quadrant of it",
-		_mask(water, Vector2i(4, 4)) == EcsDualGrid.BR and _mask(water, Vector2i(5, 4)) == EcsDualGrid.BL
-		and _mask(water, Vector2i(4, 5)) == EcsDualGrid.TR and _mask(water, Vector2i(5, 5)) == EcsDualGrid.TL)
-	_check("and nothing else is drawn on its layer", water.get_used_cells().size() == 4)
-	_check("grass stays whole under it, so no hole shows through the rounded edge",
-		_mask(grass, Vector2i(4, 4)) == 15 and _mask(grass, Vector2i(5, 5)) == 15)
-	var dirt := sync.terrain_layers()[1]
-	_check("types between fill under the higher one too", _mask(dirt, Vector2i(5, 5)) == EcsDualGrid.TL)
+	_check("the ground holds water's draw order at its cell, grass round it",
+		sync.ground_rank_at(Vector2i(4, 4)) == 3 and sync.ground_rank_at(Vector2i(5, 4)) == 0
+		and sync.ground_rank_at(Vector2i(3, 3)) == 0)
+	var material := sync.ground().material as ShaderMaterial
+	_check("its shader gets every terrain's ground, a layer each in catalog order",
+		(material.get_shader_parameter(&"grounds") as Texture2DArray).get_layers() == CATALOG.terrains.size()
+		and material.get_shader_parameter(&"count") == CATALOG.terrains.size())
 	t.root.queue_free()
 
 ## Every quadrant drawn on a floor layer is a quarter of a cell with that floor or a higher
@@ -237,20 +233,18 @@ func _the_authors_art_is_used_and_its_layout_read() -> void:
 	var sheet := func(layer: TileMapLayer) -> String:
 		return (layer.tile_set.get_source(layer.tile_set.get_source_id(0)) as TileSetAtlasSource).texture.resource_path
 	var names: Array[String] = []
-	for layer in sync.terrain_layers() + sync.floor_layers():
+	for layer in sync.floor_layers():
 		names.append(String(layer.name))
-	_check("it builds a layer per type from its def's tiles, in catalog order",
-		names == ["Terrain_grass", "Terrain_dirt", "Terrain_sand", "Terrain_water", "Terrain_rock", "Terrain_forest",
-			"Floor_wood", "Floor_stone", "Floor_road", "Floor_rug", "Floor_dirt_path"])
+	_check("it builds the ground, then a layer per floor type from its def's tiles, in catalog order",
+		sync.ground().get_index() == 0
+		and names == ["Floor_wood", "Floor_stone", "Floor_road", "Floor_rug", "Floor_dirt_path"])
 	var main := MAIN.instantiate()
 	_check("and the scene holds none: main.tscn's TilemapGroup is empty",
 		main.get_node("World/TilemapGroup").get_child_count() == 0)
 	main.free()
-	_check("grass is the author's sheet", sheet.call(sync.terrain_layers()[0]).ends_with("Tilemap/grassTileset.png"))
 	_check("wood is the author's WoodFloor", sheet.call(sync.floor_layers()[0]).ends_with("Tilemap/WoodFloor.png"))
-	_check("dirt, with no art given, is the placeholder", sheet.call(sync.terrain_layers()[1]).ends_with("placeholder/terrain_dirt.png"))
 	var complete := true
-	for layer in sync.terrain_layers() + sync.floor_layers():
+	for layer in sync.floor_layers():
 		if EcsDualGrid.corner_layout(layer.tile_set.get_source(layer.tile_set.get_source_id(0))).size() != 15:
 			complete = false
 	_check("every layer's layout reads complete, 15 masks", complete)
@@ -264,20 +258,19 @@ func _the_authors_art_is_used_and_its_layout_read() -> void:
 		EcsDualGrid.corner_layout(EcsDualGrid.make_tile_set(def.texture, def.tile_size).get_source(0))
 	print("[town] measure: every dual-grid TileSet made from its sheet and read: %d µs" % (Time.get_ticks_usec() - started))
 	_check("a def's TileSet is made once a run, then reused", once)
-	var grass_set := sync.terrain_layers()[0].tile_set
+	var grass_set := CATALOG.tiles(CATALOG.terrains[0])
 	var grass := EcsDualGrid.corner_layout(grass_set.get_source(grass_set.get_source_id(0)))
 	_check("the 16 px grass, read from transparency: diagonals at 3:2 and 4:2, 10 full variants",
 		grass[EcsDualGrid.TL | EcsDualGrid.BR] == [Vector2i(3, 2)]
 		and grass[EcsDualGrid.TR | EcsDualGrid.BL] == [Vector2i(4, 2)]
 		and (grass[EcsDualGrid.FULL] as Array).size() == 10)
-	_check("and draws it at 2x, from its 16 px tile size", sync.terrain_layers()[0].scale == Vector2(2, 2))
 	var walls := sync.wall_layer().tile_set
 	_check("WoodWall and BaseWall, bare sheets, read all 16 wall shapes, WoodWall as its painted table did",
 		_same_layout(EcsDualGrid.side_layout(walls.get_source(CATALOG.wall(1).source_id)), EcsDualGrid.SIDE_ATLAS)
 		and EcsDualGrid.side_layout(walls.get_source(CATALOG.wall(2).source_id)).size() == 16)
 	var closed := walls.get_source(CATALOG.door(1).closed_source_id) as TileSetAtlasSource
-	_check("a door's 48 px tiles are cut after its 8 px margin, and both doors share the open sheet's one source",
-		closed.get_tile_texture_region(Vector2i(1, 0)) == Rect2i(56, 8, 48, 48) and closed.get_tiles_count() == 2
+	_check("a door's 48 px tiles are cut after its 8 px margin, resized 2x to 64 px a cell, and both doors share the open sheet's one source",
+		closed.get_tile_texture_region(Vector2i(1, 0)) == Rect2i(112, 16, 96, 96) and closed.get_tiles_count() == 2
 		and CATALOG.door(1).open_source_id == CATALOG.door(2).open_source_id
 		and CATALOG.door(1).closed_source_id != CATALOG.door(2).closed_source_id)
 	t.root.queue_free()

@@ -1,5 +1,5 @@
 """Module 10's Indo-Malay furniture, flat vector style (thick ink outline, flat lit shading, light from the top-left).
-Writes ../placeholder/indomalay.png: a 32 px grid, 8x4, the layout in ../placeholder/README.md, and a review sheet.
+Writes ../placeholder/indomalay.png: a 64 px grid, 8x4, the layout in ../placeholder/README.md, and a review sheet.
 usage: python indomalay.py        (needs Inkscape on PATH, Pillow)
 Each piece is drawn top-down on 128 units a tile; a piece standing against a wall has its back at the top."""
 import math
@@ -13,9 +13,9 @@ from PIL import Image  # noqa: E402
 HERE = os.path.dirname(os.path.abspath(__file__))
 BUILD = os.path.join(HERE, "build")
 SHEET = os.path.join(HERE, "..", "placeholder", "indomalay.png")
-TILE = 32           # game pixels a tile
+TILE = 64           # sheet pixels a tile (EcsTownGrid.ART)
 DRAW = 128          # drawing units a tile
-OUT = 5.0           # outline width: thick enough to read at 32 px
+OUT = 5.0           # outline width in drawing units
 FINE = 2.4          # inner detail lines
 
 WOOD, DARK_WOOD, CLAY, DARK_CLAY = (0.62, 0.42, 0.24), (0.42, 0.28, 0.17), (0.72, 0.40, 0.25), (0.48, 0.26, 0.17)
@@ -210,7 +210,7 @@ def main():
 		s = Svg(DRAW * max(size))
 		draw(s)
 		pairs.append((s.write(os.path.join(BUILD, f"{name}.svg")), os.path.join(BUILD, f"{name}.png")))
-	# Render at 4x game size, then scale down: crisper than rendering at 32 px.
+	# Render at 4x game size, then scale down: crisper than rendering at 64 px.
 	big = []
 	for (svg, png), (_, _, size, _) in zip(pairs, PIECES):
 		big.append((svg, png, size))

@@ -2,9 +2,11 @@
 
 [ext_resource type="Script" uid="uid://bjrdpjs1inii4" path="res://10. Town Generator/defs/ecs_terrain_def.gd" id="1"]
 [ext_resource type="Texture2D" uid="uid://cois61few2rn2" path="res://10. Town Generator/art/placeholder/terrain_dirt.png" id="2_tiles"]
+[ext_resource type="Texture2D" path="res://10. Town Generator/art/ground/dirt.png" id="ground"]
 
 [resource]
 script = ExtResource("1")
 key = &"dirt"
 display_name = "dirt"
 texture = ExtResource("2_tiles")
+ground = ExtResource("ground")

@@ -10,7 +10,7 @@
 [sub_resource type="Resource" id="c_tile"]
 script = ExtResource("s_tile")
 texture = ExtResource("t_sheet")
-tile_size = 16
+tile_size = 32
 
 [sub_resource type="Resource" id="c_att"]
 script = ExtResource("s_att")

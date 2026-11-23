@@ -51,8 +51,18 @@ static func make_tile_set(texture: Texture2D, tile_size: int) -> TileSet:
 	tile_set.add_source(make_source(texture, tile_size), 0)
 	return tile_set
 
-## An atlas source of `texture` cut into `tile_size` tiles after `margins`, every tile that fits.
-static func make_source(texture: Texture2D, tile_size: int, margins: Vector2i = Vector2i.ZERO) -> TileSetAtlasSource:
+## An atlas source of `texture` cut into `tile_size` tiles after `margins`, every tile that fits;
+## `scale` other than 1 resizes the sheet first (nearest), for an old sheet on a finer grid.
+static func make_source(texture: Texture2D, tile_size: int, margins: Vector2i = Vector2i.ZERO,
+		scale: float = 1.0) -> TileSetAtlasSource:
+	if not is_equal_approx(scale, 1.0):
+		var image := texture.get_image()
+		if image.is_compressed():
+			image.decompress()
+		image.resize(roundi(image.get_width() * scale), roundi(image.get_height() * scale), Image.INTERPOLATE_NEAREST)
+		texture = ImageTexture.create_from_image(image)
+		tile_size = roundi(tile_size * scale)
+		margins = Vector2i((Vector2(margins) * scale).round())
 	var source := TileSetAtlasSource.new()
 	source.texture = texture
 	source.margins = margins

@@ -14,4 +14,4 @@ var id: int = 0
 ## The sheet: its shapes in any arrangement, extra full tiles as variants.
 @export var texture: Texture2D
 ## Tile size in the sheet, in pixels; one other than the grid's cell is scaled to fit.
-@export var tile_size: int = 32
+@export var tile_size: int = 64

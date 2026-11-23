@@ -804,7 +804,7 @@ func _make_level(size: Vector2i, commands: Array[EcsBuildCommand], at: Vector2, 
 	for layer in tile_sync.roof_layers():
 		layer.z_index = 2
 	if trim:
-		for layer in tile_sync.terrain_layers() + tile_sync.floor_layers() + tile_sync.roof_layers():
+		for layer in tile_sync.floor_layers() + tile_sync.roof_layers():
 			for x in size.x + 1:
 				layer.erase_cell(Vector2i(x, 0))
 				layer.erase_cell(Vector2i(x, size.y))

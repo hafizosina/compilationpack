@@ -1,12 +1,15 @@
 class_name EcsTileSyncSystem
 extends EcsSystem
 
-## Draws the grid, one way, onto TileMapLayers it builds from the catalog under its root:
-## one per terrain, floor and roof type from the def's TileSet, half a cell up and left for
-## the dual grid, in list order, a type's layer also filling under every later type so edges
+## Draws the grid, one way, under its root: the ground, one sprite whose texture holds each cell's
+## terrain and whose shader (art/ground/ground.gdshader) shows the terrains' large textures with soft
+## edges; then a TileMapLayer per floor and roof type from the def's TileSet, half a cell up and left
+## for the dual grid, in list order, a type's layer also filling under every later type so edges
 ## blend; then furniture, walls and attachments on the cell grid, their sheets added as sources. Walls use one atlas source
 ## per wall type, joined to their building's neighbouring walls. The root is its own: the
 ## first run clears it, builds and draws all; after that only what changed is redrawn.
+
+const GROUND_SHADER := preload("res://10. Town Generator/art/ground/ground.gdshader")
 
 ## A tile's transform flags for 0-3 quarter turns clockwise.
 const TURN_FLAGS: Array[int] = [
@@ -20,9 +23,11 @@ var _layers_root: Node
 var _catalog: EcsTownCatalog
 var _built: bool = false
 ## Per group, in draw order: defs, their layers, and each layer's corner layout.
-var _terrain_defs: Array[EcsTileDef] = []
 var _floor_defs: Array[EcsTileDef] = []
-var _terrain_layers: Array[TileMapLayer] = []
+## The ground: one pixel a cell, its terrain's draw order + 1.
+var _ground: Sprite2D
+var _ground_image: Image
+var _ground_texture: ImageTexture
 var _floor_layers: Array[TileMapLayer] = []
 var _roof_defs: Array[EcsTileDef] = []
 var _roof_layers: Array[TileMapLayer] = []
@@ -68,15 +73,22 @@ func run(world: EcsWorld, _delta: float) -> void:
 	redrawn = 0
 	_world = world
 	if not _built:
-		_build()
+		_build(grid)
 		_draw_all(grid)
 	else:
 		_draw_dirty(grid)
 	grid.dirty.clear()
 	last_usec = Time.get_ticks_usec() - started
 
-func terrain_layers() -> Array[TileMapLayer]:
-	return _terrain_layers
+## The ground sprite: its texture is one pixel a cell.
+func ground() -> Sprite2D:
+	return _ground
+
+## The draw order of the terrain shown at `cell`, as the ground holds it; -1 off the ground or for none.
+func ground_rank_at(cell: Vector2i) -> int:
+	if _ground_image == null or not Rect2i(Vector2i.ZERO, _ground_image.get_size()).has_point(cell):
+		return -1
+	return roundi(_ground_image.get_pixelv(cell).r * 255.0) - 1
 
 func floor_layers() -> Array[TileMapLayer]:
 	return _floor_layers
@@ -115,12 +127,12 @@ func wall_mask_at(cell: Vector2i) -> int:
 			return EcsDualGrid.mask_of((_wall_sources[type] as Array)[1], _wall_layer.get_cell_atlas_coords(cell))
 	return -1
 
-func _build() -> void:
+func _build(grid: EcsTownGridSingleton) -> void:
 	_catalog.number()
 	for child in _layers_root.get_children():
 		_layers_root.remove_child(child)
 		child.queue_free()
-	_collect(_catalog.terrains, _terrain_defs, _terrain_layers, _terrain_rank, "Terrain")
+	_make_ground(grid)
 	_collect(_catalog.floors, _floor_defs, _floor_layers, _floor_rank, "Floor")
 	_furniture_layer = _make_layer("Furniture", _cell_tile_set(), false)
 	_wall_layer = _make_layer("Walls", _catalog.wall_tiles(), false)
@@ -137,10 +149,11 @@ func _build() -> void:
 			_wall_sources[def.id] = [def.source_id, EcsDualGrid.side_layout(source)]
 	_built = true
 
-## An empty TileSet on the cell grid; pieces add their sheets as they are first drawn.
+## An empty TileSet on the cell grid at EcsTownGrid.ART pixels a cell; pieces add their sheets
+## as they are first drawn.
 func _cell_tile_set() -> TileSet:
 	var tile_set := TileSet.new()
-	tile_set.tile_size = Vector2i(EcsTownGrid.CELL, EcsTownGrid.CELL)
+	tile_set.tile_size = Vector2i(EcsTownGrid.ART, EcsTownGrid.ART)
 	return tile_set
 
 ## The source on `layer` for `tile`'s sheet, added the first time that sheet is drawn.
@@ -149,6 +162,36 @@ func _source_for(layer: TileMapLayer, tile: EcsTileComponent) -> int:
 	if not _sheet_sources.has(key):
 		_sheet_sources[key] = layer.tile_set.add_source(EcsDualGrid.make_source(tile.texture, tile.tile_size))
 	return _sheet_sources[key]
+
+## The ground sprite, a grid-sized texture scaled up a cell a pixel, drawn by the ground shader.
+func _make_ground(grid: EcsTownGridSingleton) -> void:
+	for k in _catalog.terrains.size():
+		_terrain_rank[_catalog.terrains[k].id] = k
+	_ground_image = Image.create_empty(grid.width, grid.height, false, Image.FORMAT_R8)
+	_ground_texture = ImageTexture.create_from_image(_ground_image)
+	var material := ShaderMaterial.new()
+	material.shader = GROUND_SHADER
+	material.set_shader_parameter(&"grounds", _catalog.grounds())
+	material.set_shader_parameter(&"count", _catalog.terrains.size())
+	material.set_shader_parameter(&"cell", float(EcsTownGrid.CELL))
+	material.set_shader_parameter(&"cells_per_texture", float(EcsTownCatalog.GROUND_SIZE) / EcsTownGrid.ART)
+	_ground = Sprite2D.new()
+	_ground.name = "Ground"
+	_ground.texture = _ground_texture
+	_ground.centered = false
+	_ground.scale = Vector2(EcsTownGrid.CELL, EcsTownGrid.CELL)
+	_ground.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_ground.material = material
+	_layers_root.add_child(_ground)
+
+## Writes `cell`'s terrain into the ground image; true when it changed.
+func _put_ground(grid: EcsTownGridSingleton, cell: Vector2i) -> bool:
+	var id := grid.terrain[EcsTownGrid.index(grid, cell)]
+	var value := (int(_terrain_rank.get(id, -1)) + 1) / 255.0 if id != 0 else 0.0
+	if is_equal_approx(_ground_image.get_pixelv(cell).r, value):
+		return false
+	_ground_image.set_pixelv(cell, Color(value, 0, 0))
+	return true
 
 ## A layer per def, in list order, and each one's corner layout.
 func _collect(defs: Array, out_defs: Array[EcsTileDef], out_layers: Array[TileMapLayer],
@@ -178,16 +221,21 @@ func _make_layer(layer_name: String, tile_set: TileSet, dual: bool) -> TileMapLa
 	return layer
 
 func _draw_all(grid: EcsTownGridSingleton) -> void:
+	for y in grid.height:
+		for x in grid.width:
+			if _put_ground(grid, Vector2i(x, y)):
+				redrawn += 1
+	_ground_texture.update(_ground_image)
 	for y in grid.height + 1:
 		for x in grid.width + 1:
-			_draw_at(grid, Vector2i(x, y), true, true, false)
+			_draw_at(grid, Vector2i(x, y), false)
 	for y in grid.height:
 		for x in grid.width:
 			_draw_wall(grid, Vector2i(x, y))
 			_draw_objects(grid, Vector2i(x, y))
 
 func _draw_dirty(grid: EcsTownGridSingleton) -> void:
-	var terrain_tiles: Dictionary = {}
+	var ground_changed := false
 	var floor_tiles: Dictionary = {}
 	var roof_tiles: Dictionary = {}
 	var wall_cells: Dictionary = {}
@@ -195,9 +243,10 @@ func _draw_dirty(grid: EcsTownGridSingleton) -> void:
 	for i: int in grid.dirty:
 		var bits: int = grid.dirty[i]
 		var cell := Vector2i(i % grid.width, i / grid.width)
+		if bits & EcsTownGridSingleton.CHANGED_TERRAIN and _put_ground(grid, cell):
+			ground_changed = true
+			redrawn += 1
 		for corner in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
-			if bits & EcsTownGridSingleton.CHANGED_TERRAIN:
-				terrain_tiles[cell + corner] = true
 			if bits & EcsTownGridSingleton.CHANGED_FLOOR:
 				floor_tiles[cell + corner] = true
 			if bits & EcsTownGridSingleton.CHANGED_ROOF:
@@ -213,12 +262,12 @@ func _draw_dirty(grid: EcsTownGridSingleton) -> void:
 			wall_cells[cell] = true
 			for side in EcsDualGrid.SIDES:
 				wall_cells[cell + side] = true
-	for at: Vector2i in terrain_tiles:
-		_draw_at(grid, at, true, false, true)
+	if ground_changed:
+		_ground_texture.update(_ground_image)
 	for at: Vector2i in floor_tiles:
-		_draw_at(grid, at, false, true, true)
+		_draw_at(grid, at, true)
 	for at: Vector2i in roof_tiles:
-		var around := _around(grid, at, grid.roof, _roof_rank, false)
+		var around := _around(grid, at, grid.roof, _roof_rank)
 		for k in _roof_layers.size():
 			_put(_roof_layers[k], at, _mask(around, k), true)
 	for cell: Vector2i in wall_cells:
@@ -227,31 +276,22 @@ func _draw_dirty(grid: EcsTownGridSingleton) -> void:
 	for cell: Vector2i in object_cells:
 		_draw_objects(grid, cell)
 
-## Redraws render tile `at` on the chosen groups. `erase` clears tiles whose mask became
+## Redraws render tile `at` on the floor layers. `erase` clears tiles whose mask became
 ## empty; a first draw has nothing to clear.
-func _draw_at(grid: EcsTownGridSingleton, at: Vector2i, terrain: bool, floors: bool, erase: bool) -> void:
-	if terrain:
-		var around := _around(grid, at, grid.terrain, _terrain_rank, true)
-		for k in _terrain_layers.size():
-			_put(_terrain_layers[k], at, _mask(around, k), erase)
-	if floors:
-		var around := _under_walls(grid, at, _around(grid, at, grid.floor, _floor_rank, false))
-		for k in _floor_layers.size():
-			_put(_floor_layers[k], at, _mask(around, k), erase)
+func _draw_at(grid: EcsTownGridSingleton, at: Vector2i, erase: bool) -> void:
+	var around := _under_walls(grid, at, _around(grid, at, grid.floor, _floor_rank))
+	for k in _floor_layers.size():
+		_put(_floor_layers[k], at, _mask(around, k), erase)
 
-## Draw order of the four cells around render tile `at`, TL, TR, BL, BR; -1 for none.
-## Off the map, terrain repeats the edge cell and floor is none.
-func _around(grid: EcsTownGridSingleton, at: Vector2i, cells: PackedInt32Array,
-		rank: Dictionary, clamp_edges: bool) -> PackedInt32Array:
+## Draw order of the four cells around render tile `at`, TL, TR, BL, BR; -1 for none, and off the map.
+func _around(grid: EcsTownGridSingleton, at: Vector2i, cells: PackedInt32Array, rank: Dictionary) -> PackedInt32Array:
 	var out := PackedInt32Array()
 	out.resize(4)
 	for q in 4:
 		var cell: Vector2i = at + EcsDualGrid.CORNERS[q]
 		if not EcsTownGrid.in_bounds(grid, cell):
-			if not clamp_edges:
-				out[q] = -1
-				continue
-			cell = cell.clamp(Vector2i.ZERO, Vector2i(grid.width - 1, grid.height - 1))
+			out[q] = -1
+			continue
 		var id := cells[EcsTownGrid.index(grid, cell)]
 		out[q] = int(rank.get(id, -1)) if id != 0 else -1
 	return out

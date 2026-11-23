@@ -1,5 +1,5 @@
 """Module 10's Indo-Malay outdoor pieces, flat vector style (as indomalay.py). Writes
-../placeholder/indomalay_outdoor.png: a 32 px grid, 8x3, the layout in ../placeholder/README.md.
+../placeholder/indomalay_outdoor.png: a 64 px grid, 8x3, the layout in ../placeholder/README.md.
 usage: python indomalay_outdoor.py      (needs Inkscape on PATH, Pillow)"""
 import os
 import sys

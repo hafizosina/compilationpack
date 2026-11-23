@@ -5,6 +5,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CELL = 32
+SCALE = 2          # sheets are saved at EcsTownGrid.ART = 64 px a cell, drawn here at 32
 rng = np.random.default_rng(10)
 
 # Dual-grid layout, same as WoodFloor.png: atlas (x, y) -> filled quadrants (TL, TR, BL, BR).
@@ -19,6 +20,10 @@ SIDES = {
     (0, 1): "BT", (1, 1): "", (2, 1): "BT", (3, 1): "RBT", (4, 1): "RBLT", (5, 1): "BLT",
     (0, 2): "RT", (1, 2): "RL", (2, 2): "LT", (3, 2): "T", (4, 2): "RLT", (5, 2): "L",
 }
+
+
+def save(img, name):
+    img.resize((img.width * SCALE, img.height * SCALE), Image.NEAREST).save(os.path.join(HERE, name))
 
 
 def rgb(h):
@@ -94,7 +99,7 @@ def dual_sheet(name, kind, base, outline_dark=55):
         tile[..., :3] = np.clip(fill, 0, 255).astype(np.uint8)
         tile[..., 3] = np.where(shape, 255, 0)
         sheet[ay * CELL:(ay + 1) * CELL, ax * CELL:(ax + 1) * CELL] = tile
-    Image.fromarray(sheet, "RGBA").save(os.path.join(HERE, name))
+    save(Image.fromarray(sheet, "RGBA"), name)
 
 
 def wall_sheet(name, beam, post, edge):
@@ -109,7 +114,7 @@ def wall_sheet(name, beam, post, edge):
         if "T" in sides: d.rectangle([ox + c - w, oy, ox + c + w, oy + c], fill=beam, outline=edge)
         d.rectangle([ox + c - 8, oy + c - 8, ox + c + 7, oy + c + 7], fill=post, outline=edge, width=2)
         d.rectangle([ox + c - 3, oy + c - 3, ox + c + 2, oy + c + 2], outline=edge)
-    img.save(os.path.join(HERE, name))
+    save(img, name)
 
 
 def door_sheet(name):
@@ -128,7 +133,7 @@ def door_sheet(name):
     d.rectangle([T + c - 3, c - 15, T + c + 2, c + 14], fill=wood, outline=edge); posts(T, True)
     d.rectangle([2 * T + c - 15, c - 3, 2 * T + c - 10, c + 24], fill=wood, outline=edge); posts(2 * T, False)
     d.rectangle([3 * T + c - 3, c - 15, 3 * T + c + 24, c - 10], fill=wood, outline=edge); posts(3 * T, True)
-    img.save(os.path.join(HERE, name))
+    img.save(os.path.join(HERE, name))  # door defs read it with cell_pixels 32
 
 
 def objects_atlas(name):
@@ -164,7 +169,7 @@ def objects_atlas(name):
     r(7, 2, 1, 1, 3, 3, 28, 28, fill=(120, 110, 100, 255)); e(7, 2, 9, 9, 22, 22, fill=(220, 120, 40, 255)); e(7, 2, 13, 13, 18, 18, fill=(250, 210, 80, 255))  # hearth
     for cx, cy, rad, shade in ((9, 20, 7, 120), (20, 22, 8, 105), (15, 11, 6, 135), (24, 12, 4, 115), (7, 9, 3, 100)):
         e(2, 3, cx - rad, cy - rad, cx + rad, cy + rad, fill=(shade, shade - 8, shade - 18, 255))  # rubble
-    img.save(os.path.join(HERE, name))
+    save(img, name)
 
 
 def nodes_atlas(name):
@@ -195,7 +200,7 @@ def nodes_atlas(name):
         p(cx, 1, [(3, 25), (6, 8), (18, 3), (28, 11), (27, 27)], fill=(110, 108, 105, 255))
         for fx, fy in ((10, 12), (19, 10), (15, 19), (22, 20)): e(cx, 1, fx - 3, fy - 3, fx + 3, fy + 3, fill=ore)
     e(7, 1, 3, 6, 28, 26, fill=(165, 95, 60, 255)); e(7, 1, 9, 11, 22, 21, fill=(185, 115, 75, 255))  # clay pit
-    img.save(os.path.join(HERE, name))
+    save(img, name)
 
 
 def attachments_atlas(name):
@@ -210,7 +215,7 @@ def attachments_atlas(name):
     d.rectangle([3 * S + 3, 3, 3 * S + 12, 12], fill=(140, 40, 40, 255), outline=ink); d.line([3 * S + 5, 3, 3 * S + 5, 12], fill=(230, 210, 150, 255))  # book
     d.rectangle([4 * S + 4, 4, 4 * S + 10, 12], fill=(150, 110, 70, 255), outline=ink); d.rectangle([4 * S + 10, 6, 4 * S + 12, 10], outline=ink)  # mug
     d.polygon([(5 * S + 3, 1), (5 * S + 12, 1), (5 * S + 12, 14), (5 * S + 7, 11), (5 * S + 3, 14)], fill=(60, 80, 150, 255), outline=ink)  # banner
-    img.save(os.path.join(HERE, name))
+    save(img, name)
 
 
 def ui_icons():
@@ -295,7 +300,7 @@ def furniture_atlas(name):
     r(5, 3, 4, 12, 27, 17, fill=wood); line(5, 3, 7, 17, 5, 27, fill=ink, width=2); line(5, 3, 24, 17, 26, 27, fill=ink, width=2)  # sawhorse
     r(6, 3, 4, 4, 27, 27, fill=wood); line(6, 3, 4, 4, 27, 27, fill=ink); line(6, 3, 27, 4, 4, 27, fill=ink)  # crate
     e(7, 3, 6, 5, 25, 27, fill=(170, 140, 100, 255))  # sack
-    img.save(os.path.join(HERE, name))
+    save(img, name)
 
 
 def outdoor_atlas(name):
@@ -330,7 +335,7 @@ def outdoor_atlas(name):
         a = k * math.pi / 4
         d.line([7 * CELL + 16 + 5 * math.cos(a), CELL + 16 + 5 * math.sin(a), 7 * CELL + 16 + 13 * math.cos(a), CELL + 16 + 13 * math.sin(a)], fill=ink, width=2)
     r(0, 2, 8, 6, 23, 28, fill=stone); p(0, 2, [(6, 8), (16, 1), (25, 8)], fill=(150, 60, 50, 255)); e(0, 2, 13, 13, 18, 18, fill=(250, 210, 80, 255))  # shrine
-    img.save(os.path.join(HERE, name))
+    save(img, name)
 
 
 ui_icons()

@@ -5,6 +5,8 @@ extends RefCounted
 
 ## Pixels per cell side.
 const CELL: int = 32
+## Sheet pixels per cell: art is drawn at twice the world's size and shown at half scale.
+const ART: int = 64
 
 ## A `width` x `height` grid of `base_terrain`, nothing else on it.
 static func make(width: int, height: int, base_terrain: int) -> EcsTownGridSingleton:

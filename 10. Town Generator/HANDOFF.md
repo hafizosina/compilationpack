@@ -105,8 +105,8 @@ door tiles are bigger than a cell and drawn centred). The catalog makes one wall
 `closed_source_id`, `open_source_id`, runtime, never authored). **Furniture, plants and attachments
 carry their sheet on their blueprint**: `EcsTileComponent{texture, tile_size, atlas}`; the tile sync
 gives their layers empty TileSets and adds a source for a sheet the first time a piece from it is
-drawn, so a blueprint with a new sheet needs nothing else (attachments are 16 px tiles, drawn centred
-in their cell). **Draw order is
+drawn, so a blueprint with a new sheet needs nothing else (attachments are half-cell tiles, drawn centred
+in their cell; sheets are 64 px a cell since §13e). **Draw order is
 list order in the catalog**, the same order that numbers the types: terrains, then floors, then
 furniture, walls, attachments, then roofs. `EcsTileSyncSystem` owns `World/TilemapGroup`: its first run
 clears it and makes one `TileMapLayer` per type, scaled so a tile spans one 32 px cell (the 16 px grass
@@ -117,8 +117,7 @@ slots without any:
 
 | Layer, in draw order | Draws | Art |
 |---|---|---|
-| `Terrain_grass` | grass | sheet: author's `grassTileset.png`, 16 px, drawn at 2x |
-| `Terrain_dirt`, `_sand`, `_water` | terrain | sheets: placeholders |
+| `Ground` | every terrain, one sprite and shader (§13e) | `art/ground/<key>.png`, 512 px seamless |
 | `Floor_wood` | wood | sheet: author's `WoodFloor.png` |
 | `Floor_stone`, `_road`, `_rug` | floor | sheets: placeholders |
 | `Furniture` | furniture and plants, cell grid | `furniture` — placeholder `objects.png`, 32 px |
@@ -126,7 +125,7 @@ slots without any:
 | `Attachments` | attachments, cell grid | `attachments` — placeholder `attachments.png`, 16 px icons centred |
 | `Roof_thatch` (last) | roofs, dual grid, hidden by default | sheet: placeholder `roof.png` |
 
-**The dual grid.** Terrain and floor are drawn on a grid offset half a cell, so each render tile
+**The dual grid.** (Terrain left it in §13e; floors and roofs still use it.) Terrain and floor are drawn on a grid offset half a cell, so each render tile
 sits on a cell corner and shows a quarter of each of its four cells; the 4-bit mask of which
 quarters are filled picks the tile. **A type's layer also fills under every later type** (bit set
 when the cell's type draws at or after the layer), so a higher type's rounded edge never shows a
@@ -805,6 +804,27 @@ the door, centred, its back to it), `side`, `corner`, `beside_door`, `centre` or
 place but `back` keeps the way in (the cells from the door to the back wall) clear. When nothing fits
 there it goes anywhere, as before. `generator_test` counts back pieces on the facing wall and rooms
 with the way in clear.
+
+## 13e. 64 px art and RimWorld-style ground (2026-11-23, `docs/ART_PLAN.md`)
+
+**Art is 64 px a cell, shown at half scale** (`EcsTownGrid.ART`; the world is still 32 units a cell).
+The cell-grid layers (furniture, walls, attachments) are TileSets at `ART` scaled by `CELL / ART`; dual-grid
+layers scale by their def's `tile_size` as before. Every placeholder sheet is now 64 px a cell
+(`make_placeholders.py` draws at 32 and saves 2×; attachments are 32 px, half a cell). The author's old
+32 px sheets keep working: walls set `tile_size = 32` and doors `cell_pixels = 32`, and the catalog
+resizes such a sheet (nearest) on load through `EcsDualGrid.make_source(..., scale)`. New art is the flat
+vector style of the author's RimWorld mod (BirdsEyePawns), drawn at 128 units a tile; the plan is
+`docs/ART_PLAN.md`.
+
+**Terrain is no longer on the dual grid.** Each `EcsTerrainDef.ground` is a large seamless texture
+(512 px = 8 cells, `art/ground/make_ground.py`); the catalog stacks them in a `Texture2DArray`
+(`grounds()`, a terrain with none repeats its sheet's full tile). The tile sync draws one `Ground` sprite
+whose texture is one pixel a cell (the terrain's draw order + 1, `FORMAT_R8`) scaled up a cell a pixel;
+`art/ground/ground.gdshader` places each terrain's texture by world position (so it runs on across
+module 12's chunks) and blends by each terrain's share of the 5×5 cells round a point (`spread`), pushed
+up or down by noise so the edge line is ragged (`jag`), sharpened (`sharp`) for a short soft fade. A
+terrain change rewrites one pixel. Floors and roofs stay on the dual grid with hard edges. Known gap: the
+blend stops at a module 12 chunk's border, since a chunk knows only its own cells.
 
 ---
 

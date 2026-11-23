@@ -9,3 +9,4 @@ rubble = &"rubble"
 key = &"wood"
 display_name = "wood"
 texture = ExtResource("2_sheet")
+tile_size = 32

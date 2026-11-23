@@ -14,6 +14,8 @@ var id: int = 0
 @export var blueprint: StringName = &"door"
 ## Tile size in both sheets, in pixels.
 @export var tile_size: int = 48
+## Pixels of one cell in its sheets; other than EcsTownGrid.ART, the sheets are resized to it.
+@export var cell_pixels: int = 32
 @export var closed_texture: Texture2D
 ## Pixels before the first tile, from the left and the top.
 @export var closed_margins: Vector2i = Vector2i.ZERO

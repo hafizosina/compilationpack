@@ -126,7 +126,7 @@ func _tool_name(tool: StringName, id: int, brush: int, turns: int) -> String:
 func _tools() -> Array:
 	var terrains: Array = []
 	for def in _catalog.terrains:
-		terrains.append({"id": def.id, "label": def.display_name.capitalize(), "icon": _dual_swatch(_catalog.tiles(def))})
+		terrains.append({"id": def.id, "label": def.display_name.capitalize(), "icon": _ground_swatch(def)})
 	var floors: Array = []
 	for def in _catalog.floors:
 		floors.append({"id": def.id, "label": def.display_name.capitalize(), "icon": _dual_swatch(_catalog.tiles(def))})
@@ -211,6 +211,15 @@ func _stamp_choices() -> Array:
 	for k in _stamps.size():
 		choices.append({"id": k + 1, "label": _stamps[k].display_name, "icon": _plan_swatch(_stamps[k])})
 	return choices
+
+## A cell of a terrain's ground, or its sheet's full tile when it has none.
+func _ground_swatch(def: EcsTerrainDef) -> Texture2D:
+	if def.ground == null:
+		return _dual_swatch(_catalog.tiles(def))
+	var swatch := AtlasTexture.new()
+	swatch.atlas = def.ground
+	swatch.region = Rect2(Vector2.ZERO, Vector2(EcsTownGrid.ART, EcsTownGrid.ART) * def.ground.get_size() / EcsTownCatalog.GROUND_SIZE)
+	return swatch
 
 ## A full tile of a dual-grid type's tiles, as it is drawn.
 func _dual_swatch(tiles: TileSet) -> Texture2D:
