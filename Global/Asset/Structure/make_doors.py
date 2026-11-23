@@ -96,7 +96,7 @@ def leaf_carved(half):
 
 
 # key -> (draw, half thickness, post half-width of the wall it goes in, from make_walls.py)
-DOORS = {"bamboo": (leaf_bamboo, 0.15, 0.30), "wood": (leaf_wood, 0.17, 0.37), "carved": (leaf_carved, 0.19, 0.38)}
+DOORS = {"bamboo": (leaf_bamboo, 0.17, 0.37), "wood": (leaf_wood, 0.17, 0.37), "carved": (leaf_carved, 0.19, 0.38)}
 LENGTH = 1.0                    # set per door in sheet(): the gap between the posts either side, plus TUCK each end
 
 
