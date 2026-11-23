@@ -46,7 +46,7 @@ def grain(seed):
 
 def leaf_bamboo(half):
     """Three bamboo poles lying along the door, each its own part, lashed at both ends, a node ring every third of a
-    cell; the bamboo wall's weathered colour."""
+    cell; smoked darker than the bamboo wall so the door reads in it."""
     y, x = np.mgrid[0:D, 0:D] + 0.5
     m = rect(C - LENGTH * U / 2, C - half * U, C + LENGTH * U / 2, C + half * U)
     w = 2 * half * U / 3
@@ -58,25 +58,29 @@ def leaf_bamboo(half):
     parts = []
     for k in range(3):
         pole = m * (np.floor(v) == k) * ~seam
-        colour = np.array((150, 130, 88), np.float32) * DARKEN * (round_ * grain(5 + k) * (0.92 + 0.08 * k))[..., None]
+        colour = np.array((92, 72, 42), np.float32) * DARKEN * (round_ * grain(5 + k) * (0.92 + 0.08 * k))[..., None]
         colour[node] *= 0.74
         parts.append((pole, colour))
     for sx in (-0.5, 0.5):
         lash = rect(C + sx * U - 1.6 * SS, C - half * U, C + sx * U + 1.6 * SS, C + half * U)
-        parts.append((lash, np.zeros((D, D, 3), np.float32) + np.array((96, 74, 48), np.float32) * DARKEN))
+        parts.append((lash, np.zeros((D, D, 3), np.float32) + np.array((58, 42, 26), np.float32) * DARKEN))
     return parts
 
 
 def leaf_wood(half):
-    """A plank door: two boards along it, each its own part, two dark iron straps across."""
+    """A plank door: short boards across it, each its own part, stained darker than the wood wall, two iron straps
+    along it."""
     y, x = np.mgrid[0:D, 0:D] + 0.5
     parts = []
-    for k, (y0, y1) in enumerate(((C - half * U, C - 0.4 * SS), (C + 0.4 * SS, C + half * U))):
-        board = rect(C - LENGTH * U / 2, y0, C + LENGTH * U / 2, y1)
-        parts.append((board, np.array((136, 96, 60), np.float32) * DARKEN * (grain(3 + k) * (0.95 + 0.08 * k))[..., None]))
-    for sx in (-0.33, 0.33):
-        strap = rect(C + sx * U - 2.2 * SS, C - half * U, C + sx * U + 2.2 * SS, C + half * U)
-        parts.append((strap, np.zeros((D, D, 3), np.float32) + np.array((70, 64, 58), np.float32)))
+    n = 5
+    step = LENGTH * U / n
+    for k in range(n):
+        x0 = C - LENGTH * U / 2 + k * step
+        board = rect(x0 + 0.35 * SS, C - half * U, x0 + step - 0.35 * SS, C + half * U)
+        parts.append((board, np.array((96, 60, 36), np.float32) * DARKEN * (grain(3 + k) * (0.92 + 0.04 * (k % 3)))[..., None]))
+    for sy in (-0.45, 0.45):
+        strap = rect(C - LENGTH * U / 2, C + sy * half * U - 1.6 * SS, C + LENGTH * U / 2, C + sy * half * U + 1.6 * SS)
+        parts.append((strap, np.zeros((D, D, 3), np.float32) + np.array((58, 54, 50), np.float32)))
     return parts
 
 
