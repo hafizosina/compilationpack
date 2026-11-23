@@ -87,3 +87,15 @@ extends Resource
 @export var yard_garden: Array[float] = [0.35, 0.7, 0.9]
 @export var yard_coop: Array[float] = [0.5, 0.5, 0.3]
 @export var yard_tree: Array[float] = [0.4, 0.5, 0.6]
+@export_group("Fences")
+## The fence blueprint round fields, and round pens.
+@export var field_fence: StringName = &"fence"
+@export var pen_fence: StringName = &"fence"
+## The fence round a house's yard, by wealth, poorest first.
+@export var yard_fences: Array[StringName] = [&"fence_hedge", &"fence_woven", &"fence_woven"]
+## The wall round a rich compound, and round a temple's.
+@export var compound_fence: StringName = &"fence_brick_wall"
+@export var temple_fence: StringName = &"fence_brick_wall"
+## The gate set into each fence, by the fence's blueprint id.
+@export var gates: Dictionary[StringName, StringName] = {&"fence": &"gate_bamboo_rail", &"fence_woven": &"gate_woven",
+	&"fence_hedge": &"gate_hedge", &"fence_brick_wall": &"gate_brick"}

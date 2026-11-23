@@ -53,7 +53,8 @@ static func build(site: EcsSettlementSite, def: EcsSettlementDef, catalog: EcsTo
 		var wealth: int = plot.get("wealth", role.wealth)
 		if wealth < 0:
 			wealth = _wealth_at(site, rect)
-		if role.compound and _compound(site, plot, type, wealth, catalog, hash([rng_seed, site.l2_cell, k])):
+		var wall := def.temple_fence if role.key == &"temple" else def.compound_fence
+		if role.compound and _compound(site, plot, type, wealth, catalog, hash([rng_seed, site.l2_cell, k]), wall, def):
 			continue
 		var plan := EcsBuildingGenerator.plan(type, rect.size, wealth, plot["front"], hash([rng_seed, site.l2_cell, k]),
 			catalog, ENTITIES, rect.position, plot["door"])
@@ -142,8 +143,9 @@ static func _lamp_posts(site: EcsSettlementSite, def: EcsSettlementDef) -> void:
 			site.plot_at.erase(cell)
 	site.economy["lamps"] = lamps
 
-## A house's yard by its wealth: maybe a fence round its outer cells, open by the lane, and inside a
-## garden bed, a chicken coop and a banana tree, each by chance; none on the cells by the door.
+## A house's yard by its wealth: maybe its wealth's fence round its outer cells, open by the lane with a
+## gate at each fence end there, and inside a garden bed, a chicken coop and a banana tree, each by
+## chance; none on the cells by the door.
 static func _dress_yard(site: EcsSettlementSite, plot: Dictionary, def: EcsSettlementDef, rng: RandomNumberGenerator) -> void:
 	var wealth: int = clampi(plot.get("wealth", 0), 0, 2)
 	var yard: Dictionary = {}
@@ -166,10 +168,24 @@ static func _dress_yard(site: EcsSettlementSite, plot: Dictionary, def: EcsSettl
 				if not yard.has(next) and not rect.has_point(next):
 					ring.append(cell)
 					break
+		var fence: StringName = def.yard_fences[wealth]
+		var fenced: Dictionary = {}
 		for cell in ring:
-			var across := yard.has(cell + Vector2i.LEFT) or yard.has(cell + Vector2i.RIGHT)
-			site.commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, cell, &"fence", 0 if across else 1))
+			site.commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, cell, fence, 0))
 			free.erase(cell)
+			fenced[cell] = true
+		var gate: StringName = def.gates.get(fence, &"")
+		for cell: Vector2i in yard:
+			if gate == &"" or free.has(cell) or fenced.has(cell) or cell == plot.get("stockpile", Vector2i(-1, -1)):
+				continue
+			var edge := false
+			var beside := false
+			for side in EcsPlotPlanner.SIDES:
+				var next: Vector2i = cell + side
+				edge = edge or (not yard.has(next) and not rect.has_point(next))
+				beside = beside or fenced.has(next)
+			if edge and beside:
+				site.commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, cell, gate, 0))
 		plot["fenced"] = true
 	var inner: Array = free.keys()
 	inner.sort()
@@ -190,12 +206,12 @@ static func _dress_yard(site: EcsSettlementSite, plot: Dictionary, def: EcsSettl
 					inner.erase(c)
 				break
 
-## A walled compound on `plot`: a fence round it with its gate at the door, the main house of
+## A walled compound on `plot`: `wall` round it with its gate at the door, the main house of
 ## `type` across the back facing the gate, and in front of it, either side of a clear way in, an
 ## open pavilion (posts and a wood floor, no roof yet) and a kitchen house facing the way in, when
 ## there is room. False when the plot is too small, so it is built as one house.
 static func _compound(site: EcsSettlementSite, plot: Dictionary, type: EcsBuildingTypeDef, wealth: int,
-		catalog: EcsTownCatalog, rng_seed: int) -> bool:
+		catalog: EcsTownCatalog, rng_seed: int, wall: StringName, def: EcsSettlementDef) -> bool:
 	var rect: Rect2i = plot["footprint"]
 	var front: Vector2i = plot["front"]
 	var size := rect.size
@@ -213,11 +229,7 @@ static func _compound(site: EcsSettlementSite, plot: Dictionary, type: EcsBuildi
 		var r := EcsBuildingGenerator._from_frame(frame, size, front)
 		return Rect2i(r.position + rect.position, r.size)
 	var gate: Array[Vector2i] = [plot["door"], EcsBuildingGenerator._frame_cell(Vector2i(door_u + 1, 0), size, front) + rect.position]
-	for cell in EcsBuildRules.cells(rect):
-		if rect.grow(-1).has_point(cell) or gate.has(cell):
-			continue
-		var turns := 0 if cell.y == rect.position.y or cell.y == rect.end.y - 1 else 1
-		site.commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, cell, &"fence", turns))
+	_enclose(site, rect, gate, wall, def)
 	var v0 := depth - 1 - main_d
 	var outbuildings: Array = []
 	var kitchen := false
@@ -300,8 +312,8 @@ static func _keep_joined(site: EcsSettlementSite, plot: Dictionary) -> void:
 			site.plot_at.erase(cell)
 	plot["yard"] = kept
 
-## A plot's field or pen: fenced round its edge with a 2-cell gate on the side facing the house;
-## a field is dirt with a scarecrow at its middle, a haystack in a corner and crops on every other
+## A plot's field or pen: the def's fence round its edge with a 2-cell gate on the side facing the
+## house; a field is dirt with a scarecrow at its middle, a haystack in a corner and crops on every other
 ## row along its long side; a pen holds a trough and hay.
 static func _annex(site: EcsSettlementSite, plot: Dictionary, def: EcsSettlementDef, catalog: EcsTownCatalog) -> void:
 	var annex: Rect2i = plot["annex"]
@@ -314,12 +326,7 @@ static func _annex(site: EcsSettlementSite, plot: Dictionary, def: EcsSettlement
 		for cell in EcsBuildRules.cells(annex):
 			site.commands.append(EcsBuildCommand.make(EcsBuildCommand.Kind.SET_TERRAIN, cell, ground))
 	var inside := annex.grow(-1)
-	for cell in EcsBuildRules.cells(annex):
-		if inside.has_point(cell) or gate.has(cell):
-			continue
-		# Rails along the top and bottom rows run across, the sides' run down.
-		var turns := 0 if cell.y == annex.position.y or cell.y == annex.end.y - 1 else 1
-		site.commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, cell, &"fence", turns))
+	_enclose(site, annex, gate, def.field_fence if field else def.pen_fence, def)
 	var taken: Dictionary = {}
 	# The cells inside the gate stay clear, so the way in is never blocked.
 	for cell: Vector2i in gate:
@@ -343,7 +350,18 @@ static func _annex(site: EcsSettlementSite, plot: Dictionary, def: EcsSettlement
 		if not taken.has(hay) and not Rect2i(trough, Vector2i(2, 1)).has_point(hay):
 			site.commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, hay, &"hay_pile", 0))
 
-## The 2 cells in the middle of `annex`'s side facing `facing`, left open as its gate.
+## `fence` round the edge of `rect`, and its gate (walkable) on the cells of `gate`.
+static func _enclose(site: EcsSettlementSite, rect: Rect2i, gate: Array[Vector2i], fence: StringName, def: EcsSettlementDef) -> void:
+	var gate_piece: StringName = def.gates.get(fence, &"")
+	for cell in EcsBuildRules.cells(rect):
+		if rect.grow(-1).has_point(cell):
+			continue
+		if not gate.has(cell):
+			site.commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, cell, fence, 0))
+		elif gate_piece != &"":
+			site.commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, cell, gate_piece, 0))
+
+## The 2 cells in the middle of `annex`'s side facing `facing`, its gate.
 static func _gate(annex: Rect2i, facing: Vector2i) -> Array[Vector2i]:
 	var mid := annex.position + annex.size / 2
 	var edge := Vector2i(annex.end.x - 1 if facing.x > 0 else annex.position.x, annex.end.y - 1 if facing.y > 0 else annex.position.y)

@@ -105,16 +105,21 @@ func _every_rule_lays_its_work() -> void:
 				first = "a %s facing %s has nothing on it" % [key, front]
 	_check("every work's rule, facing every way, lays %d pieces, none outside or on the way in%s" % [pieces, "" if first == "" else "  " + first], first == "")
 
-## Every field and pen has a fence on every edge cell but a 2-cell gate, the gate facing its house.
+## Every field and pen has a fence on every edge cell but a 2-cell gate of gate pieces, the gate facing its house.
 func _fields_and_pens_are_fenced_with_a_gate() -> void:
 	var fenced := 0
 	var all := 0
 	var first := ""
 	for site in _sites:
 		var fence_at: Dictionary = {}
+		var gate_at: Dictionary = {}
 		for command in site.commands:
-			if command.kind == EcsBuildCommand.Kind.PLACE_OBJECT and command.blueprint == &"fence":
+			if command.kind != EcsBuildCommand.Kind.PLACE_OBJECT:
+				continue
+			if String(command.blueprint).begins_with("fence"):
 				fence_at[command.cell] = true
+			elif String(command.blueprint).begins_with("gate_"):
+				gate_at[command.cell] = true
 		for plot in site.plots:
 			if not plot.has("annex"):
 				continue
@@ -129,12 +134,12 @@ func _fields_and_pens_are_fenced_with_a_gate() -> void:
 				if not fence_at.has(cell):
 					gaps.append(cell)
 			var house: Rect2i = plot["footprint"]
-			var facing := gaps.size() == 2 and gaps.all(func(c: Vector2i) -> bool: return house.grow(3).has_point(c))
+			var facing := gaps.size() == 2 and gaps.all(func(c: Vector2i) -> bool: return house.grow(3).has_point(c) and gate_at.has(c))
 			if facing:
 				fenced += 1
 			elif first == "":
 				first = "a %s's %s at %s: %d gaps of %d edge cells" % [plot["role"], plot["annex_kind"], annex, gaps.size(), edge]
-	_check("%d of %d fields and pens fenced with a 2-cell gate facing the house%s" % [fenced, all, "" if first == "" else "  " + first],
+	_check("%d of %d fields and pens fenced with a 2-cell gate (gate pieces) facing the house%s" % [fenced, all, "" if first == "" else "  " + first],
 		all > 0 and fenced == all)
 
 ## Every dock lies on water, wood-floored and walkable through module 10's nav (but for its mooring
