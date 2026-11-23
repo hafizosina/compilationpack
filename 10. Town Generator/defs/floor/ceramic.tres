@@ -2,9 +2,11 @@
 
 [ext_resource type="Script" uid="uid://cfhfq0d55ey50" path="res://10. Town Generator/defs/ecs_floor_def.gd" id="1"]
 [ext_resource type="Texture2D" path="res://Global/Asset/Floor/surface_ceramic.png" id="2_surface"]
+[ext_resource type="Texture2D" path="res://Global/Asset/Floor/pieces_ceramic.png" id="3_pieces"]
 
 [resource]
 script = ExtResource("1")
 key = &"ceramic"
 display_name = "ceramic"
 surface = ExtResource("2_surface")
+pieces = ExtResource("3_pieces")

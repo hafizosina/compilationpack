@@ -229,7 +229,7 @@ def bamboo():
     rng = np.random.default_rng(62)
     pole, widths, edges = poles()
     across = (X - edges[pole]) / widths[pole]
-    hues = np.array([(204, 172, 108), (190, 152, 92), (212, 184, 120), (176, 136, 80), (198, 170, 110)], np.float32)
+    hues = np.array([(164, 120, 70), (150, 106, 60), (172, 130, 78), (140, 98, 56), (158, 116, 68)], np.float32)  # smoke-darkened
     colour = hues[rng.integers(0, len(hues), len(widths))][pole]
     shade = tint_of(pole, 62, 0.14) * (1 + field(3, 63, aspect=1 / 10) * 0.08 + field(40, 64, aspect=1 / 14) * 0.04)
     albedo = colour * shade[..., None]
@@ -327,7 +327,16 @@ def pole_pieces():
     return piece_map((centre_x - X) / CELL, shift[pole], np.full(X.shape, 0.5), np.ones(X.shape))
 
 
+def tile_pieces():
+    """A ceramic tile decides by its own centre, so an edge is cut by whole tiles."""
+    size = CELL / 2
+    cx = (np.floor(X / size) + 0.5) * size
+    cy = (np.floor(Y / size) + 0.5) * size
+    return piece_map((cx - X) / CELL, (cy - Y) / CELL, np.full(X.shape, 0.5), np.ones(X.shape))
+
+
 PIECES = {"stone": lambda: stone_pieces(14, 21, 0.8), "road": lambda: stone_pieces(22, 31, 0.7),
+          "ceramic": tile_pieces,
           "wood": plank_pieces, "bamboo": pole_pieces}
 
 SURFACES = {"wood": teak, "stone": flagstones, "road": cobbles, "rug": pandan, "dirt_path": earth, "bamboo": bamboo,
