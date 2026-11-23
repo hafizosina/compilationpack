@@ -46,7 +46,8 @@ static func walkable(nav: EcsTownNavSingleton, cell: Vector2i) -> bool:
 	return nav.astar.is_in_boundsv(cell) and not nav.astar.is_point_solid(cell)
 
 ## What a step onto cell `i` costs; 0 can't be walked. A wall, furniture, a plant or rubble
-## blocks; a door is walked through unless locked; a floor's cost replaces its terrain's.
+## blocks, but for walkable furniture (a gate) once born; a door is walked through unless locked;
+## a floor's cost replaces its terrain's.
 func cost(world: EcsWorld, grid: EcsTownGridSingleton, i: int) -> float:
 	match grid.structure[i]:
 		EcsTownGridSingleton.WALL:
@@ -56,7 +57,10 @@ func cost(world: EcsWorld, grid: EcsTownGridSingleton, i: int) -> float:
 				if grid.object_id[i] > EcsWorld.NO_ENTITY else null
 			return 0.0 if door != null and door.is_locked else 1.0
 	if grid.object_id[i] != EcsTownGridSingleton.NO_ID:
-		return 0.0
+		var piece := world.get_component(grid.object_id[i], EcsFurnitureComponent) as EcsFurnitureComponent \
+			if grid.object_id[i] > EcsWorld.NO_ENTITY else null
+		if piece == null or not piece.walkable:
+			return 0.0
 	if grid.floor[i] != 0:
 		return _catalog.floor_def(grid.floor[i]).walk_cost
 	return _catalog.terrain(grid.terrain[i]).walk_cost

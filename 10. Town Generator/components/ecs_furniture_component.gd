@@ -10,6 +10,8 @@ extends EcsComponent
 ## Stands with its back to a wall (a bed's head, a stove's back): the generator places it so.
 ## Its back is its top edge as drawn, unturned.
 @export var against_wall: bool = false
+## Can be walked through, like a gate; it still takes its cell.
+@export var walkable: bool = false
 
 func key() -> StringName:
 	return &"furniture"

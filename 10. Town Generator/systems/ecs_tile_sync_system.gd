@@ -8,7 +8,8 @@ extends EcsSystem
 ## attachments on the cell grid, their sheets added as sources; then a TileMapLayer per roof type,
 ## half a cell up and left for the dual grid, in list order, a type's layer also filling under every
 ## later type. Walls use one atlas source per wall type, joined to their building's neighbouring
-## walls. The root is its own: the first run clears it, builds and draws all; after that only what
+## walls. A linked piece (a fence, a gate) joins the side neighbours of its link group, as a wall
+## does. The root is its own: the first run clears it, builds and draws all; after that only what
 ## changed is redrawn.
 
 const GROUND_SHADER := preload("res://10. Town Generator/art/ground.gdshader")
@@ -52,6 +53,8 @@ var _attachment_layer: TileMapLayer
 var _wall_sources: Dictionary = {}
 ## [layer, texture, tile size] -> source id, for furniture and attachment sheets.
 var _sheet_sources: Dictionary = {}
+## [layer, source id] -> join mask -> atlas coords, for linked pieces' sheets.
+var _link_layouts: Dictionary = {}
 ## Whether the roof layers show.
 var roofs_visible: bool = true:
 	set(on):
@@ -322,6 +325,9 @@ func _draw_dirty(grid: EcsTownGridSingleton) -> void:
 		if bits & EcsTownGridSingleton.CHANGED_OBJECT:
 			wall_cells[cell] = true
 			object_cells[cell] = true
+			for side in EcsDualGrid.SIDES:
+				if not object_cells.has(cell + side):
+					object_cells[cell + side] = false
 		if bits & EcsTownGridSingleton.CHANGED_STRUCTURE:
 			wall_cells[cell] = true
 			for side in EcsDualGrid.SIDES:
@@ -338,7 +344,10 @@ func _draw_dirty(grid: EcsTownGridSingleton) -> void:
 		if EcsTownGrid.in_bounds(grid, cell):
 			_draw_wall(grid, cell)
 	for cell: Vector2i in object_cells:
-		_draw_objects(grid, cell)
+		if object_cells[cell]:
+			_draw_objects(grid, cell)
+		elif EcsTownGrid.in_bounds(grid, cell):
+			_draw_linked(grid, cell)
 
 ## Draw order of the four cells around render tile `at`, TL, TR, BL, BR; -1 for none, and off the map.
 func _around(grid: EcsTownGridSingleton, at: Vector2i, cells: PackedInt32Array, rank: Dictionary) -> PackedInt32Array:
@@ -429,11 +438,17 @@ func _draw_door(grid: EcsTownGridSingleton, cell: Vector2i, i: int) -> void:
 func _draw_objects(grid: EcsTownGridSingleton, cell: Vector2i) -> void:
 	var i := EcsTownGrid.index(grid, cell)
 	if _furniture_layer != null:
-		_draw_entity_tile(_furniture_layer, cell, grid.object_id[i])
+		_draw_entity_tile(grid, _furniture_layer, cell, grid.object_id[i])
 	if _attachment_layer != null:
-		_draw_entity_tile(_attachment_layer, cell, grid.attachment_id[i])
+		_draw_entity_tile(grid, _attachment_layer, cell, grid.attachment_id[i])
 
-func _draw_entity_tile(layer: TileMapLayer, cell: Vector2i, id: int) -> void:
+## Redraws the object on `cell` if it is linked, as a neighbour's change may join or end it.
+func _draw_linked(grid: EcsTownGridSingleton, cell: Vector2i) -> void:
+	var id := grid.object_id[EcsTownGrid.index(grid, cell)]
+	if _furniture_layer != null and _link_of(id) != &"":
+		_draw_entity_tile(grid, _furniture_layer, cell, id)
+
+func _draw_entity_tile(grid: EcsTownGridSingleton, layer: TileMapLayer, cell: Vector2i, id: int) -> void:
 	var tile := _world.get_component(id, EcsTileComponent) as EcsTileComponent \
 		if _world != null and id > EcsWorld.NO_ENTITY else null
 	if tile == null or tile.texture == null:
@@ -443,10 +458,43 @@ func _draw_entity_tile(layer: TileMapLayer, cell: Vector2i, id: int) -> void:
 		return
 	var source := _source_for(layer, tile)
 	var place := _world.get_component(id, EcsGridPositionComponent) as EcsGridPositionComponent
-	if place == null:
+	if tile.link != &"":
+		layer.set_cell(cell, source, EcsDualGrid.atlas_for(_link_layout(layer, source), _link_mask(grid, cell, tile.link), cell))
+	elif place == null:
 		layer.set_cell(cell, source, tile.atlas)
 	else:
 		# A turned piece draws, on each cell, the slice that turned there, turned the same.
 		var offset := EcsTownGrid.turn(cell - place.cell, place.size, 4 - place.turns)
 		layer.set_cell(cell, source, tile.atlas + offset, TURN_FLAGS[posmod(place.turns, 4)])
 	redrawn += 1
+
+## The link group of object `id`; none when it is unborn or has none.
+func _link_of(id: int) -> StringName:
+	var tile := _world.get_component(id, EcsTileComponent) as EcsTileComponent \
+		if _world != null and id > EcsWorld.NO_ENTITY else null
+	return tile.link if tile != null else &""
+
+## Which sides of `cell` hold an object of link group `link`.
+func _link_mask(grid: EcsTownGridSingleton, cell: Vector2i, link: StringName) -> int:
+	var mask := 0
+	for k in 4:
+		var next: Vector2i = cell + EcsDualGrid.SIDES[k]
+		if EcsTownGrid.in_bounds(grid, next) and _link_of(grid.object_id[EcsTownGrid.index(grid, next)]) == link:
+			mask |= EcsDualGrid.SIDE_BITS[k]
+	return mask
+
+## The join layout of a linked sheet, read once: a 2-tile sheet is a gate's, across when it joins
+## left or right, else down; any other is the walls' side layout.
+func _link_layout(layer: TileMapLayer, source_id: int) -> Dictionary:
+	var key := [layer, source_id]
+	if not _link_layouts.has(key):
+		var source := layer.tile_set.get_source(source_id) as TileSetAtlasSource
+		var layout: Dictionary = {}
+		if source.get_tiles_count() == 2:
+			for mask in 16:
+				var down := (mask & (EcsDualGrid.LEFT | EcsDualGrid.RIGHT)) == 0 and mask != 0
+				layout[mask] = [Vector2i(1, 0) if down else Vector2i(0, 0)]
+		else:
+			layout = EcsDualGrid.side_layout(source)
+		_link_layouts[key] = layout
+	return _link_layouts[key]
