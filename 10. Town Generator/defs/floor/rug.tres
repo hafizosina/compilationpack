@@ -10,3 +10,4 @@ key = &"rug"
 display_name = "rug"
 texture = ExtResource("2_tiles")
 surface = ExtResource("3_surface")
+hem = true

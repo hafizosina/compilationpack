@@ -826,6 +826,19 @@ up or down by noise so the edge line is ragged (`jag`), sharpened (`sharp`) for 
 terrain change rewrites one pixel. Floors and roofs stay on the dual grid with hard edges. Known gap: the
 blend stops at a module 12 chunk's border, since a chunk knows only its own cells.
 
+**Floors are cut round their pieces** (2026-11-23). `EcsFloorDef.pieces` is a piece map
+(`Global/Asset/Floor/pieces_*.png`, `make_floors.py`'s `piece_map()`), read exactly (`EcsTownCatalog.pieces()`: no
+mipmaps, nearest; a floor without one gets a map of no offset, a straight cut). For each pixel it gives the offset to
+the point that decides its piece — a stone's centre, a plank's or pole's middle line shifted along it — so a piece is
+drawn whole or not at all: it shows where that point's signed distance to the floor's outline (`sd_mask`, from the
+3×3 cells round it) is positive, plus a stone's own reach. A floor's region is every cell of it or of a higher built
+floor, so a lower floor runs on under a higher one it touches. `earthy` floors (stone, road) sit in a jagged earth margin (the
+`dirt` terrain's ground, drawn under everything), drop strays past the edge and sink edge pieces into the earth;
+every built floor has a light earth ring and casts a small shadow down-right; `hem` (rug) stripes a bound edge. By a
+wall or door (any in the 3×3 round a pixel) the cut is the plain cell rule — no offsets, reach or strays — so nothing
+pokes out past a wall. Where the 3×3 is one built floor and no wall, the shader draws its surface and stops. Tests
+still check the cell rule (`floor_shown_at`), not the pieces.
+
 ## 13f. Fences and gates: linked pieces (2026-11-23, `docs/WALLS_PLAN.md` steps 4–6)
 
 **A piece can join like a wall without being one.** `EcsTileComponent.link` names a link group; the tile

@@ -3,8 +3,8 @@ extends EcsSystem
 
 ## Draws the grid, one way, under its root: the ground, one sprite whose texture holds each cell's
 ## terrain and whose shader (art/ground.gdshader) shows the terrains' large textures with soft
-## edges; the floors likewise (art/floor.gdshader: rigid edges, a path's ragged, a floor running
-## under walls to their middle); then furniture, doors (their own layer, under the walls), walls and
+## edges; the floors likewise (art/floor.gdshader: edges cut round their pieces, a path's ragged, a
+## floor running under walls to their middle); then furniture, doors (their own layer, under the walls), walls and
 ## attachments on the cell grid, their sheets added as sources; then a TileMapLayer per roof type,
 ## half a cell up and left for the dual grid, in list order, a type's layer also filling under every
 ## later type. Walls use one atlas source per wall type, joined to their building's neighbouring
@@ -219,14 +219,24 @@ func _make_ground(grid: EcsTownGridSingleton) -> void:
 ## The floors sprite, like the ground's, drawn by the floor shader.
 func _make_floors(grid: EcsTownGridSingleton) -> void:
 	var soft := 0
+	var earthy := 0
+	var hem := 0
 	for k in _catalog.floors.size():
-		_floor_rank[_catalog.floors[k].id] = k
-		if _catalog.floors[k].soft:
+		var def := _catalog.floors[k]
+		_floor_rank[def.id] = k
+		if def.soft:
 			soft |= 1 << k
+		if def.earthy:
+			earthy |= 1 << k
+		if def.hem:
+			hem |= 1 << k
+	var dirt := _catalog.terrain(_catalog.terrain_id(&"dirt"))
 	_floor_image = Image.create_empty(grid.width, grid.height, false, Image.FORMAT_R8)
 	_floor_texture = ImageTexture.create_from_image(_floor_image)
 	_floors = _map_sprite("Floors", _floor_texture, FLOOR_SHADER, {
-		&"map": _floor_texture, &"surfaces": _catalog.surfaces(), &"count": _catalog.floors.size(), &"soft_mask": soft})
+		&"map": _floor_texture, &"surfaces": _catalog.surfaces(), &"pieces": _catalog.pieces(),
+		&"count": _catalog.floors.size(), &"soft_mask": soft, &"earthy_mask": earthy, &"hem_mask": hem,
+		&"earth": dirt.ground if dirt != null else null})
 
 ## A sprite of `texture` (a pixel a cell) scaled up to the grid, drawn by `shader` with `params`.
 func _map_sprite(sprite_name: String, texture: ImageTexture, shader: Shader, params: Dictionary) -> Sprite2D:
