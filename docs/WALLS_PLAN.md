@@ -82,7 +82,7 @@ Each step: a mock-up for you to review (in-engine screenshot, before and after),
 
 - **D1 Wall view:** straight from above, **drawn in RimWorld's art style** (its material textures, soft shading,
   a dark edge), not the ink-outlined vector style.
-- **D2 Structure:** walls keep today's core structure (a whole cell, the 16 join shapes); only the art follows
+- **D2 Structure:** walls keep today's core structure (a post in each wall cell, beams to the walls beside it, the 16 join shapes); only the art follows
   RimWorld.
 - **D3 Doors:** 1.5 cells wide over the wall gap, for now.
 - **D4 Gates:** drawn closed; an open gate is drawn see-through (transparent), no swing animation for now.

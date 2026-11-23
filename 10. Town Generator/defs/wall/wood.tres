@@ -1,7 +1,7 @@
 [gd_resource type="Resource" script_class="EcsWallDef" format=3 uid="uid://du3o3361f2fqc"]
 
 [ext_resource type="Script" uid="uid://cuh411fcskjqj" path="res://10. Town Generator/defs/ecs_wall_def.gd" id="1"]
-[ext_resource type="Texture2D" uid="uid://dlq8l57ahlgve" path="res://10. Town Generator/art/placeholder/WoodWall.png" id="2_sheet"]
+[ext_resource type="Texture2D" path="res://Global/Asset/Structure/wall_wood.png" id="2_sheet"]
 
 [resource]
 script = ExtResource("1")
@@ -9,4 +9,3 @@ rubble = &"rubble"
 key = &"wood"
 display_name = "wood"
 texture = ExtResource("2_sheet")
-tile_size = 32
