@@ -1,4 +1,4 @@
-"""Door sheets in RimWorld's style, as the walls (make_walls.py): a leaf across the gap between the two posts beside
+"""Door sheets in the walls' style (make_walls.py: hard bevel per part, no outline, the darker palette): a leaf across the gap between the two posts beside
 it, seen from above. 4 tiles of 96 px (1.5 cells at 64 px a cell): horizontal closed, vertical closed, horizontal
 open, vertical open; open is the closed leaf see-through.
 usage: python make_doors.py [key ...]      (needs Pillow, numpy)"""
@@ -8,7 +8,7 @@ import sys
 import numpy as np
 from PIL import Image
 
-from make_walls import SS, blur, erode
+from make_walls import DARKEN, SS, blur, erode
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CELL = 64
@@ -45,35 +45,39 @@ def grain(seed):
 
 
 def leaf_bamboo(half):
-    """Three bamboo poles lying along the door, lashed at both ends, a node ring every third of a cell."""
+    """Three bamboo poles lying along the door, each its own part, lashed at both ends, a node ring every third of a
+    cell; the bamboo wall's weathered colour."""
     y, x = np.mgrid[0:D, 0:D] + 0.5
     m = rect(C - LENGTH * U / 2, C - half * U, C + LENGTH * U / 2, C + half * U)
     w = 2 * half * U / 3
     v = (y - (C - half * U)) / w
     fv = v - np.floor(v)
-    round_ = 0.78 + 0.32 * np.sin(np.clip(fv, 0, 1) * np.pi)           # each pole rounded across
-    colour = np.array((180, 156, 94), np.float32) * (round_ * grain(5))[..., None]
-    split = np.minimum(fv, 1 - fv) * w < 0.8 * SS
-    colour[(split & (m > 0))] *= 0.55
+    round_ = 0.80 + 0.30 * np.sin(np.clip(fv, 0, 1) * np.pi)           # each pole rounded across
     node = np.abs(((x - C) / (U / 3) + 0.5) % 1 - 0.5) * (U / 3) < 0.9 * SS
-    colour[(node & (m > 0))] *= 0.75
+    seam = (np.minimum(fv, 1 - fv) * w < 0.7 * SS) & (m > 0)
+    parts = []
+    for k in range(3):
+        pole = m * (np.floor(v) == k) * ~seam
+        colour = np.array((150, 130, 88), np.float32) * DARKEN * (round_ * grain(5 + k) * (0.92 + 0.08 * k))[..., None]
+        colour[node] *= 0.74
+        parts.append((pole, colour))
     for sx in (-0.5, 0.5):
         lash = rect(C + sx * U - 1.6 * SS, C - half * U, C + sx * U + 1.6 * SS, C + half * U)
-        colour[lash > 0] = (110, 84, 52)
-    return [(m, colour)]
+        parts.append((lash, np.zeros((D, D, 3), np.float32) + np.array((96, 74, 48), np.float32) * DARKEN))
+    return parts
 
 
 def leaf_wood(half):
-    """A plank door: boards along it, two dark iron straps across."""
-    m = rect(C - LENGTH * U / 2, C - half * U, C + LENGTH * U / 2, C + half * U)
-    colour = np.array((136, 96, 60), np.float32) * grain(3)[..., None]
+    """A plank door: two boards along it, each its own part, two dark iron straps across."""
     y, x = np.mgrid[0:D, 0:D] + 0.5
-    seam = np.exp(-((y - C) / (0.8 * SS)) ** 2) * 0.35
-    colour *= (1 - seam)[..., None]
+    parts = []
+    for k, (y0, y1) in enumerate(((C - half * U, C - 0.4 * SS), (C + 0.4 * SS, C + half * U))):
+        board = rect(C - LENGTH * U / 2, y0, C + LENGTH * U / 2, y1)
+        parts.append((board, np.array((136, 96, 60), np.float32) * DARKEN * (grain(3 + k) * (0.95 + 0.08 * k))[..., None]))
     for sx in (-0.33, 0.33):
         strap = rect(C + sx * U - 2.2 * SS, C - half * U, C + sx * U + 2.2 * SS, C + half * U)
-        colour[strap > 0] = (70, 64, 58)
-    return [(m, colour)]
+        parts.append((strap, np.zeros((D, D, 3), np.float32) + np.array((70, 64, 58), np.float32)))
+    return parts
 
 
 def leaf_carved(half):
@@ -83,15 +87,13 @@ def leaf_carved(half):
     for side in (-1, 1):
         x0, x1 = (C - LENGTH * U / 2, C - 0.6 * SS) if side < 0 else (C + 0.6 * SS, C + LENGTH * U / 2)
         m = rect(x0, C - half * U, x1, C + half * U)
-        colour = np.array((112, 62, 40), np.float32) * grain(7 + side)[..., None]
+        colour = np.array((112, 62, 40), np.float32) * DARKEN * grain(7 + side)[..., None]
         inner = rect(x0 + 3.5 * SS, C - half * U + 3.5 * SS, x1 - 3.5 * SS, C + half * U - 3.5 * SS)
-        border = m * (1 - inner)
         groove = rect(x0 + 3 * SS, C - half * U + 3 * SS, x1 - 3 * SS, C + half * U - 3 * SS) * (1 - inner)
-        colour[border > 0] *= 1.12
-        colour[groove > 0] *= 0.62
-        ring = disc(C + side * 4.5 * SS, C, 2.6 * SS) * (1 - disc(C + side * 4.5 * SS, C, 1.4 * SS))
-        colour[ring > 0] = (196, 150, 60)
+        colour[groove > 0] *= 0.66
         out.append((m, colour))
+        ring = disc(C + side * 4.5 * SS, C, 2.6 * SS) * (1 - disc(C + side * 4.5 * SS, C, 1.4 * SS))
+        out.append((ring, np.zeros((D, D, 3), np.float32) + np.array((196, 150, 60), np.float32)))
     return out
 
 
@@ -101,26 +103,35 @@ LENGTH = 1.0                    # set per door in sheet(): the gap between the p
 
 
 def render(parts, vertical, alpha):
-    """Light, edge and shadow each part in image space (so a vertical door is lit from the top-left too)."""
+    """Each part given the walls' hard bevel in image space (so a vertical door is lit from the top-left too), no
+    outline, a faint shadow."""
     if vertical:
         parts = [(m.T, c.transpose(1, 0, 2)) for m, c in parts]
     shape = np.zeros((D, D), np.float32)
     col = np.zeros((D, D, 3), np.float32)
     for m, c in parts:
-        s = blur(m, 2.0 * SS)
-        k = int(1.4 * SS)
-        light = 1.0 - 0.9 * (shift_d(s, k, k) - shift_d(s, -k, -k))
-        cc = c * light[..., None]
-        ring = (m > 0) & ~(erode(m, 1.5 * SS) > 0)
-        cc[ring] *= 0.42
+        cc = c * facets_d(m)[..., None]
         col = np.where(m[..., None] > 0, cc, col)
         shape = np.maximum(shape, m)
-    shadow = blur(shift_d(shape, 3 * SS, 2 * SS), 2.0 * SS) * 0.35 * (1 - shape)
+    shadow = blur(shift_d(shape, 3 * SS, 2 * SS), 2.0 * SS) * 0.40 * (1 - shape)
     out = np.zeros((D, D, 4), np.float32)
     out[..., :3] = col
     out[..., 3] = np.maximum(shape, shadow) * 255 * alpha
     im = Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGBA")
     return im.resize((TILE, TILE), Image.LANCZOS)
+
+
+def facets_d(mask, width=2.0):
+    """make_walls.facets on the door's canvas: a lit band along a part's top-left edges, a dark one bottom-right."""
+    s = blur(mask, 1.0 * SS)
+    gx = shift_d(s, 0, -1) - shift_d(s, 0, 1)
+    gy = shift_d(s, -1, 0) - shift_d(s, 1, 0)
+    facing = (gx + gy) / (np.hypot(gx, gy) * 1.4142 + 1e-6)
+    band = (mask > 0) & ~(erode(mask, width * SS) > 0)
+    out = np.ones(mask.shape, np.float32)
+    out[band & (facing > 0.35)] = 1.16
+    out[band & (facing < -0.35)] = 0.78
+    return out
 
 
 def shift_d(a, dy, dx):
