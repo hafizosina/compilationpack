@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://cfhfq0d55ey50" path="res://10. Town Generator/defs/ecs_floor_def.gd" id="1"]
 [ext_resource type="Texture2D" path="res://10. Town Generator/art/placeholder/WoodFloor.png" id="2_tiles"]
 [ext_resource type="Texture2D" path="res://Global/Asset/Floor/surface_wood.png" id="3_surface"]
+[ext_resource type="Texture2D" path="res://Global/Asset/Floor/pieces_wood.png" id="4_pieces"]
 
 [resource]
 script = ExtResource("1")
@@ -11,3 +12,4 @@ display_name = "wood"
 texture = ExtResource("2_tiles")
 tile_size = 32
 surface = ExtResource("3_surface")
+pieces = ExtResource("4_pieces")

@@ -23,6 +23,8 @@ var _wall_tile_set: TileSet
 var _grounds: Texture2DArray
 ## Every floor's surface likewise, a layer per floor in list order.
 var _surfaces: Texture2DArray
+## Every floor's piece map likewise.
+var _pieces: Texture2DArray
 ## Pixels a side of a ground texture: 8 cells at EcsTownGrid.ART.
 const GROUND_SIZE: int = 512
 
@@ -53,33 +55,53 @@ func tiles(def: EcsTileDef) -> TileSet:
 ## a terrain with no `ground` repeats its sheet's full tile.
 func grounds() -> Texture2DArray:
 	if _grounds == null:
-		_grounds = _stack(terrains, func(def: EcsTerrainDef) -> Texture2D: return def.ground)
+		_grounds = _stack(terrains, &"ground", _repeat_full_tile)
 	return _grounds
 
 ## The floors' surfaces as one array, a layer per floor in list order, as `grounds()`.
 func surfaces() -> Texture2DArray:
 	if _surfaces == null:
-		_surfaces = _stack(floors, func(def: EcsFloorDef) -> Texture2D: return def.surface)
+		_surfaces = _stack(floors, &"surface", _repeat_full_tile)
 	return _surfaces
 
-func _stack(defs: Array, large: Callable) -> Texture2DArray:
+## The floors' piece maps likewise, read exactly: no mipmaps, never smoothed; a floor with none
+## gets a map that cuts it straight.
+func pieces() -> Texture2DArray:
+	if _pieces == null:
+		_pieces = _stack(floors, &"pieces", _no_pieces, false)
+	return _pieces
+
+## Each def's texture `property`, or `fallback` of the def when it has none, as GROUND_SIZE layers;
+## data maps (`mipmaps` false) are resized nearest.
+func _stack(defs: Array, property: StringName, fallback: Callable, mipmaps: bool = true) -> Texture2DArray:
 	var images: Array[Image] = []
 	for def: EcsTileDef in defs:
-		var texture: Texture2D = large.call(def)
+		var texture := def.get(property) as Texture2D
 		var image: Image
 		if texture != null:
 			image = texture.get_image()
 			if image.is_compressed():
 				image.decompress()
 			image.convert(Image.FORMAT_RGBA8)
-			image.resize(GROUND_SIZE, GROUND_SIZE, Image.INTERPOLATE_LANCZOS)
+			if image.get_size() != Vector2i(GROUND_SIZE, GROUND_SIZE):
+				image.resize(GROUND_SIZE, GROUND_SIZE,
+					Image.INTERPOLATE_LANCZOS if mipmaps else Image.INTERPOLATE_NEAREST)
 		else:
-			image = _repeat_full_tile(def)
-		image.generate_mipmaps()
+			image = fallback.call(def)
+		if mipmaps:
+			image.generate_mipmaps()
+		elif image.has_mipmaps():
+			image.clear_mipmaps()
 		images.append(image)
 	var array := Texture2DArray.new()
 	array.create_from_images(images)
 	return array
+
+## A piece map of no offset, no reach and no strays: the floor is cut on its cell lines.
+func _no_pieces(_def: EcsTileDef) -> Image:
+	var image := Image.create_empty(GROUND_SIZE, GROUND_SIZE, false, Image.FORMAT_RGBA8)
+	image.fill(Color8(128, 128, 128, 255))
+	return image
 
 func _repeat_full_tile(def: EcsTileDef) -> Image:
 	var image := Image.create_empty(GROUND_SIZE, GROUND_SIZE, false, Image.FORMAT_RGBA8)
