@@ -747,6 +747,67 @@ rooms with its cut side marked; unmarked it loses 708. The generator takes 0.3 m
 
 ---
 
+## 13c. Grown buildings (2026-11-23, for module 12; `12. Settlement Generator/BETTER_TOWNS_PLAN.md` §2)
+
+A building may grow room by room instead of being cut from its footprint, as RimWorld's Better
+Towns mod grows its complexes, kept modest: houses here are mostly simple rectangles.
+
+- `EcsBuildingTypeDef.layout`: `split` (as before) or `grow`. **Every type now grows.**
+- `EcsRoomTypeDef` gained `size_min` and `size_max` (inside its walls) and `place`: `front`
+  (beside a room, flush with the front), `back` (behind one), `side` (beside one) or `any`.
+- `EcsBuildingGenerator._grow`, in the facing frame: the main room (the first role) on the front
+  over the door; each next role tries a mid size, its smallest, its largest (each turned) at every
+  spot sharing a wall line with a placed room on the sides its `place` allows, overlapping enough
+  for a door; a spot inside the footprint, meeting other rooms only on walls, and **never closing
+  in a pocket of open ground**, scores by shared wall plus noise. A room that fits nowhere is left
+  out. Each room is its own walled part, so walls, doors (the same spanning tree), roles (the
+  grown ones, not by size), floors and furniture run as before. `shape` is `grown`. When the main
+  room can't stand, the building is split as before.
+- Sizes and places: bedroom, study and store `side`; kitchen and lumber store `back`; main rooms
+  (hall 5×4–7×5, common room, nave 5×5–7×8, workshop, forge…) `any`.
+
+**Tests** (`generator_test`, 111): all 11 types, 1,000 seeds each, all sound, every room typed.
+The generator takes 0.25 ms for a hut to 3.3 ms for a manor on average, 10 ms at worst. In these
+types' own footprints many grown buildings keep fewer rooms than asked (a mill only its mill room);
+module 12 gives multi-room roles bigger footprints.
+
+---
+
+## 13d. Indo-Malay content and furniture by the door (2026-11-23, module 12's plan §5 and §4)
+
+The game is set in maritime Indo-Malay lands (Majapahit, Srivijaya), so the content was rethemed,
+English names kept (module 12's `BETTER_TOWNS_PLAN.md` §5).
+
+**Art:** `art/flatvec/indomalay.py` draws 19 pieces in the flat vector style (thick ink outline,
+flat lit shading, light from the top-left; `art/flatvec/flatvec.py` is the style's library) and packs
+them into `art/placeholder/indomalay.png` (8×4, layout in its README). `make_placeholders.py` adds
+`wall_bamboo.png` and `wall_brick.png`.
+
+**Pieces:** sleeping mat (1×2, tag bed), clay stove (stove), storage jar (storage), low table (2×1,
+table), statue, offering table (2×1), pounding trough (2×1), rice basket, potter's wheel, loom (2×1),
+wine jar, kiln, salt boiler (2×1), herb jars, weapon rack, strongbox, scales, gong, incense burner.
+
+**Walls:** bamboo and brick. Huts, houses, farmhouses, workshops and taverns are bamboo when poor,
+wood above; storehouses, manors and halls brick when rich.
+
+**Room types:** new sanctum, offering hall, pounding room, rice store, pottery, weaving room, boiling
+room, herb room, guard room, counting room, kiln room. Rethemed: bedroom (a sleeping mat), kitchen (a
+clay stove), store (storage jars), dining (the main room, a low table), common room (the serving
+room), hall (the reception hall). **Removed:** bakehouse, nave, mill room, hay store.
+
+**Building types:** new temple (offering hall and sanctum, brick), rice pounding shed, rice barn.
+**Removed:** chapel, mill, barn. The European pieces (oven, millstone, pew, altar…) stay in the
+entity catalog unused, for the author to decide on.
+
+**Furniture by the door** (`EcsRoomTypeDef.layout`, blueprint → place; `_furnish`): a placed piece
+takes the best spot of its place in the frame of the room's main door — `back` (on the wall facing
+the door, centred, its back to it), `side`, `corner`, `beside_door`, `centre` or `rows` — and every
+place but `back` keeps the way in (the cells from the door to the back wall) clear. When nothing fits
+there it goes anywhere, as before. `generator_test` counts back pieces on the facing wall and rooms
+with the way in clear.
+
+---
+
 ## 14. Open for discussion
 
 - **What "closed" means** (flagged 2026-11-05). `CLOSE_BUILDING` sets `EcsBuildingComponent.closed`,

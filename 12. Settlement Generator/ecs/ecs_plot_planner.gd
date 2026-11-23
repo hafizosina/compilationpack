@@ -3,18 +3,24 @@ extends RefCounted
 
 ## Pure and seeded: a town's plots, each placed by the building it is for, and the lanes they need,
 ## added to its EcsSettlementSite.
-##   1. Plots: the economy's buildings, highest priority first, each at its role's size where its
-##      site rules score best (RULES), grid-aligned, a gap apart, facing the side nearest a road.
-##      The area is a guideline: a work whose resource isn't in it goes out to the resource, in an
-##      outlying window joined to the town by a track; anything else that fits nowhere grows the
-##      area. Whatever still fits nowhere is reported short on the economy.
+##   0. Quarters: a district point per building group, placed by the groups' likes and dislikes.
+##   1. Plots: the census's buildings, highest priority first, each at its role's size where its
+##      site rules score best (RULES), plus its group's likes and dislikes of the plots placed
+##      before it, a weak pull to its district point, and, for a maker selling from home, the main
+##      road and the centre; grid-aligned, a gap apart, facing the side nearest a road. A home
+##      seller whose door lands past `sell_reach` sells at the market, which gets a stall for each.
+##      The town has no box: a plot stands within the town's radius of the well. A work whose
+##      resource isn't in reach goes out to it, in an outlying window joined to the town by a
+##      track; anything else that fits nowhere grows the radius (and the ground under it).
+##      Whatever still fits nowhere is reported short on the census.
 ##   2. Lanes: in the area and each window, from the cell before each door to the nearest road,
 ##      nearest plot first, so lanes merge. A plot no lane reaches is dropped, and reported short.
 ##   3. Yards: every plot grows from its footprint over free land to its role's yard depth.
 ## A role with a field or pen (an annex) takes a spot only where it fits beside it, off its front
 ## and a cell clear of it, so a yard path runs between; annexes block plots, lanes and yards. A
-## role with a dock gets one out over the water nearest it, and a watermill its wheel on the river.
-## Footprints and yards go into `cleared_cells`; floors are left to EcsRoadPlanner.lay.
+## role with a dock takes a spot only where its pier reaches water, and keeps the pier and the
+## walk to it free of later plots; a watermill gets its wheel on the river.
+## Footprints, yards, annexes and docks go into `cleared_cells`; floors are left to EcsRoadPlanner.lay.
 
 enum Use { FREE, ROAD, WATER, FOOTPRINT, FIELD }
 
@@ -27,13 +33,23 @@ const RESOURCE_RULES: Array[StringName] = [&"river", &"water", &"forest", &"rock
 ## Distances, in L1 cells, at which a "near" rule scores 1 and 0.
 const NEAR := {&"water": Vector2(3, 8), &"river": Vector2(2, 6), &"forest": Vector2(4, 10), &"rock": Vector2(4, 10),
 	&"main_road": Vector2(3, 10), &"deposit": Vector2(4, 10)}
+## Distances in L1 cells, door to door, at which a liked or disliked group counts fully and not at all.
+const AFFINITY_NEAR := Vector2(8, 80)
+## Distance from a door to its group's district point at which the pull is full and gone.
+const DISTRICT_NEAR := Vector2(8, 80)
+## District point candidates tried per group.
+const DISTRICT_TRIES: int = 80
+## Weight of the main road and the centre for a maker who sells from home (passing trade).
+const SELLER: float = 0.4
+## A footprint grows by this for each room its family's list has past two.
+const ROOM_GROWTH := Vector2i(3, 2)
 ## Placement attempts per building.
 const TRIES: int = 40
 ## Cells kept between a footprint and its grid's edge.
 const EDGE: int = 3
 ## How much the lanes' noise adds to a step, so they bend.
 const BEND: float = 0.6
-## An outlying window's side in L1 cells, how many a work may try, and how far the area grows a time.
+## An outlying window's side in L1 cells, how many a work may try, and how far the radius grows a time.
 const WINDOW: int = 32
 const MAX_WINDOWS: int = 6
 const GROW: int = 16
@@ -62,28 +78,47 @@ class Grid:
 static func plan(site: EcsSettlementSite, def: EcsSettlementDef, terrain: Dictionary, ctx: Dictionary) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash([ctx["seed"], site.l2_cell, &"plots"])
+	var bounds := Rect2i(Vector2i.ZERO, (ctx["region_def"] as EcsLandDef).size * int(ctx["scale"]))
 	var core := grid_of(site, site.area, terrain)
+	if _hold_radius(site, bounds):
+		core = grid_of(site, site.area, _refine(ctx, site.area))
 	var windows: Array[Grid] = []
 	var short: Dictionary = {}
 	var grows := 0
 	var progress: EcsProgress = ctx.get("progress")
 	var entries := _entries(site)
+	_districts(site, core, entries, rng)
 	for n in entries.size():
-		var role := entries[n]
+		var role: EcsSettlementRoleDef = entries[n][0]
+		var sells: bool = entries[n][2]
+		var rooms: Array = entries[n][3]
+		var count := site.plots.size()
 		EcsProgress.say(progress, "Placing plots: %s, %d of %d" % [role.display_name, n + 1, entries.size()], 0.56 + 0.14 * n / entries.size())
-		var placed := _place_in(site, def, core, role, rng)
+		var placed := _place_in(site, def, core, role, rng, sells, rooms.size())
 		if not placed and _resource_of(role, site.survey) != &"":
-			placed = _go_out(site, def, role, windows, core, ctx, rng)
+			placed = _go_out(site, def, role, windows, core, ctx, rng, sells, rooms.size())
 		while not placed and _resource_of(role, site.survey) == &"" and grows < MAX_GROWS:
 			grows += 1
-			var bigger := site.area.grow(GROW).intersection(Rect2i(Vector2i.ZERO, (ctx["region_def"] as EcsLandDef).size * int(ctx["scale"])))
-			if bigger == site.area:
-				break
-			site.area = bigger
-			core = grid_of(site, bigger, _refine(ctx, bigger))
-			placed = _place_in(site, def, core, role, rng)
+			site.radius += GROW
+			if _hold_radius(site, bounds):
+				core = grid_of(site, site.area, _refine(ctx, site.area))
+			placed = _place_in(site, def, core, role, rng, sells, rooms.size())
 		if not placed:
 			short[role.key] = int(short.get(role.key, 0)) + 1
+		elif site.plots.size() > count:
+			var plot: Dictionary = site.plots.back()
+			plot["wealth"] = entries[n][1]
+			if not rooms.is_empty():
+				plot["rooms"] = rooms
+			if sells:
+				var far := Vector2(plot["door"]).distance_to(Vector2(site.well)) > def.sell_reach
+				plot["sells"] = &"market" if far else &"home"
+			elif role.sells_at_home > 0.0:
+				plot["sells"] = &"market"
+			var doors: Dictionary = site.quarters["doors"]
+			if not doors.has(role.group):
+				doors[role.group] = []
+			(doors[role.group] as Array).append(plot["door"] + plot["front"])
 	var grids: Array[Grid] = [core]
 	grids.append_array(windows)
 	var dropped: Dictionary = {}
@@ -101,13 +136,30 @@ static func plan(site: EcsSettlementSite, def: EcsSettlementDef, terrain: Dictio
 		if not dropped.has(k):
 			kept.append(site.plots[k])
 	site.plots = kept
-	EcsProgress.say(progress, "Growing yards", 0.86)
-	for grid in grids:
-		_yards(site, def, grid)
+	var stalls := def.market_stalls
 	for plot in site.plots:
-		var role := EcsTownEconomy.CATALOG.role(plot["role"])
+		stalls += 1 if plot.get("sells", &"") == &"market" else 0
+	for plot in site.plots:
+		if plot["role"] == &"market":
+			plot["stalls"] = stalls
+	EcsProgress.say(progress, "Growing yards", 0.86)
+	# Grids can overlap once the town's ground has grown over a window: a cell is one plot's at most.
+	var claimed: Dictionary = {}
+	for plot in site.plots:
+		for cell in EcsBuildRules.cells(plot["footprint"]):
+			claimed[cell] = true
+		for cell in EcsBuildRules.cells(plot.get("annex", Rect2i())):
+			claimed[cell] = true
+	for grid in grids:
+		# Tracks out to works were routed after a grid was made; yards must not grow over them.
+		for cell: Vector2i in site.road_cells:
+			if grid.rect.has_point(cell):
+				grid.use[grid.i(cell)] = Use.ROAD
+		_yards(site, def, grid, claimed)
+	for plot in site.plots:
+		var role := EcsTownCensus.CATALOG.role(plot["role"])
 		var grid := _grid_holding(grids, plot["footprint"])
-		if role.annex == &"dock":
+		if role.annex == &"dock" and not plot.has("dock"):
 			var dock := _dock(site, plot, grid)
 			if not dock.is_empty():
 				plot["dock"] = dock
@@ -125,6 +177,9 @@ static func plan(site: EcsSettlementSite, def: EcsSettlementDef, terrain: Dictio
 		for cell: Vector2i in site.plots[k]["yard"]:
 			site.plot_at[cell] = k
 			site.cleared_cells[cell] = true
+		if site.plots[k].has("dock"):
+			for cell: Vector2i in site.plots[k]["dock"]["cells"]:
+				site.cleared_cells[cell] = true
 		var field: Rect2i = site.plots[k].get("annex", Rect2i())
 		for y in range(field.position.y, field.end.y):
 			for x in range(field.position.x, field.end.x):
@@ -139,16 +194,33 @@ static func plan(site: EcsSettlementSite, def: EcsSettlementDef, terrain: Dictio
 	site.economy["short"] = shortfall
 	site.bridges = EcsRoadPlanner.bridges_of(site.road_cells)
 
-## One role def per building on the economy's list, highest priority first.
-static func _entries(site: EcsSettlementSite) -> Array[EcsSettlementRoleDef]:
-	var out: Array[EcsSettlementRoleDef] = []
+## [role def, wealth, sells from home, rooms ([] for its role's)] per building on the census's list, highest priority first.
+static func _entries(site: EcsSettlementSite) -> Array[Array]:
+	var out: Array[Array] = []
 	for entry: Dictionary in site.economy.get("roles", []):
-		var role := EcsTownEconomy.CATALOG.role(entry["role"])
+		var role := EcsTownCensus.CATALOG.role(entry["role"])
+		var wealths: Array = entry.get("wealths", [])
+		var sells: Array = entry.get("sells", [])
+		var rooms: Array = entry.get("rooms", [])
 		for n in int(entry["count"]):
-			out.append(role)
-	out.sort_custom(func(a: EcsSettlementRoleDef, b: EcsSettlementRoleDef) -> bool:
-		return a.priority > b.priority if a.priority != b.priority else a.key < b.key)
+			out.append([role, wealths[n] if n < wealths.size() else role.wealth, sells[n] if n < sells.size() else false,
+				rooms[n] if n < rooms.size() else []])
+	out.sort_custom(func(a: Array, b: Array) -> bool:
+		var ra: EcsSettlementRoleDef = a[0]
+		var rb: EcsSettlementRoleDef = b[0]
+		if ra.priority != rb.priority:
+			return ra.priority > rb.priority
+		return ra.key < rb.key if ra.key != rb.key else a[1] > b[1])
 	return out
+
+## Grows the working ground to hold the town's radius (inside `bounds`); whether it grew.
+static func _hold_radius(site: EcsSettlementSite, bounds: Rect2i) -> bool:
+	var r := ceili(site.radius) + EDGE + 2
+	var need := Rect2i(site.well - Vector2i(r, r), Vector2i(r, r) * 2 + Vector2i.ONE).intersection(bounds)
+	if site.area.encloses(need):
+		return false
+	site.area = site.area.merge(need).intersection(bounds)
+	return true
 
 ## The ground at `rect`: refine_terrain's {kinds, river, deposits} for it.
 static func _refine(ctx: Dictionary, rect: Rect2i) -> Dictionary:
@@ -183,6 +255,10 @@ static func grid_of(site: EcsSettlementSite, rect: Rect2i, terrain: Dictionary) 
 		for y in range(field.position.y, field.end.y):
 			for x in range(field.position.x, field.end.x):
 				grid.use[grid.i(Vector2i(x, y))] = Use.FIELD
+		if plot.has("dock"):
+			for cell: Vector2i in plot["dock"]["cells"] + plot["dock"]["walk"]:
+				if rect.has_point(cell):
+					grid.use[grid.i(cell)] = Use.FIELD
 	grid.reach = _reach(grid.use, rect.size)
 	return grid
 
@@ -200,7 +276,7 @@ static func _resource_of(role: EcsSettlementRoleDef, survey: Dictionary) -> Stri
 
 ## Places one `role` in `grid` at its best-scoring spot of TRIES; false when none fits.
 static func _place_in(site: EcsSettlementSite, def: EcsSettlementDef, grid: Grid, role: EcsSettlementRoleDef,
-		rng: RandomNumberGenerator) -> bool:
+		rng: RandomNumberGenerator, sells: bool = false, rooms: int = 0) -> bool:
 	var inner := grid.rect.grow(-EDGE)
 	if not inner.has_area():
 		return false
@@ -216,7 +292,8 @@ static func _place_in(site: EcsSettlementSite, def: EcsSettlementDef, grid: Grid
 	var best := {}
 	var best_score := -INF
 	for attempt in TRIES:
-		var size := Vector2i(rng.randi_range(role.size_min.x, role.size_max.x), rng.randi_range(role.size_min.y, role.size_max.y))
+		var grow := ROOM_GROWTH * maxi(rooms - 2, 0) if not role.compound else Vector2i.ZERO
+		var size := Vector2i(rng.randi_range(role.size_min.x, role.size_max.x), rng.randi_range(role.size_min.y, role.size_max.y)) + grow
 		if rng.randf() < 0.5:
 			size = Vector2i(size.y, size.x)
 		var at := Vector2.ZERO
@@ -229,11 +306,15 @@ static func _place_in(site: EcsSettlementSite, def: EcsSettlementDef, grid: Grid
 		elif way == 1 and not roadside.is_empty():
 			var pick: Array = roadside[rng.randi_range(0, roadside.size() - 1)]
 			at = (pick[0] as Vector2) + (pick[1] as Vector2) * (1.0 if rng.randf() < 0.5 else -1.0) * rng.randf_range(def.main_width + 2.0, def.main_width + 8.0)
+		elif grid.resource == &"":
+			at = Vector2(site.well) + Vector2.from_angle(rng.randf() * TAU) * site.radius * sqrt(rng.randf())
 		else:
 			at = Vector2(rng.randf_range(inner.position.x, inner.end.x), rng.randf_range(inner.position.y, inner.end.y))
 		if not rect.has_area():
 			rect = Rect2i(Vector2i(at.round()) - size / 2, size)
 		if not inner.encloses(rect) or not _fits(rect, grid, def.plot_gap):
+			continue
+		if grid.resource == &"" and Vector2(rect.get_center()).distance_to(Vector2(site.well)) > site.radius:
 			continue
 		var noise := rng.randf() * 0.15
 		# Every side a door could reach a road from, weighed by the role's rules.
@@ -245,12 +326,21 @@ static func _place_in(site: EcsSettlementSite, def: EcsSettlementDef, grid: Grid
 				field = _annex_for(rect, front, grid, role, rng)
 				if not field.has_area():
 					continue
+			var dock := {}
+			if role.annex == &"dock":
+				dock = _dock(site, {"footprint": rect, "front": front}, grid)
+				if dock.is_empty():
+					continue
 			var score := noise
 			for rule: StringName in role.sites:
 				score += role.sites[rule] * score_rule(site, grid, rule, rect, front)
+			var door := _door(rect, front) + front
+			score += def.affinity_weight * _affinity(site, role.group, door) + def.district_weight * _district(site, role.group, door)
+			if sells:
+				score += SELLER * score_rule(site, grid, &"main_road", rect, front) + SELLER * score_rule(site, grid, &"centre", rect, front)
 			if score > best_score:
 				best_score = score
-				best = {"footprint": rect, "front": front, "field": field}
+				best = {"footprint": rect, "front": front, "field": field, "dock": dock}
 	if best.is_empty():
 		return false
 	var rect: Rect2i = best["footprint"]
@@ -265,6 +355,11 @@ static func _place_in(site: EcsSettlementSite, def: EcsSettlementDef, grid: Grid
 		for y in range(field.position.y, field.end.y):
 			for x in range(field.position.x, field.end.x):
 				grid.use[grid.i(Vector2i(x, y))] = Use.FIELD
+	var dock: Dictionary = best["dock"]
+	if not dock.is_empty():
+		plot["dock"] = dock
+		for cell: Vector2i in dock["cells"] + dock["walk"]:
+			grid.use[grid.i(cell)] = Use.FIELD
 	site.plots.append(plot)
 	return true
 
@@ -344,14 +439,81 @@ static func _musts(site: EcsSettlementSite, grid: Grid, role: EcsSettlementRoleD
 	return false
 
 ## Rule `rule` scored 0–1 for a footprint `rect` facing `front` in `grid`.
+## One point per group the town has, in the catalog's order: each where its group's likes (other
+## points, or place rules) score best against its dislikes, kept apart from the points before it.
+static func _districts(site: EcsSettlementSite, core: Grid, entries: Array[Array], rng: RandomNumberGenerator) -> void:
+	var present: Dictionary = {}
+	for entry in entries:
+		present[(entry[0] as EcsSettlementRoleDef).group] = true
+	var points: Dictionary = {}
+	var inner := core.rect.grow(-EDGE)
+	for group in EcsTownCensus.CATALOG.groups:
+		if not present.has(group.key) or not inner.has_area():
+			continue
+		var best := Vector2i(-1, -1)
+		var best_score := -INF
+		for attempt in DISTRICT_TRIES:
+			var cell := Vector2i(rng.randi_range(inner.position.x, inner.end.x - 1), rng.randi_range(inner.position.y, inner.end.y - 1))
+			if core.use[core.i(cell)] == Use.WATER:
+				continue
+			var score := rng.randf() * 0.05
+			for key in group.likes:
+				score += _toward(site, core, points, key, cell)
+			for key in group.dislikes:
+				score -= _toward(site, core, points, key, cell)
+			for other: Vector2i in points.values():
+				score -= 0.5 * _falloff(Vector2(cell).distance_to(Vector2(other)), Vector2(4, 16))
+			if score > best_score:
+				best_score = score
+				best = cell
+		if best != Vector2i(-1, -1):
+			points[group.key] = best
+	site.quarters["points"] = points
+
+## How near `cell` is to `key`: another group's point, or a place rule; 0 when there is none yet.
+static func _toward(site: EcsSettlementSite, core: Grid, points: Dictionary, key: StringName, cell: Vector2i) -> float:
+	if EcsTownCensus.CATALOG.group(key) != null:
+		if not points.has(key):
+			return 0.0
+		return _falloff(Vector2(cell).distance_to(Vector2(points[key])), DISTRICT_NEAR)
+	return score_rule(site, core, key, Rect2i(cell, Vector2i.ONE), Vector2i.ZERO)
+
+## A plot of `group` with its door at `door`: +1 for each liked group close by, −1 for each disliked
+## one, by the nearest door of that group, averaged over the groups it names.
+static func _affinity(site: EcsSettlementSite, group_key: StringName, door: Vector2i) -> float:
+	var group := EcsTownCensus.CATALOG.group(group_key)
+	if group == null:
+		return 0.0
+	var doors: Dictionary = site.quarters["doors"]
+	var total := 0.0
+	var named := 0
+	for list in [group.likes, group.dislikes]:
+		var sign := 1.0 if list == group.likes else -1.0
+		for key: StringName in list:
+			if EcsTownCensus.CATALOG.group(key) == null:
+				continue
+			named += 1
+			var nearest := INF
+			for other: Vector2i in doors.get(key, []):
+				nearest = minf(nearest, Vector2(door).distance_to(Vector2(other)))
+			if nearest < INF:
+				total += sign * _falloff(nearest, AFFINITY_NEAR)
+	return total / maxi(named, 1)
+
+## The pull of `group`'s district point on a door there: 1 at it, 0 far off.
+static func _district(site: EcsSettlementSite, group: StringName, door: Vector2i) -> float:
+	var points: Dictionary = site.quarters["points"]
+	if not points.has(group):
+		return 0.0
+	return _falloff(Vector2(door).distance_to(Vector2(points[group])), DISTRICT_NEAR)
+
 static func score_rule(site: EcsSettlementSite, grid: Grid, rule: StringName, rect: Rect2i, front: Vector2i) -> float:
 	var door := _door(rect, front) + front
 	match rule:
 		&"plaza":
 			return 1.0 if site.plaza.grow(1).has_point(door) else 0.0
 		&"centre", &"outskirts":
-			var half := Vector2(site.area.size).length() * 0.5
-			var near := 1.0 - clampf(Vector2(rect.get_center()).distance_to(Vector2(site.well)) / half, 0.0, 1.0)
+			var near := 1.0 - clampf(Vector2(rect.get_center()).distance_to(Vector2(site.well)) / maxf(site.radius, 1.0), 0.0, 1.0)
 			return near if rule == &"centre" else 1.0 - near
 		&"main_road":
 			return _falloff(_at(grid, &"main_road", door, site), NEAR[&"main_road"])
@@ -421,10 +583,10 @@ static func _field(grid: Grid, key: StringName, site: EcsSettlementSite) -> Pack
 ## Places `role` out at its resource: first in a window already opened for it, then in new windows
 ## round the catchment's cells of that resource, nearest by route first, each joined by a track.
 static func _go_out(site: EcsSettlementSite, def: EcsSettlementDef, role: EcsSettlementRoleDef, windows: Array[Grid],
-		core: Grid, ctx: Dictionary, rng: RandomNumberGenerator) -> bool:
+		core: Grid, ctx: Dictionary, rng: RandomNumberGenerator, sells: bool = false, rooms: int = 0) -> bool:
 	var resource := _resource_of(role, site.survey)
 	for window in windows:
-		if window.resource == resource and _place_in(site, def, window, role, rng):
+		if window.resource == resource and _place_in(site, def, window, role, rng, sells, rooms):
 			return true
 	var region := ctx["region_def"] as EcsLandDef
 	var scale: int = ctx["scale"]
@@ -444,7 +606,7 @@ static func _go_out(site: EcsSettlementSite, def: EcsSettlementDef, role: EcsSet
 		if laid.is_empty():
 			continue
 		window.reach = _reach(window.use, rect.size)
-		if _place_in(site, def, window, role, rng):
+		if _place_in(site, def, window, role, rng, sells, rooms):
 			windows.append(window)
 			return true
 		# Nothing fits: the window and its track go, so no track leads nowhere.
@@ -792,7 +954,7 @@ static func _open(grid: Grid, cell: Vector2i) -> bool:
 
 ## The yards of `grid`'s plots, grown from their footprints at once a ring at a time over free
 ## land, each to its role's yard depth (or the settlement's); a cell goes to whichever reaches it first.
-static func _yards(site: EcsSettlementSite, def: EcsSettlementDef, grid: Grid) -> void:
+static func _yards(site: EcsSettlementSite, def: EcsSettlementDef, grid: Grid, claimed: Dictionary = {}) -> void:
 	var owner := PackedInt32Array()
 	owner.resize(grid.use.size())
 	owner.fill(-1)
@@ -803,7 +965,7 @@ static func _yards(site: EcsSettlementSite, def: EcsSettlementDef, grid: Grid) -
 		if not grid.rect.encloses(rect) or site.plots[k].get("yard_done", false):
 			continue
 		site.plots[k]["yard_done"] = true
-		var role := EcsTownEconomy.CATALOG.role(site.plots[k]["role"])
+		var role := EcsTownCensus.CATALOG.role(site.plots[k]["role"])
 		depth_of[k] = role.yard_depth if role != null and role.yard_depth > 0 else def.yard_depth
 		site.plots[k]["yard"] = [] as Array[Vector2i]
 		for y in range(rect.position.y, rect.end.y):
@@ -823,7 +985,8 @@ static func _yards(site: EcsSettlementSite, def: EcsSettlementDef, grid: Grid) -
 				if not grid.rect.has_point(next):
 					continue
 				var n := grid.i(next)
-				if owner[n] == -1 and grid.use[n] == Use.FREE:
+				if owner[n] == -1 and grid.use[n] == Use.FREE and not claimed.has(next):
+					claimed[next] = true
 					owner[n] = k
 					(site.plots[k]["yard"] as Array[Vector2i]).append(next)
 					next_ring.append(next)
@@ -847,6 +1010,7 @@ static func _dock(site: EcsSettlementSite, plot: Dictionary, grid: Grid) -> Dict
 		var across := Vector2i(absi(side.y), absi(side.x))
 		var at := _door(rect, side)
 		var shore := Vector2i(-1, -1)
+		var walk: Array[Vector2i] = []
 		for step in range(1, DOCK_REACH + 1):
 			var cell := at + side * step
 			if not grid.rect.has_point(cell) or not grid.rect.has_point(cell + across):
@@ -857,6 +1021,7 @@ static func _dock(site: EcsSettlementSite, plot: Dictionary, grid: Grid) -> Dict
 				break
 			if u == Use.FOOTPRINT or u == Use.FIELD:
 				break
+			walk.append(cell)
 		if shore == Vector2i(-1, -1):
 			continue
 		var cells: Array[Vector2i] = []
@@ -875,7 +1040,7 @@ static func _dock(site: EcsSettlementSite, plot: Dictionary, grid: Grid) -> Dict
 		var boat_cells := [boat, boat + (Vector2i.RIGHT if boat_turns == 0 else Vector2i.DOWN)]
 		var boat_ok := boat_cells.all(func(c: Vector2i) -> bool:
 			return grid.rect.has_point(c) and grid.use[grid.i(c)] == Use.WATER and not site.road_cells.has(c))
-		return {"cells": cells, "boat": boat if boat_ok else Vector2i(-1, -1), "boat_turns": boat_turns, "post": end + across}
+		return {"cells": cells, "walk": walk, "boat": boat if boat_ok else Vector2i(-1, -1), "boat_turns": boat_turns, "post": end + across}
 	return {}
 
 static func _water_pair(grid: Grid, site: EcsSettlementSite, cell: Vector2i, across: Vector2i) -> bool:

@@ -47,6 +47,8 @@ func _check_type(type: EcsBuildingTypeDef) -> void:
 	var worst_usec: int = 0
 	var shapes: Dictionary = {}
 	var cut_rooms: int = 0
+	var backs := [0, 0]
+	var ways := [0, 0]
 	for n in SEEDS:
 		var input := _inputs(type, n)
 		var started := Time.get_ticks_usec()
@@ -70,6 +72,7 @@ func _check_type(type: EcsBuildingTypeDef) -> void:
 				bad[kind] = []
 			(bad[kind] as Array).append("seed %d: %s" % [n, problem])
 		missing += (plan.missing as Array).size()
+		_count_layout(plan, backs, ways)
 		shapes[plan.shape] = int(shapes.get(plan.shape, 0)) + 1
 		var in_shape: Dictionary = {}
 		for cell: Vector2i in plan.cells:
@@ -103,8 +106,42 @@ func _check_type(type: EcsBuildingTypeDef) -> void:
 	_check("%s: every room typed as its role by room detection (%d rooms, %d mistyped)" % [name, rooms, mistyped], mistyped == 0)
 	var shaped := shapes.keys().filter(func(k: StringName) -> bool: return k != &"plain").size()
 	_check("%s: shapes %s; no cut corner is a room" % [name, shapes], cut_rooms == 0 and (type.shapes.size() <= 1 or shaped > 0))
+	_check("%s: furniture by the door's frame: %d of %d back pieces on the wall facing the main door, the way in clear in %d of %d rooms" % [
+		name, backs[0], backs[1], ways[0], ways[1]], backs[0] >= backs[1] * 0.9 and ways[0] >= ways[1] * 0.9)
 	print("[gen] measure: %s, %d buildings: generator %.0f µs each on average, %d µs at worst; %d rooms; %d optional pieces had no room" % [
 		name, SEEDS, float(generate_usec) / SEEDS, worst_usec, rooms, missing])
+
+## For each room whose type places pieces: whether its `back` pieces stand on the wall facing its
+## main door ([on it, all] in `backs`), and whether the way in from that door is free of everything
+## but those ([clear, all] in `ways`).
+func _count_layout(plan: Dictionary, backs: Array, ways: Array) -> void:
+	for room: Dictionary in plan.rooms:
+		var kind := CATALOG.room_type(room.role)
+		if kind == null or kind.layout.is_empty():
+			continue
+		var rect: Rect2i = room.rect
+		var frame := EcsBuildingGenerator._door_frame(rect, plan.doors)
+		if frame.is_empty():
+			continue
+		var way: Dictionary = {}
+		var at: Vector2i = frame["door"]
+		while rect.has_point(at):
+			way[at] = true
+			at += frame["back"]
+		var clear := true
+		for command: EcsBuildCommand in plan.commands:
+			if command.kind != EcsBuildCommand.Kind.PLACE_OBJECT or not rect.has_point(command.cell):
+				continue
+			var place := EcsBuildRules.template(ENTITIES, command.blueprint, &"grid_position") as EcsGridPositionComponent
+			var covers := Rect2i(command.cell, EcsTownGrid.turned(place.size if place != null else Vector2i.ONE, command.value))
+			var where: StringName = kind.layout.get(command.blueprint, &"")
+			if where == &"back":
+				backs[1] += 1
+				backs[0] += 1 if EcsBuildingGenerator._on_edge(rect, covers, frame["back"]) else 0
+			elif way.keys().any(func(c: Vector2i) -> bool: return covers.has_point(c)):
+				clear = false
+		ways[1] += 1
+		ways[0] += 1 if clear else 0
 
 ## A building cut in two, as in a chunk: its left part alone, with its right side marked cut,
 ## keeps every interior cell on that side in a room or sealed region; unmarked, the cut rooms leak.

@@ -13,7 +13,8 @@ const REGION := "res://12. Settlement Generator/defs/lands/region.tres"
 const TOWNS: Array[StringName] = [&"hamlet", &"village", &"town"]
 const SEEDS: int = 3
 const ZOOM: int = 8
-const WORKS: Array[StringName] = [&"market", &"mine", &"quarry", &"lumber_camp", &"clay_pit", &"harbour", &"shrine"]
+const WORKS: Array[StringName] = [&"market", &"iron_mine", &"gold_mine", &"lumber_camp", &"clay_pit", &"harbour", &"shrine",
+	&"cockfight_ring", &"performance_pavilion", &"bathing_place", &"cremation_ground"]
 
 var _checks: int = 0
 var _failures: int = 0
@@ -81,7 +82,7 @@ func _every_rule_lays_its_work() -> void:
 	var first := ""
 	var pieces := 0
 	for key in WORKS:
-		var role := EcsTownEconomy.CATALOG.role(key)
+		var role := EcsTownCensus.CATALOG.role(key)
 		for front in EcsPlotPlanner.SIDES:
 			var site := EcsSettlementSite.new()
 			var rect := Rect2i(Vector2i(20, 20), role.size_max)
@@ -148,7 +149,7 @@ func _docks_and_wheels_stand_on_water() -> void:
 	var mills := 0
 	for site in _sites:
 		for plot in site.plots:
-			var role := EcsTownEconomy.CATALOG.role(plot["role"])
+			var role := EcsTownCensus.CATALOG.role(plot["role"])
 			mills += 1 if role.key == &"watermill" else 0
 			wheels += 1 if plot.has("wheel") else 0
 			if role.annex != &"dock":

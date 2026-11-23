@@ -10,3 +10,6 @@ needs = Array[StringName]([&"nets"])
 priority = 5
 required = Array[StringName]([&"net_rack"])
 optional = Array[StringName]([&"fish_rack", &"barrel"])
+size_min = Vector2i(3, 3)
+size_max = Vector2i(4, 4)
+place = &"any"

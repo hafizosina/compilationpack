@@ -10,3 +10,6 @@ needs = Array[StringName]([&"sawhorse"])
 priority = 6
 required = Array[StringName]([&"sawhorse", &"workbench"])
 optional = Array[StringName]([&"lumber_pile", &"tool_rack"])
+size_min = Vector2i(4, 3)
+size_max = Vector2i(5, 4)
+place = &"any"

@@ -1,3 +1,7 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+
+# Flat vector art build output (re-rendered by the scripts)
+10. Town Generator/art/flatvec/build/
+10. Town Generator/art/flatvec/__pycache__/

@@ -10,3 +10,6 @@ needs = Array[StringName]([&"lumber"])
 priority = 5
 required = Array[StringName]([&"lumber_pile"])
 optional = Array[StringName]([&"crate", &"lumber_pile"])
+size_min = Vector2i(3, 3)
+size_max = Vector2i(4, 4)
+place = &"back"

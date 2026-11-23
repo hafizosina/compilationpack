@@ -25,6 +25,10 @@ extends Resource
 @export var optional_chance: Array[float] = [0.0, 0.5, 1.0]
 ## Chance of one extra inner door, making a loop.
 @export var loop_chance: float = 0.3
+## How it is laid out: &"split" cuts the footprint into rooms; &"grow" starts from the main room
+## on the front and attaches each next room to a wall, sized by its room type, front, back or side
+## as the type says, inside the footprint.
+@export var layout: StringName = &"split"
 ## Shape -> weight for a building of more than one room: plain, l, t (a wing out of the back) or
 ## u (a notch in the back). Empty, or one room, is plain.
 @export var shapes: Dictionary[StringName, float] = {}

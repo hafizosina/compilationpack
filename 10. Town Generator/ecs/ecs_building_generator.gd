@@ -4,6 +4,11 @@ extends RefCounted
 ## Pure and seeded: lays out a building of a type, wealth and size and gives back the build
 ## commands the player's tools send, so everything downstream is the tested path. The same
 ## inputs always give the same commands.
+##   0. Grow (a type laid out by &"grow"): the main room on the front, at the door; each next
+##      room, sized by its room type, attached to a wall of one already placed, front, back or side
+##      as its type says, inside the footprint, never closing in a pocket of open ground. Each
+##      room is its own walled part. One that fits nowhere is left out; when the main room can't
+##      stand, the building is split instead.
 ##   0. Shape: with more than one room, by the type's `shapes`, the footprint's back is cut into
 ##      an L, a T (a wing) or a U; the front stays whole. Each part is walled, and the cut is open
 ##      ground inside the footprint, which room detection and roofs already leave out.
@@ -15,7 +20,9 @@ extends RefCounted
 ##   4. Roles from the type's list, largest room first.
 ##   5. Floor by wealth; the poorest has none.
 ##   6. Furniture by role, turned to fit, against a wall or free-standing, never on a door's
-##      inside neighbour and never cutting a room in two.
+##      inside neighbour and never cutting a room in two; a piece its room type places (`layout`)
+##      goes where it says in the frame of the room's main door (back wall, side, back corner,
+##      beside the door, middle), keeping the way in from the door clear.
 
 ## The commands for a building of `type` with its top-left at `at`; `door`, a cell at `at` on the
 ## facing side, is the entrance when it can be.
@@ -32,7 +39,9 @@ static func plan(type: EcsBuildingTypeDef, size: Vector2i, wealth: int, facing: 
 		door: Vector2i = Vector2i(-1, -1)) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = rng_seed
-	var shaped := _shape(type, size, wealth, facing, rng)
+	var grown := _grow(type, size, wealth, facing, rng, catalog, door - at if door != Vector2i(-1, -1) else door) \
+		if type.layout == &"grow" else {}
+	var shaped := grown if not grown.is_empty() else _shape(type, size, wealth, facing, rng)
 	var parts: Array[Rect2i] = shaped["parts"]
 	var walls: Dictionary = {}
 	var cells: Array[Vector2i] = []
@@ -49,14 +58,14 @@ static func plan(type: EcsBuildingTypeDef, size: Vector2i, wealth: int, facing: 
 			if not in_shape.has(cell):
 				in_shape[cell] = true
 				cells.append(at + cell)
-	var rooms := _split(inside, type, wealth, rng, walls)
+	var rooms: Array[Rect2i] = inside if not grown.is_empty() else _split(inside, type, wealth, rng, walls)
 	var room_of := _room_map(rooms)
 	var entrance := _entrance(size, facing, room_of, walls, rng, door - at if door != Vector2i(-1, -1) else door)
 	var doors: Array[Vector2i] = []
 	if entrance != Vector2i(-1, -1):
 		doors.append(entrance)
 		doors.append_array(_inner_doors(rooms, room_of, walls, room_of[entrance - facing], type, rng))
-	var roles := _roles(rooms, type)
+	var roles: Array[StringName] = grown["roles"] if not grown.is_empty() else _roles(rooms, type)
 	var out: Array[EcsBuildCommand] = [EcsBuildCommand.create_building(Rect2i(at, size))]
 	var wall_id := catalog.wall_id(EcsBuildingTypeDef.by_wealth(type.walls, wealth))
 	for cell: Vector2i in walls:
@@ -79,7 +88,7 @@ static func plan(type: EcsBuildingTypeDef, size: Vector2i, wealth: int, facing: 
 		for blueprint in role.optional:
 			if rng.randf() < chance:
 				pieces.append(blueprint)
-		for placed in _furnish(rooms[k], pieces, doors, entities, rng, missing):
+		for placed in _furnish(rooms[k], pieces, doors, entities, rng, missing, role.layout):
 			out.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT, at + placed[0], placed[1], placed[2]))
 	var listed: Array = []
 	for k in rooms.size():
@@ -89,6 +98,137 @@ static func plan(type: EcsBuildingTypeDef, size: Vector2i, wealth: int, facing: 
 		placed_doors.append(at + cell)
 	return {"commands": out, "shape": shaped["shape"], "cells": cells, "rooms": listed,
 		"entrance": at + entrance if entrance != Vector2i(-1, -1) else entrance, "doors": placed_doors, "missing": missing}
+
+## A grown building: {shape: &"grown", parts (each one walled room), roles}; empty when its main
+## room can't stand. Worked in the facing frame (u along the front, v back from it).
+static func _grow(type: EcsBuildingTypeDef, size: Vector2i, wealth: int, facing: Vector2i, rng: RandomNumberGenerator,
+		catalog: EcsTownCatalog, door: Vector2i) -> Dictionary:
+	var across := size.x if facing.y != 0 else size.y
+	var depth := size.y if facing.y != 0 else size.x
+	var want: int = mini(EcsBuildingTypeDef.by_wealth(type.rooms, wealth), maxi(type.roles.size(), 1))
+	var wanted: Array[StringName] = []
+	for k in want:
+		wanted.append(type.roles[mini(k, type.roles.size() - 1)] if not type.roles.is_empty() else &"")
+	var door_u := -1
+	if door != Vector2i(-1, -1):
+		for u in across:
+			if _frame_cell(Vector2i(u, 0), size, facing) == door:
+				door_u = u
+	var frame: Array[Rect2i] = []
+	var roles: Array[StringName] = []
+	# The main room: on the front, over the door.
+	var main := catalog.room_type(wanted[0])
+	var main_sizes := _outer_sizes(main, type, rng)
+	for outer: Vector2i in main_sizes:
+		if outer.x > across or outer.y > depth:
+			continue
+		var lo := 0
+		var hi := across - outer.x
+		if door_u >= 0:
+			lo = clampi(door_u - outer.x + 2, 0, hi)
+			hi = clampi(door_u - 1, lo, hi)
+		frame.append(Rect2i(rng.randi_range(lo, hi), 0, outer.x, outer.y))
+		roles.append(wanted[0])
+		break
+	if frame.is_empty():
+		return {}
+	for k in range(1, wanted.size()):
+		var room := catalog.room_type(wanted[k])
+		var place: StringName = room.place if room != null else &"any"
+		var best := Rect2i()
+		var best_score := -INF
+		for outer: Vector2i in _outer_sizes(room, type, rng):
+			for rect in _attachments(frame, outer, place):
+				if rect.position.x < 0 or rect.position.y < 0 or rect.end.x > across or rect.end.y > depth:
+					continue
+				if not _clear_of(rect, frame) or _closes_pocket(rect, frame, Vector2i(across, depth)):
+					continue
+				var score := _shared(rect, frame) * 0.5 + rng.randf()
+				if score > best_score:
+					best_score = score
+					best = rect
+			if best.has_area():
+				break
+		if best.has_area():
+			frame.append(best)
+			roles.append(wanted[k])
+	var parts: Array[Rect2i] = []
+	for rect in frame:
+		parts.append(_from_frame(rect, size, facing))
+	return {"shape": &"grown", "parts": parts, "roles": roles}
+
+## Outer sizes (walls included) to try for a room of `room`: a random one in its range, its
+## smallest, its largest, each also turned.
+static func _outer_sizes(room: EcsRoomTypeDef, type: EcsBuildingTypeDef, rng: RandomNumberGenerator) -> Array[Vector2i]:
+	var least := room.size_min if room != null else type.min_room
+	var most := room.size_max if room != null else type.min_room
+	var mid := Vector2i(rng.randi_range(least.x, most.x), rng.randi_range(least.y, most.y))
+	var out: Array[Vector2i] = []
+	for inner: Vector2i in [mid, least, most]:
+		for turned: Vector2i in [inner, Vector2i(inner.y, inner.x)]:
+			if not out.has(turned + Vector2i(2, 2)):
+				out.append(turned + Vector2i(2, 2))
+	return out
+
+## Every spot for a room `outer` big sharing a wall line with a room of `frame` on the sides
+## `place` allows (front: beside one, flush with the front; back: behind one; side: beside one),
+## each overlapping it by enough for a door.
+static func _attachments(frame: Array[Rect2i], outer: Vector2i, place: StringName) -> Array[Rect2i]:
+	var out: Array[Rect2i] = []
+	for p in frame:
+		if place == &"back" or place == &"any":
+			for u in range(p.position.x - outer.x + 3, p.end.x - 2):
+				out.append(Rect2i(u, p.end.y - 1, outer.x, outer.y))
+		if place != &"back":
+			for v in range(p.position.y - outer.y + 3, p.end.y - 2):
+				if place == &"front" and v != 0:
+					continue
+				out.append(Rect2i(p.end.x - 1, v, outer.x, outer.y))
+				out.append(Rect2i(p.position.x - outer.x + 1, v, outer.x, outer.y))
+	return out
+
+## Whether `rect` and every room of `frame` meet only on their walls.
+static func _clear_of(rect: Rect2i, frame: Array[Rect2i]) -> bool:
+	for other in frame:
+		if rect.grow(-1).intersects(other) or other.grow(-1).intersects(rect):
+			return false
+	return true
+
+## Cells of wall `rect` shares with the rooms of `frame`.
+static func _shared(rect: Rect2i, frame: Array[Rect2i]) -> int:
+	var n := 0
+	for other in frame:
+		var both := rect.intersection(other)
+		n += both.size.x * both.size.y
+	return n
+
+## Whether adding `rect` leaves open ground inside the footprint that can't reach its edge.
+static func _closes_pocket(rect: Rect2i, frame: Array[Rect2i], size: Vector2i) -> bool:
+	var solid: Dictionary = {}
+	for r in frame + [rect]:
+		for cell in EcsBuildRules.cells(r):
+			solid[cell] = true
+	var open := 0
+	var queue: Array[Vector2i] = []
+	var seen: Dictionary = {}
+	for y in size.y:
+		for x in size.x:
+			var cell := Vector2i(x, y)
+			if solid.has(cell):
+				continue
+			open += 1
+			if x == 0 or y == 0 or x == size.x - 1 or y == size.y - 1:
+				seen[cell] = true
+				queue.append(cell)
+	while not queue.is_empty():
+		var cell: Vector2i = queue.pop_back()
+		for side: Vector2i in [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]:
+			var next := cell + side
+			if next.x < 0 or next.y < 0 or next.x >= size.x or next.y >= size.y or solid.has(next) or seen.has(next):
+				continue
+			seen[next] = true
+			queue.append(next)
+	return seen.size() < open
 
 ## The building's parts, each walled on its perimeter, two touching parts sharing a wall line:
 ## {shape, parts}. With more than one room the type's `shapes` may cut the back (away from
@@ -290,7 +430,9 @@ static func _roles(rooms: Array[Rect2i], type: EcsBuildingTypeDef) -> Array[Stri
 ## Places `pieces` in `room`, in order: [cell, blueprint, turns] for each that fits; those that
 ## don't go to `missing`. A door's inside neighbour stays free, and the free cells stay one area.
 static func _furnish(room: Rect2i, pieces: Array[StringName], doors: Array[Vector2i],
-		entities: EcsEntityCatalog, rng: RandomNumberGenerator, missing: Array[StringName]) -> Array:
+		entities: EcsEntityCatalog, rng: RandomNumberGenerator, missing: Array[StringName],
+		layout: Dictionary[StringName, StringName] = {}) -> Array:
+	var frame := _door_frame(room, doors)
 	var taken: Dictionary = {}
 	for door in doors:
 		for side: Vector2i in [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]:
@@ -319,9 +461,28 @@ static func _furnish(room: Rect2i, pieces: Array[StringName], doors: Array[Vecto
 						loose.append([rect.position, turns])
 					else:
 						fits.append([rect.position, turns])
-		# The flood fill only for the spot drawn; one that splits the room is dropped and another drawn.
+		# A piece with a place in the door's frame takes the best spot there that keeps the room one area;
+		# when there is none it falls back to anywhere, as before.
 		var pick: Array = []
-		for options: Array in [fits, loose]:
+		var where: StringName = layout.get(blueprint, &"")
+		if where != &"" and not frame.is_empty():
+			var spots: Array = (fits + loose).filter(func(spot: Array) -> bool:
+				return _fits_place(room, Rect2i(spot[0], EcsTownGrid.turned(size, spot[1])), spot[1], where, frame, to_wall))
+			spots.sort_custom(func(x: Array, y: Array) -> bool:
+				return _place_score(room, Rect2i(x[0], EcsTownGrid.turned(size, x[1])), where, frame) \
+					< _place_score(room, Rect2i(y[0], EcsTownGrid.turned(size, y[1])), where, frame))
+			for spot: Array in spots:
+				if _stays_one_area(room, Rect2i(spot[0], EcsTownGrid.turned(size, spot[1])), taken):
+					pick = spot
+					break
+		# The flood fill only for the spot drawn; one that splits the room is dropped and another drawn.
+		# Spots off the way in from the door first, when the room has a door.
+		var tiers: Array = [fits, loose]
+		if not frame.is_empty():
+			var off := func(spot: Array) -> bool:
+				return not _on_way(room, Rect2i(spot[0], EcsTownGrid.turned(size, spot[1])), frame)
+			tiers = [fits.filter(off), loose.filter(off), fits, loose]
+		for options: Array in tiers:
 			while pick.is_empty() and not options.is_empty():
 				var k := rng.randi() % options.size()
 				var spot: Array = options[k]
@@ -336,6 +497,73 @@ static func _furnish(room: Rect2i, pieces: Array[StringName], doors: Array[Vecto
 			taken[cell] = true
 		placed.append([pick[0], blueprint, pick[1]])
 	return placed
+
+## The room seen from its main door (the first door touching it: the entrance, or the one toward
+## it): {door: the cell inside it, back: the direction from the door to the back wall}; empty with
+## no door.
+static func _door_frame(room: Rect2i, doors: Array[Vector2i]) -> Dictionary:
+	for door in doors:
+		for side: Vector2i in [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]:
+			if room.has_point(door + side) and not room.has_point(door):
+				return {"door": door + side, "back": side}
+	return {}
+
+## Whether `rect` (turned `turns`) stands where `where` says in the door's frame. The way in, the
+## line of cells from the door to the back wall, is kept free by every place but `back`.
+static func _fits_place(room: Rect2i, rect: Rect2i, turns: int, where: StringName, frame: Dictionary, to_wall: bool) -> bool:
+	var back: Vector2i = frame["back"]
+	var inside: Vector2i = frame["door"]
+	var across := Vector2i(absi(back.y), absi(back.x))
+	var on_way := _on_way(room, rect, frame)
+	var at_back := _on_edge(room, rect, back)
+	var at_side := _on_edge(room, rect, across) or _on_edge(room, rect, -across)
+	var faces_in := func(side: Vector2i) -> bool: return not to_wall or _back_to(rect, turns, room, side)
+	match where:
+		&"back":
+			return at_back and faces_in.call(back)
+		&"side":
+			return at_side and not on_way and (faces_in.call(across) or faces_in.call(-across))
+		&"corner":
+			return at_back and at_side and not on_way
+		&"beside_door":
+			return _on_edge(room, rect, -back) and not on_way and rect.grow(1).has_point(inside)
+		&"centre":
+			return not on_way and not (at_back or at_side or _on_edge(room, rect, -back))
+		&"rows":
+			return not on_way
+	return true
+
+## Whether `rect` covers a cell of the way in: the line from the door to the back wall.
+static func _on_way(room: Rect2i, rect: Rect2i, frame: Dictionary) -> bool:
+	var at: Vector2i = frame["door"]
+	while room.has_point(at):
+		if rect.has_point(at):
+			return true
+		at += frame["back"]
+	return false
+
+## Lower is better: `back` and `centre` near the middle, the others nearer the back wall.
+static func _place_score(room: Rect2i, rect: Rect2i, where: StringName, frame: Dictionary) -> float:
+	var mid := Vector2(room.position) + Vector2(room.size) / 2.0
+	var centre := Vector2(rect.position) + Vector2(rect.size) / 2.0
+	if where == &"back" or where == &"centre":
+		return centre.distance_squared_to(mid)
+	return centre.distance_squared_to(mid + Vector2(frame["back"]) * Vector2(room.size) / 2.0)
+
+## Whether `rect` touches `room`'s edge in direction `side`.
+static func _on_edge(room: Rect2i, rect: Rect2i, side: Vector2i) -> bool:
+	if side == Vector2i.UP:
+		return rect.position.y == room.position.y
+	if side == Vector2i.DOWN:
+		return rect.end.y == room.end.y
+	if side == Vector2i.LEFT:
+		return rect.position.x == room.position.x
+	return rect.end.x == room.end.x
+
+## Whether a piece turned `turns` on `rect` has its back on `room`'s edge in direction `side`.
+static func _back_to(rect: Rect2i, turns: int, room: Rect2i, side: Vector2i) -> bool:
+	var faces: Vector2i = [Vector2i.UP, Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT][posmod(turns, 4)]
+	return faces == side and _on_edge(room, rect, side)
 
 static func _free(rect: Rect2i, taken: Dictionary) -> bool:
 	for cell in EcsBuildRules.cells(rect):

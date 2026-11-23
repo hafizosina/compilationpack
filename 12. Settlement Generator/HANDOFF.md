@@ -840,3 +840,177 @@ plot's field or pen.
 
 `plot_test` now checks all 201 farmhouses, herders, barns and stables have their field or pen.
 
+
+---
+
+## 11. The census — people before buildings (2026-11-23, `BETTER_TOWNS_PLAN.md` §C, order step 1)
+
+Decided with the author: **people first**, Indo-Malay (Majapahit, Srivijaya), English names in data,
+and **only what places or sizes a building** — trade itself is the simulation's.
+
+**`EcsTownCensus.plan(facts, def, seed, cell)`** replaces `EcsTownEconomy` (pure, seeded; the
+result stays on `site.economy`):
+1. **Main trade:** the best-scoring character the tier and survey allow. A character now names the
+   role whose work it **exports**; trading and port export nothing and raise traffic.
+2. **Traffic:** quiet, steady, busy, crossroads (35/35/20/10%), a trading town at least busy;
+   travellers a day by level × the tier's `traffic_scale` (hamlet 0.3, village 0.6, town 1).
+3. **People:** population in the tier's range (hamlet 30–70, village 120–250, town 350–700), in
+   households of 1–7 (single, couple, with children, extended).
+4. **Makers:** for each `EcsResourceDef` (food, salt, drink, wood, thatch, clay, metal, cloth; spice,
+   forest goods, gold as trade goods), need = people × `per_person`; its makers (roles that `make`
+   it) fill it, the exporter first, each held to `capacity × survey fact × (catchment/40)²`. The
+   exporter makes `surplus` × the need (hamlet 1.5, village 2, town 3), or its trade good for
+   export; a trade good that isn't the main trade gets one maker from village up.
+5. **Buffalo:** middling and richer rice farms get one while herders (pasture) and traders (by
+   traffic) have them; a buffalo farm makes more, so the poorest hand farms are dropped.
+6. **Services** one per `per_people` (travellers counted) or `per_town`; **inns** one per
+   `travellers_per` staying the night; **entertainment** by `traffic_min`.
+7. **Owners:** each workplace with `places` goes to a family, the most needed first (food, other
+   needs, services, traffic's, trade goods); one with no family left is dropped and counted in
+   `short_of_people`. Then what **serves** another role (rice barn, pounding shed, clay pit, smelter,
+   boat shed, stores) by `per_served`, from what survived. The village head's family is rich and
+   lives in the head's house.
+8. **Wealth:** the owner's, rolled from the role's `wealth_odds`; in a busy town inns and trade a
+   step up. Families with no workplace are labourers (mostly poor).
+9. **Homes:** a family lives at its workplace when the role says `lives_at_work` and it isn't
+   rich; every other family gets a house by its wealth (poor house, house, rich house).
+10. **Tally:** what the makers left standing make, against the need: imported and exported.
+
+Result: {character, scores, traffic, population, families [{people, adults, children, elders, job,
+wealth, home}], resources {need, made, imported, exported}, roles [{role, count, from, wealths}],
+labourers, short_of_people, short_of_workers}.
+
+**Each building carries its family's wealth:** `EcsPlotPlanner._entries` hands `[role, wealth]` and
+the plot gains `wealth`; `EcsTownBuilder` uses it before the role's or the place's.
+
+**Data** (`economy.tres`, rewritten): 44 roles (homes, farming, food, crafts, works, faith, trade,
+entertainment), 12 resources, 11 characters. **Module 10's European types stand in** until
+grown buildings and the content retheme (order steps 3 and 4): a rice farm is a farmhouse, a temple
+a chapel, a rice pounding shed a mill. `EcsSettlementDef` lost `base_roles` and `trade_scale` and
+gained `population`, `surplus`, `traffic_scale`. Roles gained `layout`, `max_tier` and a Census group;
+lost `residents` and `feeds`. Outdoor works got stand-in rules for the cockfighting ring,
+performance pavilion and bathing place.
+
+**Viewer:** the info panel gives the main trade, traffic, people by wealth and who lives at work,
+made/needed per resource, and the buildings. Groups are tinted: elite, farming and entertainment
+are new.
+
+**Not yet:** quarters (step 2); houses sized by family (step 3); the watermill's wheel code stays
+but nothing builds a watermill now.
+
+---
+
+## 12. Quarters — likes, dislikes, district points, selling (2026-11-23, plan §1, order step 2)
+
+Decided: **affinity leads, the district is a weak suggestion**; entertainment has no fixed spot;
+crafters sell from home or at the market; heavy goods are sold where they are made.
+
+**`EcsGroupDef`** (`economy.tres`, `groups`, in the order their points are placed): a group's
+`likes` and `dislikes`, each another group or a place rule (plaza, main road, water, outskirts,
+river).
+
+| Group | Likes | Dislikes |
+|---|---|---|
+| elite | plaza, faith | works, entertainment |
+| faith | plaza, elite | works, entertainment |
+| trade | plaza, main road, water | — |
+| food | main road, trade | faith |
+| entertainment | trade, food | faith, elite |
+| craft | main road, home | — |
+| home | trade, faith | works |
+| works | water, outskirts | home, elite, faith, food |
+| farming | outskirts, river | — |
+
+**`EcsPlotPlanner`:**
+- `_districts`: before any plot, one point per group the town has: the best of 80 cells for its
+  likes (another point near, or a place rule) against its dislikes, kept off the points before it.
+  `site.quarters.points`.
+- Each spot is scored by the role's own rules **plus** `affinity_weight` (1.0) × its group's
+  likes and dislikes of the doors already placed (+1 each liked group close by, −1 each disliked,
+  by the nearest door, fading 6–40 cells, averaged) **plus** `district_weight` (0.3) × the pull to
+  its group's point (fading 8–80 cells).
+- **Selling:** the census rolls whether each maker sells from home (`sells_at_home`: potter 0.7,
+  thatcher and palm tapper 0.6, carpenter 0.5, weaver 0.4, bladesmith 0.8). A home seller weighs
+  the main road and the centre (`SELLER` 0.4 each); if its door still lands past `sell_reach` (40)
+  from the well it sells at the market. `plot.sells` is `home` or `market`; the market's `stalls` =
+  `market_stalls` (2) + its sellers, laid round its edge, the rest scattered.
+- **Heavy goods:** a role naming a `stockpile` (brick kiln, smelter: a stone pile standing in for
+  bricks and ore) gets it in its yard on the cell nearest the lane. Lumber camps and mines are
+  outdoor works with their piles already.
+
+**Viewer:** each district point is a disc of its group's tint; a shop front's door is ringed.
+
+**Tests** (`plot_test`): every group the town has has its point; homes stand nearer trade than
+works; every home seller is within reach, and the market has a stall for each market seller.
+
+---
+
+## 13. Grown buildings, houses by family, compounds (2026-11-23, plan §2 and §C.7, order step 3)
+
+Module 10's side is its HANDOFF §13c: every building type now **grows** room by room (the main
+room on the front at the door, each next room attached front, back or side as its room type says).
+
+**Houses by family** (`EcsTownCensus._rooms`): each building a family lives in gets its own room
+list (`roles[].rooms`, `plot.rooms`), which replaces its role's:
+- a house: its role's rooms (poor: one room; middling: a main room and kitchen; rich: hall,
+  kitchen, store) plus sleeping rooms — poor none (they sleep in the main room), middling 1 (2 above
+  four people), rich one per couple and one for the children;
+- a workplace lived in: its own rooms plus a store, a kitchen from middling up, and at least one
+  sleeping room. So a poor potter has workshop, store and a bedroom.
+A plot grows by `ROOM_GROWTH` (3×2) for each room past two; a walled role of two rooms or more is
+at least 9×7–11×9.
+
+**Compounds** (`role.compound`: rich compound, village head's compound; `EcsTownBuilder._compound`):
+a fence round the plot with a 2-cell gate at the door; the main house across the back facing the
+gate (the census's rooms, its kitchen moved out when a kitchen house stands); in front of it,
+either side of a clear way in, an **open pavilion** (a wood floor and four posts, stumps standing
+in, no roof — decided for now) and a **kitchen house** facing the way in. A plot too small for it is
+built as one house. `plot.building` gains `at` (the house's corner) and `gate`; `plot.outbuildings`
+lists the pavilion and kitchen house. The building test finds the house at `at` and checks the gate
+is on a road.
+
+**Not yet:** a storehouse in the compound; a pavilion that is a roofed open building (module 10).
+
+---
+
+## 14. Indo-Malay content and furniture by the door (2026-11-23, plan §5 and §4, order steps 4 and 5)
+
+Module 10's side is its HANDOFF §13d (pieces drawn in the flat vector style, bamboo and brick walls,
+11 new room types, temple, rice pounding shed and rice barn; chapel, mill and barn removed; furniture
+placed in the frame of each room's main door). Here the roles point at them: temple → temple, rice
+pounding shed → pounding_shed, rice barn → rice_barn, potter → pottery, weaver → weaving room, salt
+works → boiling room, brick kiln → kiln room, healer → herb room, guard post → guard room, merchant,
+spice store, sorting shed and harbour office → counting room; huts gain a sleeping room.
+
+---
+
+## 15. Dressing — plaza, lamps, yards, paths (2026-11-23, plan step 7b, order step 6)
+
+`EcsTownBuilder` after the buildings:
+- **Plaza:** a notice board and benches round its edge, one every `bench_every` (5) cells, along it;
+  the well's ring, the cells where a road meets it and those before a door are kept clear.
+- **Lamp posts** on a main road's verge every `lamp_every` (12) cells within the town's radius, on a
+  cell no road, plot or yard holds.
+- **House yards** (poor and middling houses) by wealth: a fence round the yard's outer cells, open by
+  the lane (`yard_fence` 0.2 / 0.55 / 0.8), a garden bed, a chicken coop, a banana tree
+  (`yard_garden`, `yard_coop`, `yard_tree`); nothing on the cells by the door.
+- **Paths:** lanes and tracks take `lane_floor`, a new dirt path floor; main roads keep the road floor.
+
+New outdoor pieces (`indomalay_outdoor.png`, drawn by `10. Town Generator/art/flatvec/indomalay_outdoor.py`):
+bench, lamp post, garden bed, chicken coop, banana tree, pyre. **Not yet:** the cremation ground (the
+pyre is drawn).
+
+---
+
+## 16. The town is a point, not a box (2026-11-23)
+
+Decided: like Better Towns, the town is **the well and a radius**; no rule looks at a rectangle.
+- `site.radius` = `radius_base` (30) + `radius_per_person` (6.5) × √people, set after the census.
+- A plot in the town stands with its centre within the radius; spots are drawn round the well inside
+  it. `centre` and `outskirts`, wealth by place and lamp posts are measured against the radius.
+- A building that fits nowhere grows the **radius** by `GROW`, up to `MAX_GROWS` times.
+- `site.area` stays only as the **working ground**: the rectangle refined to L1 for planning, grown
+  to hold the radius (`_hold_radius`). `EcsSettlementDef.size` is that first ground, not a border.
+- Works still go out to their resource in outlying windows, beyond the radius.
+- Viewer: the town is outlined as a circle round the well. Tests count plots beyond the radius
+  instead of outside the area.

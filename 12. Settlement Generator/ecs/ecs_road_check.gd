@@ -24,8 +24,8 @@ static func problems(site: EcsSettlementSite, region_plan: Dictionary, region_de
 			out.append("a main road doesn't start at the site")
 		if end.x != 0 and end.y != 0 and end.x != w - 1 and end.y != h - 1:
 			out.append("a main road ends at %s, not the region's edge" % end)
-	if site.bridges > def.max_bridges:
-		out.append("%d bridges, more than %d" % [site.bridges, def.max_bridges])
+	if site.main_bridges > def.max_bridges:
+		out.append("%d bridges on the main roads, more than %d" % [site.main_bridges, def.max_bridges])
 	out.append_array(_ground(site, region_plan, region_def, def, rng_seed, scale, shares))
 	out.append_array(_network(site))
 	for node: Dictionary in nodes:

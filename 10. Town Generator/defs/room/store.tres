@@ -5,8 +5,12 @@
 [resource]
 script = ExtResource("1")
 id = &"store"
-display_name = "Store room"
+display_name = "Store"
 needs = Array[StringName]([&"storage"])
 priority = 1
-required = Array[StringName]([&"chest"])
-optional = Array[StringName]([&"barrel", &"shelf"])
+required = Array[StringName]([&"storage_jar"])
+optional = Array[StringName]([&"storage_jar", &"crate"])
+size_min = Vector2i(3, 3)
+size_max = Vector2i(4, 3)
+place = &"side"
+layout = Dictionary[StringName, StringName]({&"storage_jar": &"rows", &"crate": &"rows"})

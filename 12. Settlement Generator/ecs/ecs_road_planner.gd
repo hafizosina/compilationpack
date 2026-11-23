@@ -68,16 +68,20 @@ static func plan(site: EcsSettlementSite, region_plan: Dictionary, region_def: E
 		var bridge := water.at(cell)
 		site.road_cells[cell] = &"bridge" if bridge else &"main"
 	site.bridges = bridges_of(site.road_cells)
+	site.main_bridges = site.bridges
 	return true
 
-## Every road cell of `site` floored in its commands (road, or wood for a bridge) and cleared, with
+## Every road cell of `site` floored in its commands (road for main roads, a dirt path for lanes and
+## tracks, wood for a bridge) and cleared, with
 ## a `verge` round main roads and bridges.
 static func lay(site: EcsSettlementSite, def: EcsSettlementDef, catalog: EcsTownCatalog) -> void:
 	var road_floor := catalog.floor_id(def.road_floor)
+	var lane_floor := catalog.floor_id(def.lane_floor)
 	var bridge_floor := catalog.floor_id(def.bridge_floor)
 	for cell: Vector2i in site.road_cells:
 		var kind: StringName = site.road_cells[cell]
-		site.commands.append(EcsBuildCommand.make(EcsBuildCommand.Kind.SET_FLOOR, cell, bridge_floor if kind == &"bridge" else road_floor))
+		var floor := bridge_floor if kind == &"bridge" else (road_floor if kind == &"main" else lane_floor)
+		site.commands.append(EcsBuildCommand.make(EcsBuildCommand.Kind.SET_FLOOR, cell, floor))
 		site.cleared_cells[cell] = true
 		if kind != &"lane":
 			for dy in range(-def.verge, def.verge + 1):

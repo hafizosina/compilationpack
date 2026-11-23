@@ -197,11 +197,13 @@ func _roads_load_through_the_build_system() -> void:
 	var accepted := commands.filter(func(c: EcsBuildCommand) -> bool: return c.result == &"ok").size()
 	_check("all %d commands of the town's area accepted by the build system" % commands.size(), accepted == commands.size())
 	var road := CATALOG.floor_id(def.road_floor)
+	var lane := CATALOG.floor_id(def.lane_floor)
 	var bridge := CATALOG.floor_id(def.bridge_floor)
 	var floored := true
 	for cell: Vector2i in site.road_cells:
 		if area.has_point(cell):
-			var want := bridge if site.road_cells[cell] == &"bridge" else road
+			var kind: StringName = site.road_cells[cell]
+			var want := bridge if kind == &"bridge" else (road if kind == &"main" else lane)
 			if grid.floor[EcsTownGrid.index(grid, cell - area.position)] != want:
 				floored = false
 	_check("every road cell in the area has its floor", floored)

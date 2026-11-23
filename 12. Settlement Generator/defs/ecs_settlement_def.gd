@@ -6,8 +6,12 @@ extends Resource
 
 @export var key: StringName = &""
 @export var display_name: String = ""
-## The town's area in L1 cells.
+## The ground first planned round the well, in L1 cells: a working rectangle, not the town's border.
+## The town is the well and a radius (`radius_base` + `radius_per_person` × √people), which grows
+## when a building fits nowhere; the ground grows to hold it.
 @export var size: Vector2i = Vector2i(160, 120)
+@export var radius_base: float = 30.0
+@export var radius_per_person: float = 6.5
 
 @export_group("Town")
 ## The plaza at the town's centre, in L1 cells, its floor, and the well in its middle.
@@ -32,6 +36,8 @@ extends Resource
 @export var lane_width: int = 1
 ## The floor of a road, and of a road over water: a bridge.
 @export var road_floor: StringName = &"road"
+## The floor of lanes and tracks: a dirt path.
+@export var lane_floor: StringName = &"dirt_path"
 @export var bridge_floor: StringName = &"wood"
 ## What a step onto each kind of ground costs a route, in EcsTerrainGenerator's kind order: grass,
 ## water, sand, rock, forest. Water's is high, so a bridge is built only when going round is far longer.
@@ -47,10 +53,12 @@ extends Resource
 @export_enum("Hamlet", "Village", "Town", "City", "Great City") var tier: int = 0
 ## How far its people walk for what they live on, as a route cost over `road_costs` (grass 1 a region cell).
 @export var catchment: float = 40.0
-## Role key -> count range every settlement of this tier has.
-@export var base_roles: Dictionary[StringName, Vector2i] = {}
-## The main trade's core counts are multiplied by this.
-@export var trade_scale: float = 1.0
+## How many people live in it, rolled in this range.
+@export var population: Vector2i = Vector2i(30, 70)
+## The main trade makes this many times what the town needs; the rest is sold.
+@export var surplus: float = 1.5
+## Travellers a day are the traffic level's times this: a hamlet sees fewer than a town.
+@export var traffic_scale: float = 1.0
 @export_group("Plots")
 ## A field's ground and what grows on it, in rows with a path between.
 @export var field_terrain: StringName = &"dirt"
@@ -61,3 +69,21 @@ extends Resource
 @export var yard_depth: int = 4
 ## The dearest route a lane may take from a door to a road; a plot further out is dropped.
 @export var lane_reach: float = 250.0
+## How much a plot's group's likes and dislikes weigh against its own site rules.
+@export var affinity_weight: float = 1.0
+## How much the pull toward its group's district point weighs: a weak suggestion.
+@export var district_weight: float = 0.3
+## A crafter selling from home whose door lands further than this many cells from the well sells
+## at the market instead; the market has `market_stalls` stalls plus one per such seller.
+@export var sell_reach: int = 40
+@export var market_stalls: int = 2
+@export_group("Dressing")
+## Benches round the plaza's edge, one every this many cells; a lamp post every this many cells of
+## main road inside the area.
+@export var bench_every: int = 5
+@export var lamp_every: int = 12
+## Chance a house's yard is fenced, has a garden bed, a chicken coop, a banana tree; by wealth, poorest first.
+@export var yard_fence: Array[float] = [0.2, 0.55, 0.8]
+@export var yard_garden: Array[float] = [0.35, 0.7, 0.9]
+@export var yard_coop: Array[float] = [0.5, 0.5, 0.3]
+@export var yard_tree: Array[float] = [0.4, 0.5, 0.6]

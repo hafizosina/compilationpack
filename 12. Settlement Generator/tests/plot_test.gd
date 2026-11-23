@@ -1,6 +1,7 @@
 extends Node2D
 
-## Headless test for module 12's steps 4 and 5b: plots placed by role, then the lanes they need.
+## Headless test for module 12's steps 4 and 5b: plots placed by role, then the lanes they need; and
+## quarters (BETTER_TOWNS_PLAN.md §1): groups' likes and dislikes, district points, selling.
 ##
 ##   "$GODOT" --headless --path . "res://12. Settlement Generator/tests/plot_test.tscn"
 ##
@@ -23,6 +24,7 @@ func _ready() -> void:
 	CATALOG.number()
 	_every_town_gets_sound_plots()
 	_buildings_stand_where_their_rules_say()
+	_quarters_follow_likes_and_dislikes()
 	_the_same_seed_gives_the_same_plots()
 	_plots_load_through_the_build_system()
 	print("[plot] %d/%d checks passed" % [_checks - _failures, _checks])
@@ -75,26 +77,25 @@ func _every_town_gets_sound_plots() -> void:
 			if site.plots.size() + missing != listed:
 				problems.append("%d plots and %d short for %d buildings" % [site.plots.size(), missing, listed])
 			for plot in site.plots:
-				if not site.area.encloses(plot["footprint"]):
+				if Vector2((plot["footprint"] as Rect2i).get_center()).distance_to(Vector2(site.well)) > site.radius:
 					outlying += 1
-					if EcsTownEconomy.CATALOG.role(plot["role"]).group != &"works" and EcsPlotPlanner._resource_of(EcsTownEconomy.CATALOG.role(plot["role"]), site.survey) == &"":
-						problems.append("a %s outside the area" % plot["role"])
+					if EcsTownCensus.CATALOG.role(plot["role"]).group != &"works" and EcsPlotPlanner._resource_of(EcsTownCensus.CATALOG.role(plot["role"]), site.survey) == &"":
+						problems.append("a %s beyond the town's radius" % plot["role"])
 			plots += site.plots.size()
 			wanted += listed
 			short += missing
 			windows += site.outlying.size()
-			grown += 1 if site.area.size != def.size else 0
+			grown += 1 if site.radius > def.radius_base + def.radius_per_person * sqrt(float(site.economy["population"])) else 0
 			if not problems.is_empty() and first.is_empty():
 				first = problems
 				first.push_front("seed %d:" % s)
-		_check("%s: %d seeds, %d of %d buildings placed (%d short), %d in %d outlying windows, %d areas grown, all sound%s" % [town, SEEDS,
+		_check("%s: %d seeds, %d of %d buildings placed (%d short), %d in %d outlying windows, %d radii grown, all sound%s" % [town, SEEDS,
 			plots, wanted, short, outlying, windows, grown, "" if first.is_empty() else "  " + " ".join(first)],
 			first.is_empty() and plots >= wanted * 0.9)
 		print("[plot]   %s: a town with its roads and plots takes %d ms on average; short: %s" % [town, usec / SEEDS / 1000, short_by])
 
-## Where buildings land: the manor faces the plaza, every farmhouse its field and every herder, barn
-## and stable its pen, and houses stand
-## nearer the plaza than farmhouses.
+## Where buildings land: the village head's house faces the plaza, every farm its field and every
+## buffalo herder its pen, and houses stand nearer the plaza than farms.
 func _buildings_stand_where_their_rules_say() -> void:
 	var manors := 0
 	var on_plaza := 0
@@ -104,28 +105,94 @@ func _buildings_stand_where_their_rules_say() -> void:
 		for plot in site.plots:
 			var d := Vector2((plot["footprint"] as Rect2i).get_center()).distance_to(Vector2(site.well))
 			match plot["role"]:
-				&"manor":
+				&"head_house":
 					manors += 1
 					on_plaza += 1 if site.plaza.grow(1).has_point(plot["door"] + plot["front"]) else 0
 				&"house":
 					houses[0] += d
 					houses[1] += 1
-				&"farmhouse":
+				&"rice_farm", &"buffalo_farm":
 					farms[0] += d
 					farms[1] += 1
 	var annexes := 0
 	var wanted := 0
 	for site in _sites:
 		for plot in site.plots:
-			var annex := EcsTownEconomy.CATALOG.role(plot["role"]).annex
+			var annex := EcsTownCensus.CATALOG.role(plot["role"]).annex
 			if annex == &"field" or annex == &"pen":
 				wanted += 1
 				annexes += 1 if plot.get("annex_kind", &"") == annex else 0
-	_check("%d of %d farmhouses, herders, barns and stables have their field or pen beside them" % [annexes, wanted], wanted > 0 and annexes == wanted)
+	_check("%d of %d farms and herders have their field or pen beside them" % [annexes, wanted], wanted > 0 and annexes == wanted)
 	var house_d: float = houses[0] / maxi(houses[1], 1)
 	var farm_d: float = farms[0] / maxi(farms[1], 1)
-	_check("%d of %d manors face the plaza" % [on_plaza, manors], manors > 0 and on_plaza == manors)
-	_check("houses stand %.0f cells from the well on average, farmhouses %.0f" % [house_d, farm_d], farms[1] > 0 and house_d < farm_d)
+	_check("%d of %d village heads' houses face the plaza" % [on_plaza, manors], manors > 0 and on_plaza == manors)
+	_check("houses stand %.0f cells from the well on average, farms %.0f" % [house_d, farm_d], farms[1] > 0 and house_d < farm_d)
+
+## Quarters: every group a town has gets a district point; homes stand nearer homes than works,
+## works nearer works than homes, faith nearer the elite than works (mean nearest door, over every
+## town); a maker selling from home has its door within `sell_reach` of the well, and the
+## market has a stall for each maker selling there.
+func _quarters_follow_likes_and_dislikes() -> void:
+	var points_ok := true
+	var near := {}
+	var sellers := [0, 0]
+	var stalls_ok := true
+	var first := ""
+	for site in _sites:
+		var def := _def_of(site)
+		var doors: Dictionary = {}
+		for plot in site.plots:
+			var group := EcsTownCensus.CATALOG.role(plot["role"]).group
+			if not doors.has(group):
+				doors[group] = []
+			(doors[group] as Array).append(Vector2(plot["door"] as Vector2i))
+		for group: StringName in doors:
+			if EcsTownCensus.CATALOG.group(group) != null and not (site.quarters["points"] as Dictionary).has(group):
+				points_ok = false
+		for pair in [[&"home", &"home"], [&"home", &"works"], [&"works", &"works"], [&"works", &"home"], [&"faith", &"elite"],
+				[&"faith", &"works"]]:
+			var key := "%s>%s" % pair
+			var sum: Array = near.get(key, [0.0, 0])
+			for door: Vector2 in doors.get(pair[0], []):
+				var nearest := INF
+				for other: Vector2 in doors.get(pair[1], []):
+					if other != door:
+						nearest = minf(nearest, door.distance_to(other))
+				if nearest < INF:
+					sum[0] += nearest
+					sum[1] += 1
+			near[key] = sum
+		var market_sellers := 0
+		for plot in site.plots:
+			match plot.get("sells", &""):
+				&"home":
+					sellers[0] += 1
+					if Vector2(plot["door"] as Vector2i).distance_to(Vector2(site.well)) > def.sell_reach and first == "":
+						first = "a %s selling from home %s from the well" % [plot["role"], plot["door"]]
+				&"market":
+					sellers[1] += 1
+					market_sellers += 1
+		for plot in site.plots:
+			if plot["role"] == &"market" and plot.get("stalls", -1) != def.market_stalls + market_sellers:
+				stalls_ok = false
+	var mean := func(key: String) -> float:
+		var sum: Array = near.get(key, [0.0, 0])
+		return sum[0] / maxi(sum[1], 1)
+	_check("every group a town has has its district point", points_ok)
+	_check("homes %.0f cells from the nearest home, %.0f from the nearest works; works %.0f from works, %.0f from homes; faith %.0f from the elite, %.0f from works" % [
+		mean.call("home>home"), mean.call("home>works"), mean.call("works>works"), mean.call("works>home"), mean.call("faith>elite"),
+		mean.call("faith>works")], mean.call("home>home") < mean.call("home>works") and mean.call("works>works") < mean.call("works>home")
+		and mean.call("faith>elite") < mean.call("faith>works"))
+	_check("%d makers sell from home, all within reach of the well; %d at the market, a stall each%s" % [sellers[0], sellers[1],
+		"" if first == "" else "  " + first], first == "" and stalls_ok and sellers[0] > 0)
+
+## The tier a site was made as, by its population (the tiers' ranges don't overlap).
+func _def_of(site: EcsSettlementSite) -> EcsSettlementDef:
+	for town in TOWNS:
+		var def := load(DEFS % town) as EcsSettlementDef
+		if site.economy["population"] >= def.population.x and site.economy["population"] <= def.population.y:
+			return def
+	return load(DEFS % &"town") as EcsSettlementDef
 
 func _the_same_seed_gives_the_same_plots() -> void:
 	var a := _pick(_region(), 1, &"village")
@@ -179,14 +246,14 @@ func _plots_load_through_the_build_system() -> void:
 	var refused := commands.filter(func(c: EcsBuildCommand) -> bool: return c.result != &"ok")
 	var first := "" if refused.is_empty() else "  first: %s at %s %s" % [EcsBuildCommand.Kind.keys()[refused[0].kind], refused[0].cell + area.position, refused[0].result]
 	_check("all %d commands of the hamlet's area accepted by the build system (%d refused)%s" % [commands.size(), refused.size(), first], refused.is_empty())
-	var road := CATALOG.floor_id(def.road_floor)
+	var road := CATALOG.floor_id(def.lane_floor)
 	var lanes := 0
 	var floored := true
 	for cell: Vector2i in site.road_cells:
 		if site.road_cells[cell] == &"lane" and area.has_point(cell):
 			lanes += 1
 			floored = floored and grid.floor[EcsTownGrid.index(grid, cell - area.position)] == road
-	_check("every one of %d lane cells has the road floor" % lanes, floored and lanes > 0)
+	_check("every one of %d lane cells has the dirt path floor" % lanes, floored and lanes > 0)
 	_check("no node on a footprint or yard (%d plots, %d nodes planned)" % [site.plots.size(), nodes.size()], on_plot == 0)
 	root.free()
 

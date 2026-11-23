@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="EcsRoomTypeDef" format=3]
+
+[ext_resource type="Script" uid="uid://r2c8hwr8jq2f" path="res://10. Town Generator/defs/ecs_room_type_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"boiling_room"
+display_name = "Boiling room"
+needs = Array[StringName]([&"salt"])
+priority = 6
+required = Array[StringName]([&"salt_boiler"])
+optional = Array[StringName]([&"storage_jar"])
+size_min = Vector2i(4, 3)
+size_max = Vector2i(5, 4)
+place = &"any"
+layout = Dictionary[StringName, StringName]({&"salt_boiler": &"back", &"storage_jar": &"corner"})

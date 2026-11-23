@@ -2,13 +2,19 @@ class_name EcsOutdoorBuilder
 extends RefCounted
 
 ## Pure and seeded: a plot with no walls laid out by its work's own small rule, on its footprint:
-##   market: stone floor, stalls round the back and sides, crates, a notice board by the way in;
+##   market: stone floor, a stall for each seller (`stalls` on the plot) round the back and sides,
+##   the rest scattered, crates, a notice board by the way in;
 ##   mine: the entrance at the back, an ore cart, stone piles;
 ##   quarry: stone piles round the edge, a sawhorse and crates;
 ##   lumber camp: dirt, log piles along the back, a chopping block, stumps;
 ##   clay pit: dirt, clay pits in the middle, drying racks round the edge;
 ##   harbour: crates and mooring posts along the back (its dock is the plot's);
-##   shrine: stone floor, the shrine in the middle.
+##   shrine: stone floor, the shrine in the middle;
+##   cockfight ring: dirt, benches round it (stumps stand in);
+##   performance pavilion: a wood floor, posts round it (stumps stand in), no roof yet;
+##   bathing place: stone floor, a pool in the middle (a well stands in);
+##   cremation ground: dirt, a pyre in the middle, a shrine by the way in, banana trees round it.
+## A role names its rule with `layout`, else by its key.
 ## The way in, the door's cell and the one inside it, is never used. The commands go into the
 ## site's.
 
@@ -18,10 +24,13 @@ static func lay(site: EcsSettlementSite, plot: Dictionary, def: EcsSettlementDef
 	var rng := RandomNumberGenerator.new()
 	rng.seed = rng_seed
 	var lot := Lot.new(site, plot)
-	match plot["role"]:
+	var role := EcsTownCensus.CATALOG.role(plot["role"])
+	match role.layout if role != null and role.layout != &"" else plot["role"]:
 		&"market":
 			lot.lay_floor(catalog.floor_id(&"stone"))
-			lot.ring(&"market_stall", 3)
+			var stalls: int = plot.get("stalls", 4)
+			stalls -= lot.ring(&"market_stall", 2, stalls)
+			lot.scatter(&"market_stall", stalls, rng)
 			lot.scatter(&"crate", rng.randi_range(1, 3), rng)
 			lot.beside_door(&"notice_board")
 		&"mine":
@@ -48,6 +57,20 @@ static func lay(site: EcsSettlementSite, plot: Dictionary, def: EcsSettlementDef
 		&"shrine":
 			lot.lay_floor(catalog.floor_id(&"stone"))
 			lot.middle(&"shrine")
+		&"cockfight_ring":
+			lot.lay_ground(catalog.terrain_id(def.field_terrain))
+			lot.ring(&"stump", 2)
+		&"performance_pavilion":
+			lot.lay_floor(catalog.floor_id(&"wood"))
+			lot.ring(&"stump", 3)
+		&"cremation_ground":
+			lot.lay_ground(catalog.terrain_id(def.field_terrain))
+			lot.middle(&"pyre")
+			lot.beside_door(&"shrine")
+			lot.ring(&"banana_tree", 4)
+		&"bathing_place":
+			lot.lay_floor(catalog.floor_id(&"stone"))
+			lot.middle(&"well")
 		_:
 			return false
 	return true
@@ -79,8 +102,10 @@ class Lot:
 		for cell in EcsBuildRules.cells(rect):
 			site.commands.append(EcsBuildCommand.make(EcsBuildCommand.Kind.SET_TERRAIN, cell, id))
 
-	## `blueprint` along the back and both sides every `every` cells, its length along the edge.
-	func ring(blueprint: StringName, every: int) -> void:
+	## `blueprint` along the back and both sides every `every` cells, its length along the edge, at
+	## most `most`; how many it placed.
+	func ring(blueprint: StringName, every: int, most: int = 1 << 20) -> int:
+		var placed := 0
 		var size := _size(blueprint)
 		for side in [-front, Vector2i(front.y, front.x), Vector2i(-front.y, -front.x)]:
 			var along := Vector2i(absi(side.y), absi(side.x))
@@ -90,7 +115,9 @@ class Lot:
 				rect.end.y - covers.y if side.y > 0 else rect.position.y)
 			var length := rect.size.x if along.x != 0 else rect.size.y
 			for k in range(1, length - 1, maxi(every, covers.x if along.x != 0 else covers.y)):
-				put(blueprint, start + along * k, turns)
+				if placed < most and put(blueprint, start + along * k, turns):
+					placed += 1
+		return placed
 
 	## `blueprint` in the middle, or the nearest spot back from the way in, then to either side.
 	func middle(blueprint: StringName) -> void:

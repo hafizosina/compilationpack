@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="EcsBuildingTypeDef" format=3]
+
+[ext_resource type="Script" uid="uid://bxhvyw1dy8hln" path="res://10. Town Generator/defs/ecs_building_type_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+key = &"pounding_shed"
+display_name = "Rice pounding shed"
+min_size = Vector2i(9, 7)
+max_size = Vector2i(11, 9)
+min_room = Vector2i(3, 3)
+rooms = Array[int]([2, 2, 2])
+roles = Array[StringName]([&"pounding_room", &"rice_store"])
+walls = Array[StringName]([&"bamboo", &"wood", &"wood"])
+doors = Array[StringName]([&"wood", &"wood", &"wood"])
+floors = Array[StringName]([&"", &"", &""])
+optional_chance = Array[float]([0.0, 0.5, 1.0])
+loop_chance = 0.0
+layout = &"grow"

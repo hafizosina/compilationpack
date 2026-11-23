@@ -241,7 +241,7 @@ func _the_authors_art_is_used_and_its_layout_read() -> void:
 		names.append(String(layer.name))
 	_check("it builds a layer per type from its def's tiles, in catalog order",
 		names == ["Terrain_grass", "Terrain_dirt", "Terrain_sand", "Terrain_water", "Terrain_rock", "Terrain_forest",
-			"Floor_wood", "Floor_stone", "Floor_road", "Floor_rug"])
+			"Floor_wood", "Floor_stone", "Floor_road", "Floor_rug", "Floor_dirt_path"])
 	var main := MAIN.instantiate()
 	_check("and the scene holds none: main.tscn's TilemapGroup is empty",
 		main.get_node("World/TilemapGroup").get_child_count() == 0)

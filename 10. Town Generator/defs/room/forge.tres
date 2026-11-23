@@ -10,3 +10,7 @@ needs = Array[StringName]([&"forge"])
 priority = 6
 required = Array[StringName]([&"forge", &"anvil"])
 optional = Array[StringName]([&"quench_barrel", &"tool_rack"])
+size_min = Vector2i(4, 3)
+size_max = Vector2i(5, 4)
+place = &"any"
+layout = Dictionary[StringName, StringName]({&"forge": &"back", &"anvil": &"centre", &"quench_barrel": &"side", &"tool_rack": &"side"})

@@ -13,3 +13,20 @@ Replace any sheet with real art in the same layout, or point its def at a new Ti
 | `furniture.png` | Workplace and hall furniture, 32 px grid, 8×4. Row 0: forge (0,0) 2×1, quench barrel (2,0), tool rack (3,0), oven (4,0), kneading table (5,0) 2×1, flour sack (7,0). Row 1: millstone (0,1) 2×2, grain sack (2,1), bar counter (3,1) 2×1, desk (5,1), bookshelf (6,1), altar (7,1). Row 2: high seat (0,2), trough (2,2) 2×1, hay pile (4,2), net rack (5,2), fish rack (6,2), pick rack (7,2). Row 3: pew (0,3) 2×1, ore cart (2,3), lumber pile (3,3) 2×1, sawhorse (5,3), crate (6,3), sack (7,3) |
 | `outdoor.png` | Outdoor objects, 32 px grid, 8×3. Row 0: fence (0,0) rails along x, scarecrow (1,0), haystack (2,0), market stall (3,0) 2×1, notice board (5,0), chopping block (6,0), stump (7,0). Row 1: stone pile (0,1), mine entrance (1,1) 2×2, drying rack (3,1), boat (4,1) 2×1, mooring post (6,1), water wheel (7,1). Row 2: shrine (0,2) |
 | `attachments.png` | 16 px, one row: wall lamp, candle, plate, book, mug, banner |
+
+## indomalay.png (8×4, 2026-11-23)
+
+Indo-Malay furniture (module 12's retheme), drawn by `../flatvec/indomalay.py` in the flat vector
+style. Cell (x, y), size if not 1×1:
+- row 0: sleeping mat (0,0) 1×2, clay stove (1,0), storage jar (2,0), low table (3,0) 2×1, statue (5,0), offering table (6,0) 2×1;
+- row 1: pounding trough (1,1) 2×1, rice basket (3,1), potter's wheel (4,1), loom (5,1) 2×1, wine jar (7,1);
+- row 2: kiln (0,2), salt boiler (1,2) 2×1, herb jars (3,2), weapon rack (4,2), strongbox (5,2), scales (6,2), gong (7,2);
+- row 3: incense burner (0,3).
+
+`wall_bamboo.png` and `wall_brick.png` (from `make_placeholders.py`) use the wall side layout of
+`wall_stone.png`.
+
+## indomalay_outdoor.png (8×3, 2026-11-23)
+
+Drawn by `../flatvec/indomalay_outdoor.py`. Bench (0,0) 2×1, lamp post (2,0), garden bed (3,0) 2×1,
+chicken coop (5,0), banana tree (6,0), pyre (0,1) 2×2. `floor_dirt_path.png` is the lanes' floor.

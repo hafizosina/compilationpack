@@ -97,8 +97,15 @@ static func clip(site: EcsSettlementSite, own: Rect2i, border: int, objects: boo
 				out.append(EcsBuildCommand.create_building(Rect2i(part.position + shift, part.size), false, cut))
 		elif command.kind == EcsBuildCommand.Kind.PLACE_OBJECT:
 			if objects and own.has_point(command.cell):
-				out.append(EcsBuildCommand.place(command.kind, local, command.blueprint, command.value))
+				# A piece reaching past the clip's ground goes only to a clip holding all of it.
+				var place := EcsBuildRules.template(EcsTownBuilder.ENTITIES, command.blueprint, &"grid_position") as EcsGridPositionComponent
+				var covers := Rect2i(command.cell, EcsTownGrid.turned(place.size if place != null else Vector2i.ONE, command.value))
+				if outer.encloses(covers):
+					out.append(EcsBuildCommand.place(command.kind, local, command.blueprint, command.value))
 		elif outer.has_point(command.cell):
+			# A door on the clip's outer ring has lost a wall beside it past the cut; it stays wall.
+			if command.kind == EcsBuildCommand.Kind.PLACE_DOOR and not outer.grow(-1).has_point(command.cell):
+				continue
 			out.append(EcsBuildCommand.make(command.kind, local, command.value))
 	return out
 

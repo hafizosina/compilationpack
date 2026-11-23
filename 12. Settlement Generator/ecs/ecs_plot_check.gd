@@ -27,7 +27,7 @@ static func problems(site: EcsSettlementSite, region_plan: Dictionary, region_de
 				break
 		if grid == null:
 			return ["plot %d's footprint %s is outside the area and every outlying window" % [k, rect]]
-		var role := EcsTownEconomy.CATALOG.role(plot.get("role", &""))
+		var role := EcsTownCensus.CATALOG.role(plot.get("role", &""))
 		if role == null:
 			return ["plot %d is for no building" % k]
 		for y in range(rect.position.y, rect.end.y):

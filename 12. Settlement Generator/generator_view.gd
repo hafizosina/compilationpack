@@ -45,8 +45,9 @@ const SETTLE: int = 3
 const DEPOSIT_TINTS := {&"iron": Color(0.75, 0.35, 0.2), &"coal": Color(0.1, 0.1, 0.1), &"copper": Color(0.85, 0.5, 0.15),
 	&"gold": Color(1.0, 0.85, 0.1), &"clay": Color(0.7, 0.45, 0.35)}
 ## Footprint tint by role group.
-const GROUP_TINTS := {&"home": Color(0.75, 0.45, 0.25), &"food": Color(0.85, 0.72, 0.3), &"craft": Color(0.55, 0.4, 0.65),
-	&"faith": Color(0.92, 0.9, 0.82), &"trade": Color(0.3, 0.5, 0.78), &"water": Color(0.25, 0.68, 0.72), &"works": Color(0.45, 0.45, 0.45)}
+const GROUP_TINTS := {&"home": Color(0.75, 0.45, 0.25), &"elite": Color(0.85, 0.3, 0.3), &"food": Color(0.85, 0.72, 0.3),
+	&"farming": Color(0.6, 0.78, 0.3), &"craft": Color(0.55, 0.4, 0.65), &"faith": Color(0.92, 0.9, 0.82),
+	&"trade": Color(0.3, 0.5, 0.78), &"entertainment": Color(0.9, 0.45, 0.7), &"works": Color(0.45, 0.45, 0.45)}
 ## Zone tint, most specific zone first: [zone, colour].
 const TINTS := [
 	[EcsNodeSpawnDef.Zone.SHALLOW, Color(0.3, 0.9, 1.0)], [EcsNodeSpawnDef.Zone.SHORE, Color(1.0, 0.9, 0.3)],
@@ -390,7 +391,7 @@ func _describe() -> void:
 			var k: int = _site.plot_at[cell]
 			var plot := _site.plots[k]
 			var rect: Rect2i = plot["footprint"]
-			var role := EcsTownEconomy.CATALOG.role(plot["role"])
+			var role := EcsTownCensus.CATALOG.role(plot["role"])
 			lines.append("Town: plot %d, %s: its %s; footprint %d×%d, door at %s facing %s" % [k, role.display_name,
 				"door" if cell == plot["door"] else ("footprint" if rect.has_point(cell) else
 					(String(plot.get("annex_kind", "yard")) if (plot.get("annex", Rect2i()) as Rect2i).has_point(cell) else "yard")), rect.size.x, rect.size.y,
@@ -454,21 +455,31 @@ func _town_line() -> String:
 	return "Town at region cell %s, score %.2f (water %.2f, open %.2f, room %.2f, river %.2f)\nRoads: %d exits, %d m of main road, %d lanes (%d m), %d m of track, %d bridge%s\nPlots: %d, %d of them outlying in %d window%s%s%s" % [_site.l2_cell,
 		score["total"], score["water"], score["open"], score["room"], score["river"], _site.exits.size(),
 		counts[&"main"] / _town_def().main_width, lanes, counts[&"lane"], counts[&"track"], _site.bridges, "" if _site.bridges == 1 else "s",
-		_site.plots.size(), _site.plots.filter(func(p: Dictionary) -> bool: return not _site.area.encloses(p["footprint"])).size(),
+		_site.plots.size(), _site.plots.filter(func(p: Dictionary) -> bool:
+			return Vector2((p["footprint"] as Rect2i).get_center()).distance_to(Vector2(_site.well)) > _site.radius).size(),
 		_site.outlying.size(), "" if _site.outlying.size() == 1 else "s", _economy_line(), note]
 
-## What the town is and has, for the info panel.
+## The census, for the info panel: what the town lives on, its people, traffic, resources and buildings.
 func _economy_line() -> String:
 	var economy := _site.economy
 	if economy.is_empty():
 		return ""
-	var catalog := EcsTownEconomy.CATALOG
-	var names := func(key: StringName) -> String:
-		for c in catalog.characters:
-			if c.key == key:
-				return c.display_name
-		return "none"
-	var sides := (economy["sides"] as Array).map(names)
+	var catalog: EcsEconomyCatalog = EcsTownCensus.CATALOG
+	var main := "none"
+	for c in catalog.characters:
+		if c.key == economy["character"]:
+			main = c.display_name
+	var rich := [0, 0, 0]
+	var at_work := 0
+	for family: Dictionary in economy["families"]:
+		rich[family["wealth"]] += 1
+		at_work += 1 if family["home"] == &"work" else 0
+	var resources := PackedStringArray()
+	for key: StringName in economy["resources"]:
+		var r: Dictionary = economy["resources"][key]
+		if r["need"] > 0.0 or r["made"] > 0.0:
+			resources.append("%s %d/%d%s" % [catalog.resource(key).display_name, roundi(r["made"]), roundi(r["need"]),
+				" +%d sold" % roundi(r["exported"]) if r["exported"] > 0.0 else ""])
 	var built := PackedStringArray()
 	for entry: Dictionary in economy["roles"]:
 		built.append("%d %s" % [entry["count"], catalog.role(entry["role"]).display_name])
@@ -479,9 +490,11 @@ func _economy_line() -> String:
 	var short := PackedStringArray()
 	for entry: Dictionary in economy.get("short", []):
 		short.append("%d %s" % [entry["count"], catalog.role(entry["role"]).display_name])
-	return "\nLives on: %s%s; %d people, food for %d\nIn reach: %s\nBuildings: %s%s" % [names.call(economy["character"]),
-		"" if sides.is_empty() else ", with " + ", ".join(sides), economy["population"], economy["fed"],
-		", ".join(survey), ", ".join(built), "" if short.is_empty() else "\nShort, no room: " + ", ".join(short)]
+	var traffic: Dictionary = economy["traffic"]
+	return "\nLives on: %s; traffic %s (%d travellers a day)\nPeople: %d in %d families (%d poor, %d middling, %d rich; %d live at work), %d labourers spare%s\nMade/needed: %s\nIn reach: %s\nBuildings: %s%s" % [
+		main, traffic["name"], traffic["travellers"], economy["population"], (economy["families"] as Array).size(), rich[0], rich[1],
+		rich[2], at_work, economy["labourers"], "" if economy["short_of_workers"] <= 0 else ", %d workers short" % economy["short_of_workers"],
+		", ".join(resources), ", ".join(survey), ", ".join(built), "" if short.is_empty() else "\nShort, no room: " + ", ".join(short)]
 
 func _zone_names(bits: int) -> String:
 	var names := PackedStringArray()
@@ -659,7 +672,8 @@ func _draw_roads() -> void:
 		mark.set_meta(&"screen", 3.0)
 		_roads_layer.add_child(mark)
 
-## The town's plots: yards tinted, footprints shaded by role group, doors marked; outlying windows outlined.
+## The town's plots: yards tinted, footprints shaded by role group, doors marked (ringed for a shop
+## front); outlying windows outlined; each group's district point a disc of its tint.
 func _draw_plots() -> void:
 	if _site == null:
 		return
@@ -675,22 +689,33 @@ func _draw_plots() -> void:
 			for cell: Vector2i in plot["dock"]["cells"]:
 				_plots_layer.draw_rect(Rect2(Vector2(cell) * px, Vector2(px, px)), Color(0.6, 0.42, 0.25, 0.9))
 		var rect: Rect2i = plot["footprint"]
-		var group := EcsTownEconomy.CATALOG.role(plot["role"]).group
+		var group := EcsTownCensus.CATALOG.role(plot["role"]).group
 		_plots_layer.draw_rect(Rect2(Vector2(rect.position) * px, Vector2(rect.size) * px), Color(GROUP_TINTS.get(group, Color.MAGENTA), 0.8))
 		_plots_layer.draw_rect(Rect2(Vector2(plot["door"] as Vector2i) * px, Vector2(px, px)), Color(0.2, 0.1, 0.05))
+		if plot.get("sells", &"") == &"home":
+			_plots_layer.draw_circle((Vector2(plot["door"] as Vector2i) + Vector2(0.5, 0.5)) * px, px * 1.2, Color(1, 1, 1), false, px * 0.5)
 	for window: Dictionary in _site.outlying:
 		var rect: Rect2i = window["rect"]
 		_plots_layer.draw_rect(Rect2(Vector2(rect.position) * px, Vector2(rect.size) * px), Color(0.9, 0.5, 0.2), false, px)
+	var points: Dictionary = _site.quarters.get("points", {})
+	for group: StringName in points:
+		var at := (Vector2(points[group] as Vector2i) + Vector2(0.5, 0.5)) * px
+		_plots_layer.draw_circle(at, px * 4.0, Color(GROUP_TINTS.get(group, Color.MAGENTA), 0.9))
+		_plots_layer.draw_circle(at, px * 4.0, Color(0.1, 0.1, 0.1), false, px)
 
-## Outlines the town's area and plaza over the region.
+## Outlines the town's reach (a circle round the well: the town has no box) and its plaza over the region.
 func _outline_site() -> void:
-	var rects := [_site.area, _site.plaza] if _site != null else []
+	var px := float(EcsTownGrid.CELL) / ZOOM
 	for k in _site_lines.size():
-		_site_lines[k].visible = k < rects.size()
-		if k < rects.size():
-			var px := float(EcsTownGrid.CELL) / ZOOM
-			var rect := Rect2(Vector2((rects[k] as Rect2i).position) * px, Vector2((rects[k] as Rect2i).size) * px)
-			_site_lines[k].points = PackedVector2Array([rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)])
+		_site_lines[k].visible = _site != null and k < 2
+	if _site == null:
+		return
+	var ring := PackedVector2Array()
+	for k in 49:
+		ring.append((Vector2(_site.well) + Vector2.from_angle(k * TAU / 48.0) * _site.radius) * px)
+	_site_lines[0].points = ring
+	var rect := Rect2(Vector2(_site.plaza.position) * px, Vector2(_site.plaza.size) * px)
+	_site_lines[1].points = PackedVector2Array([rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)])
 	_draw_roads()
 	_plots_layer.queue_redraw()
 

@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="EcsRoomTypeDef" format=3]
+
+[ext_resource type="Script" uid="uid://r2c8hwr8jq2f" path="res://10. Town Generator/defs/ecs_room_type_def.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = &"counting_room"
+display_name = "Counting room"
+needs = Array[StringName]([&"strongbox"])
+priority = 6
+required = Array[StringName]([&"strongbox", &"scales"])
+optional = Array[StringName]([&"low_table"])
+size_min = Vector2i(3, 3)
+size_max = Vector2i(4, 4)
+place = &"side"
+layout = Dictionary[StringName, StringName]({&"strongbox": &"back", &"scales": &"centre", &"low_table": &"centre"})

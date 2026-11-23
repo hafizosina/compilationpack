@@ -1,8 +1,7 @@
 class_name EcsSettlementCharacterDef
 extends Resource
 
-## What a town may live on: how its survey scores it, what it builds as the town's main trade, and
-## the small operation it adds when it is only a side line.
+## What a town may live on: how its survey scores it, and which maker's work it exports.
 
 @export var key: StringName = &""
 @export var display_name: String = ""
@@ -13,9 +12,7 @@ extends Resource
 ## Survey facts it can't do without; one of `requires_any` too, when it lists any.
 @export var requires: Array[StringName] = []
 @export var requires_any: Array[StringName] = []
-## Role key -> count range, built when it is the main trade, scaled by the tier.
-@export var core: Dictionary[StringName, Vector2i] = {}
-## Role key -> count range, built when it is a side line.
-@export var side: Dictionary[StringName, Vector2i] = {}
-## A score at least this makes it a side line when it isn't the main trade.
-@export var side_at: float = 0.5
+## The role whose work the town sells; empty for a town that lives on passing trade.
+@export var exports: StringName = &""
+## Traffic levels added: a trading town sees more travellers.
+@export var traffic_bonus: int = 0

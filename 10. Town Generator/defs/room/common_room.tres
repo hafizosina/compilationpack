@@ -5,8 +5,12 @@
 [resource]
 script = ExtResource("1")
 id = &"common_room"
-display_name = "Common room"
+display_name = "Serving room"
 needs = Array[StringName]([&"bar"])
 priority = 6
-required = Array[StringName]([&"bar_counter", &"table"])
-optional = Array[StringName]([&"table", &"chair", &"chair", &"barrel"])
+required = Array[StringName]([&"bar_counter", &"low_table"])
+optional = Array[StringName]([&"wine_jar", &"wine_jar", &"low_table"])
+size_min = Vector2i(5, 4)
+size_max = Vector2i(7, 6)
+place = &"any"
+layout = Dictionary[StringName, StringName]({&"bar_counter": &"side", &"low_table": &"centre", &"wine_jar": &"corner"})

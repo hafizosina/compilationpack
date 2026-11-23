@@ -33,12 +33,9 @@
 
 [ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/manor.tres" id="bt_manor"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/tavern.tres" id="bt_tavern"]
-[ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/chapel.tres" id="bt_chapel"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/hall.tres" id="bt_hall"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/farmhouse.tres" id="bt_farmhouse"]
-[ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/barn.tres" id="bt_barn"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/storehouse.tres" id="bt_storehouse"]
-[ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/mill.tres" id="bt_mill"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/hut.tres" id="bt_hut"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/room/hall.tres" id="rt_hall"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/room/study.tres" id="rt_study"]
@@ -46,21 +43,34 @@
 [ext_resource type="Resource" path="res://10. Town Generator/defs/room/forge.tres" id="rt_forge"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/room/carpentry.tres" id="rt_carpentry"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/room/lumber_store.tres" id="rt_lumber_store"]
-[ext_resource type="Resource" path="res://10. Town Generator/defs/room/bakehouse.tres" id="rt_bakehouse"]
-[ext_resource type="Resource" path="res://10. Town Generator/defs/room/nave.tres" id="rt_nave"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/room/stalls.tres" id="rt_stalls"]
-[ext_resource type="Resource" path="res://10. Town Generator/defs/room/hay_store.tres" id="rt_hay_store"]
-[ext_resource type="Resource" path="res://10. Town Generator/defs/room/mill_room.tres" id="rt_mill_room"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/room/grain_store.tres" id="rt_grain_store"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/room/fishery.tres" id="rt_fishery"]
 [ext_resource type="Resource" path="res://10. Town Generator/defs/room/miner_room.tres" id="rt_miner_room"]
 
+[ext_resource type="Resource" path="res://10. Town Generator/defs/wall/bamboo.tres" id="w_bamboo"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/wall/brick.tres" id="w_brick"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/sanctum.tres" id="rt_sanctum"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/offering_hall.tres" id="rt_offering_hall"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/pounding_room.tres" id="rt_pounding_room"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/rice_store.tres" id="rt_rice_store"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/pottery.tres" id="rt_pottery"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/weaving_room.tres" id="rt_weaving_room"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/boiling_room.tres" id="rt_boiling_room"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/herb_room.tres" id="rt_herb_room"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/guard_room.tres" id="rt_guard_room"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/counting_room.tres" id="rt_counting_room"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/room/kiln_room.tres" id="rt_kiln_room"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/temple.tres" id="bt_temple"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/pounding_shed.tres" id="bt_pounding_shed"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/rice_barn.tres" id="bt_rice_barn"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/floor/dirt_path.tres" id="f_dirt_path"]
 [resource]
 script = ExtResource("1")
 terrains = Array[ExtResource("t")]([ExtResource("t1"), ExtResource("t2"), ExtResource("t3"), ExtResource("t4"), ExtResource("t5"), ExtResource("t6")])
-floors = Array[ExtResource("f")]([ExtResource("f1"), ExtResource("f2"), ExtResource("f3"), ExtResource("f4")])
-walls = Array[ExtResource("w")]([ExtResource("w1"), ExtResource("w2")])
+floors = Array[ExtResource("f")]([ExtResource("f1"), ExtResource("f2"), ExtResource("f3"), ExtResource("f4"), ExtResource("f_dirt_path")])
+walls = Array[ExtResource("w")]([ExtResource("w1"), ExtResource("w2"), ExtResource("w_bamboo"), ExtResource("w_brick")])
 doors = Array[ExtResource("d")]([ExtResource("d1"), ExtResource("d2")])
 roofs = Array[ExtResource("r")]([ExtResource("r1")])
-room_types = Array[ExtResource("rt")]([ExtResource("rt_bedroom"), ExtResource("rt_kitchen"), ExtResource("rt_workshop"), ExtResource("rt_dining"), ExtResource("rt_store"), ExtResource("rt_hall"), ExtResource("rt_study"), ExtResource("rt_common_room"), ExtResource("rt_forge"), ExtResource("rt_carpentry"), ExtResource("rt_lumber_store"), ExtResource("rt_bakehouse"), ExtResource("rt_nave"), ExtResource("rt_stalls"), ExtResource("rt_hay_store"), ExtResource("rt_mill_room"), ExtResource("rt_grain_store"), ExtResource("rt_fishery"), ExtResource("rt_miner_room")])
-building_types = Array[ExtResource("bt")]([ExtResource("bt_house"), ExtResource("bt_workshop"), ExtResource("bt_manor"), ExtResource("bt_tavern"), ExtResource("bt_chapel"), ExtResource("bt_hall"), ExtResource("bt_farmhouse"), ExtResource("bt_barn"), ExtResource("bt_storehouse"), ExtResource("bt_mill"), ExtResource("bt_hut")])
+room_types = Array[ExtResource("rt")]([ExtResource("rt_bedroom"), ExtResource("rt_kitchen"), ExtResource("rt_workshop"), ExtResource("rt_dining"), ExtResource("rt_store"), ExtResource("rt_hall"), ExtResource("rt_study"), ExtResource("rt_common_room"), ExtResource("rt_forge"), ExtResource("rt_carpentry"), ExtResource("rt_lumber_store"), ExtResource("rt_stalls"), ExtResource("rt_grain_store"), ExtResource("rt_fishery"), ExtResource("rt_miner_room"), ExtResource("rt_sanctum"), ExtResource("rt_offering_hall"), ExtResource("rt_pounding_room"), ExtResource("rt_rice_store"), ExtResource("rt_pottery"), ExtResource("rt_weaving_room"), ExtResource("rt_boiling_room"), ExtResource("rt_herb_room"), ExtResource("rt_guard_room"), ExtResource("rt_counting_room"), ExtResource("rt_kiln_room")])
+building_types = Array[ExtResource("bt")]([ExtResource("bt_house"), ExtResource("bt_workshop"), ExtResource("bt_manor"), ExtResource("bt_tavern"), ExtResource("bt_hall"), ExtResource("bt_farmhouse"), ExtResource("bt_storehouse"), ExtResource("bt_hut"), ExtResource("bt_temple"), ExtResource("bt_pounding_shed"), ExtResource("bt_rice_barn")])

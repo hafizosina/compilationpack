@@ -65,7 +65,7 @@ func _every_walled_plot_gets_a_sound_building() -> void:
 						first = "seed %d: %s at %s %s" % [s, EcsBuildCommand.Kind.keys()[command.kind], command.cell + ground.position, command.result]
 				for k in site.plots.size():
 					var plot := site.plots[k]
-					var role := EcsTownEconomy.CATALOG.role(plot["role"])
+					var role := EcsTownCensus.CATALOG.role(plot["role"])
 					if not ground.encloses(plot["footprint"]) or role.building == &"":
 						continue
 					if not plot.has("building"):
@@ -76,12 +76,14 @@ func _every_walled_plot_gets_a_sound_building() -> void:
 					var b: Dictionary = plot["building"]
 					shapes[b["shape"]] = int(shapes.get(b["shape"], 0)) + 1
 					var entrance: Vector2i = b["entrance"]
-					var local: Vector2i = (plot["footprint"] as Rect2i).position - ground.position
+					var local: Vector2i = (b.get("at", (plot["footprint"] as Rect2i).position) as Vector2i) - ground.position
 					var id := grid.building_id[EcsTownGrid.index(grid, local)]
 					for problem in EcsBuildingCheck.problems(world["world"], grid, id, entrance - ground.position):
 						if first == "":
 							first = "seed %d: plot %d, a %s: %s" % [s, k, role.key, problem]
-					if not site.road_cells.has(entrance + plot["front"]) and not site.plaza.has_point(entrance + plot["front"]) and first == "":
+					# A compound is entered by its gate; its house stands behind it.
+					var way_in: Vector2i = b.get("gate", entrance)
+					if not site.road_cells.has(way_in + plot["front"]) and not site.plaza.has_point(way_in + plot["front"]) and first == "":
 						first = "seed %d: plot %d, a %s, entered from no road" % [s, k, role.key]
 				(world["root"] as Node).free()
 		_check("%s: %d seeds, %d buildings, all accepted, sound and entered from a road; shapes %s%s" % [town, SEEDS, built, shapes,
@@ -114,12 +116,17 @@ func _a_building_across_chunks_draws_as_one() -> void:
 	chunks.site = site
 	var under := chunks.touching(rect.grow(-1))
 	var refused := 0
+	var first_refused := ""
 	var differ := 0
 	var roofed := 0
 	for at in under:
 		var part := _world(Vector2i(CHUNK + 2, CHUNK + 2), chunks.overlay(at, true))
 		var grid := part["grid"] as EcsTownGridSingleton
-		refused += (part["commands"] as Array).filter(func(c: EcsBuildCommand) -> bool: return c.result != &"ok").size()
+		for c: EcsBuildCommand in part["commands"]:
+			if c.result != &"ok":
+				refused += 1
+				if first_refused == "":
+					first_refused = "  first: %s %s at %s %s" % [EcsBuildCommand.Kind.keys()[c.kind], c.blueprint, c.cell, c.result]
 		var own := Rect2i(at * CHUNK, Vector2i(CHUNK, CHUNK)).intersection(rect)
 		for cell in EcsBuildRules.cells(own):
 			var i := EcsTownGrid.index(grid, cell - at * CHUNK + Vector2i.ONE)
@@ -129,8 +136,8 @@ func _a_building_across_chunks_draws_as_one() -> void:
 				differ += 1
 		(part["root"] as Node).free()
 	(whole["root"] as Node).free()
-	_check("a %s %s across %d chunks: every clipped command accepted (%d refused), %d cells differ from the whole building (%d roofed)" % [
-		site.plots[target]["role"], rect, under.size(), refused, differ, roofed], under.size() >= 2 and refused == 0 and differ == 0 and roofed > 0)
+	_check("a %s %s across %d chunks: every clipped command accepted (%d refused), %d cells differ from the whole building (%d roofed)%s" % [
+		site.plots[target]["role"], rect, under.size(), refused, differ, roofed, first_refused], under.size() >= 2 and refused == 0 and differ == 0 and roofed > 0)
 
 ## A world of `size` with `commands` sent through lifecycle, build, room detection and roofs.
 func _world(size: Vector2i, commands: Array[EcsBuildCommand]) -> Dictionary:
