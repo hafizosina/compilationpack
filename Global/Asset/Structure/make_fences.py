@@ -1,5 +1,6 @@
-"""Fence and gate sheets in the walls' style (make_walls.py), lower and lighter: posts and rails joined to the fences
-beside them, 16 join shapes in the walls' side layout, 64 px a cell. A gate is one cell, 2 tiles: across, down.
+"""Fence and gate sheets in the walls' style (make_walls.py): a hard bevel on each part lit from the top-left, no outline,
+the walls' darker palette, a faint shadow; posts and rails joined to the fences beside them, 16 join shapes in the
+walls' side layout, 64 px a cell. A gate is one cell, 2 tiles: across, down.
 usage: python make_fences.py [key ...]      (needs Pillow, numpy)"""
 import os
 import sys
@@ -7,7 +8,7 @@ import sys
 import numpy as np
 from PIL import Image
 
-from make_walls import CELL, SIDES, SS, T, blur, box, bricks, erode, field, pillar, shift
+from make_walls import CELL, DARKEN, SIDES, SS, T, blur, box, bricks, erode, facets, field, pillar, shift
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 C = T / 2
@@ -41,26 +42,21 @@ def along(tex_h, h, v):
 
 
 def paint(colour, tex):
-    return np.array(colour, np.float32) * tex[..., None]
+    return np.array(colour, np.float32) * DARKEN * tex[..., None]
 
 
-def render(layers, soft=1.6, shadow=0.28):
-    """Layers bottom to top as (mask, rgb, edge): each lit from the top-left, its edge darkened in its own colour;
-    a faint shadow down-right under them all."""
+def render(layers, soft=1.6, shadow=0.40):
+    """Layers bottom to top as (mask, rgb, edge): each given the walls' hard bevel (a lit band top-left, a shadowed
+    one bottom-right), no outline (`edge` is kept for the layer lists, unused); a faint shadow down-right."""
     shape = np.zeros((T, T), np.float32)
     col = np.zeros((T, T, 3), np.float32)
-    for m, c, edge in layers:
+    for m, c, _edge in layers:
         if not m.any():
             continue
-        s = blur(m, soft * SS)
-        k = int(1.2 * SS)
-        light = 1.0 - 0.9 * (shift(s, k, k) - shift(s, -k, -k))
-        cc = c * light[..., None]
-        ring = (m > 0) & ~(erode(m, 1.4 * SS) > 0)
-        cc[ring] *= edge
+        cc = c * facets(m, 1.6 if soft < 2 else 2.2)[..., None]
         col = np.where(m[..., None] > 0, cc, col)
         shape = np.maximum(shape, m)
-    drop = blur(shift(shape, 2 * SS, int(1.5 * SS)), 1.8 * SS) * shadow * (1 - shape)
+    drop = blur(shift(shape, 3 * SS, 2 * SS), 2.0 * SS) * shadow * (1 - shape)
     out = np.zeros((T, T, 4), np.float32)
     out[..., :3] = np.where(shape[..., None] > 0, col, 0)
     out[..., 3] = np.maximum(shape, drop) * 255
