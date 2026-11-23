@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="EcsDoorDef" format=3 uid="uid://4gvd8qsph26g"]
+
+[ext_resource type="Script" uid="uid://c6issvxyrmm1g" path="res://10. Town Generator/defs/ecs_door_def.gd" id="1"]
+[ext_resource type="Texture2D" path="res://Global/Asset/Structure/door_carved.png" id="2_sheet"]
+
+[resource]
+script = ExtResource("1")
+key = &"carved"
+display_name = "carved"
+tile_size = 96
+cell_pixels = 64
+closed_texture = ExtResource("2_sheet")
+open_texture = ExtResource("2_sheet")

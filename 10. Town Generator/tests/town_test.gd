@@ -265,13 +265,15 @@ func _the_authors_art_is_used_and_its_layout_read() -> void:
 		and grass[EcsDualGrid.TR | EcsDualGrid.BL] == [Vector2i(4, 2)]
 		and (grass[EcsDualGrid.FULL] as Array).size() == 10)
 	var walls := sync.wall_layer().tile_set
-	_check("WoodWall and BaseWall, bare sheets, read all 16 wall shapes, WoodWall as its painted table did",
-		_same_layout(EcsDualGrid.side_layout(walls.get_source(CATALOG.wall(1).source_id)), EcsDualGrid.SIDE_ATLAS)
-		and EcsDualGrid.side_layout(walls.get_source(CATALOG.wall(2).source_id)).size() == 16)
-	var closed := walls.get_source(CATALOG.door(1).closed_source_id) as TileSetAtlasSource
-	_check("a door's 48 px tiles are cut after its 8 px margin, resized 2x to 64 px a cell, and both doors share the open sheet's one source",
-		closed.get_tile_texture_region(Vector2i(1, 0)) == Rect2i(112, 16, 96, 96) and closed.get_tiles_count() == 2
-		and CATALOG.door(1).open_source_id == CATALOG.door(2).open_source_id
+	var all_walls := true
+	for def in CATALOG.walls:
+		all_walls = all_walls and EcsDualGrid.side_layout(walls.get_source(def.source_id)).size() == 16
+	_check("every wall sheet, bare, reads all 16 wall shapes, wood in WoodWall's layout",
+		all_walls and _same_layout(EcsDualGrid.side_layout(walls.get_source(CATALOG.wall(1).source_id)), EcsDualGrid.SIDE_ATLAS))
+	var sheet_of := walls.get_source(CATALOG.door(1).closed_source_id) as TileSetAtlasSource
+	_check("a door's one sheet holds its 4 states, 96 px tiles at 64 px a cell, closed and open from the same source",
+		sheet_of.get_tile_texture_region(Vector2i(2, 0)) == Rect2i(192, 0, 96, 96) and sheet_of.get_tiles_count() == 4
+		and CATALOG.door(1).open_source_id == CATALOG.door(1).closed_source_id
 		and CATALOG.door(1).closed_source_id != CATALOG.door(2).closed_source_id)
 	t.root.queue_free()
 

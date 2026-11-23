@@ -6,7 +6,8 @@
 [ext_resource type="Resource" path="res://10. Town Generator/defs/building_type/workshop.tres" id="bt_workshop"]
 [ext_resource type="Script" uid="uid://c6issvxyrmm1g" path="res://10. Town Generator/defs/ecs_door_def.gd" id="d"]
 [ext_resource type="Resource" uid="uid://bybsrxj5qjt0e" path="res://10. Town Generator/defs/door/wood.tres" id="d1"]
-[ext_resource type="Resource" uid="uid://4gvd8qsph26g" path="res://10. Town Generator/defs/door/stone.tres" id="d2"]
+[ext_resource type="Resource" uid="uid://4gvd8qsph26g" path="res://10. Town Generator/defs/door/carved.tres" id="d2"]
+[ext_resource type="Resource" path="res://10. Town Generator/defs/door/bamboo.tres" id="d3"]
 [ext_resource type="Script" uid="uid://cfhfq0d55ey50" path="res://10. Town Generator/defs/ecs_floor_def.gd" id="f"]
 [ext_resource type="Resource" uid="uid://cgxfxuhuqmpsv" path="res://10. Town Generator/defs/floor/wood.tres" id="f1"]
 [ext_resource type="Resource" uid="uid://bpg1r0g0ybsr8" path="res://10. Town Generator/defs/floor/stone.tres" id="f2"]
@@ -70,7 +71,7 @@ script = ExtResource("1")
 terrains = Array[ExtResource("t")]([ExtResource("t1"), ExtResource("t2"), ExtResource("t3"), ExtResource("t4"), ExtResource("t5"), ExtResource("t6")])
 floors = Array[ExtResource("f")]([ExtResource("f1"), ExtResource("f2"), ExtResource("f3"), ExtResource("f4"), ExtResource("f_dirt_path")])
 walls = Array[ExtResource("w")]([ExtResource("w1"), ExtResource("w2"), ExtResource("w_bamboo"), ExtResource("w_brick")])
-doors = Array[ExtResource("d")]([ExtResource("d1"), ExtResource("d2")])
+doors = Array[ExtResource("d")]([ExtResource("d1"), ExtResource("d2"), ExtResource("d3")])
 roofs = Array[ExtResource("r")]([ExtResource("r1")])
 room_types = Array[ExtResource("rt")]([ExtResource("rt_bedroom"), ExtResource("rt_kitchen"), ExtResource("rt_workshop"), ExtResource("rt_dining"), ExtResource("rt_store"), ExtResource("rt_hall"), ExtResource("rt_study"), ExtResource("rt_common_room"), ExtResource("rt_forge"), ExtResource("rt_carpentry"), ExtResource("rt_lumber_store"), ExtResource("rt_stalls"), ExtResource("rt_grain_store"), ExtResource("rt_fishery"), ExtResource("rt_miner_room"), ExtResource("rt_sanctum"), ExtResource("rt_offering_hall"), ExtResource("rt_pounding_room"), ExtResource("rt_rice_store"), ExtResource("rt_pottery"), ExtResource("rt_weaving_room"), ExtResource("rt_boiling_room"), ExtResource("rt_herb_room"), ExtResource("rt_guard_room"), ExtResource("rt_counting_room"), ExtResource("rt_kiln_room")])
 building_types = Array[ExtResource("bt")]([ExtResource("bt_house"), ExtResource("bt_workshop"), ExtResource("bt_manor"), ExtResource("bt_tavern"), ExtResource("bt_hall"), ExtResource("bt_farmhouse"), ExtResource("bt_storehouse"), ExtResource("bt_hut"), ExtResource("bt_temple"), ExtResource("bt_pounding_shed"), ExtResource("bt_rice_barn")])

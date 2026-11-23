@@ -36,7 +36,7 @@ Vector2i(7, 5): &"stone",
 Vector2i(7, 6): &"stone"
 })
 doors = Dictionary[Vector2i, StringName]({
-Vector2i(3, 6): &"stone"
+Vector2i(3, 6): &"carved"
 })
 floors = Dictionary[Vector2i, StringName]({
 Vector2i(1, 1): &"stone",
