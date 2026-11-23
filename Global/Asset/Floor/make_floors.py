@@ -253,6 +253,45 @@ def bamboo():
     return relief(albedo, height, 1.0, 0.55)
 
 
+def ceramic():
+    """Square terracotta tiles (Majapahit), two to a cell on the cell grid, set close: matte fired clay, each its own
+    shade, a soft bevel, the Surya Majapahit (an eight-rayed sun) pressed into its middle, and a quarter lotus in
+    each corner, so four tiles meeting make a lotus."""
+    size = CELL / 2
+    i, j = np.floor(X / size), np.floor(Y / size)
+    fx, fy = X - i * size, Y - j * size
+    ids = (i * 131 + j).astype(np.int32) % 4096
+    joint = 0.008 * CELL
+    inner = np.minimum(np.minimum(fx, size - fx), np.minimum(fy, size - fy)) - joint / 2
+    face = bevel(inner, 0.018 * CELL)
+    # the sun: a disc ringed by eight long and eight short rays, pressed in
+    dx, dy = (fx - size / 2) / size, (fy - size / 2) / size
+    r, a = np.hypot(dx, dy), np.arctan2(dy, dx)
+    sector = np.abs(((a / (2 * np.pi / 8)) % 1) - 0.5) * 2          # 0 on a ray's line, 1 halfway between rays
+    long = (np.round(a / (2 * np.pi / 8)) % 2) == 0
+    reach = np.where(long, 0.30, 0.23)
+    ray = (r > 0.12) & (r < reach) & (sector < 0.55 * (1 - (r - 0.12) / (reach - 0.12)))
+    disc = r < 0.075
+    ring = np.abs(r - 0.10) < 0.014
+    sun = ray | disc | ring
+    # a quarter lotus in each corner: petals round the corner point
+    cxs = np.where(fx < size / 2, 0, size) ; cys = np.where(fy < size / 2, 0, size)
+    ex, ey = (fx - cxs) / size, (fy - cys) / size
+    er, ea = np.hypot(ex, ey), np.arctan2(ey, ex)
+    petal = (er < 0.15 + 0.05 * np.abs(np.cos(ea * 4))) & (er > 0.035)
+    pressed = (sun | petal).astype(np.float32)
+    soft = np.array(Image.fromarray((pressed * 255).astype(np.uint8)).filter(__import__("PIL.ImageFilter", fromlist=["x"]).GaussianBlur(K * 0.8))) / 255
+    height = face * 3.0 - soft * face * 2.0 + face * field(60, 92) * 0.25
+    tint = tint_of(ids, 93, 0.14)
+    albedo = np.array((140, 86, 66), np.float32) * (tint * patches(94, 0.07) * (1 - 0.14 * soft))[..., None]
+    grain = field(200, 97) * 0.06 + field(70, 98) * 0.04                  # matte fired clay, no glaze
+    albedo *= (1 + grain)[..., None]
+    albedo[field(180, 95) > 0.6] *= 0.88
+    grout = inner <= 0
+    albedo[grout] = np.array((168, 148, 122), np.float32) * patches(96, 0.05)[grout][..., None]
+    return relief(albedo, height, 1.0, 0.22)
+
+
 SHIFT = 0.12                    # cells a plank or pole end may reach past the cell line or stop short
 
 
@@ -291,7 +330,8 @@ def pole_pieces():
 PIECES = {"stone": lambda: stone_pieces(14, 21, 0.8), "road": lambda: stone_pieces(22, 31, 0.7),
           "wood": plank_pieces, "bamboo": pole_pieces}
 
-SURFACES = {"wood": teak, "stone": flagstones, "road": cobbles, "rug": pandan, "dirt_path": earth, "bamboo": bamboo}
+SURFACES = {"wood": teak, "stone": flagstones, "road": cobbles, "rug": pandan, "dirt_path": earth, "bamboo": bamboo,
+            "ceramic": ceramic}
 
 
 def roof():

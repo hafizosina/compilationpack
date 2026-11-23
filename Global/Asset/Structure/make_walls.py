@@ -1,7 +1,7 @@
 """Wall sheets in RimWorld's art style, seen straight from above: a post at a wall's end, corner or join, beams to the
-walls beside it; material texture, soft bevel lit from the top-left, a dark edge of the material's own colour, a
-faint shadow. 16 join shapes in the side layout of module 10's walls, 64 px a cell.
-usage: python make_walls.py [key ...] [--preview]      (needs Pillow, numpy)"""
+walls beside it; material texture, a hard bevel on each piece (plank, brick, block, pole) lit from the top-left, no
+outline, a faint shadow. 16 join shapes in the side layout of module 10's walls, 64 px a cell.
+usage: python make_walls.py [key ...] [--outline]      (needs Pillow, numpy)"""
 import math
 import os
 import sys
@@ -61,31 +61,56 @@ def box(x0, y0, x1, y1, r=0.0):
     return (inside & (dx * dx + dy * dy <= r * r + 1e-6)).astype(np.float32)
 
 
+DARKEN = 0.82                   # walls a little darker than their materials' plain colours, to stand off floors
+
+
 class Material:
     """How a wall of one material looks: beam and post half-widths (in cells), colour, its textures, and its post
     `round` (a bamboo culm) or square with corners rounded by `corner` of its half-width."""
-    def __init__(self, key, colour, beam, post, beam_tex, post_tex, edge=0.42, post_colour=None, round=False, corner=0.18):
-        self.key, self.colour, self.beam, self.post = key, np.array(colour, np.float32), beam, post
+    def __init__(self, key, colour, beam, post, beam_tex, post_tex, edge=1.0, post_colour=None, round=False, corner=0.18,
+                 joints=None, post_joints=None, mortar=None, rough=0.0, open_joints=False):
+        # edge darkens the outline (1 = none, the look chosen); every colour is taken DARKEN times
+        self.key, self.colour, self.beam, self.post = key, np.array(colour, np.float32) * DARKEN, beam, post
         self.beam_tex, self.post_tex, self.edge = beam_tex, post_tex, edge
-        self.post_colour = np.array(post_colour or colour, np.float32)
+        self.post_colour = np.array(post_colour or colour, np.float32) * DARKEN
         self.round, self.corner = round, corner
+        # joints(): the seams or mortar on a beam running across (a T x T bool mask), post_joints() on a post; mortar is
+        # their colour (None: the piece's own, darkened); rough roughens the outline, as if cut by hand
+        self.joints, self.post_joints, self.rough = joints, post_joints, rough
+        self.open_joints = open_joints                          # the joints are gaps, the ground showing through
+        self.mortar = None if mortar is None else tuple(v * DARKEN for v in mortar)
 
 
 # ------------------------------------------------------------------ textures: T x T arrays of brightness factors, grain along x
 
-def planks(seed, boards=2, half=0.19):
-    """Boards along the beam, a dark seam between them, long grain; repeats every tile along x."""
-    g = field(T / 1.0, 3.0 * SS, seed) * 0.10 + field(T / 4.0, 1.2 * SS, seed + 1) * 0.06
-    y = np.arange(T)[:, None] + 0.5
-    width = 2 * half * T / boards
-    out = 1.0 + g
+# Where each row of boards along a wood beam ends, as fractions of a tile: staggered row to row, repeating every tile.
+BOARD_CUTS = ((0.12, 0.58), (0.36, 0.86))
+
+
+def boards_of(half=0.19):
+    """A wood beam running across: two rows of boards, each board's id, and its joints (the seam between the rows
+    and the boards' butt ends)."""
+    y, x = np.mgrid[0:T, 0:T] + 0.5
     top = T / 2 - half * T
-    for k in range(1, boards):
-        seam = top + k * width
-        out = out * (1 - 0.35 * np.exp(-((y - seam) / (0.9 * SS)) ** 2))
-    for k in range(boards):                       # each board a touch lighter or darker
-        y0, y1 = top + k * width, top + (k + 1) * width
-        out = np.where((y >= y0) & (y < y1), out * (0.96 + 0.08 * ((seed + k * 7) % 3) / 2), out)
+    row = np.clip(np.floor((y - top) / (half * T)), 0, 1).astype(int)
+    ids = np.zeros((T, T), np.int32)
+    ends = np.zeros((T, T), bool)
+    for r, cuts in enumerate(BOARD_CUTS):
+        cut_px = np.array(cuts) * T
+        k = np.searchsorted(cut_px, x[row == r], side="right") % len(cuts)
+        ids[row == r] = r * 10 + k
+        d = np.min(np.abs((x[..., None] - cut_px + T / 2) % T - T / 2), axis=-1)
+        ends |= (row == r) & (d < 0.7 * SS)
+    seam = np.abs(y - T / 2) < 0.7 * SS
+    return ids, seam | ends, row, x, cut_px
+
+
+def planks(seed, boards=2, half=0.19):
+    """Boards along the beam, short and staggered, each its own shade, grain along it."""
+    ids, joints, row, x, _ = boards_of(half)
+    g = field(T / 1.0, 3.0 * SS, seed) * 0.10 + field(T / 4.0, 1.2 * SS, seed + 1) * 0.06
+    tint = 0.90 + 0.16 * ((np.sin(ids * 12.9898 + 3.1) * 43758.5453) % 1.0)
+    out = (1.0 + g) * tint
     return out
 
 
@@ -117,15 +142,50 @@ def culm(seed):
     y, x = np.mgrid[0:T, 0:T] + 0.5
     r = np.hypot(x - T / 2, y - T / 2) / T
     out = 1.0 + 0.06 * np.cos(r * 90)
-    return np.where(r < 0.17, 0.42 + r * 1.2, out)
+    return np.where(r < 0.08, 0.42 + r * 2.4, out)
 
 
-def bricks(seed, half, course=None, length=None):
-    """Bricks seen on the wall's top: courses along the beam, joints staggered row to row, light mortar,
-    each brick a little lighter or darker."""
+# Where each row of bamboo poles along a wall ends, as fractions of a tile: staggered row to row, repeating every tile.
+POLE_CUTS = ((0.20, 0.74), (0.47, 0.99))
+
+
+def poles_along(half):
+    """A wall of old bamboo poles laid along it, two side by side, a wall running across: each pixel's pole, its
+    place across the pole (0..1), and the joints (the seams between rows and the poles' cut ends)."""
     y, x = np.mgrid[0:T, 0:T] + 0.5
-    rows = 3
-    course = course or (2 * half * T / rows)
+    rows = len(POLE_CUTS)
+    top = T / 2 - half * T
+    width = 2 * half * T / rows
+    row = np.clip(np.floor((y - top) / width), 0, rows - 1).astype(int)
+    across = (y - top) / width - row
+    ids = np.zeros((T, T), np.int32)
+    ends = np.zeros((T, T), bool)
+    for r, cuts in enumerate(POLE_CUTS):
+        cut_px = np.array(cuts) * T
+        sel = row == r
+        k = np.searchsorted(cut_px, x[sel], side="right") % len(cuts)
+        ids[sel] = r * 10 + k
+        d = np.min(np.abs((x[..., None] - cut_px + T / 2) % T - T / 2), axis=-1)
+        ends |= sel & (d < 0.7 * SS)
+    seams = (np.minimum(across, 1 - across) * width < 0.6 * SS) & (y > top + 1) & (y < T - top - 1)
+    return ids, across, seams | ends, x
+
+
+def old_poles(seed, half):
+    """Old bamboo poles along the wall: each round across (lit down its middle), weathered grey-tan and a little
+    lighter or darker than the next, node rings along it."""
+    ids, across, joints, x = poles_along(half)
+    tint = 0.84 + 0.26 * ((np.sin(ids * 12.9898 + 5.0) * 43758.5453) % 1.0)
+    out = (0.80 + 0.30 * np.sin(np.clip(across, 0, 1) * np.pi)) * tint * (1 + field(2.0 * SS, T / 10.0, seed) * 0.05)
+    offset = ((np.sin(ids * 78.233 + 1.0) * 43758.5453) % 1.0) * T
+    node = np.abs(((x + offset) % (T / 2)) - T / 4) < 0.6 * SS           # a node every half cell, shifted pole to pole
+    return np.where(node, out * 0.72, out)
+
+
+def brick_grid(half, course=None, length=None, joint=0.9):
+    """Courses along a beam running across, joints staggered row to row: each pixel's (row, column) and the mortar."""
+    y, x = np.mgrid[0:T, 0:T] + 0.5
+    course = course or (2 * half * T / 3)
     length = length or T / 4
     top = T / 2 - half * T
     row = np.floor((y - top) / course)
@@ -133,10 +193,15 @@ def bricks(seed, half, course=None, length=None):
     col = np.floor(xs / length)
     fy = (y - top) / course - row
     fx = xs / length - col
-    mortar = (np.minimum(fy, 1 - fy) * course < 0.9 * SS) | (np.minimum(fx, 1 - fx) * length < 0.9 * SS)
-    tint = 0.9 + 0.2 * ((np.sin(row * 12.9898 + col * 78.233) * 43758.5453) % 1.0)
-    out = tint * (1 + field(T / 6.0, T / 6.0, seed) * 0.05)
-    return np.where(mortar, 1.18, out)
+    mortar = (np.minimum(fy, 1 - fy) * course < joint * SS) | (np.minimum(fx, 1 - fx) * length < joint * SS)
+    return row, col, mortar
+
+
+def bricks(seed, half, course=None, length=None):
+    """Bricks seen on the wall's top, each a little lighter or darker (the mortar is drawn from the joints)."""
+    row, col, mortar = brick_grid(half, course, length)
+    tint = 0.88 + 0.24 * ((np.sin(row * 12.9898 + col * 78.233) * 43758.5453) % 1.0)
+    return tint * (1 + field(T / 6.0, T / 6.0, seed) * 0.05)
 
 
 def blocks(seed, half):
@@ -153,25 +218,57 @@ def pillar(seed, kind):
     c = T / 2
     if kind == "brick":
         out = 1 + field(T / 6.0, T / 6.0, seed) * 0.05
-        joint = (np.abs(x - c) < 0.9 * SS) | (np.abs(y - c) < 0.9 * SS)
         quad = (x > c) * 1 + (y > c) * 2
-        out = out * (0.92 + 0.06 * (quad % 3))
-        return np.where(joint, 1.16, out)
+        return out * (0.90 + 0.07 * (quad % 3))
     d = np.maximum(np.abs(x - c), np.abs(y - c)) / T
     border = (d > 0.26) & (d < 0.285)
     return np.where(border, 0.82, 1.0) * (1 + field(T / 8.0, T / 8.0, seed) * 0.06)
 
 
+def plank_seam(half):
+    y = np.arange(T)[:, None] + np.zeros((1, T)) + 0.5
+    return np.abs(y - T / 2) < 0.8 * SS
+
+
+def cross_joint():
+    y, x = np.mgrid[0:T, 0:T] + 0.5
+    return (np.abs(x - T / 2) < 0.9 * SS) | (np.abs(y - T / 2) < 0.9 * SS)
+
+
 MATERIALS = {
     "wood": Material("wood", (136, 96, 60), 0.19, 0.37, lambda s: planks(s), lambda s: end_grain(s),
-                     post_colour=(122, 84, 52)),
-    "bamboo": Material("bamboo", (196, 170, 104), 0.15, 0.30, lambda s: weave(s, 0.15), lambda s: culm(s),
-                       post_colour=(150, 160, 84), round=True, edge=0.45),
+                     post_colour=(122, 84, 52), joints=lambda: boards_of(0.19)[1], rough=0.02),
+    "bamboo": Material("bamboo", (150, 130, 88), 0.19, 0.37, lambda s: old_poles(s, 0.19), lambda s: culm(s),
+                       post_colour=(138, 118, 80), round=True, joints=lambda: poles_along(0.19)[2]),
     "brick": Material("brick", (170, 82, 56), 0.23, 0.38, lambda s: bricks(s, 0.23), lambda s: pillar(s, "brick"),
-                      post_colour=(160, 76, 52), corner=0.08, edge=0.40),
+                      post_colour=(160, 76, 52), corner=0.08, joints=lambda: brick_grid(0.23)[2],
+                      post_joints=cross_joint, mortar=(132, 104, 82), rough=0.05),
     "stone": Material("stone", (128, 128, 122), 0.25, 0.40, lambda s: blocks(s, 0.25), lambda s: pillar(s, "stone"),
-                      post_colour=(120, 120, 114), corner=0.10, edge=0.42),
+                      post_colour=(120, 120, 114), corner=0.10, joints=lambda: brick_grid(0.25, 0.25 * T, T / 2)[2],
+                      mortar=(92, 90, 84), rough=0.08),
 }
+
+
+def roughen(mask, amount, seed):
+    """The outline nudged in and out a little, as if cut by hand (repeats every tile, so joins still meet)."""
+    if amount <= 0:
+        return mask
+    n = field(T / 7.0, T / 7.0, seed) * 0.6 + field(T / 18.0, T / 18.0, seed + 1) * 0.4
+    return ((blur(mask, 1.2 * SS) + n * amount) > 0.5).astype(np.float32)
+
+
+def facets(mask, width=2.0):
+    """A hard-edged bevel on each piece of `mask`: a lit band along its top-left edges, a dark band along its
+    bottom-right, flat between."""
+    s = blur(mask, 1.0 * SS)
+    gx = shift(s, 0, -1) - shift(s, 0, 1)
+    gy = shift(s, -1, 0) - shift(s, 1, 0)
+    facing = (gx + gy) / (np.hypot(gx, gy) * 1.4142 + 1e-6)
+    band = (mask > 0) & ~(erode(mask, width * SS) > 0)
+    out = np.ones(mask.shape, np.float32)
+    out[band & (facing > 0.35)] = 1.16
+    out[band & (facing < -0.35)] = 0.78
+    return out
 
 
 def tile(mat, sides, seed):
@@ -197,28 +294,46 @@ def tile(mat, sides, seed):
     beams = np.maximum(beams_h, beams_v) * (1 - post)
     shape = np.maximum(beams, post)
 
+    whole = roughen(np.maximum(beams_h, beams_v), mat.rough, 41)
+    post = roughen(post, mat.rough, 43)
+    beams_h = whole * (beams_h >= beams_v)
+    beams_v = whole * (beams_v > beams_h)
+    beams = whole * (1 - post)
+    shape = np.maximum(beams, post)
+
     tex_h = mat.beam_tex(1)                                     # one texture a direction: joints meet across tiles
     tex_v = mat.beam_tex(1).T
     shade = np.where(beams_v > beams_h, tex_v, tex_h)
     base = np.where(post[..., None] > 0, mat.post_colour * mat.post_tex(seed + 9)[..., None], mat.colour * shade[..., None])
 
-    def lit(mask):
-        """Bevel: brighter toward the top-left edge, darker toward the bottom-right."""
-        s = blur(mask, 2.2 * SS)
-        k = int(1.5 * SS)
-        e = shift(s, k, k) - shift(s, -k, -k)
-        return 1.0 - 0.9 * e
-
-    light = np.where(post > 0, lit(post), lit(np.maximum(beams_h, beams_v)))
+    # The pieces between the joints each get a hard bevel: a lit facet top-left, a shadowed one bottom-right.
+    joints = np.zeros((T, T), bool)
+    if mat.joints is not None:
+        jh = mat.joints()
+        joints |= np.where(beams_v > beams_h, jh.T, jh) & (beams > 0)
+    if mat.post_joints is not None:
+        joints |= mat.post_joints() & (post > 0)
+    if mat.open_joints:                                         # gaps between poles: nothing drawn there
+        gaps = joints & (post == 0)
+        whole = whole * ~gaps
+        beams = beams * ~gaps
+        shape = np.maximum(beams, post)
+        joints = joints & ~gaps
+    pieces_b = (beams > 0) & ~joints
+    pieces_p = (post > 0) & ~joints
+    light = np.where(post > 0, facets(pieces_p.astype(np.float32)), facets(whole * ~joints))
     col = base * light[..., None]
-    edge = 1.6 * SS
+    if mat.mortar is not None:
+        col[joints] = np.array(mat.mortar, np.float32) * (0.9 + 0.2 * field(T / 8.0, T / 8.0, 47))[joints][..., None]
+    else:
+        col[joints] *= 0.62
+    edge = 1.5 * SS
     # The beam runs on under the post: its edge only where it shows, so the post's one edge marks the join.
-    whole = np.maximum(beams_h, beams_v)
     ring = (whole > 0) & ~(erode(whole, edge) > 0) & (post == 0)
     col[ring] = col[ring] * mat.edge
     ring = (post > 0) & ~(erode(post, edge) > 0)
     col[ring] = col[ring] * mat.edge
-    shadow = blur(shift(shape, 3 * SS, 2 * SS), 2.0 * SS) * 0.35 * (1 - shape)
+    shadow = blur(shift(shape, 3 * SS, 2 * SS), 2.0 * SS) * 0.40 * (1 - shape)
 
     out = np.zeros((T, T, 4), np.float32)
     out[..., :3] = col * shape[..., None]
@@ -237,6 +352,9 @@ def sheet(mat):
 
 def main():
     keys = [a for a in sys.argv[1:] if not a.startswith("--")] or list(MATERIALS)
+    if "--outline" in sys.argv:                                 # the dark outline, for comparison
+        for mat in MATERIALS.values():
+            mat.edge = 0.36
     for key in keys:
         sheet(MATERIALS[key]).save(os.path.join(HERE, f"wall_{key}.png"))
         print(f"wall_{key}.png")
