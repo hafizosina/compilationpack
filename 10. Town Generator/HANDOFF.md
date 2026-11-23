@@ -831,12 +831,14 @@ blend stops at a module 12 chunk's border, since a chunk knows only its own cell
 **A piece can join like a wall without being one.** `EcsTileComponent.link` names a link group; the tile
 sync draws such a piece by the mask of its four side neighbours whose object shares the link, from a
 16-shape sheet in the walls' side layout (`EcsDualGrid.side_layout`, cached per source), with no turn. A
-2-tile sheet is a gate's: across when it joins left or right, else down. An object change also redraws its
+6-tile sheet is a gate's: across when it joins left or right, else down, a post on each side its fence meets (none toward another cell of the same gate, so a 2-cell gate is one gateway). An object change also redraws its
 four neighbours' linked pieces, so joins follow. Fences stay furniture, so a fenced field never becomes a
 room. **Gates** carry their fence's link, so the fence runs into them, and are walkable:
 `EcsFurnitureComponent.walkable`, read by the nav once the piece is born. Blueprints: `fence` (bamboo
-rail), `fence_woven`, `fence_hedge`, `fence_brick_wall`, and `gate_bamboo_rail`, `gate_woven`, `gate_hedge`,
-`gate_brick` (candi bentar); art from `Global/Asset/Structure/make_fences.py`. Module 12 picks them from
+rail), `fence_plank`, `fence_stick`, `fence_stone`, `fence_hedge` (plant fence), `fence_brick_wall` (candi fence),
+each with its gate (`gate_bamboo_rail`, `gate_plank`, `gate_stick`, `gate_stone`, `gate_hedge`, `gate_brick`, the
+candi bentar); art from `Global/Asset/Structure/make_fences.py`, every fence on one size scale (`FENCE`, `POST`,
+`RAIL`, `STAKE`, `GATE_AT` there), thinner than walls. Module 12 picks them from
 `EcsSettlementDef`'s Fences group. **Gates are drawn closed only**; the decided open state (drawn
 see-through while someone passes, like a door) is not built.
 

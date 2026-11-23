@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://7vfeqt7qfnyv"
-path="res://.godot/imported/fence_woven.png-0bc693a7faaed7c87546969dd7a5eea0.ctex"
+uid="uid://d3g2bppm7hvjc"
+path="res://.godot/imported/fence_stick.png-9cdf4503eb638ad1ceb67a9b96b4d139.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Global/Asset/Structure/fence_woven.png"
-dest_files=["res://.godot/imported/fence_woven.png-0bc693a7faaed7c87546969dd7a5eea0.ctex"]
+source_file="res://Global/Asset/Structure/fence_stick.png"
+dest_files=["res://.godot/imported/fence_stick.png-9cdf4503eb638ad1ceb67a9b96b4d139.ctex"]
 
 [params]
 

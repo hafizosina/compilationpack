@@ -23,5 +23,5 @@ tags = Array[StringName]([&"fence"])
 [resource]
 script = ExtResource("def")
 id = &"fence_brick_wall"
-display_name = "Low brick wall"
+display_name = "Candi fence"
 components = Array[ExtResource("base")]([SubResource("c_grid"), SubResource("c_tile"), SubResource("c_furn")])

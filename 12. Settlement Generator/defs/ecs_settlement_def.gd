@@ -92,10 +92,10 @@ extends Resource
 @export var field_fence: StringName = &"fence"
 @export var pen_fence: StringName = &"fence"
 ## The fence round a house's yard, by wealth, poorest first.
-@export var yard_fences: Array[StringName] = [&"fence_hedge", &"fence_woven", &"fence_woven"]
+@export var yard_fences: Array[StringName] = [&"fence_stick", &"fence_plank", &"fence_hedge"]
 ## The wall round a rich compound, and round a temple's.
 @export var compound_fence: StringName = &"fence_brick_wall"
 @export var temple_fence: StringName = &"fence_brick_wall"
 ## The gate set into each fence, by the fence's blueprint id.
-@export var gates: Dictionary[StringName, StringName] = {&"fence": &"gate_bamboo_rail", &"fence_woven": &"gate_woven",
-	&"fence_hedge": &"gate_hedge", &"fence_brick_wall": &"gate_brick"}
+@export var gates: Dictionary[StringName, StringName] = {&"fence": &"gate_bamboo_rail", &"fence_plank": &"gate_plank",
+	&"fence_stick": &"gate_stick", &"fence_stone": &"gate_stone", &"fence_hedge": &"gate_hedge", &"fence_brick_wall": &"gate_brick"}

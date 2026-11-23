@@ -478,7 +478,9 @@ func _draw_entity_tile(grid: EcsTownGridSingleton, layer: TileMapLayer, cell: Ve
 		return
 	var source := _source_for(layer, tile)
 	var place := _world.get_component(id, EcsGridPositionComponent) as EcsGridPositionComponent
-	if tile.link != &"":
+	if tile.link != &"" and _is_gate_sheet(layer, source):
+		layer.set_cell(cell, source, _gate_tile(grid, cell, tile))
+	elif tile.link != &"":
 		layer.set_cell(cell, source, EcsDualGrid.atlas_for(_link_layout(layer, source), _link_mask(grid, cell, tile.link), cell))
 	elif place == null:
 		layer.set_cell(cell, source, tile.atlas)
@@ -494,6 +496,35 @@ func _link_of(id: int) -> StringName:
 		if _world != null and id > EcsWorld.NO_ENTITY else null
 	return tile.link if tile != null else &""
 
+## Whether a linked sheet is a gate's: a row of GATE_TILES tiles.
+func _is_gate_sheet(layer: TileMapLayer, source_id: int) -> bool:
+	return (layer.tile_set.get_source(source_id) as TileSetAtlasSource).get_tiles_count() == 6
+
+## A gate's tile: across when its fence or gate is beside it left or right (or nothing is), else down; a post on
+## each side but one that is another cell of the same gate (the same sheet), so a gate two cells wide is one gateway.
+## Tiles: 0 across, 1 down, both posts; 2, 3 across with only the right, only the left; 4, 5 down with only the
+## bottom, only the top.
+func _gate_tile(grid: EcsTownGridSingleton, cell: Vector2i, tile: EcsTileComponent) -> Vector2i:
+	var mask := _link_mask(grid, cell, tile.link)
+	var down := (mask & (EcsDualGrid.LEFT | EcsDualGrid.RIGHT)) == 0 and mask != 0
+	var first := cell + (Vector2i.UP if down else Vector2i.LEFT)
+	var second := cell + (Vector2i.DOWN if down else Vector2i.RIGHT)
+	var first_gate := _same_sheet(grid, first, tile)
+	var second_gate := _same_sheet(grid, second, tile)
+	if first_gate == second_gate:
+		return Vector2i(1 if down else 0, 0)
+	if down:
+		return Vector2i(4 if first_gate else 5, 0)
+	return Vector2i(2 if first_gate else 3, 0)
+
+func _same_sheet(grid: EcsTownGridSingleton, cell: Vector2i, tile: EcsTileComponent) -> bool:
+	if not EcsTownGrid.in_bounds(grid, cell):
+		return false
+	var id := grid.object_id[EcsTownGrid.index(grid, cell)]
+	var other := _world.get_component(id, EcsTileComponent) as EcsTileComponent \
+		if _world != null and id > EcsWorld.NO_ENTITY else null
+	return other != null and other.texture == tile.texture
+
 ## Which sides of `cell` hold an object of link group `link`.
 func _link_mask(grid: EcsTownGridSingleton, cell: Vector2i, link: StringName) -> int:
 	var mask := 0
@@ -503,18 +534,9 @@ func _link_mask(grid: EcsTownGridSingleton, cell: Vector2i, link: StringName) ->
 			mask |= EcsDualGrid.SIDE_BITS[k]
 	return mask
 
-## The join layout of a linked sheet, read once: a 2-tile sheet is a gate's, across when it joins
-## left or right, else down; any other is the walls' side layout.
+## The join layout of a linked fence sheet, the walls' side layout, read once.
 func _link_layout(layer: TileMapLayer, source_id: int) -> Dictionary:
 	var key := [layer, source_id]
 	if not _link_layouts.has(key):
-		var source := layer.tile_set.get_source(source_id) as TileSetAtlasSource
-		var layout: Dictionary = {}
-		if source.get_tiles_count() == 2:
-			for mask in 16:
-				var down := (mask & (EcsDualGrid.LEFT | EcsDualGrid.RIGHT)) == 0 and mask != 0
-				layout[mask] = [Vector2i(1, 0) if down else Vector2i(0, 0)]
-		else:
-			layout = EcsDualGrid.side_layout(source)
-		_link_layouts[key] = layout
+		_link_layouts[key] = EcsDualGrid.side_layout(layer.tile_set.get_source(source_id) as TileSetAtlasSource)
 	return _link_layouts[key]

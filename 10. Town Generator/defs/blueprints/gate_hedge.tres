@@ -24,5 +24,5 @@ walkable = true
 [resource]
 script = ExtResource("def")
 id = &"gate_hedge"
-display_name = "Hedge opening"
+display_name = "Plant fence gate"
 components = Array[ExtResource("base")]([SubResource("c_grid"), SubResource("c_tile"), SubResource("c_furn")])

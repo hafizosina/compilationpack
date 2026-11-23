@@ -1,6 +1,7 @@
 """Fence and gate sheets in the walls' style (make_walls.py): a hard bevel on each part lit from the top-left, no outline,
 the walls' darker palette, a faint shadow; posts and rails joined to the fences beside them, 16 join shapes in the
-walls' side layout, 64 px a cell. A gate is one cell, 2 tiles: across, down.
+walls' side layout, 64 px a cell. A gate is one cell, 6 tiles (GATE_TILES): across and down, posts on both
+sides or on one, for a gate two cells wide.
 usage: python make_fences.py [key ...]      (needs Pillow, numpy)"""
 import os
 import sys
@@ -8,7 +9,7 @@ import sys
 import numpy as np
 from PIL import Image
 
-from make_walls import CELL, DARKEN, SIDES, SS, T, blur, box, bricks, erode, facets, field, pillar, shift
+from make_walls import CELL, DARKEN, SIDES, SS, T, blocks, blur, boards_of, box, brick_grid, bricks, erode, facets, field, pillar, planks, shift
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 C = T / 2
@@ -83,18 +84,6 @@ def split_bamboo(half, seed):
     return np.where(node, out * 0.78, out)
 
 
-def screen(seed):
-    """A fine woven bamboo screen: narrow strips over and under on the diagonal."""
-    y, x = YX
-    p = T / 16
-    u, v = (x + y) / p, (x - y) / p
-    over = (np.floor(u) + np.floor(v)) % 2 == 0
-    fu, fv = u - np.floor(u), v - np.floor(v)
-    strip = np.where(over, np.minimum(fu, 1 - fu), np.minimum(fv, 1 - fv))
-    out = np.where(over, 1.07, 0.90) * (0.84 + 0.16 * np.clip(strip * 6, 0, 1))
-    return out * (1 + field(T / 3.0, T / 3.0, seed) * 0.05)
-
-
 def culm_top(cx, cy, r):
     """A round bamboo post cut across: the culm's wall, its hollow dark."""
     y, x = YX
@@ -114,39 +103,150 @@ def coping(seed):
     return 1 + field(T / 8.0, T / 8.0, seed) * 0.06
 
 
+# ------------------------------------------------------------------ standard sizes, in cells (walls: beam 0.19, post 0.37)
+
+FENCE = 0.10                    # half-width of a fence's body
+POST = 0.15                     # half-width of a fence's post or pillar
+RAIL = 0.035                    # half-width of a thin rail
+STAKE = 0.065                   # radius of a stake's top
+GATE_AT = 0.17                  # a gate's posts, in from the cell's edges
+
+WOOD = (136, 96, 60)
+STONE = (128, 128, 122)
+STICK = (122, 98, 68)
+BRICK = (170, 82, 56)
+LEAF = (76, 116, 54)
+
+
+def split(mask, joints):
+    """A part cut into pieces by its joints: the pieces (each bevelled on its own) and the joints between."""
+    return mask * ~joints, mask * joints
+
+
+def square(cx, cy, half):
+    return box(cx - half * T, cy - half * T, cx + half * T, cy + half * T, 0.12 * half * T)
+
+
+def stubs(half, to, left=True, right=True):
+    """The fence's body running in from the edges of a gate's cell to its posts, `to` in from the edges; only on the
+    sides where the fence meets the gate."""
+    m = np.zeros((T, T), np.float32)
+    if left:
+        m = np.maximum(m, box(-8, C - half * T, to * T, C + half * T))
+    if right:
+        m = np.maximum(m, box((1 - to) * T, C - half * T, T + 8, C + half * T))
+    return m
+
+
+def ends(left, right):
+    """A gate's posts: the centres on the sides where the fence meets it, and the leaf's reach (to the cell's edge
+    where it runs on into the next cell of the same gate)."""
+    lo = GATE_AT * T if left else -8
+    hi = (1 - GATE_AT) * T if right else T + 8
+    at = ([GATE_AT * T] if left else []) + ([(1 - GATE_AT) * T] if right else [])
+    return lo, hi, at
+
+
+def union(masks):
+    out = np.zeros((T, T), np.float32)
+    for m in masks:
+        out = np.maximum(out, m)
+    return out
+
+
+def tiers(cx, cy, top, colours, knob=True):
+    """A candi-like pillar from above: square tiers stepping in from half-width `top`, bricks on the lowest, a small
+    round knob (ratna) crowning it."""
+    layers = []
+    n = len(colours)
+    for k, colour in enumerate(colours):
+        tex = pillar(9 + k, "brick") if k == 0 else 1 + field(T / 8.0, T / 8.0, 20 + k) * 0.05
+        layers.append((square(cx, cy, top * (1 - 0.6 * k / n)), paint(colour, tex), 1.0))
+    if knob:
+        layers.append((disc(cx, cy, top * 0.22 * T), paint((196, 104, 72), np.ones((T, T))), 1.0))
+    return layers
+
+
 # ------------------------------------------------------------------ fences: layers for one join shape
 
 def bamboo_rail(sides):
-    h, v = arms(sides, 0.085)
+    """Split-bamboo rails on round bamboo posts, a post in every cell."""
+    h, v = arms(sides, FENCE * 0.8)
     rail = np.maximum(h, v)
-    tex = along(paint((204, 182, 116), split_bamboo(0.085, 3)), h, v)
-    r = 0.13 * T
-    post = disc(C, C, r)
-    return [(rail, tex, 0.50), (post, paint((166, 160, 90), culm_top(C, C, r)), 0.48)]
+    tex = along(paint((204, 182, 116), split_bamboo(FENCE * 0.8, 3)), h, v)
+    r = POST * T
+    return [(rail, tex, 1.0), (disc(C, C, r), paint((166, 160, 90), culm_top(C, C, r)), 1.0)]
 
 
-def woven(sides):
-    h, v = arms(sides, 0.07)
-    panel = np.maximum(h, v)
-    tex = along(paint((212, 188, 126), screen(5)), h, v)
-    r = 0.11 * T
-    post = disc(C, C, r)
-    return [(panel, tex, 0.52), (post, paint((156, 150, 84), culm_top(C, C, r)), 0.48)]
+def plank(sides):
+    """Teak boards between square posts: two rows of short boards, staggered, as the wood wall's."""
+    h, v = arms(sides, FENCE)
+    rail = np.maximum(h, v)
+    joints_h = boards_of(FENCE)[1]
+    joints = np.where(v > h, joints_h.T, joints_h) & (rail > 0)
+    pieces, gaps = split(rail, joints)
+    layers = [(pieces, along(paint(WOOD, planks(1, half=FENCE)), h, v), 1.0), (gaps, paint(WOOD, np.full((T, T), 0.55)), 1.0)]
+    if sides not in ("RL", "BT"):
+        layers.append((square(C, C, POST), paint((122, 84, 52), np.ones((T, T))), 1.0))
+    return layers
+
+
+def stakes(sides, centre=True):
+    """Round stake tops along each joined arm, six a cell on the cell grid, and one in the middle."""
+    m = disc(C, C, STAKE * 1.15 * T) if centre else np.zeros((T, T), np.float32)
+    for k in range(6):
+        p = (k + 0.5) * T / 6
+        r = STAKE * T * (0.9 + 0.2 * ((k * 37) % 5) / 4)
+        if "R" in sides and p > C:
+            m = np.maximum(m, disc(p, C, r))
+        if "L" in sides and p < C:
+            m = np.maximum(m, disc(p, C, r))
+        if "B" in sides and p > C:
+            m = np.maximum(m, disc(C, p, r))
+        if "T" in sides and p < C:
+            m = np.maximum(m, disc(C, p, r))
+    return m
+
+
+def stick_tex():
+    y, x = YX
+    step = T / 6
+    rings = 1 + 0.08 * np.cos(np.hypot(x % step - step / 2, y % step - step / 2) * 0.9)
+    return paint(STICK, rings * (1 + field(T / 8.0, T / 8.0, 5) * 0.08))
+
+
+def stick(sides):
+    """A stick fence: close-set wooden stakes tied to a thin rail behind them."""
+    h, v = arms(sides, RAIL)
+    return [(np.maximum(h, v), paint((104, 82, 56), np.ones((T, T))), 1.0), (stakes(sides), stick_tex(), 1.0)]
+
+
+def stone(sides):
+    """A low andesite wall of cut blocks, square block pillars at its ends, corners and joins."""
+    h, v = arms(sides, FENCE)
+    wall = np.maximum(h, v)
+    joints_h = brick_grid(FENCE, FENCE * T, T / 2)[2]
+    joints = np.where(v > h, joints_h.T, joints_h) & (wall > 0)
+    pieces, gaps = split(wall, joints)
+    layers = [(pieces, along(paint(STONE, blocks(3, FENCE)), h, v), 1.0), (gaps, paint((92, 90, 84), np.ones((T, T))), 1.0)]
+    if sides not in ("RL", "BT"):
+        layers.append((square(C, C, POST), paint((120, 120, 114), pillar(4, "stone")), 1.0))
+    return layers
 
 
 def hedge_mask(sides):
-    """A clipped-free hedge: round the middle and along each joined arm, its outline lumpy but the same at every
-    tile's edge (width and noise repeat every tile), so arms meet their neighbours'."""
+    """A plant fence: round the middle and along each joined arm, its outline lumpy but the same at every tile's edge
+    (width and noise repeat every tile), so arms meet their neighbours'."""
     y, x = YX
-    n = field(T / 7.0, T / 7.0, 21) * 0.05 * T
-    d = np.hypot(x - C, y - C) - 0.27 * T
+    n = field(T / 7.0, T / 7.0, 21) * 0.035 * T
+    d = np.hypot(x - C, y - C) - FENCE * 1.9 * T
     for side, (sx, sy) in {"R": (1, 0), "L": (-1, 0), "B": (0, 1), "T": (0, -1)}.items():
         if side not in sides:
             continue
-        s = x if sx else y
+        s_ = x if sx else y
         across = np.abs(y - C) if sx else np.abs(x - C)
-        w = 0.21 * T * (1 + 0.12 * np.sin(2 * np.pi * 3 * s / T + 0.7))
-        on = (s - C) * (sx + sy) >= 0
+        w = FENCE * 1.5 * T * (1 + 0.12 * np.sin(2 * np.pi * 3 * s_ / T + 0.7))
+        on = (s_ - C) * (sx + sy) >= 0
         d = np.minimum(d, np.where(on, across - w, 1e9))
     return (d + n < 0).astype(np.float32)
 
@@ -154,97 +254,129 @@ def hedge_mask(sides):
 def flowers(mask, seed, count):
     """A few red hibiscus flowers on the hedge, away from the tile's edges: [(mask, rgb, edge)]."""
     rng = np.random.default_rng(seed)
-    inner = erode(mask, 4 * SS)
+    inner = erode(mask, 3 * SS)
     petals = np.zeros((T, T), np.float32)
     hearts = np.zeros((T, T), np.float32)
     placed = 0
-    for _ in range(40):
+    for _ in range(60):
         if placed >= count:
             break
         cx, cy = rng.uniform(6 * SS, T - 6 * SS, 2)
         if inner[int(cy), int(cx)] <= 0:
             continue
-        petals = np.maximum(petals, disc(cx, cy, 2.2 * SS))
-        hearts = np.maximum(hearts, disc(cx, cy, 0.8 * SS))
+        petals = np.maximum(petals, disc(cx, cy, 2.0 * SS))
+        hearts = np.maximum(hearts, disc(cx, cy, 0.7 * SS))
         placed += 1
-    return [(petals, paint((200, 44, 46), np.ones((T, T))), 0.62), (hearts, paint((236, 196, 90), np.ones((T, T))), 1.0)]
+    return [(petals, paint((200, 44, 46), np.ones((T, T))), 1.0), (hearts, paint((236, 196, 90), np.ones((T, T))), 1.0)]
 
 
 def hedge(sides, seed=0):
     m = hedge_mask(sides)
-    return [(m, paint((76, 116, 54), leaves(31)), 0.55)] + flowers(m, 101 + seed, 1 + len(sides) // 2 + seed % 2)
+    return [(m, paint(LEAF, leaves(31)), 1.0)] + flowers(m, 101 + seed, 1 + len(sides) // 2 + seed % 2)
 
 
 def brick_wall(sides):
-    h, v = arms(sides, 0.18)
+    """A candi fence: a low Majapahit brick wall, each brick its own, a brick coping along its top, and at its ends,
+    corners and joins a pillar built up in tiers like a candi, crowned with a knob."""
+    h, v = arms(sides, FENCE)
     wall = np.maximum(h, v)
-    tex = along(paint((178, 90, 62), bricks(7, 0.18)), h, v)
-    ch, cv = arms(sides, 0.06)
-    layers = [(wall, tex, 0.45), (np.maximum(ch, cv), paint((214, 194, 160), coping(8)), 0.72)]
+    joints_h = brick_grid(FENCE)[2]
+    joints = np.where(v > h, joints_h.T, joints_h) & (wall > 0)
+    pieces, gaps = split(wall, joints)
+    layers = [(pieces, along(paint(BRICK, bricks(7, FENCE)), h, v), 1.0), (gaps, paint((132, 104, 82), np.ones((T, T))), 1.0)]
+    ch, cv = arms(sides, FENCE * 0.45)
+    layers.append((np.maximum(ch, cv), paint((186, 94, 64), 1 + field(T / 8.0, T / 8.0, 8) * 0.06), 1.0))
     if sides not in ("RL", "BT"):
-        p = 0.22 * T
-        q = 0.14 * T
-        layers.append((box(C - p, C - p, C + p, C + p, 0.08 * p), paint((168, 82, 56), pillar(9, "brick")), 0.42))
-        layers.append((box(C - q, C - q, C + q, C + q, 0.1 * q), paint((218, 198, 164), coping(10)), 0.70))
+        layers += tiers(C, C, POST * 1.1, ((160, 76, 52), (178, 88, 60), (190, 98, 66)))
     return layers
 
 
-FENCES = {"bamboo_rail": bamboo_rail, "woven": woven, "hedge": hedge, "brick_wall": brick_wall}
+FENCES = {"bamboo_rail": bamboo_rail, "plank": plank, "stick": stick, "stone": stone, "hedge": hedge,
+          "brick_wall": brick_wall}
 
 
 # ------------------------------------------------------------------ gates: one cell drawn across, joined at both sides
 
-def gate_bamboo_rail():
-    """A swing gate of three lashed poles between two posts, the fence's rails running on to the cell's edges."""
-    stub = np.maximum(box(-8, C - 0.085 * T, 0.16 * T, C + 0.085 * T), box(0.84 * T, C - 0.085 * T, T + 8, C + 0.085 * T))
-    rail = paint((204, 182, 116), split_bamboo(0.085, 3))
-    leaf = box(0.16 * T, C - 0.12 * T, 0.84 * T, C + 0.12 * T)
-    poles = paint((222, 200, 136), np.ones((T, T)))
+def gate_bamboo_rail(left=True, right=True):
+    """A swing gate of three lashed poles between two round posts, the fence's rails running on to the cell's edges."""
     y, x = YX
-    pv = (y - (C - 0.12 * T)) / (0.24 * T / 3)
-    fv = pv - np.floor(pv)
-    poles *= (0.82 + 0.28 * np.sin(np.clip(fv, 0, 1) * np.pi))[..., None]
-    for sx in (0.36, 0.64):
-        poles[np.abs(x - sx * T) < 1.4 * SS] = (110, 84, 52)
-    r = 0.12 * T
-    posts = disc(0.16 * T, C, r) + disc(0.84 * T, C, r)
-    post_tex = np.where(x < C, culm_top(0.16 * T, C, r), culm_top(0.84 * T, C, r))
-    return [(stub, rail, 0.50), (leaf, poles, 0.46), (np.minimum(posts, 1), paint((166, 160, 90), post_tex), 0.48)]
+    lo, hi, at = ends(left, right)
+    half = FENCE * 1.1
+    leaf = box(lo, C - half * T, hi, C + half * T)
+    pv = (y - (C - half * T)) / (2 * half * T / 3)
+    poles = paint((222, 200, 136), 0.82 + 0.28 * np.sin(np.clip(pv - np.floor(pv), 0, 1) * np.pi))
+    for sx in (0.38, 0.62):
+        poles[np.abs(x - sx * T) < 1.2 * SS] = (110, 84, 52)
+    r = POST * T
+    posts = union([disc(cx, C, r) for cx in at])
+    post_tex = np.where(x < C, culm_top(GATE_AT * T, C, r), culm_top((1 - GATE_AT) * T, C, r))
+    return [(stubs(FENCE * 0.8, GATE_AT, left, right), paint((204, 182, 116), split_bamboo(FENCE * 0.8, 3)), 1.0),
+            (leaf, poles, 1.0), (posts, paint((166, 160, 90), post_tex), 1.0)]
 
 
-def gate_woven():
-    """A gate of woven nipa leaf in a bamboo frame, between two posts."""
-    stub = np.maximum(box(-8, C - 0.07 * T, 0.15 * T, C + 0.07 * T), box(0.85 * T, C - 0.07 * T, T + 8, C + 0.07 * T))
+def gate_plank(left=True, right=True):
+    """A gate of upright boards with a Z brace, between two square posts; the fence's boards run on to the edges."""
     y, x = YX
-    leaf = box(0.15 * T, C - 0.09 * T, 0.85 * T, C + 0.09 * T)
-    ribs = 0.9 + 0.14 * np.sin(x / (1.6 * SS)) + field(T / 4.0, 1.5 * SS, 12) * 0.08
-    frame = np.maximum(box(0.15 * T, C - 0.11 * T, 0.85 * T, C - 0.075 * T), box(0.15 * T, C + 0.075 * T, 0.85 * T, C + 0.11 * T))
-    r = 0.12 * T
-    posts = np.minimum(disc(0.15 * T, C, r) + disc(0.85 * T, C, r), 1)
-    post_tex = np.where(x < C, culm_top(0.15 * T, C, r), culm_top(0.85 * T, C, r))
-    return [(stub, paint((212, 188, 126), screen(5)), 0.52), (leaf, paint((150, 138, 76), ribs), 0.50),
-            (frame, paint((206, 184, 118), np.ones((T, T))), 0.55), (posts, paint((156, 150, 84), post_tex), 0.48)]
+    lo, hi, at = ends(left, right)
+    leaf = box(lo, C - FENCE * 0.85 * T, hi, C + FENCE * 0.85 * T)
+    width = (1 - 2 * GATE_AT) * T / 5
+    board = np.floor((x - GATE_AT * T) / width)
+    fx = (x - GATE_AT * T) / width - board
+    seams = (np.minimum(fx, 1 - fx) * width < 0.7 * SS) & (leaf > 0)
+    brace = (np.abs((y - C) - (x - C) * 0.22) < 1.2 * SS) & (leaf > 0)
+    pieces, gaps = split(leaf, seams)
+    tint = 0.92 + 0.14 * ((np.sin(board * 12.9898) * 43758.5453) % 1.0)
+    posts = union([square(cx, C, POST) for cx in at])
+    return [(stubs(FENCE, GATE_AT, left, right), paint(WOOD, planks(1, half=FENCE)), 1.0), (pieces, paint(WOOD, tint * 1.05), 1.0),
+            (gaps, paint(WOOD, np.full((T, T), 0.55)), 1.0), (brace.astype(np.float32), paint((112, 78, 48), np.ones((T, T))), 1.0),
+            (posts, paint((122, 84, 52), np.ones((T, T))), 1.0)]
 
 
-def gate_hedge():
-    """An opening in the hedge framed by two clipped square posts of it; the middle left empty."""
-    posts = np.maximum(box(-8, C - 0.25 * T, 0.28 * T, C + 0.25 * T, 0.05 * T), box(0.72 * T, C - 0.25 * T, T + 8, C + 0.25 * T, 0.05 * T))
-    return [(posts, paint((86, 128, 60), leaves(33, fine=True)), 0.55)]
+def gate_stick(left=True, right=True):
+    """A gate of stakes lashed to a frame, a stick brace across it, between two thicker stakes."""
+    y, x = YX
+    lo, hi, at = ends(left, right)
+    frame = box(lo, C - RAIL * 1.8 * T, hi, C + RAIL * 1.8 * T)
+    tops = stakes("RL", centre=False) * (frame == 0)
+    brace = ((np.abs(y - C - (x - C) * 0.12) < 1.0 * SS) & (frame > 0)).astype(np.float32)
+    posts = union([disc(cx, C, STAKE * 1.5 * T) for cx in at])
+    return [(stubs(RAIL, GATE_AT, left, right), paint((104, 82, 56), np.ones((T, T))), 1.0), (frame, paint((140, 112, 76), np.ones((T, T))), 1.0),
+            (np.maximum(tops, brace), stick_tex(), 1.0), (posts, paint((104, 82, 56), np.ones((T, T))), 1.0)]
 
 
-def gate_brick():
-    """Candi bentar: a split gate, two stepped brick towers either side of an opening in the cell's middle, their
-    inner faces sheer."""
-    layers = []
-    for half, depth, colour, tex, edge in ((0.36, 0.33, (172, 86, 58), bricks(13, 0.36), 0.42),
-                                           (0.27, 0.26, (184, 94, 64), pillar(14, "brick"), 0.45),
-                                           (0.17, 0.18, (218, 198, 164), coping(15), 0.70)):
-        m = np.maximum(box(-8, C - half * T, depth * T, C + half * T), box((1 - depth) * T, C - half * T, T + 8, C + half * T))
-        layers.append((m, paint(colour, tex), edge))
+def gate_stone(left=True, right=True):
+    """An opening in the stone wall between two square block pillars."""
+    lo, hi, at = ends(left, right)
+    stub = stubs(FENCE, GATE_AT, left, right)
+    pieces, gaps = split(stub, brick_grid(FENCE, FENCE * T, T / 2)[2] & (stub > 0))
+    pillars = union([square(cx, C, POST * 1.1) for cx in at])
+    return [(pieces, paint(STONE, blocks(3, FENCE)), 1.0), (gaps, paint((92, 90, 84), np.ones((T, T))), 1.0),
+            (pillars, paint((120, 120, 114), pillar(4, "stone")), 1.0)]
+
+
+def gate_hedge(left=True, right=True):
+    """An opening in the plant fence between two clipped hedge posts, squarer and denser than the hedge, a flower on
+    each; the middle left empty."""
+    lo, hi, at = ends(left, right)
+    posts = union([square(cx, C, POST * 1.3) for cx in at])
+    return [(stubs(FENCE * 1.5, GATE_AT, left, right), paint(LEAF, leaves(31)), 1.0), (posts, paint((70, 112, 50), leaves(33, fine=True)), 1.0)] \
+        + flowers(posts, 7, len(at))
+
+
+def gate_brick(left=True, right=True):
+    """Candi bentar: a split gate, two tiered candi towers either side of an opening in the cell's middle, the candi
+    fence running into them."""
+    lo, hi, at = ends(left, right)
+    stub = stubs(FENCE, GATE_AT, left, right)
+    pieces, gaps = split(stub, brick_grid(FENCE)[2] & (stub > 0))
+    layers = [(pieces, paint(BRICK, bricks(7, FENCE)), 1.0), (gaps, paint((132, 104, 82), np.ones((T, T))), 1.0)]
+    for cx in at:
+        layers += tiers(cx, C, POST * 1.3, ((160, 76, 52), (172, 84, 58), (184, 92, 62), (196, 102, 70)))
     return layers
 
 
-GATES = {"bamboo_rail": gate_bamboo_rail, "woven": gate_woven, "hedge": gate_hedge, "brick": gate_brick}
+GATES = {"bamboo_rail": gate_bamboo_rail, "plank": gate_plank, "stick": gate_stick, "stone": gate_stone,
+         "hedge": gate_hedge, "brick": gate_brick}
 
 
 def fence_sheet(key):
@@ -255,12 +387,18 @@ def fence_sheet(key):
     return img
 
 
+# A gate sheet's 6 tiles: (down, a post on the first side, a post on the second side). The first side is the left
+# across, the top down; a side with no post meets another cell of the same gate.
+GATE_TILES = ((False, True, True), (True, True, True), (False, False, True), (False, True, False),
+              (True, False, True), (True, True, False))
+
+
 def gate_sheet(key):
-    layers = GATES[key]()
     soft = 2.6 if key == "hedge" else 1.6
-    img = Image.new("RGBA", (CELL * 2, CELL), (0, 0, 0, 0))
-    img.alpha_composite(render(layers, soft), (0, 0))
-    img.alpha_composite(render(turned(layers), soft), (CELL, 0))
+    img = Image.new("RGBA", (CELL * len(GATE_TILES), CELL), (0, 0, 0, 0))
+    for k, (down, first, second) in enumerate(GATE_TILES):
+        layers = GATES[key](first, second)
+        img.alpha_composite(render(turned(layers) if down else layers, soft), (k * CELL, 0))
     return img
 
 

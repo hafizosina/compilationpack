@@ -24,5 +24,5 @@ walkable = true
 [resource]
 script = ExtResource("def")
 id = &"gate_brick"
-display_name = "Split gate"
+display_name = "Candi bentar gate"
 components = Array[ExtResource("base")]([SubResource("c_grid"), SubResource("c_tile"), SubResource("c_furn")])

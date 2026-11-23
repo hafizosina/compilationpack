@@ -38,9 +38,13 @@ Each drawn closed and open, horizontal and vertical, as today.
 | Fence | Gate | Used for |
 |---|---|---|
 | `bamboo_rail`: split-bamboo rails on posts | swing gate of rails | fields and pens |
-| `woven`: woven bamboo screen | woven leaf gate | middling yards |
-| `hedge`: living hedge (hibiscus) | an opening framed by two clipped posts | poor yards |
-| `brick_wall`: low brick wall with a coping | **split gate** (candi bentar: two brick towers, an opening between) | rich compounds, temples |
+| `plank`: teak boards between square posts | board gate with a Z brace | middling yards |
+| `stick`: close-set wooden stakes on a rail | stick gate with a brace | poor yards |
+| `stone`: low andesite block wall | opening between two block pillars | (free to use) |
+| `hedge` (plant fence): living hibiscus hedge | an opening between two clipped hedge posts | rich yards |
+| `brick_wall` (candi fence): low Majapahit brick wall, tiered candi pillars | **candi bentar** (two tiered towers, an opening between) | rich compounds, temples |
+
+(2026-11-24: the woven bamboo fence was dropped for the plank, stick and stone fences.)
 
 ## 3. Technical changes
 

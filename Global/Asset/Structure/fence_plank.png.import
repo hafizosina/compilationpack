@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bglyivs4n17y4"
-path="res://.godot/imported/gate_woven.png-d9c380f2b5496494dc7813b5c0aa46c6.ctex"
+uid="uid://c6cy72dxplrh1"
+path="res://.godot/imported/fence_plank.png-999fea3b4c406eb811024fe1b3aa8323.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Global/Asset/Structure/gate_woven.png"
-dest_files=["res://.godot/imported/gate_woven.png-d9c380f2b5496494dc7813b5c0aa46c6.ctex"]
+source_file="res://Global/Asset/Structure/fence_plank.png"
+dest_files=["res://.godot/imported/fence_plank.png-999fea3b4c406eb811024fe1b3aa8323.ctex"]
 
 [params]
 
