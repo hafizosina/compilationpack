@@ -46,6 +46,8 @@ var _roof_rank: Dictionary = {}
 var _wall_layer: TileMapLayer
 ## Doors, on their own layer just under the walls, so a door always lies under the posts either side.
 var _door_layer: TileMapLayer
+## Posts laid over straight wall runs beside a door, just above the walls.
+var _post_layer: TileMapLayer
 var _furniture_layer: TileMapLayer
 var _attachment_layer: TileMapLayer
 ## Wall type id -> [source id, side layout].
@@ -133,6 +135,9 @@ func wall_layer() -> TileMapLayer:
 func door_layer() -> TileMapLayer:
 	return _door_layer
 
+func post_layer() -> TileMapLayer:
+	return _post_layer
+
 func furniture_layer() -> TileMapLayer:
 	return _furniture_layer
 
@@ -171,6 +176,7 @@ func _build(grid: EcsTownGridSingleton) -> void:
 	_furniture_layer = _make_layer("Furniture", _cell_tile_set(), false)
 	_door_layer = _make_layer("Doors", _catalog.wall_tiles(), false)
 	_wall_layer = _make_layer("Walls", _catalog.wall_tiles(), false)
+	_post_layer = _make_layer("Posts", _catalog.wall_tiles(), false)
 	_attachment_layer = _make_layer("Attachments", _cell_tile_set(), false)
 	_collect(_catalog.roofs, _roof_defs, _roof_layers, _roof_rank, "Roof")
 	roofs_visible = roofs_visible
@@ -386,6 +392,8 @@ func _draw_wall(grid: EcsTownGridSingleton, cell: Vector2i) -> void:
 		redrawn += 1
 	var entry: Array = _wall_sources.get(grid.wall_type[i], [])
 	if grid.structure[i] != EcsTownGridSingleton.WALL or entry.is_empty():
+		if _post_layer.get_cell_source_id(cell) != -1:
+			_post_layer.erase_cell(cell)
 		if _wall_layer.get_cell_source_id(cell) != -1:
 			_wall_layer.erase_cell(cell)
 			redrawn += 1
@@ -399,6 +407,18 @@ func _draw_wall(grid: EcsTownGridSingleton, cell: Vector2i) -> void:
 		if grid.structure[n] == EcsTownGridSingleton.WALL and grid.building_id[n] == grid.building_id[i]:
 			mask |= EcsDualGrid.SIDE_BITS[k]
 	_wall_layer.set_cell(cell, entry[0], EcsDualGrid.atlas_for(entry[1], mask, cell))
+	# A straight run has no post; beside a door it needs one for the door to meet, laid over it from the lone post.
+	var post := false
+	if mask == EcsDualGrid.LEFT | EcsDualGrid.RIGHT or mask == EcsDualGrid.TOP | EcsDualGrid.BOTTOM:
+		for k in 4:
+			var next: Vector2i = cell + EcsDualGrid.SIDES[k]
+			if EcsTownGrid.in_bounds(grid, next):
+				var n := EcsTownGrid.index(grid, next)
+				post = post or (grid.structure[n] == EcsTownGridSingleton.DOOR and grid.building_id[n] == grid.building_id[i])
+	if post:
+		_post_layer.set_cell(cell, entry[0], EcsDualGrid.atlas_for(entry[1], 0, cell))
+	elif _post_layer.get_cell_source_id(cell) != -1:
+		_post_layer.erase_cell(cell)
 	redrawn += 1
 
 ## A door lies along its wall: horizontal when a wall or door of its building is beside it
