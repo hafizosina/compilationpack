@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://2js63gawjenr"
-path="res://.godot/imported/water.png-47a6fe3bcaa178e59b39c821165ba53b.ctex"
+uid="uid://caebouvs83dv4"
+path="res://.godot/imported/sand.png-45ddb0a4516c42180f30109da33fe0d4.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://10. Town Generator/art/ground/water.png"
-dest_files=["res://.godot/imported/water.png-47a6fe3bcaa178e59b39c821165ba53b.ctex"]
+source_file="res://Global/Asset/Ground/sand.png"
+dest_files=["res://.godot/imported/sand.png-45ddb0a4516c42180f30109da33fe0d4.ctex"]
 
 [params]
 

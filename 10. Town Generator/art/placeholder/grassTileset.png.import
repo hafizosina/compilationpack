@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cgafes1yksdfo"
-path="res://.godot/imported/BaseWall.png-90d185a32dedf997e0ee2ac1888c4ba5.ctex"
+uid="uid://cujkmtrbgvsmt"
+path="res://.godot/imported/grassTileset.png-25af080a7b2632ddd4283148c991f99d.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Global/Asset/Tilemap/BaseWall.png"
-dest_files=["res://.godot/imported/BaseWall.png-90d185a32dedf997e0ee2ac1888c4ba5.ctex"]
+source_file="res://10. Town Generator/art/placeholder/grassTileset.png"
+dest_files=["res://.godot/imported/grassTileset.png-25af080a7b2632ddd4283148c991f99d.ctex"]
 
 [params]
 

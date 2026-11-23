@@ -117,7 +117,7 @@ slots without any:
 
 | Layer, in draw order | Draws | Art |
 |---|---|---|
-| `Ground` | every terrain, one sprite and shader (§13e) | `art/ground/<key>.png`, 512 px seamless |
+| `Ground` | every terrain, one sprite and shader (§13e) | `Global/Asset/Ground/<key>.png`, 512 px seamless |
 | `Floor_wood` | wood | sheet: author's `WoodFloor.png` |
 | `Floor_stone`, `_road`, `_rug` | floor | sheets: placeholders |
 | `Furniture` | furniture and plants, cell grid | `furniture` — placeholder `objects.png`, 32 px |
@@ -817,10 +817,10 @@ vector style of the author's RimWorld mod (BirdsEyePawns), drawn at 128 units a 
 `docs/ART_PLAN.md`.
 
 **Terrain is no longer on the dual grid.** Each `EcsTerrainDef.ground` is a large seamless texture
-(512 px = 8 cells, `art/ground/make_ground.py`); the catalog stacks them in a `Texture2DArray`
+(512 px = 8 cells, `Global/Asset/Ground/make_ground.py`); the catalog stacks them in a `Texture2DArray`
 (`grounds()`, a terrain with none repeats its sheet's full tile). The tile sync draws one `Ground` sprite
 whose texture is one pixel a cell (the terrain's draw order + 1, `FORMAT_R8`) scaled up a cell a pixel;
-`art/ground/ground.gdshader` places each terrain's texture by world position (so it runs on across
+`art/ground.gdshader` places each terrain's texture by world position (so it runs on across
 module 12's chunks) and blends by each terrain's share of the 5×5 cells round a point (`spread`), pushed
 up or down by noise so the edge line is ragged (`jag`), sharpened (`sharp`) for a short soft fade. A
 terrain change rewrites one pixel. Floors and roofs stay on the dual grid with hard edges. Known gap: the

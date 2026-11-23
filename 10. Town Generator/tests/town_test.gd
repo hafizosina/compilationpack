@@ -242,7 +242,7 @@ func _the_authors_art_is_used_and_its_layout_read() -> void:
 	_check("and the scene holds none: main.tscn's TilemapGroup is empty",
 		main.get_node("World/TilemapGroup").get_child_count() == 0)
 	main.free()
-	_check("wood is the author's WoodFloor", sheet.call(sync.floor_layers()[0]).ends_with("Tilemap/WoodFloor.png"))
+	_check("wood is the author's WoodFloor", sheet.call(sync.floor_layers()[0]).ends_with("placeholder/WoodFloor.png"))
 	var complete := true
 	for layer in sync.floor_layers():
 		if EcsDualGrid.corner_layout(layer.tile_set.get_source(layer.tile_set.get_source_id(0))).size() != 15:

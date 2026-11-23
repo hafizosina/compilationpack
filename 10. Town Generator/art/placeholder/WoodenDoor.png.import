@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dvohdstcpa5ai"
-path="res://.godot/imported/WoodFloor.png-c68b7f259592cf9de6cd024dd4c648ff.ctex"
+uid="uid://socmalcjr70n"
+path="res://.godot/imported/WoodenDoor.png-b828229191ced7556b3b144571d42cb6.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Global/Asset/Tilemap/WoodFloor.png"
-dest_files=["res://.godot/imported/WoodFloor.png-c68b7f259592cf9de6cd024dd4c648ff.ctex"]
+source_file="res://10. Town Generator/art/placeholder/WoodenDoor.png"
+dest_files=["res://.godot/imported/WoodenDoor.png-b828229191ced7556b3b144571d42cb6.ctex"]
 
 [params]
 

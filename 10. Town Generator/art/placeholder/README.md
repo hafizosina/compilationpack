@@ -5,7 +5,7 @@ Replace any sheet with real art in the same layout, or point its def at a new Ti
 
 | File | Layout |
 |---|---|
-| `terrain_grass/dirt/sand/water/rock/forest.png`, `floor_wood/stone/road/rug.png`, `roof.png` | Dual grid, 6×3 of 64 px, the same layout as `Global/Asset/Tilemap/WoodFloor.png` (3:2, 4:2, 5:2 are full-tile variants of 1:1) |
+| `terrain_grass/dirt/sand/water/rock/forest.png`, `floor_wood/stone/road/rug.png`, `roof.png` | Dual grid, 6×3 of 64 px, the same layout as `WoodFloor.png` (here) (3:2, 4:2, 5:2 are full-tile variants of 1:1) |
 | `wall_stone.png` | Cell grid, 6×3 of 64 px, the same side layout as `WoodWall.png` |
 | `door_states.png` | 4 tiles of 48 px at 32 px a cell (the door defs' `cell_pixels`, resized 2× on load), oversized: horizontal closed, vertical closed, horizontal open, vertical open |
 | `objects.png` | 64 px grid, 8×4. Origin cell and size: bed (0,0) 1×2, double bed (1,0) 2×2, table (3,0), long table (4,0) 2×1, chair (6,0), stove (7,0), chest (3,1), workbench (4,1) 2×1, shelf (6,1), barrel (7,1), sawmill (0,2) 2×2, anvil (2,2), crop (3,2), tree (4,2), bush (5,2), well (6,2), hearth (7,2), rubble (2,3) |

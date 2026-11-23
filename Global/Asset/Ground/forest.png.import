@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://mhfn7sr24gqi"
-path="res://.godot/imported/rock.png-3ceea182eb52684f22071b77f9c80de5.ctex"
+uid="uid://dy1rrly828mth"
+path="res://.godot/imported/forest.png-ef8f96178d9200ece590593b19d6f4c1.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://10. Town Generator/art/ground/rock.png"
-dest_files=["res://.godot/imported/rock.png-3ceea182eb52684f22071b77f9c80de5.ctex"]
+source_file="res://Global/Asset/Ground/forest.png"
+dest_files=["res://.godot/imported/forest.png-ef8f96178d9200ece590593b19d6f4c1.ctex"]
 
 [params]
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dlq8l57ahlgve"
-path="res://.godot/imported/WoodWall.png-21c6ed8e602791f0fad78c5a040b0dab.ctex"
+uid="uid://y4ext07i58vn"
+path="res://.godot/imported/grass.png-82e310ac09d24cdb6ab357b1362a4adf.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Global/Asset/Tilemap/WoodWall.png"
-dest_files=["res://.godot/imported/WoodWall.png-21c6ed8e602791f0fad78c5a040b0dab.ctex"]
+source_file="res://Global/Asset/Ground/grass.png"
+dest_files=["res://.godot/imported/grass.png-82e310ac09d24cdb6ab357b1362a4adf.ctex"]
 
 [params]
 

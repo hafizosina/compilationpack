@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://bjrdpjs1inii4" path="res://10. Town Generator/defs/ecs_terrain_def.gd" id="1"]
 [ext_resource type="Texture2D" uid="uid://c34os85gs5oc3" path="res://10. Town Generator/art/placeholder/terrain_sand.png" id="2_tiles"]
-[ext_resource type="Texture2D" path="res://10. Town Generator/art/ground/sand.png" id="ground"]
+[ext_resource type="Texture2D" path="res://Global/Asset/Ground/sand.png" id="ground"]
 
 [resource]
 script = ExtResource("1")

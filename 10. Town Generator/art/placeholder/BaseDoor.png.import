@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://y4ext07i58vn"
-path="res://.godot/imported/grass.png-9950c18878ef03fdd3f06c5a5c49b080.ctex"
+uid="uid://duanrqhv5h4tu"
+path="res://.godot/imported/BaseDoor.png-11ea573cacf66fca44ffe4b50ae4adda.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://10. Town Generator/art/ground/grass.png"
-dest_files=["res://.godot/imported/grass.png-9950c18878ef03fdd3f06c5a5c49b080.ctex"]
+source_file="res://10. Town Generator/art/placeholder/BaseDoor.png"
+dest_files=["res://.godot/imported/BaseDoor.png-11ea573cacf66fca44ffe4b50ae4adda.ctex"]
 
 [params]
 

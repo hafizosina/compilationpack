@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dy1rrly828mth"
-path="res://.godot/imported/forest.png-68a8707a1a7ee37019f7f5f53d4875ef.ctex"
+uid="uid://dvohdstcpa5ai"
+path="res://.godot/imported/WoodFloor.png-d0450bbe20b412fd4d07e4afa50cdf68.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://10. Town Generator/art/ground/forest.png"
-dest_files=["res://.godot/imported/forest.png-68a8707a1a7ee37019f7f5f53d4875ef.ctex"]
+source_file="res://10. Town Generator/art/placeholder/WoodFloor.png"
+dest_files=["res://.godot/imported/WoodFloor.png-d0450bbe20b412fd4d07e4afa50cdf68.ctex"]
 
 [params]
 

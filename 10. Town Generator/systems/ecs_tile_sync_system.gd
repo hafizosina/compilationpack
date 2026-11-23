@@ -2,14 +2,14 @@ class_name EcsTileSyncSystem
 extends EcsSystem
 
 ## Draws the grid, one way, under its root: the ground, one sprite whose texture holds each cell's
-## terrain and whose shader (art/ground/ground.gdshader) shows the terrains' large textures with soft
+## terrain and whose shader (art/ground.gdshader) shows the terrains' large textures with soft
 ## edges; then a TileMapLayer per floor and roof type from the def's TileSet, half a cell up and left
 ## for the dual grid, in list order, a type's layer also filling under every later type so edges
 ## blend; then furniture, walls and attachments on the cell grid, their sheets added as sources. Walls use one atlas source
 ## per wall type, joined to their building's neighbouring walls. The root is its own: the
 ## first run clears it, builds and draws all; after that only what changed is redrawn.
 
-const GROUND_SHADER := preload("res://10. Town Generator/art/ground/ground.gdshader")
+const GROUND_SHADER := preload("res://10. Town Generator/art/ground.gdshader")
 
 ## A tile's transform flags for 0-3 quarter turns clockwise.
 const TURN_FLAGS: Array[int] = [

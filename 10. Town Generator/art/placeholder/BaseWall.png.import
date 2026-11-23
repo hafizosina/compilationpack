@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://caebouvs83dv4"
-path="res://.godot/imported/sand.png-3bf3595a25a681f029dafd58523382da.ctex"
+uid="uid://cgafes1yksdfo"
+path="res://.godot/imported/BaseWall.png-f5c68be3bb98ea2c1ab5ed910baae404.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://10. Town Generator/art/ground/sand.png"
-dest_files=["res://.godot/imported/sand.png-3bf3595a25a681f029dafd58523382da.ctex"]
+source_file="res://10. Town Generator/art/placeholder/BaseWall.png"
+dest_files=["res://.godot/imported/BaseWall.png-f5c68be3bb98ea2c1ab5ed910baae404.ctex"]
 
 [params]
 

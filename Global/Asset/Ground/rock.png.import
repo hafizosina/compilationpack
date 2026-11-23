@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://duanrqhv5h4tu"
-path="res://.godot/imported/BaseDoor.png-20b5f51a7138bf29b419a82a6b953d69.ctex"
+uid="uid://mhfn7sr24gqi"
+path="res://.godot/imported/rock.png-4a9c0f2251a1e319dbbbe62a63333f54.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Global/Asset/Tilemap/BaseDoor.png"
-dest_files=["res://.godot/imported/BaseDoor.png-20b5f51a7138bf29b419a82a6b953d69.ctex"]
+source_file="res://Global/Asset/Ground/rock.png"
+dest_files=["res://.godot/imported/rock.png-4a9c0f2251a1e319dbbbe62a63333f54.ctex"]
 
 [params]
 
