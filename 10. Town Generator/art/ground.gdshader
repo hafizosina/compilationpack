@@ -7,7 +7,6 @@ shader_type canvas_item;
 
 uniform sampler2DArray grounds : source_color, filter_linear_mipmap, repeat_enable;
 uniform int count = 1;
-uniform float cell = 32.0;
 uniform float cells_per_texture = 8.0;
 uniform float spread = 0.45;
 uniform float sharp = 5.0;
@@ -18,7 +17,8 @@ const int MAX = 8;
 varying vec2 world;
 
 void vertex() {
-	world = (MODEL_MATRIX * vec4(VERTEX, 0.0, 1.0)).xy;
+	// In this map's cells, whatever the level's scale: the sprite is a pixel a cell.
+	world = (MODEL_MATRIX * vec4(VERTEX, 0.0, 1.0)).xy / length(MODEL_MATRIX[0].xy);
 }
 
 float hash(vec2 p) {
@@ -49,7 +49,7 @@ void fragment() {
 		shares[id] += weight;
 		total += weight;
 	}
-	vec2 w = world / cell;
+	vec2 w = world;
 	vec2 uv = w / cells_per_texture;
 	vec4 col = vec4(0.0);
 	float sum = 0.0;

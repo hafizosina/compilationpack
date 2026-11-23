@@ -242,7 +242,6 @@ func _make_floors(grid: EcsTownGridSingleton) -> void:
 func _map_sprite(sprite_name: String, texture: ImageTexture, shader: Shader, params: Dictionary) -> Sprite2D:
 	var material := ShaderMaterial.new()
 	material.shader = shader
-	material.set_shader_parameter(&"cell", float(EcsTownGrid.CELL))
 	material.set_shader_parameter(&"cells_per_texture", float(EcsTownCatalog.GROUND_SIZE) / EcsTownGrid.ART)
 	for key: StringName in params:
 		material.set_shader_parameter(key, params[key])

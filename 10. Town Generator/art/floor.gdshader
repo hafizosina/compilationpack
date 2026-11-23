@@ -16,7 +16,6 @@ uniform int count = 1;
 uniform int soft_mask = 0;
 uniform int earthy_mask = 0;
 uniform int hem_mask = 0;
-uniform float cell = 32.0;
 uniform float cells_per_texture = 8.0;
 uniform float spread = 0.45;
 uniform float sharp = 5.0;
@@ -27,7 +26,8 @@ const int MAX = 16;
 varying vec2 world;
 
 void vertex() {
-	world = (MODEL_MATRIX * vec4(VERTEX, 0.0, 1.0)).xy;
+	// In this map's cells, whatever the level's scale: the sprite is a pixel a cell.
+	world = (MODEL_MATRIX * vec4(VERTEX, 0.0, 1.0)).xy / length(MODEL_MATRIX[0].xy);
 }
 
 float hash(vec2 p) {
@@ -221,7 +221,7 @@ vec4 paths_at(vec2 p, vec2 w, vec2 uv, vec2 gx, vec2 gy, ivec2 size) {
 void fragment() {
 	ivec2 size = textureSize(map, 0);
 	vec2 p = UV * vec2(size);
-	vec2 w = world / cell;
+	vec2 w = world;
 	vec2 uv = w / cells_per_texture;
 	vec2 gx = dFdx(uv);
 	vec2 gy = dFdy(uv);

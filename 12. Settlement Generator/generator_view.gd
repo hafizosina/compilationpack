@@ -90,7 +90,7 @@ var _road_l2_cells: Dictionary = {}
 var _plots_layer: Node2D
 var _zones_on: bool = false
 var _nodes_on: bool = true
-var _roofs_on: bool = true
+var _roofs_on: bool = false
 ## The region shown: {root, world, scheduler, tile_sync, zones, def, plan, shares, seed, problems}.
 var _region: Dictionary = {}
 ## Counts regions made, so a chunk job for an old one is thrown away.

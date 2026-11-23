@@ -162,9 +162,10 @@ static func _dress_yard(site: EcsSettlementSite, plot: Dictionary, def: EcsSettl
 			free.erase(cell)
 	if rng.randf() < def.yard_fence[wealth]:
 		var ring: Array[Vector2i] = []
+		# Diagonals count, so a stepped yard edge gets a fence whose cells link.
 		for cell: Vector2i in free:
-			for side in EcsPlotPlanner.SIDES:
-				var next: Vector2i = cell + side
+			for k in 9:
+				var next: Vector2i = cell + Vector2i(k % 3 - 1, k / 3 - 1)
 				if not yard.has(next) and not rect.has_point(next):
 					ring.append(cell)
 					break

@@ -17,6 +17,7 @@ entity_catalog = ExtResource("4_entities")
 zoom_speed = 0.0
 min_zoom = 0.05
 max_zoom = 16.0
+pan_speed = 4.0
 
 [node name="UI" type="CanvasLayer" parent="."]
 
