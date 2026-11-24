@@ -38,6 +38,13 @@ const MAX_JOBS: int = 3
 const CLOUDS := preload("res://13. World Generator/art/clouds.gdshader")
 const IRIS := preload("res://13. World Generator/art/iris.gdshader")
 const L3_MAP := preload("res://13. World Generator/art/l3_map.gdshader")
+const PARCHMENT := preload("res://13. World Generator/art/parchment.gdshader")
+const COMPASS := preload("res://Global/Asset/Map/compass.png")
+## Parchment drawn past each pole, in cells, and the compass's size and gap below the south border.
+const PARCHMENT_CELLS: int = 96
+const COMPASS_CELLS := Vector2(16, 4)
+## How far, in cells, the camera may look past a pole.
+const POLE_MARGIN: float = 4.0
 @export var world_seed: int = 0
 
 @onready var _camera: Camera2D = $Camera2D
@@ -179,6 +186,33 @@ func _draw_l3() -> void:
 		sprite.scale = Vector2(CELL_PX, CELL_PX)
 		sprite.position = Vector2(k * WorldPlaceholder.L3.x * CELL_PX, 0)
 		_roots[0].add_child(sprite)
+	_draw_parchment()
+
+## Parchment past both poles, with the printed border along the map's edges and a compass under the south.
+func _draw_parchment() -> void:
+	var map := Vector2(WorldPlaceholder.L3) * CELL_PX
+	var material := ShaderMaterial.new()
+	material.shader = PARCHMENT
+	material.set_shader_parameter(&"cell", CELL_PX)
+	material.set_shader_parameter(&"map_height", map.y)
+	var white := Image.create_empty(1, 1, false, Image.FORMAT_RGB8)
+	white.fill(Color.WHITE)
+	var texture := ImageTexture.create_from_image(white)
+	var depth := PARCHMENT_CELLS * CELL_PX
+	for y: float in [-depth, map.y]:
+		var sprite := Sprite2D.new()
+		sprite.texture = texture
+		sprite.material = material
+		sprite.centered = false
+		sprite.position = Vector2(-map.x, y)
+		sprite.scale = Vector2(map.x * 3.0, depth)
+		_roots[0].add_child(sprite)
+	for k in [-1, 0, 1]:
+		var compass := Sprite2D.new()
+		compass.texture = COMPASS
+		compass.scale = Vector2.ONE * COMPASS_CELLS.x * CELL_PX / COMPASS.get_width()
+		compass.position = Vector2((k + 0.5) * map.x, map.y + (COMPASS_CELLS.y + COMPASS_CELLS.x * 0.5) * CELL_PX)
+		_roots[0].add_child(compass)
 
 ## The L3 key, bottom left: each colour and what it is; shown on L3 only.
 func _build_legend() -> void:
@@ -199,11 +233,18 @@ func _build_legend() -> void:
 		box.add_child(row)
 	_legend.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 12)
 
-## Keeps the camera over the middle copy of L3.
+## Keeps the camera over the middle copy of L3, and from straying far past the poles.
 func _wrap_l3() -> void:
-	var width := WorldPlaceholder.L3.x * CELL_PX
-	if _camera.position.x < 0.0 or _camera.position.x >= width:
-		_camera.position.x = fposmod(_camera.position.x, width)
+	var map := Vector2(WorldPlaceholder.L3) * CELL_PX
+	if _camera.position.x < 0.0 or _camera.position.x >= map.x:
+		_camera.position.x = fposmod(_camera.position.x, map.x)
+	# Up and down only a little past the poles.
+	var half := get_viewport_rect().size.y * 0.5 / _camera.zoom.x
+	var margin := POLE_MARGIN * CELL_PX
+	if half * 2.0 >= map.y + margin * 2.0:
+		_camera.position.y = map.y * 0.5
+	else:
+		_camera.position.y = clampf(_camera.position.y, half - margin, map.y - half + margin)
 
 ## Moves the current level's anchor under the camera once it strays far, so frame numbers stay small.
 func _reanchor() -> void:
