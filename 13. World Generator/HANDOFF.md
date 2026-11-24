@@ -71,10 +71,10 @@ land cell drains downhill to the sea or the edge, rivers end in water, ice or an
 
 ## The copied module 12 code
 
-`ecs/world_terrain_*.gd`, the town pipeline, `defs/`, `generator.tscn` and `tests/terrain_test.*` are
-module 12 copied at `1b6fa66` with classes renamed `World*`, then grown to regions refined from an older
-64 m L3. The new world view doesn't use them; they are kept for the town pipeline and L2/L1 generation to
-draw from.
+`ecs/world_terrain_*.gd`, the town pipeline, `defs/` and `tests/terrain_test.*` are module 12 copied at
+`1b6fa66` with classes renamed `World*`, then grown to regions refined from an older 64 m L3. Their viewer,
+`generator.tscn`, was removed once `world.tscn` replaced it. The new world view doesn't use them; they are
+kept for the town pipeline and L2/L1 generation to draw from.
 
 ## Left to do
 
