@@ -37,6 +37,7 @@ const KEEP: int = 3
 const MAX_JOBS: int = 3
 const CLOUDS := preload("res://13. World Generator/art/clouds.gdshader")
 const IRIS := preload("res://13. World Generator/art/iris.gdshader")
+const L3_MAP := preload("res://13. World Generator/art/l3_map.gdshader")
 @export var world_seed: int = 0
 
 @onready var _camera: Camera2D = $Camera2D
@@ -61,7 +62,8 @@ var _clouds: ColorRect
 var _iris: ColorRect
 var _cover_label: Label
 var _info: Label
-## The L3 map, a pixel a cell; chunks read their parent colours from it.
+var _legend: PanelContainer
+## L3's fields, a pixel a cell; the map shader draws them and chunks read their parent colours from them.
 var _l3_image: Image
 
 func _ready() -> void:
@@ -80,6 +82,7 @@ func _ready() -> void:
 	_info = Label.new()
 	_info.position = Vector2(12, 8)
 	_ui.add_child(_info)
+	_build_legend()
 	var size := Vector2(WorldPlaceholder.L3) * CELL_PX
 	_camera.zoom = Vector2.ONE * _standard(0)
 	_camera.position = size * 0.5
@@ -156,18 +159,45 @@ func _view_cells(level: int) -> Rect2i:
 	var to := _cells_of(level, _camera.position + half)
 	return Rect2i(floori(from[0]), floori(from[1]), ceili(to[0]) - floori(from[0]), ceili(to[1]) - floori(from[1]))
 
-## The L3 map, three copies side by side so it wraps.
+## The L3 map, three copies side by side so it wraps, drawn by the map shader from its fields.
 func _draw_l3() -> void:
-	_l3_image = WorldPlaceholder.l3_image(world_seed)
+	_l3_image = WorldPlaceholder.l3_fields(world_seed)
 	var texture := ImageTexture.create_from_image(_l3_image)
+	var material := ShaderMaterial.new()
+	material.shader = L3_MAP
+	material.set_shader_parameter(&"table", ImageTexture.create_from_image(WorldPlaceholder.table()))
+	material.set_shader_parameter(&"sea", WorldPlaceholder.SEA)
+	material.set_shader_parameter(&"mountain", WorldPlaceholder.MOUNTAIN)
+	material.set_shader_parameter(&"snow", WorldPlaceholder.SNOW)
 	for k in [-1, 0, 1]:
 		var sprite := Sprite2D.new()
 		sprite.texture = texture
+		sprite.material = material
 		sprite.centered = false
-		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+		sprite.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 		sprite.scale = Vector2(CELL_PX, CELL_PX)
 		sprite.position = Vector2(k * WorldPlaceholder.L3.x * CELL_PX, 0)
 		_roots[0].add_child(sprite)
+
+## The L3 key, bottom left: each colour and what it is; shown on L3 only.
+func _build_legend() -> void:
+	_legend = PanelContainer.new()
+	_legend.theme_type_variation = &"DockPanel"
+	_ui.add_child(_legend)
+	var box := VBoxContainer.new()
+	_legend.add_child(box)
+	for entry: Array in WorldPlaceholder.HEIGHTS + WorldPlaceholder.BIOMES:
+		var row := HBoxContainer.new()
+		var swatch := ColorRect.new()
+		swatch.color = entry[1]
+		swatch.custom_minimum_size = Vector2(14, 14)
+		row.add_child(swatch)
+		var name := Label.new()
+		name.text = entry[0]
+		row.add_child(name)
+		box.add_child(row)
+	_legend.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 12)
 
 ## Keeps the camera over the middle copy of L3.
 func _wrap_l3() -> void:
@@ -359,6 +389,7 @@ func _open() -> void:
 		_phase = &"")
 
 func _report() -> void:
+	_legend.visible = _level == 0
 	var cells := _cells_of(_level, _camera.position)
 	var km := PackedFloat64Array([cells[0] * METRES[_level] / 1000.0, cells[1] * METRES[_level] / 1000.0])
 	var lines: Array[String] = ["%s, %s a cell: zoom ×%.3f (×%.3f to ×%.3f)%s" % [LEVEL_NAMES[_level],
