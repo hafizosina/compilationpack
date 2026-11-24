@@ -77,8 +77,9 @@ var _clouds: ColorRect
 var _iris: ColorRect
 var _cover_label: Label
 var _info: Label
-## Notches pushed past the current limit (+ in, - out) and when the last came.
-var _held: int = 0
+## Notches pushed past the current limit, zooming in and zooming out, kept apart, and when the last came.
+var _held_in: int = 0
+var _held_out: int = 0
 var _held_at: float = 0.0
 ## Fingers down (index -> screen position), the last pinch spread, and how far the pinch has gone past a limit.
 var _touches: Dictionary = {}
@@ -148,9 +149,8 @@ func _process(_delta: float) -> void:
 		if _load_counts.x >= _load_counts.y or Time.get_ticks_msec() / 1000.0 - _load_started > LOAD_CAP:
 			_open()
 	# A pause in a held zoom empties the mark, as it does the count.
-	if _held != 0 and Time.get_ticks_msec() / 1000.0 - _held_at > HOLD_GAP:
-		_held = 0
-		_hold_mark.fade()
+	if Time.get_ticks_msec() / 1000.0 - _held_at > HOLD_GAP:
+		_reset_hold()
 	if _touches.size() < 2 and _past != 1.0:
 		_past = 1.0
 		_hold_mark.fade()
@@ -182,19 +182,32 @@ func _input(event: InputEvent) -> void:
 	elif zoom < standard * range_.x and _camera.zoom.x <= standard * range_.x * 1.001 and _level > 0:
 		push = -1
 	_zoom_at(at, clampf(zoom, standard * range_.x, standard * range_.y), screen)
-	# At a limit the first notches only hold; keep scrolling and the level changes.
+	# At a limit the first notches only hold; keep scrolling and the level changes. Each way has its own count,
+	# and a notch the other way, or a pause, empties both and hides the mark.
 	var now := Time.get_ticks_msec() / 1000.0
-	if push == 0 or signi(_held) != push or now - _held_at > HOLD_GAP:
-		_held = 0
+	var going_in := step > 1.0
+	if now - _held_at > HOLD_GAP or (going_in and _held_out > 0) or (not going_in and _held_in > 0) or push == 0:
+		_reset_hold()
 	_held_at = now
-	if push != 0:
-		_held += push
-		if absi(_held) > HOLD_NOTCHES[_level]:
-			_held = 0
-			_hold_mark.fade()
-			_close(_level + push, at, screen)
-		else:
-			_show_hold(_level + push, float(absi(_held)) / HOLD_NOTCHES[_level])
+	if push == 0:
+		return
+	var held := (_held_in + 1) if going_in else (_held_out + 1)
+	if going_in:
+		_held_in = held
+	else:
+		_held_out = held
+	if held > HOLD_NOTCHES[_level]:
+		_reset_hold()
+		_close(_level + push, at, screen)
+	else:
+		_show_hold(_level + push, float(held) / HOLD_NOTCHES[_level])
+
+## Empties both hold counts and hides the mark.
+func _reset_hold() -> void:
+	if _held_in > 0 or _held_out > 0:
+		_hold_mark.fade()
+	_held_in = 0
+	_held_out = 0
 
 ## One finger pans (a left-button drag too: the project turns mouse drags into touches); two fingers pinch to zoom on their middle, and a pinch kept
 ## going past a limit changes level.
