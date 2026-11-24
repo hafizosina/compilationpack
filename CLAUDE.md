@@ -78,6 +78,8 @@ There are no build scripts; the editor is the tool chain. The tests are module 9
 "$GODOT" --headless --path . "res://9. EcsSystem/tests/stress_test.tscn"
 ```
 
+CI (`.github/workflows/tests.yml`) runs every headless test above except the two stress tests on each push and pull request, with Godot 4.7.2.
+
 ## Commands
 
 The Godot editor is installed via Steam and is **not on PATH**:
