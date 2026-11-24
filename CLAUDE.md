@@ -63,6 +63,11 @@ There are no build scripts; the editor is the tool chain. The tests are module 9
 # traffic and inns, every workplace owned, every family housed by its wealth.
 "$GODOT" --headless --path . "res://12. Settlement Generator/tests/census_test.tscn"
 
+# Module 13: the copied terrain checks, the L3 world, regions refined from its windows that follow it,
+# L1 windows that follow them, regions without a seam, region streaming order. 64 checks, ~80 s.
+# Viewer (wheel past a level's zoom range to move between L3, L2 and L1): "res://13. World Generator/generator.tscn".
+"$GODOT" --headless --path . "res://13. World Generator/tests/terrain_test.tscn"
+
 # Module 11: module 7's touch controls driving a player entity in module 9's ECS — moving,
 # sprint, the dash, stun, attacks aimed and tapped, cooldown, dummies broken and back,
 # skill slots, the weapon's swing as data, cleave, whirlwind, fireball, block, stamina and mana,
@@ -117,6 +122,7 @@ Hand-edited scene/resource files are the main breakage risk in this repo: `.tscn
 | `9. EcsSystem/tests/` | Module 9's lifecycle acceptance test and its population stress test |
 | `10. Town Generator/` | Town building on module 9's borrowed ECS, aimed at procedural generation. `HANDOFF.md` is its state of the build; `main.tscn` (`main.gd`) is the ECS scene and the project's main scene; `tests/` holds the town test, the generator test and the stress scene. The brief's steps 1–8 and its §5 measurements are done, and villagers path round walls and through doors (HANDOFF §12). Read its HANDOFF before touching it |
 | `12. Settlement Generator/` | A whole settlement from a seed, on module 10's grid; `PLAN.md` is its nine steps, `BETTER_TOWNS_PLAN.md` the plan taken from the author's RimWorld mod, `HANDOFF.md` its state. Indo-Malay (Majapahit, Srivijaya), English names. Terrain, site, main roads, then a **census** (families, needs, jobs, wealth, homes) decides the buildings; plots are placed by **quarters** (group likes and dislikes) within the town's **radius** round the well (no box); buildings **grow** room by room, rich families live in compounds; furniture is placed from each room's door; plaza, lamps and yards are dressed. Read its HANDOFF before touching it |
+| `13. World Generator/` | A copy of module 12 (classes renamed `World*`) grown to three map levels: an L3 world (64 m a cell), L2 regions refined from it (8 m), L1 chunks (1 m), each with a locked zoom range and an animated transition between them. Towns aren't wired in yet. `HANDOFF.md` is its state |
 | `11. EcsControl/` | Module 7's touch HUD on module 9's ECS: the player is an entity whose brain is `EcsPlayerControlSystem`, turning input into `steer` and module 9's intent flags. `HANDOFF.md` is its state of the build. Read it before touching it |
 
 Keep feature work inside the module folder it belongs to; promote something to `Global/` or `System/` only when a second module needs it.

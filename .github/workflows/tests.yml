@@ -55,6 +55,7 @@ jobs:
           run --path . "res://12. Settlement Generator/tests/building_test.tscn"
           run --path . "res://12. Settlement Generator/tests/plot_test.tscn"
           run --path . "res://12. Settlement Generator/tests/census_test.tscn"
+          run --path . "res://13. World Generator/tests/terrain_test.tscn"
           if [ ${#failed[@]} -gt 0 ]; then
             printf 'Failed: %s\n' "${failed[@]}"
             exit 1
