@@ -18,16 +18,16 @@ const CHUNK: Array[int] = [0, 64, 32]
 ## Plans kept per level.
 const CAP: Array[int] = [0, 2048, 4096]
 ## Each level's zoom stays between these times its standard; L3 lets you look closer.
-const RANGES: Array[Vector2] = [Vector2(0.7, 4.0), Vector2(0.7, 1.5), Vector2(0.7, 1.5)]
+const RANGES: Array[Vector2] = [Vector2(0.7, 5.0), Vector2(0.7, 1.5), Vector2(0.7, 1.5)]
 ## On-screen pixels a cell at the standard zoom, for L2 and L1; L3's standard fits the whole map.
 const STANDARD_PX: Array[float] = [0.0, 6.0, 16.0]
 const WHEEL_STEP: float = 1.15
-## Wheel notches past a level's limit that are only held, and how long, in seconds, a pause may be before
-## the count starts again; one notch more changes level.
-const HOLD_NOTCHES: int = 2
+## Wheel notches past a level's limit that are only held, per level (L3 holds longer before L2), and how long,
+## in seconds, a pause may be before the count starts again; one notch more changes level.
+const HOLD_NOTCHES: Array[int] = [4, 2, 2]
 const HOLD_GAP: float = 0.6
-## How far, as a zoom factor, a pinch must keep going past a limit before the level changes.
-const PINCH_PAST: float = 1.35
+## How far, as a zoom factor, a pinch must keep going past a limit before the level changes, per level.
+const PINCH_PAST: Array[float] = [1.6, 1.35, 1.35]
 ## Seconds the cover takes to close, and to open.
 const COVER_TIME: float = 0.35
 ## How much further the camera zooms while the cover closes, and how far off standard it opens from.
@@ -171,7 +171,7 @@ func _input(event: InputEvent) -> void:
 	_held_at = now
 	if push != 0:
 		_held += push
-		if absi(_held) > HOLD_NOTCHES:
+		if absi(_held) > HOLD_NOTCHES[_level]:
 			_held = 0
 			_close(_level + push, at, screen)
 
@@ -216,10 +216,10 @@ func _pinch(factor: float) -> void:
 	var clamped := clampf(zoom, standard * range_.x, standard * range_.y)
 	_zoom_at(at, clamped, screen)
 	_past = _past * zoom / clamped if not is_equal_approx(zoom, clamped) else 1.0
-	if _past > PINCH_PAST and _level < 2:
+	if _past > PINCH_PAST[_level] and _level < 2:
 		_past = 1.0
 		_close(_level + 1, at, screen)
-	elif _past < 1.0 / PINCH_PAST and _level > 0:
+	elif _past < 1.0 / PINCH_PAST[_level] and _level > 0:
 		_past = 1.0
 		_close(_level - 1, at, screen)
 
