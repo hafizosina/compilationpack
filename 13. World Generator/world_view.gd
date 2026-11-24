@@ -24,7 +24,7 @@ const STANDARD_PX: Array[float] = [0.0, 6.0, 16.0]
 const WHEEL_STEP: float = 1.15
 ## Wheel notches past a level's limit that are only held, per level (L3 holds longer before L2), and how long,
 ## in seconds, a pause may be before the count starts again; one notch more changes level.
-const HOLD_NOTCHES: Array[int] = [4, 2, 2]
+const HOLD_NOTCHES: Array[int] = [5, 2, 2]
 const HOLD_GAP: float = 0.6
 ## How far, as a zoom factor, a pinch must keep going past a limit before the level changes, per level.
 const PINCH_PAST: Array[float] = [1.6, 1.35, 1.35]
@@ -85,6 +85,7 @@ var _touches: Dictionary = {}
 var _spread: float = 0.0
 var _past: float = 1.0
 var _legend: WorldMapKey
+var _hold_mark: WorldHoldMark
 ## The map mode: -1 biomes, else an index into WorldMap.MODES; and the L3 map's material.
 var _mode: int = -1
 var _map_material: ShaderMaterial
@@ -111,6 +112,16 @@ func _ready() -> void:
 	_info.position = Vector2(12, 8)
 	_ui.add_child(_info)
 	_build_legend()
+	_hold_mark = WorldHoldMark.new()
+	_ui.add_child(_hold_mark)
+	_hold_mark.anchor_left = 0.5
+	_hold_mark.anchor_right = 0.5
+	_hold_mark.anchor_top = 0.5
+	_hold_mark.anchor_bottom = 0.5
+	_hold_mark.offset_left = -_hold_mark.size.x * 0.5
+	_hold_mark.offset_right = _hold_mark.size.x * 0.5
+	_hold_mark.offset_top = -_hold_mark.size.y * 0.5
+	_hold_mark.offset_bottom = _hold_mark.size.y * 0.5
 	var size := Vector2(WorldMap.SIZE) * CELL_PX
 	_camera.zoom = Vector2.ONE * _standard(0)
 	_camera.position = size * 0.5
@@ -136,6 +147,13 @@ func _process(_delta: float) -> void:
 		_cover_label.text = "Loading %s  %d / %d" % [LEVEL_NAMES[_level], _load_counts.x, _load_counts.y]
 		if _load_counts.x >= _load_counts.y or Time.get_ticks_msec() / 1000.0 - _load_started > LOAD_CAP:
 			_open()
+	# A pause in a held zoom empties the mark, as it does the count.
+	if _held != 0 and Time.get_ticks_msec() / 1000.0 - _held_at > HOLD_GAP:
+		_held = 0
+		_hold_mark.fade()
+	if _touches.size() < 2 and _past != 1.0:
+		_past = 1.0
+		_hold_mark.fade()
 	_report()
 
 ## The wheel zooms toward the mouse inside the level's range; past it, a few more notches change level.
@@ -173,7 +191,10 @@ func _input(event: InputEvent) -> void:
 		_held += push
 		if absi(_held) > HOLD_NOTCHES[_level]:
 			_held = 0
+			_hold_mark.fade()
 			_close(_level + push, at, screen)
+		else:
+			_show_hold(_level + push, float(absi(_held)) / HOLD_NOTCHES[_level])
 
 ## One finger pans (a left-button drag too: the project turns mouse drags into touches); two fingers pinch to zoom on their middle, and a pinch kept
 ## going past a limit changes level.
@@ -216,12 +237,23 @@ func _pinch(factor: float) -> void:
 	var clamped := clampf(zoom, standard * range_.x, standard * range_.y)
 	_zoom_at(at, clamped, screen)
 	_past = _past * zoom / clamped if not is_equal_approx(zoom, clamped) else 1.0
+	var target := _level + (1 if _past > 1.0 else -1)
+	if _past != 1.0 and target >= 0 and target <= 2:
+		_show_hold(target, absf(log(_past)) / log(PINCH_PAST[_level]))
 	if _past > PINCH_PAST[_level] and _level < 2:
 		_past = 1.0
+		_hold_mark.fade()
 		_close(_level + 1, at, screen)
 	elif _past < 1.0 / PINCH_PAST[_level] and _level > 0:
 		_past = 1.0
+		_hold_mark.fade()
 		_close(_level - 1, at, screen)
+
+## The hold mark, `amount` full, leading to `level`.
+func _show_hold(level: int, amount: float) -> void:
+	_hold_mark.steps = HOLD_NOTCHES[_level]
+	_hold_mark.label = LEVEL_NAMES[level]
+	_hold_mark.show_fill(amount)
 
 ## Sets the zoom, keeping frame point `at` at `screen`.
 func _zoom_at(at: Vector2, zoom: float, screen: Vector2) -> void:

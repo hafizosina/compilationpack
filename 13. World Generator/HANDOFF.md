@@ -54,7 +54,8 @@ The scene is `world.tscn` (`world_view.gd`). L3 is finished; L2 and L1 are still
 ## Zoom and transitions (`world_view.gd`)
 
 - Standard zoom: L3 fits the sheet; L2 6 px a cell; L1 16 px a cell. `RANGES`: L3 0.7–5×, L2 and L1 0.7–1.5×.
-- At a limit, `HOLD_NOTCHES` wheel notches only hold (4 on L3, 2 on L2 and L1); the next changes level (a pause
+- At a limit, `HOLD_NOTCHES` wheel notches only hold (5 on L3, 2 on L2 and L1), each filling a segment of the
+  hold mark in the screen's middle (`hold_mark.gd`: a daluang disc naming the next level); the next changes level (a pause
   of `HOLD_GAP` resets). A pinch past a limit by `PINCH_PAST` (1.6 on L3, 1.35 below) does the same.
 - A change runs three phases: closing (the camera keeps zooming on the point while a cover shuts), loading
   (the new level is set up behind it and waits for the chunks in view, at most `LOAD_CAP`), opening.
