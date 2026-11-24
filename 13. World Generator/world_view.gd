@@ -22,6 +22,10 @@ const RANGES: Array[Vector2] = [Vector2(0.7, 4.0), Vector2(0.7, 1.5), Vector2(0.
 ## On-screen pixels a cell at the standard zoom, for L2 and L1; L3's standard fits the whole map.
 const STANDARD_PX: Array[float] = [0.0, 6.0, 16.0]
 const WHEEL_STEP: float = 1.15
+## Wheel notches past a level's limit that are only held, and how long, in seconds, a pause may be before
+## the count starts again; one notch more changes level.
+const HOLD_NOTCHES: int = 2
+const HOLD_GAP: float = 0.6
 ## Seconds the cover takes to close, and to open.
 const COVER_TIME: float = 0.35
 ## How much further the camera zooms while the cover closes, and how far off standard it opens from.
@@ -70,6 +74,9 @@ var _clouds: ColorRect
 var _iris: ColorRect
 var _cover_label: Label
 var _info: Label
+## Notches pushed past the current limit (+ in, - out) and when the last came.
+var _held: int = 0
+var _held_at: float = 0.0
 var _legend: PanelContainer
 ## L3's fields, a pixel a cell; the map shader draws them and chunks read their parent colours from them.
 var _l3_image: Image
@@ -118,7 +125,7 @@ func _process(_delta: float) -> void:
 			_open()
 	_report()
 
-## The wheel zooms toward the mouse inside the level's range; a notch past it changes level.
+## The wheel zooms toward the mouse inside the level's range; past it, a few more notches change level.
 func _input(event: InputEvent) -> void:
 	if not event is InputEventMouseButton or not event.pressed:
 		return
@@ -137,12 +144,23 @@ func _input(event: InputEvent) -> void:
 	var screen := get_viewport().get_mouse_position()
 	var standard := _standard(_level)
 	var range_ := RANGES[_level]
-	if zoom > standard * range_.y and _level < 2:
-		_close(_level + 1, at, screen)
-	elif zoom < standard * range_.x and _level > 0:
-		_close(_level - 1, at, screen)
-	else:
-		_zoom_at(at, clampf(zoom, standard * range_.x, standard * range_.y), screen)
+	# A notch counts as a push only when the zoom already sits at the limit it goes past.
+	var push := 0
+	if zoom > standard * range_.y and _camera.zoom.x >= standard * range_.y * 0.999 and _level < 2:
+		push = 1
+	elif zoom < standard * range_.x and _camera.zoom.x <= standard * range_.x * 1.001 and _level > 0:
+		push = -1
+	_zoom_at(at, clampf(zoom, standard * range_.x, standard * range_.y), screen)
+	# At a limit the first notches only hold; keep scrolling and the level changes.
+	var now := Time.get_ticks_msec() / 1000.0
+	if push == 0 or signi(_held) != push or now - _held_at > HOLD_GAP:
+		_held = 0
+	_held_at = now
+	if push != 0:
+		_held += push
+		if absi(_held) > HOLD_NOTCHES:
+			_held = 0
+			_close(_level + push, at, screen)
 
 ## Sets the zoom, keeping frame point `at` at `screen`.
 func _zoom_at(at: Vector2, zoom: float, screen: Vector2) -> void:

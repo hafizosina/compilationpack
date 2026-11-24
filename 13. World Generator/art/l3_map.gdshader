@@ -51,9 +51,6 @@ void fragment() {
 			if (lit_h < mountain) {
 				col.rgb *= 0.78;
 			}
-			if (h - mountain < edge * 1.0) {
-				col.rgb = mix(col.rgb, ink.rgb, 0.5);
-			}
 		}
 	}
 	// Pigment on daluang: colours a little faded and warmed, bark fibres showing through.
