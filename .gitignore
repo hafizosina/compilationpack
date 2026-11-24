@@ -6,3 +6,7 @@
 10. Town Generator/art/flatvec/build/
 
 __pycache__/
+
+# Claude Code local settings and agent worktrees
+.claude/settings.local.json
+.claude/worktrees/
