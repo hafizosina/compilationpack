@@ -30,9 +30,8 @@ func _ready() -> void:
 
 func _gui_input(event: InputEvent) -> void:
 	var at := Vector2(-1, -1)
+	# Touch only: the project turns a click into a touch too, so the click itself would count twice.
 	if event is InputEventScreenTouch and event.pressed:
-		at = event.position
-	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		at = event.position
 	if at.x < 0.0:
 		return

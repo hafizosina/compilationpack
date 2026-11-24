@@ -3,7 +3,7 @@ extends Control
 
 ## L3's key, drawn as a daluang slip: a sepia double frame, a tumpal strip along the top, the map mode's
 ## name, and each colour as a rounded swatch with a sepia rim beside its name. Drawn, not themed, like the
-## debug overlay, since it is part of the map's art.
+## debug overlay, since it is part of the map's art. Starts folded to its heading; a tap opens or folds it.
 
 const PAPER := Color(0.88, 0.79, 0.61)
 const PAPER_DARK := Color(0.80, 0.70, 0.52)
@@ -14,6 +14,7 @@ const PAD := 14.0
 const ROW := 22.0
 const STRIP := 12.0
 const TITLE := 26.0
+const CARET := 22.0
 
 ## The heading.
 var title: String = "":
@@ -25,17 +26,29 @@ var entries: Array = []:
 	set(value):
 		entries = value
 		_fit()
+## Whether the entries show, or only the heading.
+var open: bool = false:
+	set(value):
+		open = value
+		_fit()
 
 func _ready() -> void:
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	mouse_filter = Control.MOUSE_FILTER_STOP
+
+func _gui_input(event: InputEvent) -> void:
+	# Touch only: the project turns a click into a touch too, so the click itself would count twice.
+	if event is InputEventScreenTouch and event.pressed:
+		accept_event()
+		open = not open
 
 func _fit() -> void:
 	var font := get_theme_font(&"font", &"Label")
 	var size_px := get_theme_font_size(&"font_size", &"Label")
-	var wide := font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, size_px + 2).x
+	var wide := font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, size_px + 2).x + CARET
 	for entry: Array in entries:
 		wide = maxf(wide, font.get_string_size(entry[0], HORIZONTAL_ALIGNMENT_LEFT, -1, size_px).x + ROW + 6.0)
-	custom_minimum_size = Vector2(wide + PAD * 2.0, PAD * 2.0 + STRIP + TITLE + entries.size() * ROW)
+	var rows := entries.size() if open else 0
+	custom_minimum_size = Vector2(wide + PAD * 2.0, PAD * 2.0 + STRIP + TITLE + rows * ROW - (0.0 if open else 8.0))
 	size = custom_minimum_size
 	queue_redraw()
 
@@ -65,6 +78,13 @@ func _draw() -> void:
 	var size_px := get_theme_font_size(&"font_size", &"Label")
 	var y0 := top + STRIP + TITLE - 4.0
 	draw_string(font, Vector2(PAD, y0), title, HORIZONTAL_ALIGNMENT_LEFT, -1, size_px + 2, SEPIA)
+	# A caret: down when open, left when folded.
+	var tip := Vector2(size.x - PAD - 7.0, y0 - 6.0)
+	var caret := PackedVector2Array([tip + Vector2(-6, -4), tip + Vector2(6, -4), tip + Vector2(0, 4)]) if open \
+		else PackedVector2Array([tip + Vector2(4, -6), tip + Vector2(4, 6), tip + Vector2(-4, 0)])
+	draw_colored_polygon(caret, SEPIA)
+	if not open:
+		return
 	for i in entries.size():
 		var entry: Array = entries[i]
 		var middle := Vector2(PAD + 7.0, y0 + 10.0 + i * ROW + ROW * 0.5)

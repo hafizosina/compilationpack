@@ -54,10 +54,10 @@ void fragment() {
 		}
 	}
 	// Lakes stand on land; their edge is where the lake flag, read smoothly, crosses a half.
-	if (h >= sea && f.a > 0.5 && field != 1) {
+	if (h >= sea && f.a > 0.5 && field <= 0) {
 		col = shallow;
 	}
-	if (h >= sea && field != 1 && abs(f.a - 0.5) < fwidth(f.a) * line * 0.5) {
+	if (h >= sea && field <= 0 && abs(f.a - 0.5) < fwidth(f.a) * line * 0.5) {
 		col = shore_line;
 	}
 	if (h >= sea && h - sea < edge * line) {

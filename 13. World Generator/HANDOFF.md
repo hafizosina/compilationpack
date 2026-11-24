@@ -24,7 +24,10 @@ The scene is `world.tscn` (`world_view.gd`). L3 is finished; L2 and L1 are still
 
 ## L3, the world map (`ecs/world_map.gd`)
 
-`WorldMap.make(seed)`, about 350 ms, read-only after (workers read it for chunk colours).
+`WorldMap.make(seed)`, about 1.1 s, read-only after (workers read it for chunk colours). The seed is text
+(hashed); the slip top left (`seed_bar.gd`) takes one, its die rolls a made-up name, and Generate closes the
+clouds, makes the world on a worker with a loading bar (`load_bar.gd`, fed by `make`'s progress) and opens
+on it. Heat and humidity modes hide rivers and lakes.
 
 - **Height:** Perlin fBm sampled on a cylinder (`_at`). Sea below `SEA` 0.5, mountains from 0.74, snow from 0.84.
 - **Heat:** latitude (cold at both poles), bent ±0.4 by a slow two-octave Perlin so the climate bands wave,
@@ -45,7 +48,7 @@ The scene is `world.tscn` (`world_view.gd`). L3 is finished; L2 and L1 are still
   smoothly, so every edge is a curve; biome colours from the `table()` lookup; flat, no shading; thin sea-blue shore and brown ridge lines (never black); everything faded onto daluang (bark paper,
   fibres). Rivers are `Line2D`s over it.
 - **Modes:** biome (default), heat, height, humidity (`MODES`, keys 1–4 or the slips bottom right), each a
-  banded ramp. The key bottom left (`map_key.gd`) and the slips (`mode_toggle.gd`) are drawn, not themed.
+  banded ramp. The key top right (`map_key.gd`, folded to its heading until tapped) and the slips (`mode_toggle.gd`) are drawn, not themed.
 - **The sheet:** `art/table.gdshader` draws, round the map, the sheet's margin with a tumpal border (batik
   triangles, indigo and red ochre), a torn edge, its shadow and a teak table. Brass Surya Majapahit weights
   (`Global/Asset/Map/surya.png`, `make_surya.py`) sit on the corners. The camera stays over the table.
@@ -60,6 +63,8 @@ The scene is `world.tscn` (`world_view.gd`). L3 is finished; L2 and L1 are still
   (the new level is set up behind it and waits for the chunks in view, at most `LOAD_CAP`), opening.
   L3–L2 uses `art/clouds.gdshader` (clouds rising out of Perlin noise read as a height map until they fill the
   screen), L2–L1 `art/iris.gdshader` (an ink-rimmed circle on the point).
+- **Pin:** on L3 a click (on touch a double tap, so a pan never pins) puts a pin (`pin.gd`) and shows the cell
+  bottom left (`place_info.gd`: terrain, position, elevation, climate, humidity, water, cell; X closes).
 - Touch: one finger pans, two pinch. A left-button drag pans too, because the project turns mouse drags
   into touches (`emulate_touch_from_mouse`); there is no separate mouse pan, or it would pan twice.
 
@@ -78,7 +83,9 @@ kept for the town pipeline and L2/L1 generation to draw from.
 
 ## Left to do
 
+- **L3 not settled (user, 2026-11-24):** biome distribution still isn't satisfying; some lakes still look
+  odd; some rivers still look disconnected (from lakes or the sea).
 - **L2 for real:** each chunk refines its L3 cell (biome edges wandering by noise, rivers and lakes from
   `WorldMap`'s drainage), with L2 ground art per biome.
 - **L1 for real:** small streams, trees and rocks by biome; then towns, buildings and people.
-- L3 is made on the main thread at start (~350 ms).
+- L3 is made on the main thread at start (~1.1 s); Generate makes it on a worker.

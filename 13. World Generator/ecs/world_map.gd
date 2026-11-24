@@ -70,14 +70,18 @@ var make_usec: int = 0
 var _heap_keys := PackedFloat32Array()
 var _heap_cells := PackedInt32Array()
 
-## The world for `salt`.
-static func make(salt: int) -> WorldMap:
+## The world for `salt`. A non-empty `progress` gets its first item set from 0 to 1 as stages finish, for a
+## loading bar on another thread.
+static func make(salt: int, progress: Array = []) -> WorldMap:
 	var started := Time.get_ticks_usec()
 	var map := WorldMap.new()
-	map._fields(salt)
-	map._drain()
-	map._wet()
-	map._trace(salt)
+	var stages: Array[Callable] = [map._fields.bind(salt), map._drain, map._wet, map._trace.bind(salt)]
+	# Progress after each stage, by how long each takes (measured).
+	var done: Array[float] = [0.62, 0.98, 0.99, 1.0]
+	for k in stages.size():
+		stages[k].call()
+		if not progress.is_empty():
+			progress[0] = done[k]
 	map.make_usec = Time.get_ticks_usec() - started
 	return map
 
@@ -424,15 +428,27 @@ static func ramp(mode: Dictionary) -> GradientTexture1D:
 
 ## Cell `cell`'s colour, as the map shader draws its middle.
 func colour(cell: Vector2i) -> Color:
+	return kind(cell)[1]
+
+## What `cell` is, as [name, colour] from WATERS or BIOMES (rivers aside).
+func kind(cell: Vector2i) -> Array:
 	var i := index(Vector2i(clampi(cell.x, 0, SIZE.x - 1), clampi(cell.y, 0, SIZE.y - 1)))
 	if height[i] < SEA:
 		if heat[i] < 0.12:
-			return WATERS[2][1]
-		return WATERS[0][1] if height[i] < SEA - 0.05 else WATERS[1][1]
+			return WATERS[2]
+		return WATERS[0] if height[i] < SEA - 0.05 else WATERS[1]
 	if lake[i] == 1:
-		return WATERS[3][1]
+		return WATERS[3]
 	if height[i] > SNOW:
-		return WATERS[6][1]
+		return WATERS[6]
 	if height[i] > MOUNTAIN:
-		return WATERS[5][1]
-	return BIOMES[biome_at(heat[i], humidity[i])][1]
+		return WATERS[5]
+	return BIOMES[biome_at(heat[i], humidity[i])]
+
+## The name of the band of map mode `mode` that `value` falls in.
+static func band(mode: int, value: float) -> String:
+	var name := ""
+	for b: Array in MODES[mode]["bands"]:
+		if value >= b[0]:
+			name = b[2]
+	return name

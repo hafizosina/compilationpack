@@ -53,7 +53,8 @@ const SURYA_CELLS: float = 14.0
 ## Table shown round the sheet at L3's standard zoom, and how far past the sheet the camera may look, in cells.
 const SHEET_VIEW: float = 14.0
 const TABLE_VIEW: float = 16.0
-@export var world_seed: int = 0
+## The seed the world starts with; any text.
+@export var world_seed: String = "Majapahit"
 
 @onready var _camera: Camera2D = $Camera2D
 @onready var _world_root: Node2D = $World
@@ -76,7 +77,20 @@ var _cover: Control
 var _clouds: ColorRect
 var _iris: ColorRect
 var _cover_label: Label
-var _info: Label
+var _load_bar: WorldLoadBar
+var _seed_bar: WorldSeedBar
+## The pin on L3 and what its cell is, bottom left; a click (a double tap on touch) puts it.
+var _pin: WorldPin
+var _place: WorldPlaceInfo
+## Where the left button went down, for telling a click from a drag.
+var _press_at := Vector2(-1, -1)
+## A click or tap may move this far, in pixels, and still pin.
+const CLICK_SLOP: float = 8.0
+const PIN_SIZE: float = 0.7
+## A world being made on a worker: its task (-1 none), progress [0..1] and result.
+var _make_task: int = -1
+var _make_progress: Array = [0.0]
+var _made: WorldMap
 ## Notches pushed past the current limit, zooming in and zooming out, kept apart, and when the last came.
 var _held_in: int = 0
 var _held_out: int = 0
@@ -93,6 +107,7 @@ var _map_material: ShaderMaterial
 var _mode_bar: WorldModeToggle
 ## L3, the world map; its fields are drawn by the map shader and chunks read their parent colours from it.
 var _map: WorldMap
+var _map_sprite: Sprite2D
 ## The river lines, shown on L3.
 var _river_lines: Node2D
 
@@ -105,14 +120,21 @@ func _ready() -> void:
 		root.visible = level == 0
 		_world_root.add_child(root)
 		_roots.append(root)
-	_stores[1] = WorldChunkStore.new(CHUNK[1], WorldMap.SIZE * SPLIT, CAP[1])
-	_stores[2] = WorldChunkStore.new(CHUNK[2], WorldMap.SIZE * SPLIT * SPLIT, CAP[2])
 	_draw_l3()
 	_build_cover()
-	_info = Label.new()
-	_info.position = Vector2(12, 8)
-	_ui.add_child(_info)
 	_build_legend()
+	_seed_bar = WorldSeedBar.new()
+	_seed_bar.position = Vector2(12, 12)
+	_seed_bar.text = world_seed
+	_seed_bar.generate.connect(_generate)
+	_ui.add_child(_seed_bar)
+	_pin = WorldPin.new()
+	_pin.visible = false
+	_roots[0].add_child(_pin)
+	_place = WorldPlaceInfo.new()
+	_place.visible = false
+	_place.closed.connect(_unpin)
+	_ui.add_child(_place)
 	_hold_mark = WorldHoldMark.new()
 	_ui.add_child(_hold_mark)
 	_hold_mark.anchor_left = 0.5
@@ -130,6 +152,8 @@ func _ready() -> void:
 func _exit_tree() -> void:
 	for task: int in _jobs:
 		WorkerThreadPool.wait_for_task_completion(task)
+	if _make_task >= 0:
+		WorkerThreadPool.wait_for_task_completion(_make_task)
 
 func _process(_delta: float) -> void:
 	for task: int in _jobs.keys():
@@ -144,6 +168,15 @@ func _process(_delta: float) -> void:
 		else:
 			_reanchor()
 			_stream()
+	if _phase == &"generating" and _make_task >= 0:
+		_load_bar.value = _make_progress[0]
+		if WorkerThreadPool.is_task_completed(_make_task):
+			WorkerThreadPool.wait_for_task_completion(_make_task)
+			_make_task = -1
+			_show_map(_made)
+			_made = null
+			# Let the bar reach its end before the cover opens.
+			get_tree().create_timer(0.3).timeout.connect(_open)
 	if _phase == &"loading":
 		_cover_label.text = "Loading %s  %d / %d" % [LEVEL_NAMES[_level], _load_counts.x, _load_counts.y]
 		if _load_counts.x >= _load_counts.y or Time.get_ticks_msec() / 1000.0 - _load_started > LOAD_CAP:
@@ -154,7 +187,13 @@ func _process(_delta: float) -> void:
 	if _touches.size() < 2 and _past != 1.0:
 		_past = 1.0
 		_hold_mark.fade()
-	_report()
+	_legend.visible = _level == 0
+	_mode_bar.visible = _level == 0
+	_seed_bar.visible = _level == 0
+	_place.visible = _level == 0 and _pin.visible
+	# Typing a seed doesn't pan: the camera reads the arrow keys itself.
+	if _phase == &"":
+		_camera.manual_control = not _seed_bar.editing
 
 ## The wheel zooms toward the mouse inside the level's range; past it, a few more notches change level.
 func _input(event: InputEvent) -> void:
@@ -215,8 +254,21 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _phase != &"":
 		_touches.clear()
 		return
+	# A mouse click pins; on touch a double tap does, so a one-finger pan never pins. A click comes as a touch
+	# too (the project emulates one), so only a real finger's touch counts as a tap.
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_press_at = event.position
+		elif _press_at.x >= 0.0 and event.position.distance_to(_press_at) <= CLICK_SLOP:
+			_pin_at(event.position)
+		if not event.pressed:
+			_press_at = Vector2(-1, -1)
+		return
+	if event is InputEventScreenTouch and event.pressed and event.double_tap and event.device != InputEvent.DEVICE_ID_EMULATION:
+		_pin_at(event.position)
 	if event is InputEventScreenTouch:
 		if event.pressed:
+			_seed_bar.stop_editing()
 			_touches[event.index] = event.position
 		else:
 			_touches.erase(event.index)
@@ -262,6 +314,29 @@ func _pinch(factor: float) -> void:
 		_hold_mark.fade()
 		_close(_level - 1, at, screen)
 
+## Pins the L3 cell under `screen` and shows what it is; off the map, nothing.
+func _pin_at(screen: Vector2) -> void:
+	if _level != 0:
+		return
+	var at := _camera.position + (screen - get_viewport_rect().size * 0.5) / _camera.zoom.x
+	var cell := Vector2i(floori(at.x / CELL_PX), floori(at.y / CELL_PX))
+	if not WorldMap.has(cell):
+		return
+	_pin.position = at
+	# Sized with the map: PIN_SIZE times its drawn size at L3's standard zoom, larger as you zoom in.
+	_pin.scale = Vector2.ONE * PIN_SIZE / _standard(0)
+	_pin.visible = true
+	_place.show_cell(_map, cell)
+	_place.anchor_top = 1.0
+	_place.anchor_bottom = 1.0
+	_place.offset_left = 12.0
+	_place.offset_right = 12.0 + _place.size.x
+	_place.offset_top = -12.0 - _place.size.y
+	_place.offset_bottom = -12.0
+
+func _unpin() -> void:
+	_pin.visible = false
+
 ## The hold mark, `amount` full, leading to `level`.
 func _show_hold(level: int, amount: float) -> void:
 	_hold_mark.steps = HOLD_NOTCHES[_level]
@@ -295,7 +370,6 @@ func _view_cells(level: int) -> Rect2i:
 ## The L3 map as one sheet on the table, drawn by the map shader from its fields.
 func _draw_l3() -> void:
 	_draw_table()
-	_map = WorldMap.make(world_seed)
 	var material := ShaderMaterial.new()
 	material.shader = L3_MAP
 	_map_material = material
@@ -303,14 +377,13 @@ func _draw_l3() -> void:
 	material.set_shader_parameter(&"sea", WorldMap.SEA)
 	material.set_shader_parameter(&"mountain", WorldMap.MOUNTAIN)
 	material.set_shader_parameter(&"snow", WorldMap.SNOW)
-	var sprite := Sprite2D.new()
-	sprite.texture = ImageTexture.create_from_image(_map.fields_image())
-	sprite.material = material
-	sprite.centered = false
-	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-	sprite.scale = Vector2(CELL_PX, CELL_PX)
-	_roots[0].add_child(sprite)
-	_draw_rivers()
+	_map_sprite = Sprite2D.new()
+	_map_sprite.material = material
+	_map_sprite.centered = false
+	_map_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	_map_sprite.scale = Vector2(CELL_PX, CELL_PX)
+	_roots[0].add_child(_map_sprite)
+	_show_map(WorldMap.make(world_seed.hash()))
 	var map := Vector2(WorldMap.SIZE) * CELL_PX
 	for corner: Vector2 in [Vector2.ZERO, Vector2(1, 0), Vector2(0, 1), Vector2.ONE]:
 		var weight := Sprite2D.new()
@@ -318,6 +391,54 @@ func _draw_l3() -> void:
 		weight.scale = Vector2.ONE * SURYA_CELLS * CELL_PX / SURYA.get_width()
 		weight.position = corner * map + (corner * 2.0 - Vector2.ONE) * 2.0 * CELL_PX
 		_roots[0].add_child(weight)
+
+## Shows `map` as the world: its fields on the sheet, its rivers, and L2 and L1 started afresh from it.
+func _show_map(map: WorldMap) -> void:
+	for task: int in _jobs:
+		WorkerThreadPool.wait_for_task_completion(task)
+	_jobs.clear()
+	_map = map
+	_map_sprite.texture = ImageTexture.create_from_image(map.fields_image())
+	if _river_lines:
+		_river_lines.free()
+	_draw_rivers()
+	_roots[0].move_child(_river_lines, _map_sprite.get_index() + 1)
+	for level in [1, 2]:
+		for child in _roots[level].get_children():
+			child.queue_free()
+		_stores[level] = WorldChunkStore.new(CHUNK[level], WorldMap.SIZE * SPLIT ** level, CAP[level])
+	if _legend:
+		_set_mode(_mode)
+	if _pin:
+		_unpin()
+
+## Makes the world for `seed_text` behind the cover: clouds close, a worker makes it while the bar fills,
+## then the clouds open on it at the standard zoom. L3 only.
+func _generate(seed_text: String) -> void:
+	if _phase != &"" or _level != 0:
+		return
+	world_seed = seed_text
+	_reset_hold()
+	_phase = &"generating"
+	_camera.manual_control = false
+	_clouds_kind = true
+	_going_down = false
+	_cover_point = get_viewport_rect().size * 0.5
+	_clouds.visible = true
+	_iris.visible = false
+	_cover_label.text = ""
+	_cover.visible = true
+	_set_cover(0.0, 1.0)
+	var tween := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_method(func(t: float) -> void: _set_cover(t, 1.0), 0.0, 1.0, COVER_TIME * 1.5)
+	tween.tween_callback(func() -> void:
+		_camera.zoom = Vector2.ONE * _standard(0)
+		_camera.position = Vector2(WorldMap.SIZE) * CELL_PX * 0.5
+		_load_bar.restart()
+		_load_bar.visible = true
+		_make_progress = [0.0]
+		var progress := _make_progress
+		_make_task = WorkerThreadPool.add_task(func() -> void: _made = WorldMap.make(seed_text.hash(), progress), false, "world map"))
 
 ## L3's rivers as lines over the map, each widening with its flow, in the map's own shallow water (the water
 ## line shader matches its colour and fibres). Each has a thin sea-blue edge that stops short of its mouth, and
@@ -397,10 +518,11 @@ func _draw_table() -> void:
 	sprite.scale = map + Vector2.ONE * depth * 2.0
 	_roots[0].add_child(sprite)
 
-## The L3 key, bottom left, and the map mode slips, bottom right; both shown on L3 only. Keys 1-4 pick too.
+## The L3 key, top right, and the map mode slips, bottom right; both shown on L3 only. Keys 1-4 pick too.
 func _build_legend() -> void:
 	_legend = WorldMapKey.new()
 	_ui.add_child(_legend)
+	_legend.minimum_size_changed.connect(_place_legend)
 	_mode_bar = WorldModeToggle.new()
 	_ui.add_child(_mode_bar)
 	var names: Array[String] = ["Biome"]
@@ -433,17 +555,23 @@ func _set_mode(mode: int) -> void:
 		_legend.title = entry["name"]
 		_legend.entries = entry["bands"].map(func(band: Array) -> Array: return [band[2], band[1]])
 	_mode_bar.selected = mode + 1
-	# Pinned bottom left from its own size, which it has just set.
-	_legend.anchor_top = 1.0
-	_legend.anchor_bottom = 1.0
-	_legend.offset_left = 12.0
-	_legend.offset_right = 12.0 + _legend.custom_minimum_size.x
-	_legend.offset_top = -12.0 - _legend.custom_minimum_size.y
-	_legend.offset_bottom = -12.0
+	# Heat and humidity show no water on land, like the map shader's lakes.
+	if _river_lines:
+		_river_lines.visible = mode < 0 or WorldMap.MODES[mode]["field"] == 0
+	_place_legend()
+
+## Pins the key top right from its own size, which changes as it opens and folds.
+func _place_legend() -> void:
+	_legend.anchor_left = 1.0
+	_legend.anchor_right = 1.0
+	_legend.offset_left = -12.0 - _legend.custom_minimum_size.x
+	_legend.offset_right = -12.0
+	_legend.offset_top = 12.0
+	_legend.offset_bottom = 12.0 + _legend.custom_minimum_size.y
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
-	if key != null and key.pressed and not key.echo and _level == 0 and key.keycode >= KEY_1 and key.keycode <= KEY_4:
+	if key != null and key.pressed and not key.echo and _level == 0 and not _seed_bar.editing and key.keycode >= KEY_1 and key.keycode <= KEY_4:
 		_set_mode(key.keycode - KEY_1 - 1)
 
 ## Keeps the camera over the table: no further than TABLE_VIEW cells past the sheet's edge.
@@ -557,6 +685,14 @@ func _build_cover() -> void:
 	material.shader = IRIS
 	_iris.material = material
 	_cover.add_child(_iris)
+	_load_bar = WorldLoadBar.new()
+	_load_bar.visible = false
+	_load_bar.set_anchors_preset(Control.PRESET_CENTER)
+	_load_bar.offset_left = -_load_bar.size.x * 0.5
+	_load_bar.offset_right = _load_bar.size.x * 0.5
+	_load_bar.offset_top = -_load_bar.size.y * 0.5
+	_load_bar.offset_bottom = _load_bar.size.y * 0.5
+	_cover.add_child(_load_bar)
 	_cover_label = Label.new()
 	_cover_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	_cover_label.position.y -= 60
@@ -637,21 +773,6 @@ func _open() -> void:
 	tween.tween_method(func(t: float) -> void: _set_cover(t, far), 1.0, 0.0, COVER_TIME).set_ease(Tween.EASE_IN)
 	tween.chain().tween_callback(func() -> void:
 		_cover.visible = false
+		_load_bar.visible = false
 		_camera.manual_control = true
 		_phase = &"")
-
-func _report() -> void:
-	_legend.visible = _level == 0
-	_mode_bar.visible = _level == 0
-	var cells := _cells_of(_level, _camera.position)
-	var km := PackedFloat64Array([cells[0] * METRES[_level] / 1000.0, cells[1] * METRES[_level] / 1000.0])
-	var lines: Array[String] = ["%s, %s a cell: zoom ×%.3f (×%.3f to ×%.3f)%s" % [LEVEL_NAMES[_level],
-		"%d m" % METRES[_level] if METRES[_level] < 1000 else "%.1f km" % (METRES[_level] / 1000.0),
-		_camera.zoom.x, _standard(_level) * RANGES[_level].x, _standard(_level) * RANGES[_level].y,
-		"" if _phase == &"" else ", " + _phase], "At %.1f km east, %.1f km south" % [km[0], km[1]]]
-	for level in [1, 2]:
-		var store := _stores[level]
-		lines.append("%s: %d drawn, %d planned (%.2f ms a plan)" % [LEVEL_NAMES[level], store.drawn.size(),
-			store.plans.size(), store.plan_usec / 1000.0 / maxi(store.planned, 1)])
-	lines.append("Wheel: zoom; one notch past the range changes level. Arrows: pan.")
-	_info.text = "\n".join(lines)
