@@ -172,7 +172,7 @@ func _input(event: InputEvent) -> void:
 			_held = 0
 			_close(_level + push, at, screen)
 
-## One finger (or the left mouse button) pans; two fingers pinch to zoom on their middle, and a pinch kept
+## One finger pans (a left-button drag too: the project turns mouse drags into touches); two fingers pinch to zoom on their middle, and a pinch kept
 ## going past a limit changes level.
 func _unhandled_input(event: InputEvent) -> void:
 	if _phase != &"":
@@ -194,9 +194,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _spread > 0.0:
 				_pinch(spread / _spread)
 			_spread = spread
-	elif event is InputEventMouseMotion and event.device != InputEvent.DEVICE_ID_EMULATION \
-			and event.button_mask & MOUSE_BUTTON_MASK_LEFT:
-		_camera.position -= event.relative / _camera.zoom.x
 
 func _pinch_spread() -> float:
 	if _touches.size() != 2:
