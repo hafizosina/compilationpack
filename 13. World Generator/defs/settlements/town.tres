@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="WorldSettlementDef" format=3]
+
+[ext_resource type="Script" path="res://13. World Generator/defs/world_settlement_def.gd" id="2_7ilhv"]
+
+[resource]
+script = ExtResource("2_7ilhv")
+key = &"town"
+display_name = "Town"
+size = Vector2i(384, 288)
+plaza_size = Vector2i(16, 16)
+tier = 2
+catchment = 80.0
+population = Vector2i(350, 700)
+surplus = 3.0
+traffic_scale = 1.0

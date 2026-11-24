@@ -1,0 +1,50 @@
+[gd_resource type="Resource" script_class="WorldLandDef" format=3]
+
+[ext_resource type="Script" path="res://13. World Generator/defs/world_node_spawn_def.gd" id="1_5tpvt"]
+[ext_resource type="Script" path="res://13. World Generator/defs/world_land_def.gd" id="2_b411x"]
+[ext_resource type="Resource" path="res://13. World Generator/defs/lands/l1.tres" id="4_l1"]
+[ext_resource type="Script" path="res://13. World Generator/defs/world_deposit_def.gd" id="3_dep"]
+
+[sub_resource type="Resource" id="Deposit_iron"]
+script = ExtResource("3_dep")
+key = &"iron"
+count = Vector2i(3, 5)
+radius = Vector2i(2, 3)
+
+[sub_resource type="Resource" id="Deposit_coal"]
+script = ExtResource("3_dep")
+key = &"coal"
+radius = Vector2i(2, 3)
+
+[sub_resource type="Resource" id="Deposit_copper"]
+script = ExtResource("3_dep")
+key = &"copper"
+count = Vector2i(1, 3)
+radius = Vector2i(1, 2)
+
+[sub_resource type="Resource" id="Deposit_gold"]
+script = ExtResource("3_dep")
+key = &"gold"
+count = Vector2i(0, 2)
+radius = Vector2i(1, 1)
+
+[sub_resource type="Resource" id="Deposit_clay"]
+script = ExtResource("3_dep")
+key = &"clay"
+ground = 2
+count = Vector2i(3, 5)
+radius = Vector2i(1, 2)
+
+[resource]
+script = ExtResource("2_b411x")
+key = &"region"
+display_name = "Region (L2)"
+size = Vector2i(256, 192)
+water = 3
+water_share = 0.18
+rock_share = 0.06
+forest_share = 0.3
+shore_width = 1
+river_width = Vector2i(2, 4)
+deposits = Array[ExtResource("3_dep")]([SubResource("Deposit_iron"), SubResource("Deposit_coal"), SubResource("Deposit_copper"), SubResource("Deposit_gold"), SubResource("Deposit_clay")])
+child = ExtResource("4_l1")

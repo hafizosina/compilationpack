@@ -1,0 +1,1225 @@
+[gd_resource type="Resource" script_class="WorldEconomyCatalog" format=3]
+
+[ext_resource type="Script" path="res://13. World Generator/defs/world_settlement_role_def.gd" id="1_role"]
+[ext_resource type="Script" path="res://13. World Generator/defs/world_settlement_character_def.gd" id="2_char"]
+[ext_resource type="Script" path="res://13. World Generator/defs/world_economy_catalog.gd" id="3_cat"]
+[ext_resource type="Script" path="res://13. World Generator/defs/world_resource_def.gd" id="4_res"]
+[ext_resource type="Script" path="res://13. World Generator/defs/world_group_def.gd" id="5_grp"]
+
+[sub_resource type="Resource" id="Group_elite"]
+script = ExtResource("5_grp")
+key = &"elite"
+likes = Array[StringName]([&"plaza", &"faith"])
+dislikes = Array[StringName]([&"works", &"entertainment"])
+
+[sub_resource type="Resource" id="Group_faith"]
+script = ExtResource("5_grp")
+key = &"faith"
+likes = Array[StringName]([&"plaza", &"elite"])
+dislikes = Array[StringName]([&"works", &"entertainment"])
+
+[sub_resource type="Resource" id="Group_trade"]
+script = ExtResource("5_grp")
+key = &"trade"
+likes = Array[StringName]([&"plaza", &"main_road", &"water"])
+dislikes = Array[StringName]([])
+
+[sub_resource type="Resource" id="Group_food"]
+script = ExtResource("5_grp")
+key = &"food"
+likes = Array[StringName]([&"main_road", &"trade"])
+dislikes = Array[StringName]([&"faith"])
+
+[sub_resource type="Resource" id="Group_entertainment"]
+script = ExtResource("5_grp")
+key = &"entertainment"
+likes = Array[StringName]([&"trade", &"food"])
+dislikes = Array[StringName]([&"faith", &"elite"])
+
+[sub_resource type="Resource" id="Group_craft"]
+script = ExtResource("5_grp")
+key = &"craft"
+likes = Array[StringName]([&"main_road", &"home"])
+dislikes = Array[StringName]([])
+
+[sub_resource type="Resource" id="Group_home"]
+script = ExtResource("5_grp")
+key = &"home"
+likes = Array[StringName]([&"trade", &"faith"])
+dislikes = Array[StringName]([&"works"])
+
+[sub_resource type="Resource" id="Group_works"]
+script = ExtResource("5_grp")
+key = &"works"
+likes = Array[StringName]([&"water", &"outskirts"])
+dislikes = Array[StringName]([&"home", &"elite", &"faith", &"food"])
+
+[sub_resource type="Resource" id="Group_farming"]
+script = ExtResource("5_grp")
+key = &"farming"
+likes = Array[StringName]([&"outskirts", &"river"])
+dislikes = Array[StringName]([])
+
+[sub_resource type="Resource" id="Res_food"]
+script = ExtResource("4_res")
+key = &"food"
+display_name = "Food"
+per_person = 1.0
+export_per_person = 0.0
+heavy = false
+
+[sub_resource type="Resource" id="Res_salt"]
+script = ExtResource("4_res")
+key = &"salt"
+display_name = "Salt"
+per_person = 0.05
+export_per_person = 0.0
+heavy = false
+
+[sub_resource type="Resource" id="Res_drink"]
+script = ExtResource("4_res")
+key = &"drink"
+display_name = "Drink"
+per_person = 0.3
+export_per_person = 0.0
+heavy = false
+
+[sub_resource type="Resource" id="Res_wood"]
+script = ExtResource("4_res")
+key = &"wood"
+display_name = "Wood"
+per_person = 0.3
+export_per_person = 0.0
+heavy = true
+
+[sub_resource type="Resource" id="Res_thatch"]
+script = ExtResource("4_res")
+key = &"thatch"
+display_name = "Thatch"
+per_person = 0.1
+export_per_person = 0.0
+heavy = false
+
+[sub_resource type="Resource" id="Res_clay"]
+script = ExtResource("4_res")
+key = &"clay"
+display_name = "Pots and bricks"
+per_person = 0.1
+export_per_person = 0.0
+heavy = true
+
+[sub_resource type="Resource" id="Res_metal"]
+script = ExtResource("4_res")
+key = &"metal"
+display_name = "Metal"
+per_person = 0.02
+export_per_person = 0.0
+heavy = true
+
+[sub_resource type="Resource" id="Res_cloth"]
+script = ExtResource("4_res")
+key = &"cloth"
+display_name = "Cloth"
+per_person = 0.1
+export_per_person = 0.0
+heavy = false
+
+[sub_resource type="Resource" id="Res_spice"]
+script = ExtResource("4_res")
+key = &"spice"
+display_name = "Spice"
+per_person = 0.0
+export_per_person = 0.2
+heavy = false
+
+[sub_resource type="Resource" id="Res_forest_goods"]
+script = ExtResource("4_res")
+key = &"forest_goods"
+display_name = "Forest goods"
+per_person = 0.0
+export_per_person = 0.2
+heavy = false
+
+[sub_resource type="Resource" id="Res_gold"]
+script = ExtResource("4_res")
+key = &"gold"
+display_name = "Gold"
+per_person = 0.0
+export_per_person = 0.05
+heavy = false
+
+[sub_resource type="Resource" id="Res_buffalo"]
+script = ExtResource("4_res")
+key = &"buffalo"
+display_name = "Buffalo"
+per_person = 0.0
+export_per_person = 0.0
+heavy = false
+
+[sub_resource type="Resource" id="Char_rice"]
+script = ExtResource("2_char")
+key = &"rice"
+display_name = "Rice"
+min_tier = 0
+weights = Dictionary[StringName, float]({
+&"arable": 0.8,
+&"river": 0.2
+})
+requires = Array[StringName]([&"arable"])
+requires_any = Array[StringName]([])
+exports = &"rice_farm"
+traffic_bonus = 0
+
+[sub_resource type="Resource" id="Char_fishing"]
+script = ExtResource("2_char")
+key = &"fishing"
+display_name = "Fishing"
+min_tier = 0
+weights = Dictionary[StringName, float]({
+&"fish": 1.0,
+&"open_water": 0.3
+})
+requires = Array[StringName]([&"fish"])
+requires_any = Array[StringName]([&"river", &"open_water"])
+exports = &"fisher"
+traffic_bonus = 0
+
+[sub_resource type="Resource" id="Char_timber"]
+script = ExtResource("2_char")
+key = &"timber"
+display_name = "Timber"
+min_tier = 0
+weights = Dictionary[StringName, float]({
+&"forest": 0.9
+})
+requires = Array[StringName]([&"forest"])
+requires_any = Array[StringName]([])
+exports = &"lumber_camp"
+traffic_bonus = 0
+
+[sub_resource type="Resource" id="Char_iron"]
+script = ExtResource("2_char")
+key = &"iron"
+display_name = "Iron"
+min_tier = 0
+weights = Dictionary[StringName, float]({
+&"coal": 0.2,
+&"iron": 0.8
+})
+requires = Array[StringName]([&"iron"])
+requires_any = Array[StringName]([])
+exports = &"iron_mine"
+traffic_bonus = 0
+
+[sub_resource type="Resource" id="Char_gold"]
+script = ExtResource("2_char")
+key = &"gold"
+display_name = "Gold"
+min_tier = 0
+weights = Dictionary[StringName, float]({
+&"gold": 0.9
+})
+requires = Array[StringName]([&"gold"])
+requires_any = Array[StringName]([])
+exports = &"gold_mine"
+traffic_bonus = 0
+
+[sub_resource type="Resource" id="Char_pottery"]
+script = ExtResource("2_char")
+key = &"pottery"
+display_name = "Pottery"
+min_tier = 0
+weights = Dictionary[StringName, float]({
+&"clay": 0.6,
+&"river": 0.1
+})
+requires = Array[StringName]([&"clay"])
+requires_any = Array[StringName]([])
+exports = &"potter"
+traffic_bonus = 0
+
+[sub_resource type="Resource" id="Char_salt"]
+script = ExtResource("2_char")
+key = &"salt"
+display_name = "Salt"
+min_tier = 0
+weights = Dictionary[StringName, float]({
+&"sea": 0.7
+})
+requires = Array[StringName]([&"sea"])
+requires_any = Array[StringName]([])
+exports = &"salt_works"
+traffic_bonus = 0
+
+[sub_resource type="Resource" id="Char_spice"]
+script = ExtResource("2_char")
+key = &"spice"
+display_name = "Spice"
+min_tier = 0
+weights = Dictionary[StringName, float]({
+&"forest": 0.4,
+&"rock": 0.4
+})
+requires = Array[StringName]([&"forest"])
+requires_any = Array[StringName]([])
+exports = &"pepper_garden"
+traffic_bonus = 0
+
+[sub_resource type="Resource" id="Char_forest_goods"]
+script = ExtResource("2_char")
+key = &"forest_goods"
+display_name = "Forest goods"
+min_tier = 0
+weights = Dictionary[StringName, float]({
+&"forest": 0.7
+})
+requires = Array[StringName]([&"forest"])
+requires_any = Array[StringName]([])
+exports = &"gatherers_hut"
+traffic_bonus = 0
+
+[sub_resource type="Resource" id="Char_trading"]
+script = ExtResource("2_char")
+key = &"trading"
+display_name = "Trading"
+min_tier = 1
+weights = Dictionary[StringName, float]({
+&"trade": 1.0
+})
+requires = Array[StringName]([])
+requires_any = Array[StringName]([])
+exports = &""
+traffic_bonus = 1
+
+[sub_resource type="Resource" id="Char_port"]
+script = ExtResource("2_char")
+key = &"port"
+display_name = "Port"
+min_tier = 2
+weights = Dictionary[StringName, float]({
+&"sea": 0.6,
+&"trade": 0.6
+})
+requires = Array[StringName]([&"sea"])
+requires_any = Array[StringName]([])
+exports = &""
+traffic_bonus = 1
+
+[sub_resource type="Resource" id="Role_poor_house"]
+script = ExtResource("1_role")
+key = &"poor_house"
+display_name = "Poor house"
+building = &"hut"
+rooms = Array[StringName]([&"bedroom"])
+wealth = 0
+size_min = Vector2i(5, 5)
+size_max = Vector2i(7, 6)
+sites = Dictionary[StringName, float]({
+&"main_road": 0.2,
+&"outskirts": 0.6
+})
+home = 0
+
+[sub_resource type="Resource" id="Role_house"]
+script = ExtResource("1_role")
+key = &"house"
+display_name = "House"
+rooms = Array[StringName]([&"dining", &"kitchen"])
+wealth = 1
+size_min = Vector2i(10, 8)
+size_max = Vector2i(12, 10)
+sites = Dictionary[StringName, float]({
+&"centre": 0.6,
+&"main_road": 0.3
+})
+home = 1
+
+[sub_resource type="Resource" id="Role_rich_house"]
+script = ExtResource("1_role")
+key = &"rich_house"
+display_name = "Rich compound"
+rooms = Array[StringName]([&"hall", &"kitchen", &"store"])
+wealth = 2
+group = &"elite"
+size_min = Vector2i(16, 14)
+size_max = Vector2i(19, 16)
+priority = 45
+sites = Dictionary[StringName, float]({
+&"centre": 0.8,
+&"plaza": 0.6
+})
+home = 2
+compound = true
+
+[sub_resource type="Resource" id="Role_head_house"]
+script = ExtResource("1_role")
+key = &"head_house"
+display_name = "Village head's compound"
+building = &"manor"
+wealth = 2
+group = &"elite"
+size_min = Vector2i(19, 16)
+size_max = Vector2i(22, 18)
+priority = 100
+sites = Dictionary[StringName, float]({
+&"centre": 0.5,
+&"plaza": 1.0
+})
+per_town = 1
+home = 3
+compound = true
+
+[sub_resource type="Resource" id="Role_rice_farm"]
+script = ExtResource("1_role")
+key = &"rice_farm"
+display_name = "Rice farm"
+building = &"farmhouse"
+requires = Array[StringName]([&"arable"])
+group = &"farming"
+size_min = Vector2i(9, 8)
+size_max = Vector2i(11, 10)
+priority = 30
+sites = Dictionary[StringName, float]({
+&"open": 0.8,
+&"outskirts": 1.0,
+&"river": 0.3
+})
+annex = &"field"
+annex_min = Vector2i(8, 6)
+annex_max = Vector2i(12, 9)
+yard_depth = 8
+makes = &"food"
+output = 16.0
+capacity_fact = &"arable"
+capacity = 12.0
+places = 2
+wealth_odds = Vector3(0.5, 0.45, 0.05)
+lives_at_work = true
+
+[sub_resource type="Resource" id="Role_buffalo_farm"]
+script = ExtResource("1_role")
+key = &"buffalo_farm"
+display_name = "Rice farm with a buffalo"
+building = &"farmhouse"
+requires = Array[StringName]([&"arable"])
+group = &"farming"
+size_min = Vector2i(9, 8)
+size_max = Vector2i(11, 10)
+priority = 31
+sites = Dictionary[StringName, float]({
+&"open": 0.8,
+&"outskirts": 1.0,
+&"river": 0.3
+})
+annex = &"field"
+annex_min = Vector2i(11, 8)
+annex_max = Vector2i(15, 11)
+yard_depth = 8
+makes = &"food"
+output = 24.0
+places = 2
+wealth_odds = Vector3(0.2, 0.65, 0.15)
+lives_at_work = true
+
+[sub_resource type="Resource" id="Role_buffalo_herder"]
+script = ExtResource("1_role")
+key = &"buffalo_herder"
+display_name = "Buffalo herder"
+building = &"hut"
+rooms = Array[StringName]([&"stalls"])
+requires = Array[StringName]([&"pasture"])
+group = &"farming"
+size_min = Vector2i(5, 4)
+size_max = Vector2i(6, 5)
+priority = 30
+sites = Dictionary[StringName, float]({
+&"open": 0.5,
+&"outskirts": 1.0
+})
+annex = &"pen"
+annex_min = Vector2i(6, 5)
+annex_max = Vector2i(9, 7)
+yard_depth = 6
+makes = &"buffalo"
+output = 4.0
+capacity_fact = &"pasture"
+capacity = 6.0
+places = 1
+wealth_odds = Vector3(0.2, 0.65, 0.15)
+lives_at_work = true
+
+[sub_resource type="Resource" id="Role_fisher"]
+script = ExtResource("1_role")
+key = &"fisher"
+display_name = "Fisher's house"
+building = &"hut"
+rooms = Array[StringName]([&"fishery"])
+requires_any = Array[StringName]([&"river", &"open_water"])
+group = &"food"
+size_min = Vector2i(5, 4)
+size_max = Vector2i(6, 5)
+priority = 30
+sites = Dictionary[StringName, float]({
+&"water": 1.0
+})
+must = Array[StringName]([&"water"])
+annex = &"dock"
+makes = &"food"
+output = 12.0
+capacity_fact = &"fish"
+capacity = 10.0
+places = 2
+wealth_odds = Vector3(0.65, 0.3, 0.05)
+lives_at_work = true
+
+[sub_resource type="Resource" id="Role_pounding_shed"]
+script = ExtResource("1_role")
+key = &"pounding_shed"
+display_name = "Rice pounding shed"
+building = &"pounding_shed"
+min_tier = 1
+group = &"food"
+size_min = Vector2i(6, 6)
+size_max = Vector2i(8, 8)
+priority = 70
+sites = Dictionary[StringName, float]({
+&"centre": 0.4,
+&"outskirts": 0.4,
+&"river": 0.4
+})
+serves = &"rice_farm"
+per_served = 6
+places = 2
+wealth_odds = Vector3(0.2, 0.65, 0.15)
+
+[sub_resource type="Resource" id="Role_rice_barn"]
+script = ExtResource("1_role")
+key = &"rice_barn"
+display_name = "Rice barn"
+building = &"rice_barn"
+wealth = 1
+group = &"food"
+size_max = Vector2i(8, 6)
+priority = 40
+sites = Dictionary[StringName, float]({
+&"open": 0.5,
+&"outskirts": 0.6
+})
+serves = &"rice_farm"
+per_served = 8
+
+[sub_resource type="Resource" id="Role_salt_works"]
+script = ExtResource("1_role")
+key = &"salt_works"
+display_name = "Salt works"
+building = &"workshop"
+rooms = Array[StringName]([&"boiling_room", &"store"])
+requires = Array[StringName]([&"sea"])
+group = &"works"
+size_min = Vector2i(9, 7)
+size_max = Vector2i(11, 9)
+priority = 50
+sites = Dictionary[StringName, float]({
+&"water": 1.0
+})
+must = Array[StringName]([&"water"])
+makes = &"salt"
+output = 20.0
+capacity_fact = &"sea"
+capacity = 4.0
+places = 2
+wealth_odds = Vector3(0.75, 0.22, 0.03)
+
+[sub_resource type="Resource" id="Role_palm_tapper"]
+script = ExtResource("1_role")
+key = &"palm_tapper"
+display_name = "Palm tapper's house"
+building = &"hut"
+rooms = Array[StringName]([&"bedroom", &"store"])
+requires_any = Array[StringName]([&"forest", &"sea"])
+group = &"food"
+size_min = Vector2i(5, 4)
+size_max = Vector2i(6, 5)
+priority = 28
+sites = Dictionary[StringName, float]({
+&"forest": 0.6,
+&"outskirts": 0.4,
+&"water": 0.4
+})
+makes = &"drink"
+output = 25.0
+capacity_fact = &"forest"
+capacity = 6.0
+places = 1
+wealth_odds = Vector3(0.75, 0.22, 0.03)
+lives_at_work = true
+sells_at_home = 0.6
+
+[sub_resource type="Resource" id="Role_lumber_camp"]
+script = ExtResource("1_role")
+key = &"lumber_camp"
+display_name = "Lumber camp"
+building = &""
+requires = Array[StringName]([&"forest"])
+group = &"works"
+size_min = Vector2i(6, 6)
+size_max = Vector2i(8, 8)
+priority = 64
+sites = Dictionary[StringName, float]({
+&"forest": 1.0
+})
+must = Array[StringName]([&"forest"])
+makes = &"wood"
+output = 30.0
+capacity_fact = &"forest"
+capacity = 4.0
+places = 2
+wealth_odds = Vector3(0.75, 0.22, 0.03)
+
+[sub_resource type="Resource" id="Role_thatcher"]
+script = ExtResource("1_role")
+key = &"thatcher"
+display_name = "Thatcher's house"
+building = &"hut"
+rooms = Array[StringName]([&"bedroom", &"store"])
+requires_any = Array[StringName]([&"river", &"open_water"])
+group = &"craft"
+size_min = Vector2i(5, 4)
+size_max = Vector2i(6, 5)
+priority = 28
+sites = Dictionary[StringName, float]({
+&"outskirts": 0.3,
+&"water": 0.8
+})
+makes = &"thatch"
+output = 15.0
+places = 1
+wealth_odds = Vector3(0.75, 0.22, 0.03)
+lives_at_work = true
+sells_at_home = 0.6
+
+[sub_resource type="Resource" id="Role_potter"]
+script = ExtResource("1_role")
+key = &"potter"
+display_name = "Potter's house"
+building = &"workshop"
+rooms = Array[StringName]([&"pottery", &"store"])
+requires = Array[StringName]([&"clay"])
+group = &"craft"
+size_min = Vector2i(9, 7)
+size_max = Vector2i(11, 9)
+priority = 55
+sites = Dictionary[StringName, float]({
+&"clay": 0.6,
+&"main_road": 0.3,
+&"water": 0.3
+})
+makes = &"clay"
+output = 15.0
+capacity_fact = &"clay"
+capacity = 4.0
+places = 2
+wealth_odds = Vector3(0.2, 0.65, 0.15)
+lives_at_work = true
+sells_at_home = 0.7
+
+[sub_resource type="Resource" id="Role_clay_pit"]
+script = ExtResource("1_role")
+key = &"clay_pit"
+display_name = "Clay pit"
+building = &""
+wealth = 0
+requires = Array[StringName]([&"clay"])
+group = &"works"
+size_min = Vector2i(5, 5)
+size_max = Vector2i(7, 6)
+priority = 64
+sites = Dictionary[StringName, float]({
+&"clay": 1.0
+})
+must = Array[StringName]([&"clay"])
+serves = &"potter"
+per_served = 2
+
+[sub_resource type="Resource" id="Role_brick_kiln"]
+script = ExtResource("1_role")
+key = &"brick_kiln"
+display_name = "Brick kiln"
+building = &"workshop"
+rooms = Array[StringName]([&"kiln_room", &"store"])
+min_tier = 2
+requires = Array[StringName]([&"clay"])
+group = &"works"
+size_min = Vector2i(9, 7)
+size_max = Vector2i(11, 9)
+priority = 54
+sites = Dictionary[StringName, float]({
+&"apart": 0.5,
+&"clay": 0.7
+})
+per_people = 300
+places = 3
+wealth_odds = Vector3(0.2, 0.65, 0.15)
+stockpile = &"stone_pile"
+
+[sub_resource type="Resource" id="Role_iron_mine"]
+script = ExtResource("1_role")
+key = &"iron_mine"
+display_name = "Iron mine"
+building = &""
+requires = Array[StringName]([&"iron"])
+group = &"works"
+size_min = Vector2i(4, 4)
+size_max = Vector2i(5, 5)
+priority = 65
+sites = Dictionary[StringName, float]({
+&"iron": 1.0
+})
+must = Array[StringName]([&"iron"])
+makes = &"metal"
+output = 10.0
+capacity_fact = &"iron"
+capacity = 2.0
+places = 3
+wealth_odds = Vector3(0.3, 0.5, 0.2)
+layout = &"mine"
+
+[sub_resource type="Resource" id="Role_smelter"]
+script = ExtResource("1_role")
+key = &"smelter"
+display_name = "Smelter"
+building = &"workshop"
+rooms = Array[StringName]([&"forge", &"store"])
+group = &"works"
+size_min = Vector2i(9, 7)
+size_max = Vector2i(11, 9)
+priority = 58
+sites = Dictionary[StringName, float]({
+&"apart": 0.6,
+&"iron": 0.5,
+&"outskirts": 0.4
+})
+serves = &"iron_mine"
+per_served = 2
+places = 2
+wealth_odds = Vector3(0.2, 0.65, 0.15)
+stockpile = &"stone_pile"
+
+[sub_resource type="Resource" id="Role_weaver"]
+script = ExtResource("1_role")
+key = &"weaver"
+display_name = "Weaver's house"
+building = &"workshop"
+rooms = Array[StringName]([&"weaving_room", &"store"])
+requires = Array[StringName]([&"arable"])
+group = &"craft"
+size_min = Vector2i(9, 7)
+size_max = Vector2i(11, 9)
+priority = 50
+sites = Dictionary[StringName, float]({
+&"centre": 0.5,
+&"main_road": 0.3
+})
+makes = &"cloth"
+output = 10.0
+capacity_fact = &"arable"
+capacity = 4.0
+places = 1
+wealth_odds = Vector3(0.2, 0.65, 0.15)
+lives_at_work = true
+sells_at_home = 0.4
+
+[sub_resource type="Resource" id="Role_gold_mine"]
+script = ExtResource("1_role")
+key = &"gold_mine"
+display_name = "Gold mine"
+building = &""
+requires = Array[StringName]([&"gold"])
+group = &"works"
+size_min = Vector2i(4, 4)
+size_max = Vector2i(5, 5)
+priority = 66
+sites = Dictionary[StringName, float]({
+&"gold": 1.0
+})
+must = Array[StringName]([&"gold"])
+makes = &"gold"
+output = 5.0
+capacity_fact = &"gold"
+capacity = 2.0
+places = 3
+wealth_odds = Vector3(0.0, 0.3, 0.7)
+layout = &"mine"
+
+[sub_resource type="Resource" id="Role_pepper_garden"]
+script = ExtResource("1_role")
+key = &"pepper_garden"
+display_name = "Pepper garden"
+building = &"farmhouse"
+rooms = Array[StringName]([&"kitchen", &"store"])
+requires = Array[StringName]([&"forest"])
+group = &"farming"
+size_min = Vector2i(9, 7)
+size_max = Vector2i(11, 9)
+priority = 29
+sites = Dictionary[StringName, float]({
+&"forest": 0.6,
+&"outskirts": 0.6,
+&"rock": 0.4
+})
+annex = &"field"
+annex_min = Vector2i(6, 5)
+annex_max = Vector2i(9, 7)
+yard_depth = 6
+makes = &"spice"
+output = 10.0
+capacity_fact = &"forest"
+capacity = 6.0
+places = 2
+wealth_odds = Vector3(0.2, 0.65, 0.15)
+lives_at_work = true
+
+[sub_resource type="Resource" id="Role_spice_store"]
+script = ExtResource("1_role")
+key = &"spice_store"
+display_name = "Spice store"
+building = &"storehouse"
+rooms = Array[StringName]([&"store", &"counting_room"])
+group = &"trade"
+size_min = Vector2i(9, 7)
+size_max = Vector2i(11, 9)
+priority = 56
+sites = Dictionary[StringName, float]({
+&"main_road": 1.0
+})
+serves = &"pepper_garden"
+per_served = 6
+places = 1
+wealth_odds = Vector3(0.1, 0.6, 0.3)
+
+[sub_resource type="Resource" id="Role_gatherers_hut"]
+script = ExtResource("1_role")
+key = &"gatherers_hut"
+display_name = "Gatherers' hut"
+building = &"hut"
+rooms = Array[StringName]([&"bedroom", &"store"])
+requires = Array[StringName]([&"forest"])
+group = &"works"
+size_min = Vector2i(5, 4)
+size_max = Vector2i(6, 5)
+priority = 28
+sites = Dictionary[StringName, float]({
+&"forest": 1.0,
+&"outskirts": 0.5
+})
+makes = &"forest_goods"
+output = 10.0
+capacity_fact = &"forest"
+capacity = 6.0
+places = 2
+wealth_odds = Vector3(0.75, 0.22, 0.03)
+lives_at_work = true
+
+[sub_resource type="Resource" id="Role_sorting_shed"]
+script = ExtResource("1_role")
+key = &"sorting_shed"
+display_name = "Sorting shed"
+building = &"storehouse"
+rooms = Array[StringName]([&"store", &"counting_room"])
+group = &"trade"
+size_min = Vector2i(9, 7)
+size_max = Vector2i(11, 9)
+priority = 55
+sites = Dictionary[StringName, float]({
+&"main_road": 0.8,
+&"outskirts": 0.3
+})
+serves = &"gatherers_hut"
+per_served = 6
+places = 1
+wealth_odds = Vector3(0.2, 0.65, 0.15)
+
+[sub_resource type="Resource" id="Role_smith"]
+script = ExtResource("1_role")
+key = &"smith"
+display_name = "Smithy"
+building = &"workshop"
+rooms = Array[StringName]([&"forge", &"store"])
+min_tier = 1
+group = &"works"
+size_min = Vector2i(9, 7)
+size_max = Vector2i(11, 9)
+priority = 60
+sites = Dictionary[StringName, float]({
+&"apart": 0.3,
+&"main_road": 1.0
+})
+per_people = 120
+places = 2
+wealth_odds = Vector3(0.2, 0.65, 0.15)
+
+[sub_resource type="Resource" id="Role_bladesmith"]
+script = ExtResource("1_role")
+key = &"bladesmith"
+display_name = "Bladesmith"
+building = &"workshop"
+rooms = Array[StringName]([&"forge", &"store"])
+min_tier = 2
+group = &"craft"
+size_min = Vector2i(9, 7)
+size_max = Vector2i(11, 9)
+priority = 61
+sites = Dictionary[StringName, float]({
+&"centre": 0.8,
+&"main_road": 0.4
+})
+per_town = 1
+places = 2
+wealth_odds = Vector3(0.0, 0.3, 0.7)
+sells_at_home = 0.8
+
+[sub_resource type="Resource" id="Role_carpenter"]
+script = ExtResource("1_role")
+key = &"carpenter"
+display_name = "Carpenter's house"
+building = &"workshop"
+rooms = Array[StringName]([&"carpentry", &"lumber_store"])
+group = &"craft"
+size_min = Vector2i(9, 7)
+size_max = Vector2i(11, 9)
+priority = 52
+sites = Dictionary[StringName, float]({
+&"forest": 0.3,
+&"main_road": 0.5
+})
+per_people = 150
+places = 1
+wealth_odds = Vector3(0.2, 0.65, 0.15)
+lives_at_work = true
+sells_at_home = 0.5
+
+[sub_resource type="Resource" id="Role_boat_shed"]
+script = ExtResource("1_role")
+key = &"boat_shed"
+display_name = "Boat shed"
+building = &"workshop"
+rooms = Array[StringName]([&"carpentry", &"store"])
+min_tier = 1
+group = &"craft"
+size_min = Vector2i(9, 7)
+size_max = Vector2i(11, 9)
+priority = 50
+sites = Dictionary[StringName, float]({
+&"water": 1.0
+})
+must = Array[StringName]([&"water"])
+annex = &"dock"
+serves = &"fisher"
+per_served = 6
+places = 2
+wealth_odds = Vector3(0.2, 0.65, 0.15)
+
+[sub_resource type="Resource" id="Role_temple"]
+script = ExtResource("1_role")
+key = &"temple"
+display_name = "Temple"
+building = &"temple"
+min_tier = 1
+group = &"faith"
+size_min = Vector2i(8, 7)
+size_max = Vector2i(11, 9)
+priority = 90
+sites = Dictionary[StringName, float]({
+&"centre": 0.5,
+&"plaza": 0.8
+})
+per_people = 150
+places = 2
+wealth_odds = Vector3(0.1, 0.4, 0.5)
+lives_at_work = true
+
+[sub_resource type="Resource" id="Role_shrine"]
+script = ExtResource("1_role")
+key = &"shrine"
+display_name = "Shrine"
+building = &""
+wealth = 0
+max_tier = 0
+group = &"faith"
+size_min = Vector2i(3, 3)
+size_max = Vector2i(4, 4)
+priority = 20
+sites = Dictionary[StringName, float]({
+&"centre": 0.5,
+&"main_road": 0.5
+})
+per_town = 1
+
+[sub_resource type="Resource" id="Role_cremation_ground"]
+script = ExtResource("1_role")
+key = &"cremation_ground"
+display_name = "Cremation ground"
+building = &""
+wealth = 0
+min_tier = 1
+group = &"faith"
+size_min = Vector2i(8, 8)
+size_max = Vector2i(10, 9)
+priority = 22
+sites = Dictionary[StringName, float]({
+&"apart": 0.4,
+&"outskirts": 1.0,
+&"river": 0.8
+})
+per_town = 1
+
+[sub_resource type="Resource" id="Role_tavern"]
+script = ExtResource("1_role")
+key = &"tavern"
+display_name = "Tavern"
+building = &"tavern"
+rooms = Array[StringName]([&"common_room", &"kitchen", &"store"])
+min_tier = 1
+group = &"food"
+size_min = Vector2i(9, 8)
+size_max = Vector2i(12, 10)
+priority = 84
+sites = Dictionary[StringName, float]({
+&"main_road": 0.5,
+&"plaza": 0.8
+})
+per_people = 120
+places = 2
+wealth_odds = Vector3(0.2, 0.65, 0.15)
+lives_at_work = true
+
+[sub_resource type="Resource" id="Role_healer"]
+script = ExtResource("1_role")
+key = &"healer"
+display_name = "Healer's house"
+rooms = Array[StringName]([&"herb_room", &"bedroom"])
+min_tier = 1
+group = &"craft"
+size_min = Vector2i(9, 7)
+size_max = Vector2i(11, 9)
+priority = 48
+sites = Dictionary[StringName, float]({
+&"centre": 0.5
+})
+per_people = 250
+places = 1
+wealth_odds = Vector3(0.2, 0.65, 0.15)
+lives_at_work = true
+
+[sub_resource type="Resource" id="Role_guard_post"]
+script = ExtResource("1_role")
+key = &"guard_post"
+display_name = "Guard post"
+building = &"hut"
+rooms = Array[StringName]([&"guard_room"])
+min_tier = 1
+group = &"craft"
+size_min = Vector2i(5, 4)
+size_max = Vector2i(6, 5)
+priority = 44
+sites = Dictionary[StringName, float]({
+&"main_road": 1.0,
+&"outskirts": 0.6
+})
+per_people = 150
+places = 2
+wealth_odds = Vector3(0.4, 0.55, 0.05)
+
+[sub_resource type="Resource" id="Role_merchant_shop"]
+script = ExtResource("1_role")
+key = &"merchant_shop"
+display_name = "Merchant's warehouse"
+building = &"storehouse"
+rooms = Array[StringName]([&"counting_room", &"store"])
+min_tier = 1
+group = &"trade"
+size_min = Vector2i(9, 7)
+size_max = Vector2i(11, 9)
+priority = 70
+sites = Dictionary[StringName, float]({
+&"main_road": 1.0,
+&"plaza": 0.4,
+&"water": 0.3
+})
+per_people = 60
+places = 2
+wealth_odds = Vector3(0.0, 0.3, 0.7)
+
+[sub_resource type="Resource" id="Role_harbour_office"]
+script = ExtResource("1_role")
+key = &"harbour_office"
+display_name = "Harbour office"
+rooms = Array[StringName]([&"counting_room", &"bedroom", &"kitchen"])
+min_tier = 1
+requires = Array[StringName]([&"sea"])
+group = &"trade"
+size_min = Vector2i(9, 7)
+size_max = Vector2i(11, 9)
+priority = 76
+sites = Dictionary[StringName, float]({
+&"main_road": 0.4,
+&"water": 1.0
+})
+per_town = 1
+places = 1
+wealth_odds = Vector3(0.0, 0.3, 0.7)
+lives_at_work = true
+
+[sub_resource type="Resource" id="Role_harbour"]
+script = ExtResource("1_role")
+key = &"harbour"
+display_name = "Harbour"
+building = &""
+wealth = 0
+min_tier = 2
+requires = Array[StringName]([&"sea"])
+group = &"trade"
+size_min = Vector2i(10, 6)
+size_max = Vector2i(14, 8)
+priority = 76
+sites = Dictionary[StringName, float]({
+&"water": 1.0
+})
+must = Array[StringName]([&"water"])
+annex = &"dock"
+per_town = 1
+
+[sub_resource type="Resource" id="Role_market"]
+script = ExtResource("1_role")
+key = &"market"
+display_name = "Market"
+building = &""
+wealth = 1
+group = &"trade"
+size_min = Vector2i(10, 10)
+size_max = Vector2i(14, 12)
+priority = 88
+sites = Dictionary[StringName, float]({
+&"plaza": 1.5
+})
+per_town = 1
+
+[sub_resource type="Resource" id="Role_inn"]
+script = ExtResource("1_role")
+key = &"inn"
+display_name = "Inn"
+building = &"tavern"
+rooms = Array[StringName]([&"common_room", &"kitchen", &"store", &"bedroom", &"bedroom"])
+group = &"food"
+size_min = Vector2i(10, 8)
+size_max = Vector2i(13, 11)
+priority = 85
+sites = Dictionary[StringName, float]({
+&"main_road": 0.8,
+&"plaza": 0.6
+})
+traffic_min = 0
+travellers_per = 6
+places = 2
+wealth_odds = Vector3(0.2, 0.65, 0.15)
+lives_at_work = true
+
+[sub_resource type="Resource" id="Role_drinking_house"]
+script = ExtResource("1_role")
+key = &"drinking_house"
+display_name = "Drinking house"
+building = &"tavern"
+rooms = Array[StringName]([&"common_room", &"store"])
+min_tier = 1
+group = &"food"
+size_min = Vector2i(9, 7)
+size_max = Vector2i(11, 9)
+priority = 46
+sites = Dictionary[StringName, float]({
+&"main_road": 0.8
+})
+per_people = 150
+traffic_min = 1
+places = 1
+wealth_odds = Vector3(0.2, 0.65, 0.15)
+lives_at_work = true
+
+[sub_resource type="Resource" id="Role_gaming_house"]
+script = ExtResource("1_role")
+key = &"gaming_house"
+display_name = "Gaming house"
+rooms = Array[StringName]([&"common_room", &"store"])
+min_tier = 1
+group = &"entertainment"
+size_min = Vector2i(9, 7)
+size_max = Vector2i(11, 9)
+priority = 46
+sites = Dictionary[StringName, float]({
+&"centre": 0.4,
+&"main_road": 0.6
+})
+per_town = 1
+traffic_min = 2
+places = 1
+wealth_odds = Vector3(0.2, 0.65, 0.15)
+lives_at_work = true
+
+[sub_resource type="Resource" id="Role_cockfight_ring"]
+script = ExtResource("1_role")
+key = &"cockfight_ring"
+display_name = "Cockfighting ring"
+building = &""
+wealth = 0
+min_tier = 1
+group = &"entertainment"
+size_min = Vector2i(6, 6)
+size_max = Vector2i(7, 7)
+priority = 42
+sites = Dictionary[StringName, float]({
+&"centre": 0.3,
+&"main_road": 0.5
+})
+per_town = 1
+traffic_min = 2
+
+[sub_resource type="Resource" id="Role_performance_pavilion"]
+script = ExtResource("1_role")
+key = &"performance_pavilion"
+display_name = "Performance pavilion"
+building = &""
+wealth = 1
+min_tier = 2
+group = &"entertainment"
+size_max = Vector2i(8, 6)
+priority = 43
+sites = Dictionary[StringName, float]({
+&"centre": 0.4,
+&"plaza": 0.8
+})
+per_town = 1
+traffic_min = 2
+
+[sub_resource type="Resource" id="Role_bathing_place"]
+script = ExtResource("1_role")
+key = &"bathing_place"
+display_name = "Bathing place"
+building = &""
+wealth = 1
+min_tier = 2
+requires_any = Array[StringName]([&"river", &"open_water"])
+group = &"entertainment"
+size_min = Vector2i(6, 6)
+priority = 43
+sites = Dictionary[StringName, float]({
+&"centre": 0.4,
+&"river": 0.4
+})
+per_town = 1
+traffic_min = 2
+
+[resource]
+script = ExtResource("3_cat")
+roles = Array[ExtResource("1_role")]([SubResource("Role_poor_house"), SubResource("Role_house"), SubResource("Role_rich_house"), SubResource("Role_head_house"), SubResource("Role_rice_farm"), SubResource("Role_buffalo_farm"), SubResource("Role_buffalo_herder"), SubResource("Role_fisher"), SubResource("Role_pounding_shed"), SubResource("Role_rice_barn"), SubResource("Role_salt_works"), SubResource("Role_palm_tapper"), SubResource("Role_lumber_camp"), SubResource("Role_thatcher"), SubResource("Role_potter"), SubResource("Role_clay_pit"), SubResource("Role_brick_kiln"), SubResource("Role_iron_mine"), SubResource("Role_smelter"), SubResource("Role_weaver"), SubResource("Role_gold_mine"), SubResource("Role_pepper_garden"), SubResource("Role_spice_store"), SubResource("Role_gatherers_hut"), SubResource("Role_sorting_shed"), SubResource("Role_smith"), SubResource("Role_bladesmith"), SubResource("Role_carpenter"), SubResource("Role_boat_shed"), SubResource("Role_temple"), SubResource("Role_shrine"), SubResource("Role_cremation_ground"), SubResource("Role_tavern"), SubResource("Role_healer"), SubResource("Role_guard_post"), SubResource("Role_merchant_shop"), SubResource("Role_harbour_office"), SubResource("Role_harbour"), SubResource("Role_market"), SubResource("Role_inn"), SubResource("Role_drinking_house"), SubResource("Role_gaming_house"), SubResource("Role_cockfight_ring"), SubResource("Role_performance_pavilion"), SubResource("Role_bathing_place")])
+resources = Array[ExtResource("4_res")]([SubResource("Res_food"), SubResource("Res_salt"), SubResource("Res_drink"), SubResource("Res_wood"), SubResource("Res_thatch"), SubResource("Res_clay"), SubResource("Res_metal"), SubResource("Res_cloth"), SubResource("Res_spice"), SubResource("Res_forest_goods"), SubResource("Res_gold"), SubResource("Res_buffalo")])
+characters = Array[ExtResource("2_char")]([SubResource("Char_rice"), SubResource("Char_fishing"), SubResource("Char_timber"), SubResource("Char_iron"), SubResource("Char_gold"), SubResource("Char_pottery"), SubResource("Char_salt"), SubResource("Char_spice"), SubResource("Char_forest_goods"), SubResource("Char_trading"), SubResource("Char_port")])
+groups = Array[ExtResource("5_grp")]([SubResource("Group_elite"), SubResource("Group_faith"), SubResource("Group_trade"), SubResource("Group_food"), SubResource("Group_entertainment"), SubResource("Group_craft"), SubResource("Group_home"), SubResource("Group_works"), SubResource("Group_farming")])

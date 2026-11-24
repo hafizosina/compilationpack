@@ -1,0 +1,32 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" uid="uid://gctl0rjtf4op" path="res://Global/Scene/camera_2d.tscn" id="1_camera"]
+[ext_resource type="Script" path="res://13. World Generator/generator_view.gd" id="2_view"]
+[ext_resource type="Resource" uid="uid://dy1yfvp8f74dp" path="res://10. Town Generator/defs/town_catalog.tres" id="3_catalog"]
+[ext_resource type="Resource" uid="uid://blqt4dne3iouc" path="res://10. Town Generator/defs/entity_catalog.tres" id="4_entities"]
+[ext_resource type="Theme" uid="uid://ctheme0mainx7" path="res://Global/Theme/main_theme.tres" id="5_theme"]
+
+[node name="SettlementView" type="Node2D"]
+script = ExtResource("2_view")
+catalog = ExtResource("3_catalog")
+entity_catalog = ExtResource("4_entities")
+
+[node name="World" type="Node2D" parent="."]
+
+[node name="Camera2D" parent="." instance=ExtResource("1_camera")]
+zoom_speed = 0.0
+min_zoom = 0.05
+max_zoom = 16.0
+pan_speed = 4.0
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Root" type="Control" parent="UI"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme = ExtResource("5_theme")
