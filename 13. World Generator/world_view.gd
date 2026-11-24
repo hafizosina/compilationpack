@@ -35,13 +35,7 @@ const REANCHOR_PX: float = 65536.0
 const RING: int = 1
 const KEEP: int = 3
 const MAX_JOBS: int = 3
-const CLOUDS: Array[Texture2D] = [preload("res://Global/Asset/Transition/cloud_0.png"),
-	preload("res://Global/Asset/Transition/cloud_1.png"), preload("res://Global/Asset/Transition/cloud_2.png"),
-	preload("res://Global/Asset/Transition/cloud_3.png"), preload("res://Global/Asset/Transition/cloud_4.png"),
-	preload("res://Global/Asset/Transition/cloud_5.png")]
-## The cloud cover's grid, and each cloud's width as a share of the screen's.
-const CLOUD_GRID := Vector2i(7, 6)
-const CLOUD_WIDTH := Vector2(0.2, 0.28)
+const CLOUDS := preload("res://13. World Generator/art/clouds.gdshader")
 const IRIS := preload("res://13. World Generator/art/iris.gdshader")
 @export var world_seed: int = 0
 
@@ -63,10 +57,7 @@ var _cover_point: Vector2
 var _load_started: float = 0.0
 var _load_counts := Vector2i.ZERO
 var _cover: Control
-var _backdrop: ColorRect
-var _cloud_rects: Array[TextureRect] = []
-## Where each cloud rests when the cover is shut, as shares of the screen, with its width share.
-var _cloud_spots: Array[Vector3] = []
+var _clouds: ColorRect
 var _iris: ColorRect
 var _cover_label: Label
 var _info: Label
@@ -259,25 +250,24 @@ func _build_cover() -> void:
 	_cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_cover.visible = false
 	layer.add_child(_cover)
-	_backdrop = ColorRect.new()
-	_backdrop.color = Color8(226, 232, 242)
-	_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_cover.add_child(_backdrop)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 7
-	for y in CLOUD_GRID.y:
-		for x in CLOUD_GRID.x:
-			var u := (x + 0.5 + rng.randf_range(-0.35, 0.35) + (0.5 if y % 2 == 1 else 0.0)) / CLOUD_GRID.x
-			var v := (y + 0.5 + rng.randf_range(-0.3, 0.3)) / CLOUD_GRID.y
-			_cloud_spots.append(Vector3(u - 0.05, v, rng.randf_range(CLOUD_WIDTH.x, CLOUD_WIDTH.y)))
-	for k in _cloud_spots.size():
-		var rect := TextureRect.new()
-		rect.texture = CLOUDS[k % CLOUDS.size()]
-		rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_cover.add_child(rect)
-		_cloud_rects.append(rect)
+	_clouds = ColorRect.new()
+	_clouds.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_clouds.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var height := NoiseTexture2D.new()
+	height.width = 1024
+	height.height = 1024
+	height.seamless = true
+	height.normalize = true
+	var noise := FastNoiseLite.new()
+	noise.noise_type = FastNoiseLite.TYPE_PERLIN
+	noise.fractal_octaves = 5
+	noise.frequency = 0.006
+	height.noise = noise
+	var clouds := ShaderMaterial.new()
+	clouds.shader = CLOUDS
+	clouds.set_shader_parameter(&"height", height)
+	_clouds.material = clouds
+	_cover.add_child(_clouds)
 	_iris = ColorRect.new()
 	_iris.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_iris.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -290,20 +280,15 @@ func _build_cover() -> void:
 	_cover_label.position.y -= 60
 	_cover.add_child(_cover_label)
 
-## Lays the cover `t` shut (0 open, 1 shut). Clouds come in from beyond the edges and `far` is their
-## scale when away; the iris shuts on `_cover_point`.
+## Lays the cover `t` shut (0 open, 1 shut): clouds rise out of their height map until they fill the
+## screen, drawn at `far` times their size; the iris shuts on `_cover_point`.
 func _set_cover(t: float, far: float) -> void:
 	var view := get_viewport_rect().size
 	if _clouds_kind:
-		_backdrop.color.a = clampf((t - 0.55) / 0.45, 0.0, 1.0)
-		for k in _cloud_rects.size():
-			var spot := _cloud_spots[k]
-			var home := Vector2(spot.x, spot.y) * view
-			var out := (home - view * 0.5).normalized() * view.length() * 0.5
-			var width := spot.z * view.x * lerpf(far, 1.0, t)
-			var rect := _cloud_rects[k]
-			rect.size = Vector2(width, width)
-			rect.position = home + out * (1.0 - t) - rect.size * 0.5
+		var material := _clouds.material as ShaderMaterial
+		material.set_shader_parameter(&"size", view)
+		material.set_shader_parameter(&"cover", t)
+		material.set_shader_parameter(&"scale", 0.4 / far)
 	else:
 		var material := _iris.material as ShaderMaterial
 		material.set_shader_parameter(&"size", view)
@@ -320,14 +305,12 @@ func _close(to: int, at: Vector2, screen: Vector2) -> void:
 	if not _going_down:
 		at = _camera.position
 		screen = _cover_point
-	for rect in _cloud_rects:
-		rect.visible = _clouds_kind
-	_backdrop.visible = _clouds_kind
+	_clouds.visible = _clouds_kind
 	_iris.visible = not _clouds_kind
 	_cover_label.text = ""
 	_cover_label.modulate = Color8(42, 32, 22) if _clouds_kind else Color8(231, 214, 172)
 	_cover.visible = true
-	var far := 0.6 if _going_down else 1.6
+	var far := 0.85 if _going_down else 1.2
 	_set_cover(0.0, far)
 	var from := _camera.zoom.x
 	var push := PUSH if _going_down else 1.0 / PUSH
@@ -366,7 +349,7 @@ func _open() -> void:
 	_cover_label.text = ""
 	var screen := _cover_point
 	var at := _camera.position + (screen - get_viewport_rect().size * 0.5) / _camera.zoom.x
-	var far := 1.6 if _going_down else 0.6
+	var far := 1.2 if _going_down else 0.85
 	var tween := create_tween().set_parallel().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	tween.tween_method(func(z: float) -> void: _zoom_at(at, z, screen), _camera.zoom.x, _standard(_level), COVER_TIME)
 	tween.tween_method(func(t: float) -> void: _set_cover(t, far), 1.0, 0.0, COVER_TIME).set_ease(Tween.EASE_IN)
