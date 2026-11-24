@@ -1,10 +1,10 @@
 extends Node2D
 
 ## Module 13's world view: three map levels, each drawn in its own frame round a moving anchor (a floating
-## origin, since the world is millions of metres wide), each zoom held to RANGE times its standard. A wheel
+## origin, since the world is millions of metres wide), each zoom held to its RANGES times its standard. A wheel
 ## notch past the range runs a transition: a cover closes (clouds between L3 and L2, an iris between L2 and
 ## L1) while the camera keeps zooming, the new level loads behind it, and the cover opens on it. L2 and L1
-## are streamed in chunks (WorldChunkStore) planned on worker threads; L3 is one map, wrapping east-west.
+## are streamed in chunks (WorldChunkStore) planned on worker threads; L3 is one map, a sheet on a table.
 
 const LEVEL_NAMES: Array[String] = ["L3", "L2", "L1"]
 ## Metres a cell, per level.
@@ -17,8 +17,8 @@ const CELL_PX: float = 32.0
 const CHUNK: Array[int] = [0, 64, 32]
 ## Plans kept per level.
 const CAP: Array[int] = [0, 2048, 4096]
-## A level's zoom stays between these times its standard.
-const RANGE := Vector2(0.7, 1.5)
+## Each level's zoom stays between these times its standard; L3 lets you look closer.
+const RANGES: Array[Vector2] = [Vector2(0.7, 4.0), Vector2(0.7, 1.5), Vector2(0.7, 1.5)]
 ## On-screen pixels a cell at the standard zoom, for L2 and L1; L3's standard fits the whole map.
 const STANDARD_PX: Array[float] = [0.0, 6.0, 16.0]
 const WHEEL_STEP: float = 1.15
@@ -38,13 +38,14 @@ const MAX_JOBS: int = 3
 const CLOUDS := preload("res://13. World Generator/art/clouds.gdshader")
 const IRIS := preload("res://13. World Generator/art/iris.gdshader")
 const L3_MAP := preload("res://13. World Generator/art/l3_map.gdshader")
-const PARCHMENT := preload("res://13. World Generator/art/parchment.gdshader")
-const COMPASS := preload("res://Global/Asset/Map/compass.png")
-## Parchment drawn past each pole, in cells, and the compass's size and gap below the south border.
-const PARCHMENT_CELLS: int = 96
-const COMPASS_CELLS := Vector2(16, 4)
-## How far, in cells, the camera may look past a pole.
-const POLE_MARGIN: float = 4.0
+const TABLE := preload("res://13. World Generator/art/table.gdshader")
+const SURYA := preload("res://Global/Asset/Map/surya.png")
+## Table drawn round the sheet, in cells, and the brass sun weights' size.
+const TABLE_CELLS: int = 96
+const SURYA_CELLS: float = 14.0
+## Table shown round the sheet at L3's standard zoom, and how far past the sheet the camera may look, in cells.
+const SHEET_VIEW: float = 14.0
+const TABLE_VIEW: float = 16.0
 @export var world_seed: int = 0
 
 @onready var _camera: Camera2D = $Camera2D
@@ -107,7 +108,7 @@ func _process(_delta: float) -> void:
 			_stores[job["level"]].put(job["at"], {"image": job["image"]}, job["usec"])
 	if _phase != &"closing":
 		if _level == 0:
-			_wrap_l3()
+			_clamp_l3()
 		else:
 			_reanchor()
 			_stream()
@@ -135,12 +136,13 @@ func _input(event: InputEvent) -> void:
 	var at := get_global_mouse_position()
 	var screen := get_viewport().get_mouse_position()
 	var standard := _standard(_level)
-	if zoom > standard * RANGE.y and _level < 2:
+	var range_ := RANGES[_level]
+	if zoom > standard * range_.y and _level < 2:
 		_close(_level + 1, at, screen)
-	elif zoom < standard * RANGE.x and _level > 0:
+	elif zoom < standard * range_.x and _level > 0:
 		_close(_level - 1, at, screen)
 	else:
-		_zoom_at(at, clampf(zoom, standard * RANGE.x, standard * RANGE.y), screen)
+		_zoom_at(at, clampf(zoom, standard * range_.x, standard * range_.y), screen)
 
 ## Sets the zoom, keeping frame point `at` at `screen`.
 func _zoom_at(at: Vector2, zoom: float, screen: Vector2) -> void:
@@ -151,8 +153,8 @@ func _zoom_at(at: Vector2, zoom: float, screen: Vector2) -> void:
 func _standard(level: int) -> float:
 	if level == 0:
 		var view := get_viewport_rect().size
-		var map := Vector2(WorldPlaceholder.L3) * CELL_PX
-		return minf(view.x / map.x, view.y / map.y)
+		var sheet := (Vector2(WorldPlaceholder.L3) + Vector2.ONE * SHEET_VIEW * 2.0) * CELL_PX
+		return minf(view.x / sheet.x, view.y / sheet.y)
 	return STANDARD_PX[level] / CELL_PX
 
 ## Frame point `at` of `level` in that level's cells, as 64-bit floats [x, y].
@@ -166,53 +168,48 @@ func _view_cells(level: int) -> Rect2i:
 	var to := _cells_of(level, _camera.position + half)
 	return Rect2i(floori(from[0]), floori(from[1]), ceili(to[0]) - floori(from[0]), ceili(to[1]) - floori(from[1]))
 
-## The L3 map, three copies side by side so it wraps, drawn by the map shader from its fields.
+## The L3 map as one sheet on the table, drawn by the map shader from its fields.
 func _draw_l3() -> void:
+	_draw_table()
 	_l3_image = WorldPlaceholder.l3_fields(world_seed)
-	var texture := ImageTexture.create_from_image(_l3_image)
 	var material := ShaderMaterial.new()
 	material.shader = L3_MAP
 	material.set_shader_parameter(&"table", ImageTexture.create_from_image(WorldPlaceholder.table()))
 	material.set_shader_parameter(&"sea", WorldPlaceholder.SEA)
 	material.set_shader_parameter(&"mountain", WorldPlaceholder.MOUNTAIN)
 	material.set_shader_parameter(&"snow", WorldPlaceholder.SNOW)
-	for k in [-1, 0, 1]:
-		var sprite := Sprite2D.new()
-		sprite.texture = texture
-		sprite.material = material
-		sprite.centered = false
-		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-		sprite.texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
-		sprite.scale = Vector2(CELL_PX, CELL_PX)
-		sprite.position = Vector2(k * WorldPlaceholder.L3.x * CELL_PX, 0)
-		_roots[0].add_child(sprite)
-	_draw_parchment()
+	var sprite := Sprite2D.new()
+	sprite.texture = ImageTexture.create_from_image(_l3_image)
+	sprite.material = material
+	sprite.centered = false
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	sprite.scale = Vector2(CELL_PX, CELL_PX)
+	_roots[0].add_child(sprite)
+	var map := Vector2(WorldPlaceholder.L3) * CELL_PX
+	for corner: Vector2 in [Vector2.ZERO, Vector2(1, 0), Vector2(0, 1), Vector2.ONE]:
+		var weight := Sprite2D.new()
+		weight.texture = SURYA
+		weight.scale = Vector2.ONE * SURYA_CELLS * CELL_PX / SURYA.get_width()
+		weight.position = corner * map + (corner * 2.0 - Vector2.ONE) * 2.0 * CELL_PX
+		_roots[0].add_child(weight)
 
-## Parchment past both poles, with the printed border along the map's edges and a compass under the south.
-func _draw_parchment() -> void:
+## Round the map: the sheet's margin with its tumpal border and torn edge, then the teak table.
+func _draw_table() -> void:
 	var map := Vector2(WorldPlaceholder.L3) * CELL_PX
 	var material := ShaderMaterial.new()
-	material.shader = PARCHMENT
+	material.shader = TABLE
 	material.set_shader_parameter(&"cell", CELL_PX)
-	material.set_shader_parameter(&"map_height", map.y)
+	material.set_shader_parameter(&"map_size", map)
 	var white := Image.create_empty(1, 1, false, Image.FORMAT_RGB8)
 	white.fill(Color.WHITE)
-	var texture := ImageTexture.create_from_image(white)
-	var depth := PARCHMENT_CELLS * CELL_PX
-	for y: float in [-depth, map.y]:
-		var sprite := Sprite2D.new()
-		sprite.texture = texture
-		sprite.material = material
-		sprite.centered = false
-		sprite.position = Vector2(-map.x, y)
-		sprite.scale = Vector2(map.x * 3.0, depth)
-		_roots[0].add_child(sprite)
-	for k in [-1, 0, 1]:
-		var compass := Sprite2D.new()
-		compass.texture = COMPASS
-		compass.scale = Vector2.ONE * COMPASS_CELLS.x * CELL_PX / COMPASS.get_width()
-		compass.position = Vector2((k + 0.5) * map.x, map.y + (COMPASS_CELLS.y + COMPASS_CELLS.x * 0.5) * CELL_PX)
-		_roots[0].add_child(compass)
+	var sprite := Sprite2D.new()
+	sprite.texture = ImageTexture.create_from_image(white)
+	sprite.material = material
+	sprite.centered = false
+	var depth := TABLE_CELLS * CELL_PX
+	sprite.position = -Vector2.ONE * depth
+	sprite.scale = map + Vector2.ONE * depth * 2.0
+	_roots[0].add_child(sprite)
 
 ## The L3 key, bottom left: each colour and what it is; shown on L3 only.
 func _build_legend() -> void:
@@ -233,18 +230,16 @@ func _build_legend() -> void:
 		box.add_child(row)
 	_legend.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 12)
 
-## Keeps the camera over the middle copy of L3, and from straying far past the poles.
-func _wrap_l3() -> void:
+## Keeps the camera over the table: no further than TABLE_VIEW cells past the sheet's edge.
+func _clamp_l3() -> void:
 	var map := Vector2(WorldPlaceholder.L3) * CELL_PX
-	if _camera.position.x < 0.0 or _camera.position.x >= map.x:
-		_camera.position.x = fposmod(_camera.position.x, map.x)
-	# Up and down only a little past the poles.
-	var half := get_viewport_rect().size.y * 0.5 / _camera.zoom.x
-	var margin := POLE_MARGIN * CELL_PX
-	if half * 2.0 >= map.y + margin * 2.0:
-		_camera.position.y = map.y * 0.5
-	else:
-		_camera.position.y = clampf(_camera.position.y, half - margin, map.y - half + margin)
+	var half := get_viewport_rect().size * 0.5 / _camera.zoom.x
+	var margin := TABLE_VIEW * CELL_PX
+	for axis in 2:
+		if half[axis] * 2.0 >= map[axis] + margin * 2.0:
+			_camera.position[axis] = map[axis] * 0.5
+		else:
+			_camera.position[axis] = clampf(_camera.position[axis], half[axis] - margin, map[axis] - half[axis] + margin)
 
 ## Moves the current level's anchor under the camera once it strays far, so frame numbers stay small.
 func _reanchor() -> void:
@@ -403,7 +398,7 @@ func _load(to: int, cells: PackedFloat64Array, screen: Vector2) -> void:
 	var zoom := _standard(to) / SETTLE if _going_down else _standard(to) * SETTLE
 	var at: Vector2
 	if to == 0:
-		at = Vector2(fposmod(x, WorldPlaceholder.L3.x), y) * CELL_PX
+		at = Vector2(x, y) * CELL_PX
 	else:
 		_set_anchor(to, Vector2i(floori(x), floori(y)))
 		at = Vector2(x - _anchor[to].x, y - _anchor[to].y) * CELL_PX
@@ -435,7 +430,7 @@ func _report() -> void:
 	var km := PackedFloat64Array([cells[0] * METRES[_level] / 1000.0, cells[1] * METRES[_level] / 1000.0])
 	var lines: Array[String] = ["%s, %s a cell: zoom ×%.3f (×%.3f to ×%.3f)%s" % [LEVEL_NAMES[_level],
 		"%d m" % METRES[_level] if METRES[_level] < 1000 else "%.1f km" % (METRES[_level] / 1000.0),
-		_camera.zoom.x, _standard(_level) * RANGE.x, _standard(_level) * RANGE.y,
+		_camera.zoom.x, _standard(_level) * RANGES[_level].x, _standard(_level) * RANGES[_level].y,
 		"" if _phase == &"" else ", " + _phase], "At %.1f km east, %.1f km south" % [km[0], km[1]]]
 	for level in [1, 2]:
 		var store := _stores[level]

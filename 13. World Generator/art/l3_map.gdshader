@@ -3,7 +3,7 @@ shader_type canvas_item;
 // The L3 world map from its fields (WorldPlaceholder.l3_fields): R height, G temperature, B moisture, read
 // smoothly so every edge is a curve. Sea by depth with a shallow band; land by the
 // biome table, mountains and snow by height; land and mountains each keep a shaded crescent on the side
-// away from the light (flat-vector lit copy); a faint grid of meridians and parallels over it all.
+// away from the light (flat-vector lit copy). All of it painted on daluang: faded, warmed, fibres showing.
 
 uniform sampler2D table : filter_nearest;
 uniform float sea = 0.5;
@@ -16,9 +16,19 @@ uniform vec4 shallow : source_color = vec4(0.27, 0.49, 0.66, 1.0);
 uniform vec4 sea_ice : source_color = vec4(0.84, 0.89, 0.93, 1.0);
 uniform vec4 rock : source_color = vec4(0.50, 0.48, 0.44, 1.0);
 uniform vec4 peak : source_color = vec4(0.94, 0.95, 0.97, 1.0);
-uniform vec4 ink : source_color = vec4(0.16, 0.14, 0.12, 1.0);
-// A faint grid of meridians and parallels every this many cells, the equator stronger.
-uniform float grid = 16.0;
+uniform vec4 ink : source_color = vec4(0.29, 0.19, 0.11, 1.0);
+uniform vec4 paper : source_color = vec4(0.95, 0.86, 0.68, 1.0);
+
+float hash(vec2 p) {
+	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float noise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
 
 void fragment() {
 	vec4 f = texture(TEXTURE, UV);
@@ -46,14 +56,9 @@ void fragment() {
 			}
 		}
 	}
+	// Pigment on daluang: colours a little faded and warmed, bark fibres showing through.
 	vec2 cells = UV / TEXTURE_PIXEL_SIZE;
-	vec2 near = abs(fract(cells / grid + 0.5) - 0.5) * grid / fwidth(cells);
-	if (min(near.x, near.y) < 0.6) {
-		col.rgb = mix(col.rgb, ink.rgb, 0.18);
-	}
-	float equator = abs(cells.y - 0.5 / TEXTURE_PIXEL_SIZE.y) / fwidth(cells.y);
-	if (equator < 0.9) {
-		col.rgb = mix(col.rgb, ink.rgb, 0.4);
-	}
+	float fibre = noise(cells * vec2(0.5, 9.0)) * 0.6 + noise(cells * vec2(2.0, 22.0)) * 0.4;
+	col.rgb = mix(col.rgb, col.rgb * paper.rgb, 0.45) * (fibre > 0.62 ? 0.92 : 1.0);
 	COLOR = col;
 }
