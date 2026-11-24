@@ -1,7 +1,7 @@
 shader_type canvas_item;
 
 // The L3 world map from its fields (WorldPlaceholder.l3_fields): R height, G temperature, B moisture, read
-// smoothly so every edge is a curve. Sea by depth with a shallow band and an ink coastline; land by the
+// smoothly so every edge is a curve. Sea by depth with a shallow band; land by the
 // biome table, mountains and snow by height; land and mountains each keep a shaded crescent on the side
 // away from the light (flat-vector lit copy).
 
@@ -28,9 +28,6 @@ void fragment() {
 		col = h > sea - 0.05 ? shallow : deep;
 		if (f.g < 0.12) {
 			col = sea_ice;
-		}
-		if (sea - h < edge * 1.3) {
-			col = ink;
 		}
 	} else {
 		col = texture(table, vec2(f.g, f.b));
