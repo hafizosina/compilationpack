@@ -1,53 +1,46 @@
 extends Node2D
 
-## The terrain generator's viewer: an L2 region and, zoomed in, its L1 ground in chunks. A bar and
-## a line under Generate say what is being made and how far along it is.
-## Generate plans the region (8 m a cell). The wheel zooms toward the mouse; past a zoom where L1
-## cells are big enough to see (1 m a cell, drawn at 1/8 over the region), the chunks in view and a
-## ring round them are made, each in turn: terrain planned, terrain drawn, objects planned, objects
-## drawn (WorldTerrainChunks says which). Planning and building a chunk's world run on worker
-## threads, off the scene tree: drawing objects rebuilds the chunk with them and swaps it in over
-## the terrain-only one, so the main thread only ever adds a finished chunk. Made chunks stay in
-## memory; far ones free their nodes and keep their plans. Zooming out fades L1 away. A left click
-## on the map outlines that cell, L1's where L1 is drawn, else L2's, and shows its details.
-## The town (WorldSitePicker) is picked with the region, sized by the Town option, outlined, and drawn
-## into the chunks it covers; a right click moves it to that region cell. Its roads show as lines
-## over the region, fading as L1 fades in, where the chunks draw them as floors. Its plots show as
-## shaded footprints with their doors, and tinted yards, over the region, fading as L1 shows their
-## buildings: walls, rooms, furniture and roofs, which the Roofs box hides. Ore and clay deposits are
-## tinted over the region and fade with the roads.
+## Module 13's viewer: a world in three map levels, each with its own locked zoom. L3 is the world
+## (64 m a cell, drawn at scale 1), L2 its regions (8 m, at 1/8), L1 their chunks (1 m, at 1/64).
+## Generate plans the world. The wheel zooms toward the mouse within the level's range (RANGE times
+## its STANDARD zoom); a notch past the top plays a transition down a level, into more detail, and
+## one past the bottom a transition up. Regions round the view are refined from the world, and
+## chunks from their region, on worker threads, nearest first (WorldRegions, WorldTerrainChunks):
+## planned, then drawn, chunks then objects planned and drawn. Coarser levels stay drawn beneath, so
+## what isn't made yet shows its parent. Far regions and chunks free their nodes and keep their plans.
+## A left click shows the cell under it at the level shown.
 
-const DEFS := "res://13. World Generator/defs/settlements/"
-## The region's land; its child is the L1 land chunks are made of.
-const REGION := "res://13. World Generator/defs/lands/region.tres"
-## Town sizes: the def that gives the town its area and plaza.
-const TOWNS: Array[StringName] = [&"hamlet", &"village", &"town"]
+const WORLD := "res://13. World Generator/defs/lands/world.tres"
 const CHUNK_SIZES: Array[int] = [32, 64, 128]
-const WATER_NAMES: Array[String] = ["The region's", "Lake", "River", "Coast", "River to the sea"]
-## L1 cells per L2 cell side.
+const WATER_NAMES: Array[String] = ["The world's", "Lake", "River", "Coast", "River to the sea"]
+## Child cells per parent cell side: L3 to L2 and L2 to L1.
 const ZOOM: int = 8
-## L1 shows from this zoom (an L1 cell 4 px on screen) and goes below this share of it.
-const L1_ZOOM: float = 1.0
-const ZOOM_OUT_SHARE: float = 0.75
+## Each level's standard zoom, L3, L2, L1: a cell of that level CELL px on screen.
+const STANDARD: Array[float] = [1.0, 8.0, 64.0]
+## A level's zoom range, as shares of its standard zoom.
+const RANGE := Vector2(0.7, 1.5)
+const LEVEL_NAMES: Array[String] = ["L3", "L2", "L1"]
+## Metres a cell, by level.
+const METRES: Array[int] = [64, 8, 1]
 ## Each wheel notch multiplies or divides the zoom by this.
 const WHEEL_STEP: float = 1.15
-## Seconds a level or chunk takes to fade in or out.
+## Seconds a region or chunk takes to fade in.
 const FADE: float = 0.35
+## Seconds a transition between levels takes.
+const TRANSITION: float = 0.45
 ## Worker tasks at once.
 const MAX_JOBS: int = 3
 ## Chunks made round the view, ahead of panning.
 const RING: int = 1
 ## Drawn chunks further than this many chunks outside the view free their nodes.
 const KEEP: int = 3
-## Ticks a new world is run on the worker before it is shown, so everything is born and drawn.
+## L3 cells round the view whose regions are made too.
+const REGION_MARGIN: int = 2
+## Ticks a new level is run on the worker before it is shown, so everything is born and drawn.
 const SETTLE: int = 3
 ## Deposit tint by key.
 const DEPOSIT_TINTS := {&"iron": Color(0.75, 0.35, 0.2), &"coal": Color(0.1, 0.1, 0.1), &"copper": Color(0.85, 0.5, 0.15),
 	&"gold": Color(1.0, 0.85, 0.1), &"clay": Color(0.7, 0.45, 0.35)}
-## Footprint tint by role group.
-const GROUP_TINTS := {&"home": Color(0.75, 0.45, 0.25), &"elite": Color(0.85, 0.3, 0.3), &"food": Color(0.85, 0.72, 0.3),
-	&"farming": Color(0.6, 0.78, 0.3), &"craft": Color(0.55, 0.4, 0.65), &"faith": Color(0.92, 0.9, 0.82),
-	&"trade": Color(0.3, 0.5, 0.78), &"entertainment": Color(0.9, 0.45, 0.7), &"works": Color(0.45, 0.45, 0.45)}
 ## Zone tint, most specific zone first: [zone, colour].
 const TINTS := [
 	[WorldNodeSpawnDef.Zone.SHALLOW, Color(0.3, 0.9, 1.0)], [WorldNodeSpawnDef.Zone.SHORE, Color(1.0, 0.9, 0.3)],
@@ -65,43 +58,39 @@ const TINTS := [
 
 var _panel: PanelContainer
 var _chunk_size: OptionButton
-var _town_size: OptionButton
 var _water: OptionButton
 var _seed: SpinBox
 var _generate_button: Button
-## What the region or town job is doing, shown as a bar and a line under Generate.
+## What the world job is doing, shown as a bar and a line under Generate.
 var _progress := WorldProgress.new()
 var _progress_bar: ProgressBar
 var _progress_label: Label
 var _info: Label
 var _detail_panel: PanelContainer
 var _detail: Label
-## The clicked cell's outline, and the cell: {level: 1 or 2, cell}, or {}.
+## The clicked cell's outline, and the cell: {level: 0 L3, 1 L2, 2 L1, cell}, or {}.
 var _marker: Line2D
 var _picked: Dictionary = {}
-## The town, the reason the last move was refused, and its outlines (area, plaza).
-var _site: WorldSettlementSite
-var _site_note: String = ""
-var _site_lines: Array[Line2D] = []
-## The roads drawn over the region, and the region cells a main road passes.
-var _roads_layer: Node2D
-var _road_l2_cells: Dictionary = {}
-## The plots drawn over both levels.
-var _plots_layer: Node2D
 var _zones_on: bool = false
 var _nodes_on: bool = true
 var _roofs_on: bool = false
-## The region shown: {root, world, scheduler, tile_sync, zones, def, plan, shares, seed, problems}.
-var _region: Dictionary = {}
-## Counts regions made, so a chunk job for an old one is thrown away.
+## The world shown: {root, world, scheduler, tile_sync, grid, def, plan, seed, problems, zones}.
+var _world: Dictionary = {}
+## Counts worlds made, so a job for an old one is thrown away.
 var _generation: int = 0
-## L1: the layer every chunk's root goes under, the chunks, and their L1 def.
-var _l1: Node2D
+## One layer per level, coarsest first; each region's and chunk's root goes under its level's.
+var _layers: Array[Node2D] = []
+var _regions: WorldRegions
+var _region_def: WorldLandDef
 var _chunks: WorldTerrainChunks
 var _chunk_def: WorldLandDef
-var _in_l1: bool = false
-var _l1_tween: Tween
-## Worker tasks: id -> job {kind, generation, chunk, stage, work result}.
+## The level shown: 0 L3, 1 L2, 2 L1.
+var _level: int = 0
+## The transition running, and the zoom and camera position it ends at.
+var _transition: Tween
+var _target_zoom: float = 1.0
+var _target_position: Vector2
+## Worker tasks: id -> job {kind, generation, region or chunk, stage, work result}.
 var _jobs: Dictionary = {}
 
 func _ready() -> void:
@@ -110,27 +99,18 @@ func _ready() -> void:
 	entity_catalog.has_def(&"tree")
 	_build_panel()
 	_build_detail_panel()
+	for level in STANDARD.size():
+		var layer := Node2D.new()
+		layer.name = LEVEL_NAMES[level]
+		layer.modulate.a = 1.0 if level == 0 else 0.0
+		_world_root.add_child(layer)
+		_layers.append(layer)
 	_marker = Line2D.new()
 	_marker.closed = true
 	_marker.default_color = Color(1.0, 0.85, 0.2)
 	_marker.z_index = 30
 	_marker.visible = false
 	_world_root.add_child(_marker)
-	for colour: Color in [Color(1.0, 0.95, 0.6), Color(0.9, 0.5, 0.2)]:
-		var line := Line2D.new()
-		line.closed = true
-		line.default_color = colour
-		line.z_index = 29
-		line.visible = false
-		_world_root.add_child(line)
-		_site_lines.append(line)
-	_roads_layer = Node2D.new()
-	_roads_layer.z_index = 28
-	_world_root.add_child(_roads_layer)
-	_plots_layer = Node2D.new()
-	_plots_layer.z_index = 29
-	_plots_layer.draw.connect(_draw_plots)
-	_world_root.add_child(_plots_layer)
 	_generate()
 
 func _exit_tree() -> void:
@@ -145,47 +125,53 @@ func _process(_delta: float) -> void:
 			_jobs.erase(task)
 			_arrived(job)
 	_show_progress()
-	if _region.is_empty():
+	if _world.is_empty():
 		return
-	var zoom := _camera.zoom.x
-	if not _in_l1 and zoom >= L1_ZOOM:
-		_in_l1 = true
-		_fade_l1(true)
-	elif _in_l1 and zoom < L1_ZOOM * ZOOM_OUT_SHARE:
-		_in_l1 = false
-		_fade_l1(false)
-	if _in_l1:
-		var view := _view_cells()
-		while _jobs.size() < MAX_JOBS:
-			var next := _chunks.next_job(view, RING)
-			if next.is_empty():
-				break
-			_start_chunk(next["chunk"], next["stage"])
-		for at in _chunks.far(view, KEEP):
-			_undraw(at)
+	_stream()
 	_report()
 	if _marker.visible:
 		_marker.width = 3.0 / _camera.zoom.x
-	for line in _site_lines:
-		line.width = 2.5 / _camera.zoom.x
-	if _l1 != null:
-		_roads_layer.modulate.a = 1.0 - _l1.modulate.a
-		_plots_layer.modulate.a = 1.0 - _l1.modulate.a
-		if _region.has("deposits"):
-			(_region["deposits"] as Sprite2D).modulate.a = 1.0 - _l1.modulate.a
-	for line: Line2D in _roads_layer.get_children():
-		line.width = maxf(line.get_meta(&"width", 4.0), line.get_meta(&"screen", 2.0) / _camera.zoom.x)
 
 func _physics_process(delta: float) -> void:
-	if _region.is_empty():
-		return
-	(_region["scheduler"] as EcsScheduler).run_all(_region["world"], delta)
-	for at: Vector2i in _chunks.chunks:
-		var chunk: Dictionary = _chunks.chunks[at]
-		if chunk.has("level"):
-			(chunk["level"]["scheduler"] as EcsScheduler).run_all(chunk["level"]["world"], delta)
+	for level in _levels():
+		(level["scheduler"] as EcsScheduler).run_all(level["world"], delta)
 
-## The wheel zooms by a factor toward the mouse; the shared camera keeps panning.
+## Every level drawn: the world, drawn regions, drawn chunks.
+func _levels() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if _world.is_empty():
+		return out
+	out.append(_world)
+	for store: Dictionary in [_regions.regions, _chunks.chunks]:
+		for at: Vector2i in store:
+			if store[at].has("level"):
+				out.append(store[at]["level"])
+	return out
+
+## Starts the next region and chunk jobs for the view, and offers far ones up to free: regions from
+## L2 down, their chunks at L1, each only once its region is planned.
+func _stream() -> void:
+	var around := _view_cells(0).grow(REGION_MARGIN)
+	if _level >= 1:
+		while _jobs.size() < MAX_JOBS:
+			var next := _regions.next_job(around)
+			if next.is_empty():
+				break
+			_start_region(next["region"], next["stage"])
+	for at in _regions.far(around, 1):
+		_undraw(_regions.regions[at])
+	var view := _view_cells(2)
+	if _level == 2:
+		var ready := func(at: Vector2i) -> bool: return _regions.planned(_region_of_chunk(at))
+		while _jobs.size() < MAX_JOBS:
+			var next := _chunks.next_job(view, RING, ready)
+			if next.is_empty():
+				break
+			_start_chunk(next["chunk"], next["stage"])
+	for at in _chunks.far(view, KEEP):
+		_undraw(_chunks.chunks[at])
+
+## The wheel zooms by a factor toward the mouse within the level's range; past it, a transition.
 func _input(event: InputEvent) -> void:
 	if not event is InputEventMouseButton or not event.pressed or get_viewport().gui_get_hovered_control() != null:
 		return
@@ -197,30 +183,81 @@ func _input(event: InputEvent) -> void:
 	if step == 0.0:
 		return
 	get_viewport().set_input_as_handled()
-	_zoom_at(get_global_mouse_position(), _camera.zoom.x * step)
-
-## A left click on the map picks the cell under it; a right click moves the town there.
-func _unhandled_input(event: InputEvent) -> void:
-	if not event is InputEventMouseButton or not event.pressed or _region.is_empty():
+	if _transitioning() or _world.is_empty():
 		return
-	if event.button_index == MOUSE_BUTTON_LEFT:
-		_pick(get_global_mouse_position())
-	elif event.button_index == MOUSE_BUTTON_RIGHT:
-		_move_site(EcsTownGrid.cell_at(get_global_mouse_position()))
+	var at := get_global_mouse_position()
+	var zoom := _camera.zoom.x * step
+	if zoom > STANDARD[_level] * RANGE.y and _level < STANDARD.size() - 1:
+		_go_to_level(_level + 1, at)
+	elif zoom < STANDARD[_level] * RANGE.x and _level > 0:
+		_go_to_level(_level - 1, at)
+	else:
+		_zoom_at(at, zoom)
 
-## Sets the zoom, keeping world point `at` where it is on screen.
-func _zoom_at(at: Vector2, zoom: float) -> void:
-	var screen := get_viewport().get_canvas_transform() * at
+## A left click on the map picks the cell under it.
+func _unhandled_input(event: InputEvent) -> void:
+	if not event is InputEventMouseButton or not event.pressed or _world.is_empty():
+		return
+	if event.button_index == MOUSE_BUTTON_LEFT and not _transitioning():
+		_pick(get_global_mouse_position())
+
+## Sets the zoom within the level's range, keeping world point `at` where it is on screen (or on
+## screen point `screen` when given).
+func _zoom_at(at: Vector2, zoom: float, screen: Variant = null) -> void:
+	if screen == null:
+		screen = get_viewport().get_canvas_transform() * at
+	if not _transitioning():
+		zoom = clampf(zoom, STANDARD[_level] * RANGE.x, STANDARD[_level] * RANGE.y)
 	zoom = clampf(zoom, _camera.min_zoom, _camera.max_zoom)
 	_camera.zoom = Vector2(zoom, zoom)
-	_camera.position = at - (screen - get_viewport_rect().size * 0.5) / zoom
+	_camera.position = at - ((screen as Vector2) - get_viewport_rect().size * 0.5) / zoom
 
-## What the camera shows, in L1 cells.
-func _view_cells() -> Rect2i:
-	var half := get_viewport_rect().size * 0.5 / _camera.zoom.x
-	var from := (_camera.get_screen_center_position() - half) * ZOOM / EcsTownGrid.CELL
-	var to := (_camera.get_screen_center_position() + half) * ZOOM / EcsTownGrid.CELL
-	return Rect2i(Vector2i(from.floor()), Vector2i((to - from).ceil()))
+## Plays the transition to `level`: the zoom eases to its standard with world point `at` held still
+## on screen, the finer of the two levels fades (the coarser stays beneath), and input waits.
+## The new level's regions or chunks are asked for from the start, for the view it ends on.
+func _go_to_level(level: int, at: Vector2) -> void:
+	var from := _camera.zoom.x
+	var screen := get_viewport().get_canvas_transform() * at
+	var finer := maxi(level, _level)
+	_target_zoom = STANDARD[level]
+	_target_position = at - (screen - get_viewport_rect().size * 0.5) / _target_zoom
+	_level = level
+	_camera.manual_control = false
+	_camera.is_panning = false
+	_transition = create_tween().set_parallel(true).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_transition.tween_method(func(t: float) -> void: _zoom_at(at, from * pow(_target_zoom / from, t), screen), 0.0, 1.0, TRANSITION)
+	_transition.tween_property(_layers[finer], "modulate:a", 1.0 if level == finer else 0.0, TRANSITION)
+	_transition.chain().tween_callback(func() -> void:
+		_camera.manual_control = true
+		_camera.zoom = Vector2(_target_zoom, _target_zoom)
+		_camera.position = _target_position)
+	_show_layers()
+	_stream()
+
+func _transitioning() -> bool:
+	return _transition != null and _transition.is_running()
+
+## What the camera shows, or will once a transition ends, in world px.
+func _view_rect() -> Rect2:
+	var zoom := _target_zoom if _transitioning() else _camera.zoom.x
+	var centre := _target_position if _transitioning() else _camera.get_screen_center_position()
+	var half := get_viewport_rect().size * 0.5 / zoom
+	return Rect2(centre - half, half * 2.0)
+
+## The view in `level`'s cells.
+func _view_cells(level: int) -> Rect2i:
+	var view := _view_rect()
+	var from := (view.position / _cell_px(level)).floor()
+	var to := (view.end / _cell_px(level)).ceil()
+	return Rect2i(Vector2i(from), Vector2i(to - from))
+
+## World px a cell of `level` spans.
+func _cell_px(level: int) -> float:
+	return EcsTownGrid.CELL / pow(ZOOM, level)
+
+## The region a chunk lies in.
+func _region_of_chunk(at: Vector2i) -> Vector2i:
+	return Vector2i((Vector2(at * _chunks.size) / Vector2(_region_def.size * ZOOM)).floor())
 
 func _build_panel() -> void:
 	_panel = PanelContainer.new()
@@ -231,18 +268,12 @@ func _build_panel() -> void:
 	var box := VBoxContainer.new()
 	_panel.add_child(box)
 	var title := Label.new()
-	title.text = "Settlement terrain"
+	title.text = "World terrain"
 	title.theme_type_variation = &"DockTitle"
 	box.add_child(title)
 	_chunk_size = _option(box, "L1 chunk", CHUNK_SIZES.map(func(n: int) -> String: return "%d×%d cells" % [n, n]))
-	# 32: each chunk entering the scene costs the engine one short frame; 64 costs some frames 40–70 ms.
 	_chunk_size.select(0)
-	_chunk_size.item_selected.connect(func(_k: int) -> void: _reset_l1())
-	_town_size = _option(box, "Town", TOWNS.map(func(k: StringName) -> String:
-		var size := (load(DEFS + "%s.tres" % k) as WorldSettlementDef).size
-		return "%s, %d×%d" % [String(k).capitalize(), size.x, size.y]))
-	_town_size.select(1)
-	_town_size.item_selected.connect(func(_k: int) -> void: _move_site(_site.l2_cell if _site != null else Vector2i(-1, -1)))
+	_chunk_size.item_selected.connect(func(_k: int) -> void: _reset_chunks())
 	_water = _option(box, "Water", WATER_NAMES)
 	var row := HBoxContainer.new()
 	box.add_child(row)
@@ -326,175 +357,93 @@ func _build_detail_panel() -> void:
 	_detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(_detail)
 
-## Picks the cell at `at` (world position): L1's where its chunk is drawn and L1 shows, else L2's.
+## Picks the cell at `at` (world position) at the level shown, or the nearest coarser level where
+## that one isn't made there yet.
 func _pick(at: Vector2) -> void:
-	var l1 := EcsTownGrid.cell_at(at * ZOOM)
-	var chunk: Dictionary = _chunks.chunks.get(_chunks.chunk_at(l1), {})
-	var region := _region["def"] as WorldLandDef
-	var size := float(EcsTownGrid.CELL)
-	if _in_l1 and chunk.get("drawn", false):
-		_picked = {"level": 1, "cell": l1}
-		size /= ZOOM
-	else:
-		var cell := EcsTownGrid.cell_at(at)
-		if not Rect2i(Vector2i.ZERO, region.size).has_point(cell):
-			return
-		_picked = {"level": 2, "cell": cell}
-	var corner := Vector2(_picked["cell"] as Vector2i) * size
+	var level := _level
+	if level == 2 and not (_chunks.chunks.get(_chunks.chunk_at(_cell_at(at, 2)), {}) as Dictionary).get("drawn", false):
+		level = 1
+	if level == 1 and not _regions.planned(_regions.region_at(_cell_at(at, 0))):
+		level = 0
+	var cell := _cell_at(at, level)
+	if not Rect2i(Vector2i.ZERO, (_world["def"] as WorldLandDef).size * int(pow(ZOOM, level))).has_point(cell):
+		return
+	_picked = {"level": level, "cell": cell}
+	var size := _cell_px(level)
+	var corner := Vector2(cell) * size
 	_marker.points = PackedVector2Array([corner, corner + Vector2(size, 0), corner + Vector2(size, size), corner + Vector2(0, size)])
 	_marker.visible = true
 	_detail_panel.visible = true
 	_describe()
 
-## The picked cell's details, refreshed as its chunk is made.
+func _cell_at(at: Vector2, level: int) -> Vector2i:
+	return Vector2i((at / _cell_px(level)).floor())
+
+## The picked cell's details, refreshed as its region or chunk is made.
 func _describe() -> void:
 	if _picked.is_empty():
 		return
 	var cell: Vector2i = _picked["cell"]
-	var region := _region["def"] as WorldLandDef
-	var plan := _region["plan"] as Dictionary
 	var lines := PackedStringArray()
-	if _picked["level"] == 2:
-		var i := cell.y * region.size.x + cell.x
-		var kind: int = (plan["kinds"] as PackedByteArray)[i]
-		lines.append("L2 cell %s, 8 m a side" % cell)
-		lines.append("Ground: %s%s" % [WorldTerrainGenerator.TERRAIN_KEYS[kind],
-			", river" if (plan["river"] as PackedByteArray)[i] != 0 else (", sea" if kind == WorldTerrainGenerator.WATER else "")])
-		lines.append("Zones: %s" % _zone_names((plan["zones"] as PackedByteArray)[i]))
-		lines.append("Walk cost: %s" % _walk_cost(kind))
-		lines.append("Holds L1 cells %s to %s" % [cell * ZOOM, cell * ZOOM + Vector2i(ZOOM - 1, ZOOM - 1)])
-		var deposit: int = (plan["deposits"]["ids"] as PackedByteArray)[i]
-		if deposit != 0:
-			lines.append("Deposit: %s" % plan["deposits"]["keys"][deposit - 1])
-		if _road_l2_cells.has(cell):
-			lines.append("A main road passes through")
-		if _site != null and cell == _site.l2_cell:
-			lines.append("The town's site: " + _town_line().split("score ")[1].split("\n")[0])
-		elif _site != null and Rect2i(_site.area.position / ZOOM, _site.area.size / ZOOM).has_point(cell):
-			lines.append("In the town's area")
-	else:
-		var at := _chunks.chunk_at(cell)
-		var chunk: Dictionary = _chunks.chunks.get(at, {})
-		var local := cell - at * _chunks.size
-		var parent := Vector2i((Vector2(cell) / ZOOM).floor())
-		lines.append("L1 cell %s, 1 m a side" % cell)
-		lines.append("Chunk %s, cell %s in it" % [at, local])
-		if chunk.has("terrain"):
-			var outer := _chunks.size + 2
-			var kind: int = (chunk["terrain"]["kinds"] as PackedByteArray)[(local.y + 1) * outer + local.x + 1]
+	var world := _world["def"] as WorldLandDef
+	var world_plan := _world["plan"] as Dictionary
+	match int(_picked["level"]):
+		0:
+			var i := cell.y * world.size.x + cell.x
+			var kind: int = (world_plan["kinds"] as PackedByteArray)[i]
+			lines.append("L3 cell %s, 64 m a side" % cell)
 			lines.append("Ground: %s%s" % [WorldTerrainGenerator.TERRAIN_KEYS[kind],
-				", river" if (chunk["terrain"]["river"] as PackedByteArray)[(local.y + 1) * outer + local.x + 1] != 0 else ""])
-			lines.append("Zones: %s" % _zone_names((chunk["terrain"]["zones"] as PackedByteArray)[local.y * _chunks.size + local.x]))
+				", river" if (world_plan["river"] as PackedByteArray)[i] != 0 else (", sea" if kind == WorldTerrainGenerator.WATER else "")])
+			lines.append("Zones: %s" % _zone_names((world_plan["zones"] as PackedByteArray)[i]))
 			lines.append("Walk cost: %s" % _walk_cost(kind))
-		lines.append("Object: %s" % _object_at(chunk, local))
-		if _site != null and _site.plot_at.has(cell):
-			var k: int = _site.plot_at[cell]
-			var plot := _site.plots[k]
-			var rect: Rect2i = plot["footprint"]
-			var role := WorldTownCensus.CATALOG.role(plot["role"])
-			lines.append("Town: plot %d, %s: its %s; footprint %d×%d, door at %s facing %s" % [k, role.display_name,
-				"door" if cell == plot["door"] else ("footprint" if rect.has_point(cell) else
-					(String(plot.get("annex_kind", "yard")) if (plot.get("annex", Rect2i()) as Rect2i).has_point(cell) else "yard")), rect.size.x, rect.size.y,
-				plot["door"], {Vector2i.RIGHT: "east", Vector2i.DOWN: "south", Vector2i.LEFT: "west", Vector2i.UP: "north"}[plot["front"]]])
-			if plot.has("building"):
-				var built: Dictionary = plot["building"]
-				lines.append("Building: %s, %s, %s shape" % [built["type"], ["poor", "middling", "rich"][built["wealth"]], built["shape"]])
-				var room := _room_name(cell)
-				if room != "":
-					lines.append("Room: " + room)
-		elif _site != null and _site.road_cells.has(cell):
-			lines.append("Town: %s" % {&"main": "main road", &"lane": "lane", &"track": "track to an outlying work", &"bridge": "bridge (wood over water)"}[_site.road_cells[cell]])
-		elif _site != null:
-			if cell == _site.well:
-				lines.append("Town: the well")
-			elif _site.plaza.has_point(cell):
-				lines.append("Town: the plaza (stone floor)")
-			elif _site.cleared.any(func(r: Rect2i) -> bool: return r.has_point(cell)):
-				lines.append("Town: cleared ground round the plaza")
-			elif _site.area.has_point(cell):
-				lines.append("Town: in its area")
-		var parent_deposit: int = (plan["deposits"]["ids"] as PackedByteArray)[parent.y * region.size.x + parent.x]
-		if parent_deposit != 0:
-			lines.append("In a %s deposit" % plan["deposits"]["keys"][parent_deposit - 1])
-		lines.append("In L2 cell %s: %s" % [parent, WorldTerrainGenerator.TERRAIN_KEYS[(plan["kinds"] as PackedByteArray)[parent.y * region.size.x + parent.x]]])
-		var made := PackedStringArray()
-		for step: Array in [["terrain", chunk.has("terrain")], ["drawn", chunk.get("drawn", false)],
-				["objects", chunk.has("nodes")], ["objects drawn", chunk.get("objects_drawn", false)]]:
-			if step[1]:
-				made.append(step[0])
-		lines.append("Chunk made: %s" % (", ".join(made) if not made.is_empty() else "nothing yet"))
+			lines.append("In region %s; holds L2 cells %s to %s" % [_regions.region_at(cell), cell * ZOOM, cell * ZOOM + Vector2i(ZOOM - 1, ZOOM - 1)])
+		1:
+			var at := _regions.region_at(cell / ZOOM)
+			var local := cell - at * _region_def.size
+			var plan: Dictionary = _regions.regions[at]["plan"]
+			var i := local.y * _region_def.size.x + local.x
+			var kind: int = (plan["kinds"] as PackedByteArray)[i]
+			lines.append("L2 cell %s, 8 m a side" % cell)
+			lines.append("Region %s, cell %s in it" % [at, local])
+			lines.append("Ground: %s%s" % [WorldTerrainGenerator.TERRAIN_KEYS[kind],
+				", river" if (plan["river"] as PackedByteArray)[i] != 0 else (", sea" if kind == WorldTerrainGenerator.WATER else "")])
+			lines.append("Zones: %s" % _zone_names((plan["zones"] as PackedByteArray)[i]))
+			lines.append("Walk cost: %s" % _walk_cost(kind))
+			var ids := plan["deposits"]["ids"] as PackedByteArray
+			if not ids.is_empty() and ids[i] != 0:
+				lines.append("Deposit: %s" % plan["deposits"]["keys"][ids[i] - 1])
+			lines.append("In L3 cell %s: %s" % [cell / ZOOM, _world_kind(cell / ZOOM)])
+		2:
+			var at := _chunks.chunk_at(cell)
+			var chunk: Dictionary = _chunks.chunks.get(at, {})
+			var local := cell - at * _chunks.size
+			var parent := cell / ZOOM
+			lines.append("L1 cell %s, 1 m a side" % cell)
+			lines.append("Chunk %s, cell %s in it" % [at, local])
+			if chunk.has("terrain"):
+				var outer := _chunks.size + 2
+				var kind: int = (chunk["terrain"]["kinds"] as PackedByteArray)[(local.y + 1) * outer + local.x + 1]
+				lines.append("Ground: %s%s" % [WorldTerrainGenerator.TERRAIN_KEYS[kind],
+					", river" if (chunk["terrain"]["river"] as PackedByteArray)[(local.y + 1) * outer + local.x + 1] != 0 else ""])
+				lines.append("Zones: %s" % _zone_names((chunk["terrain"]["zones"] as PackedByteArray)[local.y * _chunks.size + local.x]))
+				lines.append("Walk cost: %s" % _walk_cost(kind))
+			lines.append("Object: %s" % _object_at(chunk, local))
+			var region := _regions.region_at(parent / ZOOM)
+			if _regions.planned(region):
+				var plan: Dictionary = _regions.regions[region]["plan"]
+				var p := parent - region * _region_def.size
+				lines.append("In L2 cell %s: %s" % [parent, WorldTerrainGenerator.TERRAIN_KEYS[(plan["kinds"] as PackedByteArray)[p.y * _region_def.size.x + p.x]]])
+			var made := PackedStringArray()
+			for step: Array in [["terrain", chunk.has("terrain")], ["drawn", chunk.get("drawn", false)],
+					["objects", chunk.has("nodes")], ["objects drawn", chunk.get("objects_drawn", false)]]:
+				if step[1]:
+					made.append(step[0])
+			lines.append("Chunk made: %s" % (", ".join(made) if not made.is_empty() else "nothing yet"))
 	_detail.text = "\n".join(lines)
 
-## The room L1 detected at `cell` in its chunk's world, or "".
-func _room_name(cell: Vector2i) -> String:
-	var at := _chunks.chunk_at(cell)
-	var chunk: Dictionary = _chunks.chunks.get(at, {})
-	if not chunk.has("level"):
-		return ""
-	var level: Dictionary = chunk["level"]
-	var grid := level["grid"] as EcsTownGridSingleton
-	var local := cell - at * _chunks.size + Vector2i.ONE
-	var building := (level["world"] as EcsWorld).get_component(grid.building_id[EcsTownGrid.index(grid, local)], EcsBuildingComponent) \
-		as EcsBuildingComponent if grid.building_id[EcsTownGrid.index(grid, local)] > EcsWorld.NO_ENTITY else null
-	if building == null:
-		return ""
-	for room: Dictionary in building.rooms:
-		if (room["cells"] as Array).has(local):
-			return room["label"] if room["label"] != "" else ("sealed" if room["sealed"] else "untyped")
-	return ""
-
-func _town_line() -> String:
-	var note := "" if _site_note == "" else "\n" + _site_note
-	if _site == null:
-		return "No town" + note
-	var score := _site.score
-	var counts := {&"main": 0, &"lane": 0, &"track": 0, &"bridge": 0}
-	for kind: StringName in _site.road_cells.values():
-		counts[kind] += 1
-	var lanes := _site.roads.filter(func(r: Dictionary) -> bool: return r["kind"] == &"lane").size()
-	return "Town at region cell %s, score %.2f (water %.2f, open %.2f, room %.2f, river %.2f)\nRoads: %d exits, %d m of main road, %d lanes (%d m), %d m of track, %d bridge%s\nPlots: %d, %d of them outlying in %d window%s%s%s" % [_site.l2_cell,
-		score["total"], score["water"], score["open"], score["room"], score["river"], _site.exits.size(),
-		counts[&"main"] / _town_def().main_width, lanes, counts[&"lane"], counts[&"track"], _site.bridges, "" if _site.bridges == 1 else "s",
-		_site.plots.size(), _site.plots.filter(func(p: Dictionary) -> bool:
-			return Vector2((p["footprint"] as Rect2i).get_center()).distance_to(Vector2(_site.well)) > _site.radius).size(),
-		_site.outlying.size(), "" if _site.outlying.size() == 1 else "s", _economy_line(), note]
-
-## The census, for the info panel: what the town lives on, its people, traffic, resources and buildings.
-func _economy_line() -> String:
-	var economy := _site.economy
-	if economy.is_empty():
-		return ""
-	var catalog: WorldEconomyCatalog = WorldTownCensus.CATALOG
-	var main := "none"
-	for c in catalog.characters:
-		if c.key == economy["character"]:
-			main = c.display_name
-	var rich := [0, 0, 0]
-	var at_work := 0
-	for family: Dictionary in economy["families"]:
-		rich[family["wealth"]] += 1
-		at_work += 1 if family["home"] == &"work" else 0
-	var resources := PackedStringArray()
-	for key: StringName in economy["resources"]:
-		var r: Dictionary = economy["resources"][key]
-		if r["need"] > 0.0 or r["made"] > 0.0:
-			resources.append("%s %d/%d%s" % [catalog.resource(key).display_name, roundi(r["made"]), roundi(r["need"]),
-				" +%d sold" % roundi(r["exported"]) if r["exported"] > 0.0 else ""])
-	var built := PackedStringArray()
-	for entry: Dictionary in economy["roles"]:
-		built.append("%d %s" % [entry["count"], catalog.role(entry["role"]).display_name])
-	var survey := PackedStringArray()
-	for key: StringName in _site.survey:
-		if _site.survey[key] >= WorldResourceSurvey.PRESENT:
-			survey.append("%s %.1f" % [key, _site.survey[key]])
-	var short := PackedStringArray()
-	for entry: Dictionary in economy.get("short", []):
-		short.append("%d %s" % [entry["count"], catalog.role(entry["role"]).display_name])
-	var traffic: Dictionary = economy["traffic"]
-	return "\nLives on: %s; traffic %s (%d travellers a day)\nPeople: %d in %d families (%d poor, %d middling, %d rich; %d live at work), %d labourers spare%s\nMade/needed: %s\nIn reach: %s\nBuildings: %s%s" % [
-		main, traffic["name"], traffic["travellers"], economy["population"], (economy["families"] as Array).size(), rich[0], rich[1],
-		rich[2], at_work, economy["labourers"], "" if economy["short_of_workers"] <= 0 else ", %d workers short" % economy["short_of_workers"],
-		", ".join(resources), ", ".join(survey), ", ".join(built), "" if short.is_empty() else "\nShort, no room: " + ", ".join(short)]
+func _world_kind(cell: Vector2i) -> String:
+	var world := _world["def"] as WorldLandDef
+	return WorldTerrainGenerator.TERRAIN_KEYS[(_world["plan"]["kinds"] as PackedByteArray)[cell.y * world.size.x + cell.x]]
 
 func _zone_names(bits: int) -> String:
 	var names := PackedStringArray()
@@ -528,221 +477,91 @@ func _option(box: VBoxContainer, label: String, items: Array) -> OptionButton:
 	name.custom_minimum_size = Vector2(60, 0)
 	row.add_child(name)
 	var option := OptionButton.new()
-	option.size_flags_horizontal = Control.SIZE_EXPAND_FILL	
+	option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for item: String in items:
 		option.add_item(item)
 	row.add_child(option)
 	return option
 
-## Plans the region from the inputs, and builds its world, on a worker thread.
+## Plans the world from the inputs, and builds its L3 level, on a worker thread.
 func _generate() -> void:
 	for job: Dictionary in _jobs.values():
-		if job["kind"] == &"region":
+		if job["kind"] == &"world":
 			return
-	var def := (load(REGION) as WorldLandDef).duplicate() as WorldLandDef
+	var def := (load(WORLD) as WorldLandDef).duplicate() as WorldLandDef
 	if _water.selected > 0 and _water.selected - 1 != def.water:
 		def.water = _water.selected - 1
 		def.water_share = 0.03 if def.water == WorldLandDef.Water.RIVER else (0.18 if def.water == WorldLandDef.Water.RIVER_TO_SEA else 0.12)
 	var rng_seed := int(_seed.value)
-	var town := _town_def()
 	_generation += 1
 	_generate_button.disabled = true
 	var progress := WorldProgress.new()
 	_progress = progress
-	_start({"kind": &"region"}, func() -> Dictionary:
-		# Shares of the bar by measured time: the plan ~0.2 s, the region's tiles ~2 s, the town ~3.5 s.
-		progress.within(0.0, 0.05)
+	_start({"kind": &"world"}, func() -> Dictionary:
+		progress.within(0.0, 0.3)
 		var plan := WorldTerrainGenerator.plan(def, rng_seed, catalog, entity_catalog, progress)
-		progress.within(0.05, 0.42)
-		progress.report("Building the region's tiles")
-		var level := _make_level(def.size, plan["commands"], Vector2.ZERO, 1.0, false)
-		progress.report("Checking the terrain", 0.95)
-		var shares := WorldTerrainGenerator.blend_shares(plan, def)
-		var problems := WorldTerrainCheck.problems(def, plan)
-		var tint := _tint(def.size, plan["zones"])
-		progress.within(0.42, 1.0)
-		var site := WorldSitePicker.pick(plan, def, town, rng_seed, ZOOM, catalog, shares, progress)
-		progress.within(0.0, 1.0)
-		progress.report("Showing the region", 1.0)
-		level.merge({"def": def, "plan": plan, "seed": rng_seed, "problems": problems, "shares": shares, "tint": tint, "site": site})
+		progress.within(0.3, 1.0)
+		progress.report("Building the world's tiles")
+		var level := _make_level(def.size, plan["commands"], Vector2.ZERO, 1.0, false, 0)
+		progress.report("Checking the terrain", 0.9)
+		level.merge({"def": def, "plan": plan, "seed": rng_seed, "problems": WorldTerrainCheck.problems(def, plan),
+			"tint": _tint(def.size, plan["zones"])})
+		progress.report("Showing the world", 1.0)
 		return level)
 
-func _town_def() -> WorldSettlementDef:
-	return load(DEFS + "%s.tres" % TOWNS[_town_size.selected]) as WorldSettlementDef
+## Starts region `at`'s `stage` on a worker: its plan, an L3 window refined 8×, or its drawing.
+func _start_region(at: Vector2i, stage: int) -> void:
+	if not _regions.regions.has(at):
+		_regions.regions[at] = {}
+	var region: Dictionary = _regions.regions[at]
+	var def := _region_def
+	var job := {"kind": &"region", "region": at, "stage": stage}
+	region["busy"] = true
+	match stage:
+		WorldRegions.Stage.PLAN:
+			var parent: Dictionary = _world["plan"]
+			var world: WorldLandDef = _world["def"]
+			var rng_seed: int = _world["seed"]
+			var origin := at * _regions.window
+			_start(job, func() -> Dictionary:
+				var plan := WorldTerrainGenerator.refine(parent, world, def, origin, ZOOM, rng_seed, catalog, entity_catalog, 1)
+				return {"plan": plan, "shares": WorldTerrainGenerator.blend_shares(plan, def)})
+		WorldRegions.Stage.DRAW:
+			var plan: Dictionary = region["plan"]
+			var outer := def.size + Vector2i(2, 2)
+			# Its border cells are its neighbours', drawn the same by both.
+			var origin := Vector2(at * _regions.window) * _cell_px(0) - Vector2.ONE * _cell_px(1)
+			_start(job, func() -> Dictionary:
+				var commands := WorldTerrainGenerator.terrain_commands(plan["outer_kinds"], outer, Vector2i.ZERO, catalog)
+				var level := _make_level(outer, commands, origin, 1.0 / ZOOM, true, 1)
+				level["tint"] = _tint(def.size, plan["zones"])
+				level["deposit_tint"] = _deposit_tint(def, plan["deposits"])
+				return level)
 
-## Re-sites the town on a worker: at region cell `cell`, or the best site when `cell` is (-1, -1).
-func _move_site(cell: Vector2i) -> void:
-	if _region.is_empty():
-		return
-	for job: Dictionary in _jobs.values():
-		if job["kind"] == &"site" or job["kind"] == &"region":
-			return
-	var plan: Dictionary = _region["plan"]
-	var region: WorldLandDef = _region["def"]
-	var shares: Array = _region["shares"]
-	var rng_seed: int = _region["seed"]
-	var town := _town_def()
-	_site_note = "Placing the town…"
-	var progress := WorldProgress.new()
-	_progress = progress
-	_start({"kind": &"site"}, func() -> Dictionary:
-		if cell == Vector2i(-1, -1):
-			var site := WorldSitePicker.pick(plan, region, town, rng_seed, ZOOM, catalog, shares, progress)
-			return {"site": site} if site != null else {"refused": "no site on this region"}
-		return WorldSitePicker.place(plan, region, town, cell, rng_seed, ZOOM, catalog, shares, progress))
-
-## Puts `site` over the chunks: those under the old or new town, its outlying windows and its roads
-## lose their objects and drawing (their terrain stays) and are made again with it; any of their
-## jobs still running is thrown away.
-func _set_site(site: WorldSettlementSite) -> void:
-	var affected: Array[Vector2i] = []
-	for old in [_chunks.site, site]:
-		if old == null:
-			continue
-		var town := old as WorldSettlementSite
-		affected.append_array(_chunks.touching(town.area))
-		for window: Dictionary in town.outlying:
-			affected.append_array(_chunks.touching(window["rect"]))
-		# Roads and tracks run past the area; their floors and borders are in these chunks too.
-		var under: Dictionary = {}
-		for cell: Vector2i in town.road_cells:
-			for at in _chunks.touching(Rect2i(cell, Vector2i.ONE)):
-				under[at] = true
-		for at: Vector2i in under:
-			affected.append(at)
-	_site = site
-	_chunks.site = site
-	for at in affected:
-		var chunk: Dictionary = _chunks.chunks.get(at, {})
-		if chunk.is_empty():
-			continue
-		chunk["rev"] = int(chunk.get("rev", 0)) + 1
-		chunk["busy"] = false
-		chunk.erase("nodes")
-		if chunk.has("level"):
-			(chunk["level"]["root"] as Node2D).queue_free()
-			chunk.erase("level")
-		chunk["drawn"] = false
-		chunk["objects_drawn"] = false
-	_outline_site()
-
-## Draws the town's roads over the region: main roads thick, bridges light, lanes thin, exits marked.
-func _draw_roads() -> void:
-	for child in _roads_layer.get_children():
-		child.queue_free()
-	_road_l2_cells.clear()
-	if _site == null:
-		return
-	var px := float(EcsTownGrid.CELL) / ZOOM
-	for road: Dictionary in _site.roads:
-		var main: bool = road["kind"] == &"main"
-		# Split into runs on land and runs over bridges; each run starts where the last ended.
-		var runs: Array = []
-		var run := PackedVector2Array()
-		var on_bridge := false
-		for point: Vector2 in road["points"]:
-			var bridge: bool = _site.road_cells.get(Vector2i(point.round()), &"") == &"bridge"
-			var at := (point + Vector2(0.5, 0.5)) * px
-			if bridge != on_bridge and not run.is_empty():
-				runs.append([on_bridge, run])
-				run = PackedVector2Array([run[run.size() - 1]])
-			on_bridge = bridge
-			run.append(at)
-		runs.append([on_bridge, run])
-		for run_of: Array in runs:
-			var run_points := run_of[1] as PackedVector2Array
-			if run_points.size() < 2:
-				continue
-			var line := Line2D.new()
-			line.points = run_points
-			var track: bool = road["kind"] == &"track"
-			line.default_color = Color(0.85, 0.75, 0.55) if run_of[0] else (Color(0.45, 0.3, 0.18) if main else (Color(0.7, 0.6, 0.45) if track else Color(0.6, 0.45, 0.3)))
-			line.set_meta(&"width", road["width"] * px)
-			line.set_meta(&"screen", 3.0 if main else 1.5)
-			_roads_layer.add_child(line)
-		if main:
-			for point: Vector2 in road["l2_points"]:
-				_road_l2_cells[Vector2i(point.round())] = true
-	for exit in _site.exits:
-		var mark := Line2D.new()
-		var at := (Vector2(exit) + Vector2(0.5, 0.5)) * EcsTownGrid.CELL
-		mark.points = PackedVector2Array([at + Vector2(-24, -24), at + Vector2(24, 24), at, at + Vector2(-24, 24), at + Vector2(24, -24)])
-		mark.default_color = Color(0.9, 0.2, 0.15)
-		mark.set_meta(&"width", 6.0)
-		mark.set_meta(&"screen", 3.0)
-		_roads_layer.add_child(mark)
-
-## The town's plots: yards tinted, footprints shaded by role group, doors marked (ringed for a shop
-## front); outlying windows outlined; each group's district point a disc of its tint.
-func _draw_plots() -> void:
-	if _site == null:
-		return
-	var px := float(EcsTownGrid.CELL) / ZOOM
-	for plot: Dictionary in _site.plots:
-		for cell: Vector2i in plot["yard"]:
-			_plots_layer.draw_rect(Rect2(Vector2(cell) * px, Vector2(px, px)), Color(0.55, 0.75, 0.3, 0.35))
-		if plot.has("annex"):
-			var annex: Rect2i = plot["annex"]
-			var tint := Color(0.72, 0.6, 0.3, 0.6) if plot["annex_kind"] == &"field" else Color(0.55, 0.7, 0.35, 0.6)
-			_plots_layer.draw_rect(Rect2(Vector2(annex.position) * px, Vector2(annex.size) * px), tint)
-		if plot.has("dock"):
-			for cell: Vector2i in plot["dock"]["cells"]:
-				_plots_layer.draw_rect(Rect2(Vector2(cell) * px, Vector2(px, px)), Color(0.6, 0.42, 0.25, 0.9))
-		var rect: Rect2i = plot["footprint"]
-		var group := WorldTownCensus.CATALOG.role(plot["role"]).group
-		_plots_layer.draw_rect(Rect2(Vector2(rect.position) * px, Vector2(rect.size) * px), Color(GROUP_TINTS.get(group, Color.MAGENTA), 0.8))
-		_plots_layer.draw_rect(Rect2(Vector2(plot["door"] as Vector2i) * px, Vector2(px, px)), Color(0.2, 0.1, 0.05))
-		if plot.get("sells", &"") == &"home":
-			_plots_layer.draw_circle((Vector2(plot["door"] as Vector2i) + Vector2(0.5, 0.5)) * px, px * 1.2, Color(1, 1, 1), false, px * 0.5)
-	for window: Dictionary in _site.outlying:
-		var rect: Rect2i = window["rect"]
-		_plots_layer.draw_rect(Rect2(Vector2(rect.position) * px, Vector2(rect.size) * px), Color(0.9, 0.5, 0.2), false, px)
-	var points: Dictionary = _site.quarters.get("points", {})
-	for group: StringName in points:
-		var at := (Vector2(points[group] as Vector2i) + Vector2(0.5, 0.5)) * px
-		_plots_layer.draw_circle(at, px * 4.0, Color(GROUP_TINTS.get(group, Color.MAGENTA), 0.9))
-		_plots_layer.draw_circle(at, px * 4.0, Color(0.1, 0.1, 0.1), false, px)
-
-## Outlines the town's reach (a circle round the well: the town has no box) and its plaza over the region.
-func _outline_site() -> void:
-	var px := float(EcsTownGrid.CELL) / ZOOM
-	for k in _site_lines.size():
-		_site_lines[k].visible = _site != null and k < 2
-	if _site == null:
-		return
-	var ring := PackedVector2Array()
-	for k in 49:
-		ring.append((Vector2(_site.well) + Vector2.from_angle(k * TAU / 48.0) * _site.radius) * px)
-	_site_lines[0].points = ring
-	var rect := Rect2(Vector2(_site.plaza.position) * px, Vector2(_site.plaza.size) * px)
-	_site_lines[1].points = PackedVector2Array([rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)])
-	_draw_roads()
-	_plots_layer.queue_redraw()
-
-## Starts chunk `at`'s `stage` on a worker.
+## Starts chunk `at`'s `stage` on a worker; its terrain is refined from its region.
 func _start_chunk(at: Vector2i, stage: int) -> void:
 	if not _chunks.chunks.has(at):
 		_chunks.chunks[at] = {}
 	var chunk: Dictionary = _chunks.chunks[at]
 	var size := _chunks.size
-	var job := {"kind": &"chunk", "chunk": at, "stage": stage, "rev": int(chunk.get("rev", 0))}
+	var region_at := _region_of_chunk(at)
+	var rng_seed := hash([_world["seed"], region_at])
+	var job := {"kind": &"chunk", "chunk": at, "stage": stage}
+	chunk["busy"] = true
 	match stage:
 		WorldTerrainChunks.Stage.TERRAIN:
-			var parent: Dictionary = _region["plan"]
-			var region: WorldLandDef = _region["def"]
-			var shares: Array = _region["shares"]
-			var rng_seed: int = _region["seed"]
+			var region: Dictionary = _regions.regions[region_at]
+			var parent: Dictionary = region["plan"]
+			var shares: Array = region["shares"]
+			var def := _region_def
 			var shore := _chunk_def.shore_width
-			chunk["busy"] = true
+			var local := at * size - region_at * _region_def.size * ZOOM
 			_start(job, func() -> Dictionary:
-				return WorldTerrainGenerator.refine_terrain(parent, region, Vector2i(size, size), shore, at * size, ZOOM,
-					rng_seed, 1, shares))
+				return WorldTerrainGenerator.refine_terrain(parent, def, Vector2i(size, size), shore, local, ZOOM, rng_seed, 1, shares))
 		WorldTerrainChunks.Stage.DRAW_TERRAIN, WorldTerrainChunks.Stage.DRAW_OBJECTS:
 			var kinds: PackedByteArray = chunk["terrain"]["kinds"]
 			var nodes: Array = chunk["nodes"] if stage == WorldTerrainChunks.Stage.DRAW_OBJECTS else []
-			var town := _chunks.overlay(at, stage == WorldTerrainChunks.Stage.DRAW_OBJECTS)
-			var origin := Vector2(at * size - Vector2i.ONE) * EcsTownGrid.CELL / ZOOM
-			chunk["busy"] = true
+			var origin := Vector2(at * size - Vector2i.ONE) * _cell_px(2)
 			_start(job, func() -> Dictionary:
 				var outer := Vector2i(size, size) + Vector2i(2, 2)
 				var commands := WorldTerrainGenerator.terrain_commands(kinds, outer, Vector2i.ZERO, catalog)
@@ -750,28 +569,23 @@ func _start_chunk(at: Vector2i, stage: int) -> void:
 				for node: Dictionary in nodes:
 					commands.append(EcsBuildCommand.place(EcsBuildCommand.Kind.PLACE_OBJECT,
 						(node["cell"] as Vector2i) + Vector2i.ONE, node["blueprint"], 0))
-				commands.append_array(town)
-				return _make_level(outer, commands, origin, 1.0 / ZOOM, true))
+				return _make_level(outer, commands, origin, 1.0 / (ZOOM * ZOOM), true, 2))
 		WorldTerrainChunks.Stage.OBJECTS:
 			var zones: PackedByteArray = chunk["terrain"]["zones"]
 			var deposits: Dictionary = chunk["terrain"]["deposits"]
 			var def := _chunk_def
-			var rng_seed: int = _region["seed"]
-			var blocked := _chunks.blocked(at)
-			chunk["busy"] = true
 			_start(job, func() -> Dictionary:
-				return {"nodes": WorldTerrainGenerator.refine_nodes(def, zones, rng_seed, at, entity_catalog, blocked, deposits)})
+				return {"nodes": WorldTerrainGenerator.refine_nodes(def, zones, rng_seed, at, entity_catalog, PackedByteArray(), deposits)})
 
 func _start(job: Dictionary, work: Callable) -> void:
 	job["generation"] = _generation
-	var task := WorkerThreadPool.add_task(func() -> void: job["result"] = work.call(), false, "settlement terrain")
+	var task := WorkerThreadPool.add_task(func() -> void: job["result"] = work.call(), false, "world terrain")
 	_jobs[task] = job
 
 ## A world of `size` through module 10's pipeline, run until settled, under a root placed at `at`
-## and scaled by `scale`, built off the scene tree. `trim` erases the outer ring of ground tiles,
-## which show cells past the edge: a chunk's border cells are its neighbours', so the ring left is
-## drawn the same by both and shows no seam. Runs on a worker.
-func _make_level(size: Vector2i, commands: Array[EcsBuildCommand], at: Vector2, scale: float, trim: bool) -> Dictionary:
+## and scaled by `scale`, built off the scene tree, for map level `level`. `trim` erases the outer
+## ring of roof tiles, which show cells past the edge. Runs on a worker.
+func _make_level(size: Vector2i, commands: Array[EcsBuildCommand], at: Vector2, scale: float, trim: bool, level: int) -> Dictionary:
 	var started := Time.get_ticks_usec()
 	var root := Node2D.new()
 	root.position = at
@@ -787,6 +601,7 @@ func _make_level(size: Vector2i, commands: Array[EcsBuildCommand], at: Vector2, 
 	world.add_singleton(EcsLifecycleSingleton.new())
 	world.add_singleton(EcsTownNavSingleton.new())
 	var tile_sync := EcsTileSyncSystem.new(tiles, catalog)
+	# TODO(ground-levels): tile_sync.level = level, once module 10's tile sync has per-level ground.
 	var scheduler := EcsScheduler.new()
 	scheduler \
 		.add(EcsLifecycleSystem.new(EcsEntityManager.new(entities), entity_catalog)) \
@@ -800,7 +615,6 @@ func _make_level(size: Vector2i, commands: Array[EcsBuildCommand], at: Vector2, 
 	# Every chunk's ground reaches half a cell into its neighbours, so pieces draw above all ground.
 	for layer: TileMapLayer in [tile_sync.furniture_layer(), tile_sync.door_layer(), tile_sync.wall_layer(), tile_sync.post_layer(), tile_sync.attachment_layer()]:
 		layer.z_index = 1
-	# Roofs cover the building, pieces and walls included, when shown.
 	for layer in tile_sync.roof_layers():
 		layer.z_index = 2
 	if trim:
@@ -811,88 +625,115 @@ func _make_level(size: Vector2i, commands: Array[EcsBuildCommand], at: Vector2, 
 			for y in size.y + 1:
 				layer.erase_cell(Vector2i(0, y))
 				layer.erase_cell(Vector2i(size.x, y))
-	return {"root": root, "world": world, "scheduler": scheduler, "tile_sync": tile_sync, "grid": grid,
+	return {"root": root, "world": world, "scheduler": scheduler, "tile_sync": tile_sync, "grid": grid, "map_level": level,
 		"build_usec": Time.get_ticks_usec() - started}
 
-## What a worker made goes into the scene, unless it was for a region since replaced.
+## What a worker made goes into the scene, unless it was for a world since replaced.
 func _arrived(job: Dictionary) -> void:
 	var result: Dictionary = job["result"]
-	if job["kind"] == &"region":
+	if job["kind"] == &"world":
 		_generate_button.disabled = false
-		_show_region(result)
+		_show_world(result)
 		return
 	if job["generation"] != _generation:
 		if result.has("root"):
 			(result["root"] as Node2D).free()
 		return
-	if job["kind"] == &"site":
-		_site_note = result.get("refused", "")
-		if result.has("site"):
-			_set_site(result["site"])
+	if job["kind"] == &"region":
+		var region: Dictionary = _regions.regions[job["region"]]
+		region["busy"] = false
+		if job["stage"] == WorldRegions.Stage.PLAN:
+			region.merge(result)
+		else:
+			_add_sprite(result, result["tint"], 20, &"zones", Vector2.ONE)
+			_add_sprite(result, result["deposit_tint"], 21, &"deposits", Vector2.ONE)
+			_put(region, result, 1)
 		return
-	var at: Vector2i = job["chunk"]
-	var chunk: Dictionary = _chunks.chunks[at]
-	if job["rev"] != int(chunk.get("rev", 0)):
-		if result.has("root"):
-			(result["root"] as Node2D).free()
-		return
+	var chunk: Dictionary = _chunks.chunks[job["chunk"]]
 	chunk["busy"] = false
 	match job["stage"]:
 		WorldTerrainChunks.Stage.TERRAIN:
 			chunk["terrain"] = result
 		WorldTerrainChunks.Stage.DRAW_TERRAIN, WorldTerrainChunks.Stage.DRAW_OBJECTS:
-			# With objects, it fades in over the terrain-only chunk, which goes once it is covered.
-			var old: Node2D = chunk["level"]["root"] if chunk.has("level") else null
-			chunk["level"] = result
-			chunk["drawn"] = true
 			chunk["objects_drawn"] = job["stage"] == WorldTerrainChunks.Stage.DRAW_OBJECTS
-			var root := result["root"] as Node2D
-			root.modulate.a = 0.0
-			_l1.add_child(root)
-			var tween := create_tween()
-			tween.tween_property(root, "modulate:a", 1.0, FADE)
-			if old != null:
-				tween.tween_callback(old.queue_free)
-			_show_layers()
+			_put(chunk, result, 2)
 		WorldTerrainChunks.Stage.OBJECTS:
 			chunk["nodes"] = result["nodes"]
 
-## Frees a far chunk's nodes and world; its terrain and node plans stay, so it is only redrawn.
-func _undraw(at: Vector2i) -> void:
-	var chunk: Dictionary = _chunks.chunks[at]
-	(chunk["level"]["root"] as Node2D).queue_free()
-	chunk.erase("level")
-	chunk["drawn"] = false
-	chunk["objects_drawn"] = false
-
-func _show_region(level: Dictionary) -> void:
-	if not _region.is_empty():
-		(_region["root"] as Node2D).queue_free()
-	var zones := Sprite2D.new()
-	zones.texture = ImageTexture.create_from_image(level["tint"])
-	zones.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	zones.centered = false
-	zones.z_index = 20
-	zones.scale = Vector2(EcsTownGrid.CELL, EcsTownGrid.CELL)
-	(level["root"] as Node2D).add_child(zones)
-	level["zones"] = zones
-	var deposits := Sprite2D.new()
-	deposits.texture = ImageTexture.create_from_image(_deposit_tint(level["def"], level["plan"]["deposits"]))
-	deposits.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	deposits.centered = false
-	deposits.z_index = 21
-	deposits.scale = Vector2(EcsTownGrid.CELL, EcsTownGrid.CELL)
-	(level["root"] as Node2D).add_child(deposits)
-	level["deposits"] = deposits
-	_region = level
-	_world_root.add_child(level["root"])
-	_site = level["site"]
-	_site_note = "" if _site != null else "No site for a town on this region"
-	_reset_l1()
-	_frame()
+## Puts a drawn region or chunk under its level's layer, fading in over what it replaces, which goes
+## once it is covered.
+func _put(part: Dictionary, level: Dictionary, layer: int) -> void:
+	var old: Node2D = part["level"]["root"] if part.has("level") else null
+	part["level"] = level
+	part["drawn"] = true
+	var root := level["root"] as Node2D
+	root.modulate.a = 0.0
+	_layers[layer].add_child(root)
+	var tween := create_tween()
+	tween.tween_property(root, "modulate:a", 1.0, FADE)
+	if old != null:
+		tween.tween_callback(old.queue_free)
 	_show_layers()
 
-## The region's deposits as an image, a cell a pixel, each tinted by its key.
+## A tint image as a sprite on `level`'s root, a cell a pixel, `offset` cells in (past a border).
+func _add_sprite(level: Dictionary, image: Image, z: int, key: StringName, offset: Vector2) -> void:
+	var sprite := Sprite2D.new()
+	sprite.texture = ImageTexture.create_from_image(image)
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	sprite.centered = false
+	sprite.z_index = z
+	sprite.scale = Vector2(EcsTownGrid.CELL, EcsTownGrid.CELL)
+	sprite.position = offset * EcsTownGrid.CELL
+	(level["root"] as Node2D).add_child(sprite)
+	level[key] = sprite
+
+## Frees a far region's or chunk's nodes and world; its plans stay, so it is only redrawn.
+func _undraw(part: Dictionary) -> void:
+	(part["level"]["root"] as Node2D).queue_free()
+	part.erase("level")
+	part["drawn"] = false
+	part["objects_drawn"] = false
+
+func _show_world(level: Dictionary) -> void:
+	_generation += 1
+	if not _world.is_empty():
+		(_world["root"] as Node2D).queue_free()
+	for layer in _layers:
+		for child in layer.get_children():
+			child.queue_free()
+	_add_sprite(level, level["tint"], 20, &"zones", Vector2.ZERO)
+	_world = level
+	_layers[0].add_child(level["root"])
+	var def := level["def"] as WorldLandDef
+	_region_def = def.child
+	_regions = WorldRegions.new(def.size, _region_def.size / ZOOM)
+	_reset_chunks()
+	_level = 0
+	for k in _layers.size():
+		_layers[k].modulate.a = 1.0 if k == 0 else 0.0
+	_camera.zoom = Vector2(STANDARD[0], STANDARD[0])
+	_camera.position = Vector2(def.size) * _cell_px(0) * 0.5
+	_show_layers()
+
+## Drops every chunk and starts L1 afresh, for a new world or chunk size.
+func _reset_chunks() -> void:
+	if _world.is_empty():
+		return
+	if _chunks != null:
+		for at: Vector2i in _chunks.chunks:
+			if _chunks.chunks[at].has("level"):
+				(_chunks.chunks[at]["level"]["root"] as Node2D).queue_free()
+	_chunks = WorldTerrainChunks.new((_world["def"] as WorldLandDef).size * ZOOM, ZOOM, CHUNK_SIZES[_chunk_size.selected])
+	_chunk_def = _region_def.child.duplicate() as WorldLandDef
+	_chunk_def.size = Vector2i(_chunks.size, _chunks.size)
+	_picked = {}
+	_marker.visible = false
+	_detail_panel.visible = false
+	for job: Dictionary in _jobs.values():
+		if job["kind"] == &"chunk":
+			job["generation"] = -1
+
+## The regions' deposits as an image, a cell a pixel, each tinted by its key.
 func _deposit_tint(def: WorldLandDef, deposits: Dictionary) -> Image:
 	var image := Image.create(def.size.x, def.size.y, false, Image.FORMAT_RGBA8)
 	var ids := deposits["ids"] as PackedByteArray
@@ -903,74 +744,46 @@ func _deposit_tint(def: WorldLandDef, deposits: Dictionary) -> Image:
 			image.set_pixel(i % def.size.x, i / def.size.x, Color(tint, 0.7))
 	return image
 
-## The bar and line under Generate: the region or town job's stage while one runs, else, at L1,
-## how many chunks in view are made; hidden when nothing is under way.
+## The bar and line under Generate: the world job's stage while it runs, else how many regions (L2)
+## or chunks (L1) in view are made; hidden when nothing is under way.
 func _show_progress() -> void:
 	var stage := ""
 	var done := 0.0
 	var working := false
 	for job: Dictionary in _jobs.values():
-		working = working or job["kind"] == &"region" or job["kind"] == &"site"
+		working = working or job["kind"] == &"world"
 	if working:
 		var read := _progress.read()
 		stage = read[0] if read[0] != "" else "Starting"
 		done = read[1]
-	elif _in_l1 and _chunks != null:
-		var visible := _chunks.around(_view_cells(), 0)
+	elif not _world.is_empty() and _level >= 1:
+		var store: Dictionary = _regions.regions if _level == 1 else _chunks.chunks
+		var visible: Array[Vector2i] = _regions.around(_view_cells(0)) if _level == 1 else _chunks.around(_view_cells(2), 0)
+		var key := "drawn" if _level == 1 else "objects_drawn"
 		var made := 0
 		for at in visible:
-			made += 1 if (_chunks.chunks.get(at, {}) as Dictionary).get("objects_drawn", false) else 0
+			made += 1 if (store.get(at, {}) as Dictionary).get(key, false) else 0
 		if made < visible.size():
-			stage = "Streaming L1 ground into view: %d of %d chunks made" % [made, visible.size()]
+			stage = "Streaming %s into view: %d of %d %s made" % [LEVEL_NAMES[_level], made, visible.size(),
+				"regions" if _level == 1 else "chunks"]
 			done = float(made) / visible.size()
 	_progress_label.visible = stage != ""
 	_progress_bar.visible = stage != ""
 	_progress_label.text = stage
 	_progress_bar.value = done * 100.0
 
-## Drops every chunk and starts L1 afresh, for a new region or chunk size.
-func _reset_l1() -> void:
-	if _region.is_empty():
-		return
-	_generation += 1
-	if _l1 != null:
-		_l1.queue_free()
-	_l1 = Node2D.new()
-	_l1.modulate.a = 1.0 if _in_l1 else 0.0
-	_world_root.add_child(_l1)
-	_chunks = WorldTerrainChunks.new((_region["def"] as WorldLandDef).size, ZOOM, CHUNK_SIZES[_chunk_size.selected])
-	_chunk_def = ((_region["def"] as WorldLandDef).child).duplicate() as WorldLandDef
-	_chunk_def.size = Vector2i(_chunks.size, _chunks.size)
-	_chunks.site = _site
-	_outline_site()
-	_picked = {}
-	_marker.visible = false
-	_detail_panel.visible = false
-	_in_l1 = false
-	_l1.modulate.a = 0.0
-
-func _fade_l1(show: bool) -> void:
-	if _l1_tween != null:
-		_l1_tween.kill()
-	_l1_tween = create_tween()
-	_l1_tween.tween_property(_l1, "modulate:a", 1.0 if show else 0.0, FADE)
-
-## The nodes and zone tint toggles, on the region and every drawn chunk.
+## The nodes, roofs and tint toggles on every level drawn; tints only on the level shown.
 func _show_layers() -> void:
-	var levels: Array = [_region]
-	if _chunks != null:
-		for at: Vector2i in _chunks.chunks:
-			if _chunks.chunks[at].has("level"):
-				levels.append(_chunks.chunks[at]["level"])
-	for level: Dictionary in levels:
-		if level.is_empty():
-			continue
+	for level in _levels():
 		var sync := level["tile_sync"] as EcsTileSyncSystem
 		sync.furniture_layer().visible = _nodes_on
 		sync.attachment_layer().visible = _nodes_on
 		sync.roofs_visible = _roofs_on
-	if _region.has("zones"):
-		(_region["zones"] as Sprite2D).visible = _zones_on
+		var shown: bool = level["map_level"] == _level
+		if level.has("zones"):
+			(level["zones"] as Sprite2D).visible = _zones_on and shown
+		if level.has("deposits"):
+			(level["deposits"] as Sprite2D).visible = shown
 
 ## The zone tint: one pixel per cell, to scale to the grid.
 func _tint(size: Vector2i, zones: PackedByteArray) -> Image:
@@ -984,28 +797,20 @@ func _tint(size: Vector2i, zones: PackedByteArray) -> Image:
 				break
 	return image
 
-## Zooms and centres the camera so the whole region fills the view right of the panel.
-func _frame() -> void:
-	var left := _panel.get_rect().end.x + 12.0
-	var span := Vector2((_region["def"] as WorldLandDef).size * EcsTownGrid.CELL)
-	var view := get_viewport_rect().size
-	var room := Vector2(view.x - left, view.y)
-	var zoom := minf(room.x / span.x, room.y / span.y)
-	_camera.zoom = Vector2(zoom, zoom)
-	_camera.position = span * 0.5 - Vector2(left * 0.5 / zoom, 0)
-
 func _report() -> void:
-	var region := _region["def"] as WorldLandDef
-	var problems := _region["problems"] as Array[String]
-	var tally := _chunks.tally()
+	var def := _world["def"] as WorldLandDef
+	var problems := _world["problems"] as Array[String]
+	var regions := _regions.tally()
+	var chunks := _chunks.tally()
 	var lines := PackedStringArray([
-		"L2 region %d×%d at 8 m a cell, %s, seed %d" % [region.size.x, region.size.y,
-			WATER_NAMES[region.water + 1].to_lower(), _region["seed"]],
+		"L3 world %d×%d at 64 m a cell, %s, seed %d" % [def.size.x, def.size.y, WATER_NAMES[def.water + 1].to_lower(), _world["seed"]],
 		"Sound" if problems.is_empty() else "Problems: " + "; ".join(problems),
-		_town_line(),
-		"Zoom ×%.2f: %s" % [_camera.zoom.x, "L1, 1 m a cell" if _in_l1 else "L2 (L1 from ×%.2f)" % L1_ZOOM],
-		"L1 chunks of %d×%d, %d×%d across the region" % [_chunks.size, _chunks.size, _chunks.count.x, _chunks.count.y],
-		"Terrain planned %d, drawn %d; objects planned %d, drawn %d" % [tally[0], tally[1], tally[2], tally[3]],
+		"%s, %d m a cell: zoom ×%.2f (×%.2f to ×%.2f)%s" % [LEVEL_NAMES[_level], METRES[_level], _camera.zoom.x,
+			STANDARD[_level] * RANGE.x, STANDARD[_level] * RANGE.y, ", moving" if _transitioning() else ""],
+		"Regions of %d×%d L2 cells, %d×%d across: planned %d, drawn %d" % [_region_def.size.x, _region_def.size.y,
+			_regions.count.x, _regions.count.y, regions[0], regions[1]],
+		"L1 chunks of %d×%d: terrain planned %d, drawn %d; objects planned %d, drawn %d" % [_chunks.size, _chunks.size,
+			chunks[0], chunks[1], chunks[2], chunks[3]],
 		"Worker jobs running %d" % _jobs.size(),
 	])
 	_info.text = "\n".join(lines)
