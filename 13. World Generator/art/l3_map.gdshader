@@ -21,6 +21,10 @@ uniform vec4 rock : source_color = vec4(0.50, 0.48, 0.44, 1.0);
 uniform vec4 peak : source_color = vec4(0.94, 0.95, 0.97, 1.0);
 uniform vec4 ink : source_color = vec4(0.29, 0.19, 0.11, 1.0);
 uniform vec4 paper : source_color = vec4(0.95, 0.86, 0.68, 1.0);
+// Thin lines along the shore and round the mountains, in a dark sea-blue and a dark earth-brown, never black.
+uniform vec4 shore_line : source_color = vec4(0.17, 0.29, 0.38, 1.0);
+uniform vec4 ridge_line : source_color = vec4(0.36, 0.27, 0.19, 1.0);
+uniform float line = 0.8;
 
 float hash(vec2 p) {
 	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -60,6 +64,11 @@ void fragment() {
 				col.rgb *= 0.78;
 			}
 		}
+	}
+	if (h >= sea && h - sea < edge * line) {
+		col = shore_line;
+	} else if (field < 0 && h >= mountain && h - mountain < edge * line) {
+		col = ridge_line;
 	}
 	// Pigment on daluang: colours a little faded and warmed, bark fibres showing through.
 	vec2 cells = UV / TEXTURE_PIXEL_SIZE;

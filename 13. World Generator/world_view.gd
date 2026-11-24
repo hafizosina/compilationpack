@@ -26,6 +26,8 @@ const WHEEL_STEP: float = 1.15
 ## the count starts again; one notch more changes level.
 const HOLD_NOTCHES: int = 2
 const HOLD_GAP: float = 0.6
+## How far, as a zoom factor, a pinch must keep going past a limit before the level changes.
+const PINCH_PAST: float = 1.35
 ## Seconds the cover takes to close, and to open.
 const COVER_TIME: float = 0.35
 ## How much further the camera zooms while the cover closes, and how far off standard it opens from.
@@ -77,11 +79,15 @@ var _info: Label
 ## Notches pushed past the current limit (+ in, - out) and when the last came.
 var _held: int = 0
 var _held_at: float = 0.0
+## Fingers down (index -> screen position), the last pinch spread, and how far the pinch has gone past a limit.
+var _touches: Dictionary = {}
+var _spread: float = 0.0
+var _past: float = 1.0
 var _legend: WorldMapKey
 ## The map mode: -1 biomes, else an index into WorldPlaceholder.MODES; and the L3 map's material.
 var _mode: int = -1
 var _map_material: ShaderMaterial
-var _mode_bar: HBoxContainer
+var _mode_bar: WorldModeToggle
 ## L3's fields, a pixel a cell; the map shader draws them and chunks read their parent colours from them.
 var _l3_image: Image
 
@@ -166,6 +172,57 @@ func _input(event: InputEvent) -> void:
 			_held = 0
 			_close(_level + push, at, screen)
 
+## One finger (or the left mouse button) pans; two fingers pinch to zoom on their middle, and a pinch kept
+## going past a limit changes level.
+func _unhandled_input(event: InputEvent) -> void:
+	if _phase != &"":
+		_touches.clear()
+		return
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			_touches[event.index] = event.position
+		else:
+			_touches.erase(event.index)
+		_past = 1.0
+		_spread = _pinch_spread()
+	elif event is InputEventScreenDrag:
+		_touches[event.index] = event.position
+		if _touches.size() == 1:
+			_camera.position -= event.relative / _camera.zoom.x
+		elif _touches.size() == 2:
+			var spread := _pinch_spread()
+			if _spread > 0.0:
+				_pinch(spread / _spread)
+			_spread = spread
+	elif event is InputEventMouseMotion and event.device != InputEvent.DEVICE_ID_EMULATION \
+			and event.button_mask & MOUSE_BUTTON_MASK_LEFT:
+		_camera.position -= event.relative / _camera.zoom.x
+
+func _pinch_spread() -> float:
+	if _touches.size() != 2:
+		return 0.0
+	var points: Array = _touches.values()
+	return (points[0] as Vector2).distance_to(points[1])
+
+## Zooms by `factor` on the middle of the two fingers; past a limit the pinch is counted, and once it has gone
+## PINCH_PAST further the level changes.
+func _pinch(factor: float) -> void:
+	var points: Array = _touches.values()
+	var screen: Vector2 = ((points[0] as Vector2) + (points[1] as Vector2)) * 0.5
+	var at := _camera.position + (screen - get_viewport_rect().size * 0.5) / _camera.zoom.x
+	var standard := _standard(_level)
+	var range_ := RANGES[_level]
+	var zoom := _camera.zoom.x * factor
+	var clamped := clampf(zoom, standard * range_.x, standard * range_.y)
+	_zoom_at(at, clamped, screen)
+	_past = _past * zoom / clamped if not is_equal_approx(zoom, clamped) else 1.0
+	if _past > PINCH_PAST and _level < 2:
+		_past = 1.0
+		_close(_level + 1, at, screen)
+	elif _past < 1.0 / PINCH_PAST and _level > 0:
+		_past = 1.0
+		_close(_level - 1, at, screen)
+
 ## Sets the zoom, keeping frame point `at` at `screen`.
 func _zoom_at(at: Vector2, zoom: float, screen: Vector2) -> void:
 	_camera.zoom = Vector2(zoom, zoom)
@@ -234,25 +291,26 @@ func _draw_table() -> void:
 	sprite.scale = map + Vector2.ONE * depth * 2.0
 	_roots[0].add_child(sprite)
 
-## The L3 key, bottom left, and the map mode buttons, top right; both shown on L3 only. Keys 1-4 pick too.
+## The L3 key, bottom left, and the map mode slips, bottom right; both shown on L3 only. Keys 1-4 pick too.
 func _build_legend() -> void:
 	_legend = WorldMapKey.new()
 	_ui.add_child(_legend)
-	_mode_bar = HBoxContainer.new()
+	_mode_bar = WorldModeToggle.new()
 	_ui.add_child(_mode_bar)
-	var group := ButtonGroup.new()
 	var names: Array[String] = ["Biome"]
 	for mode: Dictionary in WorldPlaceholder.MODES:
 		names.append(mode["name"])
-	for k in names.size():
-		var button := Button.new()
-		button.text = "%d %s" % [k + 1, names[k]]
-		button.toggle_mode = true
-		button.button_group = group
-		button.button_pressed = k == 0
-		button.pressed.connect(_set_mode.bind(k - 1))
-		_mode_bar.add_child(button)
-	_mode_bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 12)
+	_mode_bar.names = names
+	_mode_bar.picked.connect(func(k: int) -> void: _set_mode(k - 1))
+	# Pinned bottom right from its own size.
+	_mode_bar.anchor_left = 1.0
+	_mode_bar.anchor_right = 1.0
+	_mode_bar.anchor_top = 1.0
+	_mode_bar.anchor_bottom = 1.0
+	_mode_bar.offset_left = -12.0 - _mode_bar.custom_minimum_size.x
+	_mode_bar.offset_right = -12.0
+	_mode_bar.offset_top = -12.0 - _mode_bar.custom_minimum_size.y
+	_mode_bar.offset_bottom = -12.0
 	_set_mode(-1)
 
 ## Shows L3 by biome (-1) or by one of WorldPlaceholder.MODES, and fits the key to it.
@@ -268,7 +326,7 @@ func _set_mode(mode: int) -> void:
 		_map_material.set_shader_parameter(&"ramp", WorldPlaceholder.ramp(entry))
 		_legend.title = entry["name"]
 		_legend.entries = entry["bands"].map(func(band: Array) -> Array: return [band[2], band[1]])
-	(_mode_bar.get_child(mode + 1) as Button).button_pressed = true
+	_mode_bar.selected = mode + 1
 	# Pinned bottom left from its own size, which it has just set.
 	_legend.anchor_top = 1.0
 	_legend.anchor_bottom = 1.0
