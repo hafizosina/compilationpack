@@ -108,6 +108,11 @@ func _ready() -> void:
 	catalog.number()
 	# Builds the catalog's lookup here, so the workers only ever read it.
 	entity_catalog.has_def(&"tree")
+	# Texture arrays touch the renderer, so they're made here and workers only read them.
+	for level in [1, 2]:
+		catalog.grounds(level)
+	catalog.surfaces()
+	catalog.pieces()
 	_build_panel()
 	_build_detail_panel()
 	_marker = Line2D.new()

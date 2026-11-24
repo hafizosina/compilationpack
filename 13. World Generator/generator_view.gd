@@ -16,7 +16,7 @@ const WATER_NAMES: Array[String] = ["The world's", "Lake", "River", "Coast", "Ri
 ## Child cells per parent cell side: L3 to L2 and L2 to L1.
 const ZOOM: int = 8
 ## Each level's standard zoom, L3, L2, L1: a cell of that level CELL px on screen.
-const STANDARD: Array[float] = [0.25, 2.0, 16.0]
+const STANDARD: Array[float] = [0.25, 2.0, 32.0]
 ## A level's zoom range, as shares of its standard zoom.
 const RANGE := Vector2(0.7, 1.5)
 const LEVEL_NAMES: Array[String] = ["L3", "L2", "L1"]
@@ -97,6 +97,11 @@ func _ready() -> void:
 	catalog.number()
 	# Builds the catalog's lookup here, so the workers only ever read it.
 	entity_catalog.has_def(&"tree")
+	# Texture arrays touch the renderer, so they're made here and workers only read them.
+	for level in [1, 2, 3]:
+		catalog.grounds(level)
+	catalog.surfaces()
+	catalog.pieces()
 	_build_panel()
 	_build_detail_panel()
 	for level in STANDARD.size():

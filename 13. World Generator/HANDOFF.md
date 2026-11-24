@@ -29,8 +29,8 @@ was dropped so the editor made new ones. Module 10's `Ecs*` classes are shared a
 
 ## Zoom and transitions (`generator_view.gd`)
 
-- `STANDARD = [0.25, 2.0, 16.0]` (L3's fits the whole world on screen) and `RANGE = Vector2(0.7, 1.5)`. `_zoom_at` keeps the zoom between
-  `STANDARD[_level] * RANGE.x` and `STANDARD[_level] * RANGE.y`. The camera allows 0.15 to 24.
+- `STANDARD = [0.25, 2.0, 32.0]` (L3's fits the whole world on screen; L1's shows 16 px a cell, as module 12) and `RANGE = Vector2(0.7, 1.5)`. `_zoom_at` keeps the zoom between
+  `STANDARD[_level] * RANGE.x` and `STANDARD[_level] * RANGE.y`. The camera allows 0.15 to 48.
 - A wheel notch past the top goes down a level, and past the bottom up a level. L3 has no up and L1 no down.
 - `_go_to_level` runs one tween of `TRANSITION` (0.45 s), sine in-out. The zoom eases (log-lerp) to the new
   standard, and the world point under the mouse keeps its screen point. The finer of the two levels fades
