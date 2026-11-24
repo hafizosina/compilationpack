@@ -77,7 +77,11 @@ var _info: Label
 ## Notches pushed past the current limit (+ in, - out) and when the last came.
 var _held: int = 0
 var _held_at: float = 0.0
-var _legend: PanelContainer
+var _legend: WorldMapKey
+## The map mode: -1 biomes, else an index into WorldPlaceholder.MODES; and the L3 map's material.
+var _mode: int = -1
+var _map_material: ShaderMaterial
+var _mode_bar: HBoxContainer
 ## L3's fields, a pixel a cell; the map shader draws them and chunks read their parent colours from them.
 var _l3_image: Image
 
@@ -192,6 +196,7 @@ func _draw_l3() -> void:
 	_l3_image = WorldPlaceholder.l3_fields(world_seed)
 	var material := ShaderMaterial.new()
 	material.shader = L3_MAP
+	_map_material = material
 	material.set_shader_parameter(&"table", ImageTexture.create_from_image(WorldPlaceholder.table()))
 	material.set_shader_parameter(&"sea", WorldPlaceholder.SEA)
 	material.set_shader_parameter(&"mountain", WorldPlaceholder.MOUNTAIN)
@@ -229,24 +234,53 @@ func _draw_table() -> void:
 	sprite.scale = map + Vector2.ONE * depth * 2.0
 	_roots[0].add_child(sprite)
 
-## The L3 key, bottom left: each colour and what it is; shown on L3 only.
+## The L3 key, bottom left, and the map mode buttons, top right; both shown on L3 only. Keys 1-4 pick too.
 func _build_legend() -> void:
-	_legend = PanelContainer.new()
-	_legend.theme_type_variation = &"DockPanel"
+	_legend = WorldMapKey.new()
 	_ui.add_child(_legend)
-	var box := VBoxContainer.new()
-	_legend.add_child(box)
-	for entry: Array in WorldPlaceholder.HEIGHTS + WorldPlaceholder.BIOMES:
-		var row := HBoxContainer.new()
-		var swatch := ColorRect.new()
-		swatch.color = entry[1]
-		swatch.custom_minimum_size = Vector2(14, 14)
-		row.add_child(swatch)
-		var name := Label.new()
-		name.text = entry[0]
-		row.add_child(name)
-		box.add_child(row)
-	_legend.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 12)
+	_mode_bar = HBoxContainer.new()
+	_ui.add_child(_mode_bar)
+	var group := ButtonGroup.new()
+	var names: Array[String] = ["Biome"]
+	for mode: Dictionary in WorldPlaceholder.MODES:
+		names.append(mode["name"])
+	for k in names.size():
+		var button := Button.new()
+		button.text = "%d %s" % [k + 1, names[k]]
+		button.toggle_mode = true
+		button.button_group = group
+		button.button_pressed = k == 0
+		button.pressed.connect(_set_mode.bind(k - 1))
+		_mode_bar.add_child(button)
+	_mode_bar.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 12)
+	_set_mode(-1)
+
+## Shows L3 by biome (-1) or by one of WorldPlaceholder.MODES, and fits the key to it.
+func _set_mode(mode: int) -> void:
+	_mode = mode
+	if mode < 0:
+		_map_material.set_shader_parameter(&"field", -1)
+		_legend.title = "Biomes"
+		_legend.entries = WorldPlaceholder.HEIGHTS + WorldPlaceholder.BIOMES
+	else:
+		var entry: Dictionary = WorldPlaceholder.MODES[mode]
+		_map_material.set_shader_parameter(&"field", entry["field"])
+		_map_material.set_shader_parameter(&"ramp", WorldPlaceholder.ramp(entry))
+		_legend.title = entry["name"]
+		_legend.entries = entry["bands"].map(func(band: Array) -> Array: return [band[2], band[1]])
+	(_mode_bar.get_child(mode + 1) as Button).button_pressed = true
+	# Pinned bottom left from its own size, which it has just set.
+	_legend.anchor_top = 1.0
+	_legend.anchor_bottom = 1.0
+	_legend.offset_left = 12.0
+	_legend.offset_right = 12.0 + _legend.custom_minimum_size.x
+	_legend.offset_top = -12.0 - _legend.custom_minimum_size.y
+	_legend.offset_bottom = -12.0
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo and _level == 0 and key.keycode >= KEY_1 and key.keycode <= KEY_4:
+		_set_mode(key.keycode - KEY_1 - 1)
 
 ## Keeps the camera over the table: no further than TABLE_VIEW cells past the sheet's edge.
 func _clamp_l3() -> void:
@@ -444,6 +478,7 @@ func _open() -> void:
 
 func _report() -> void:
 	_legend.visible = _level == 0
+	_mode_bar.visible = _level == 0
 	var cells := _cells_of(_level, _camera.position)
 	var km := PackedFloat64Array([cells[0] * METRES[_level] / 1000.0, cells[1] * METRES[_level] / 1000.0])
 	var lines: Array[String] = ["%s, %s a cell: zoom ×%.3f (×%.3f to ×%.3f)%s" % [LEVEL_NAMES[_level],

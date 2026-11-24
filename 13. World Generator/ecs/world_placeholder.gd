@@ -42,6 +42,34 @@ const BIOMES: Array[Array] = [
 const HEIGHTS: Array[Array] = [["Deep sea", Color8(42, 86, 134)], ["Shallow sea", Color8(70, 124, 168)],
 	["Sea ice", Color8(214, 226, 238)], ["Mountains", Color8(128, 122, 112)], ["Snow peaks", Color8(240, 242, 246)]]
 
+## The map modes besides biomes: name, which field (0 height, 1 heat, 2 humidity) and its bands as
+## [from, colour, name]. Heat's bands are the biome table's heat steps.
+const MODES: Array[Dictionary] = [
+	{"name": "Heat", "field": 1, "bands": [[0.0, Color8(52, 74, 128), "Frozen"], [0.14, Color8(96, 138, 178), "Cold"],
+		[0.28, Color8(150, 176, 170), "Cool"], [0.44, Color8(206, 196, 140), "Mild"], [0.64, Color8(214, 148, 84), "Warm"],
+		[0.8, Color8(170, 66, 46), "Hot"]]},
+	{"name": "Height", "field": 0, "bands": [[0.0, Color8(30, 58, 96), "Deep sea"], [0.42, Color8(62, 110, 152), "Sea"],
+		[0.5, Color8(104, 140, 80), "Lowland"], [0.6, Color8(150, 146, 90), "Upland"], [0.74, Color8(128, 112, 96), "Mountain"],
+		[0.84, Color8(238, 236, 230), "Peak"]]},
+	{"name": "Humidity", "field": 2, "bands": [[0.0, Color8(204, 164, 98), "Arid"], [0.3, Color8(190, 180, 112), "Dry"],
+		[0.45, Color8(130, 160, 92), "Moderate"], [0.55, Color8(78, 140, 110), "Wet"], [0.7, Color8(44, 100, 120), "Soaked"]]}]
+
+## A mode's bands as a strip the map shader reads, hard steps between them.
+static func ramp(mode: Dictionary) -> GradientTexture1D:
+	var gradient := Gradient.new()
+	gradient.interpolation_mode = Gradient.GRADIENT_INTERPOLATE_CONSTANT
+	var offsets := PackedFloat32Array()
+	var colours := PackedColorArray()
+	for band: Array in mode["bands"]:
+		offsets.append(band[0])
+		colours.append(band[1])
+	gradient.offsets = offsets
+	gradient.colors = colours
+	var texture := GradientTexture1D.new()
+	texture.gradient = gradient
+	texture.width = 512
+	return texture
+
 ## The land biome (index into BIOMES) at heat `t` and humidity `m`, both 0..1.
 static func biome_at(t: float, m: float) -> int:
 	if t < 0.14:

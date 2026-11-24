@@ -1,11 +1,14 @@
 shader_type canvas_item;
 
-// The L3 world map from its fields (WorldPlaceholder.l3_fields): R height, G temperature, B moisture, read
+// The L3 world map, by biome or one field at a time, from its fields (WorldPlaceholder.l3_fields): R height, G temperature, B moisture, read
 // smoothly so every edge is a curve. Sea by depth with a shallow band; land by the
 // biome table, mountains and snow by height; land and mountains each keep a shaded crescent on the side
 // away from the light (flat-vector lit copy). All of it painted on daluang: faded, warmed, fibres showing.
 
 uniform sampler2D table : filter_nearest;
+// The map mode: -1 biomes, else the field (0 height, 1 heat, 2 humidity) shown through `ramp`.
+uniform int field = -1;
+uniform sampler2D ramp : filter_nearest;
 uniform float sea = 0.5;
 uniform float mountain = 0.74;
 uniform float snow = 0.84;
@@ -36,7 +39,12 @@ void fragment() {
 	float lit_h = texture(TEXTURE, UV + light * TEXTURE_PIXEL_SIZE).r;
 	float edge = fwidth(h);
 	vec4 col;
-	if (h < sea) {
+	if (field >= 0) {
+		col = texture(ramp, vec2(clamp(f[field], 0.0, 0.999), 0.5));
+		if (h >= sea && lit_h < sea) {
+			col.rgb *= 0.8;
+		}
+	} else if (h < sea) {
 		col = h > sea - 0.05 ? shallow : deep;
 		if (f.g < 0.12) {
 			col = sea_ice;
