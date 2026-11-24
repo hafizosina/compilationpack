@@ -42,8 +42,7 @@ The scene is `world.tscn` (`world_view.gd`). L3 is finished; L2 and L1 are still
   the sea, a lake, ice or a bigger river, nudged and smoothed, widening with flow (`river_width`).
   About 80 rivers a world. This is what L2 will read to draw rivers that match across its chunks.
 - **Drawing:** `art/l3_map.gdshader` reads `fields_image()` (R height, G heat, B humidity, A lake)
-  smoothly, so every edge is a curve; biome colours from the `table()` lookup; shaded crescents away from the
-  light; thin sea-blue shore and brown ridge lines (never black); everything faded onto daluang (bark paper,
+  smoothly, so every edge is a curve; biome colours from the `table()` lookup; flat, no shading; thin sea-blue shore and brown ridge lines (never black); everything faded onto daluang (bark paper,
   fibres). Rivers are `Line2D`s over it.
 - **Modes:** biome (default), heat, height, humidity (`MODES`, keys 1–4 or the slips bottom right), each a
   banded ramp. The key bottom left (`map_key.gd`) and the slips (`mode_toggle.gd`) are drawn, not themed.

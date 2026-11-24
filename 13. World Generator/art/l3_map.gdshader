@@ -1,10 +1,9 @@
 shader_type canvas_item;
 
 // The L3 world map, by biome or one field at a time, from its fields (WorldMap.fields_image): R height, G heat,
-// B humidity, A lake, read
-// smoothly so every edge is a curve. Sea by depth with a shallow band; land by the
-// biome table, mountains and snow by height; land and mountains each keep a shaded crescent on the side
-// away from the light (flat-vector lit copy). All of it painted on daluang: faded, warmed, fibres showing.
+// B humidity, A lake, read smoothly so every edge is a curve. Sea by depth with a shallow band; land by the
+// biome table, mountains and snow by height; thin shore and ridge lines. All of it painted on daluang: faded,
+// warmed, fibres showing.
 
 uniform sampler2D table : filter_nearest;
 // The map mode: -1 biomes, else the field (0 height, 1 heat, 2 humidity) shown through `ramp`.
@@ -13,8 +12,6 @@ uniform sampler2D ramp : filter_nearest;
 uniform float sea = 0.5;
 uniform float mountain = 0.74;
 uniform float snow = 0.84;
-// The lit copy's shift, in cells, toward the bottom-right.
-uniform vec2 light = vec2(0.45, 0.45);
 uniform vec4 deep : source_color = vec4(0.16, 0.34, 0.53, 1.0);
 uniform vec4 shallow : source_color = vec4(0.27, 0.49, 0.66, 1.0);
 uniform vec4 sea_ice : source_color = vec4(0.84, 0.89, 0.93, 1.0);
@@ -41,14 +38,10 @@ float noise(vec2 p) {
 void fragment() {
 	vec4 f = texture(TEXTURE, UV);
 	float h = f.r;
-	float lit_h = texture(TEXTURE, UV + light * TEXTURE_PIXEL_SIZE).r;
 	float edge = fwidth(h);
 	vec4 col;
 	if (field >= 0) {
 		col = texture(ramp, vec2(clamp(f[field], 0.0, 0.999), 0.5));
-		if (h >= sea && lit_h < sea) {
-			col.rgb *= 0.8;
-		}
 	} else if (h < sea) {
 		col = h > sea - 0.05 ? shallow : deep;
 		if (f.g < 0.12) {
@@ -56,14 +49,8 @@ void fragment() {
 		}
 	} else {
 		col = texture(table, vec2(f.g, f.b));
-		if (lit_h < sea) {
-			col.rgb *= 0.8;
-		}
 		if (h > mountain) {
 			col = h > snow ? peak : rock;
-			if (lit_h < mountain) {
-				col.rgb *= 0.78;
-			}
 		}
 	}
 	// Lakes stand on land; their edge is where the lake flag, read smoothly, crosses a half.
