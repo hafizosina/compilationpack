@@ -18,7 +18,6 @@ uniform vec2 light = vec2(0.45, 0.45);
 uniform vec4 deep : source_color = vec4(0.16, 0.34, 0.53, 1.0);
 uniform vec4 shallow : source_color = vec4(0.27, 0.49, 0.66, 1.0);
 uniform vec4 sea_ice : source_color = vec4(0.84, 0.89, 0.93, 1.0);
-uniform vec4 lake_water : source_color = vec4(0.31, 0.52, 0.67, 1.0);
 uniform vec4 rock : source_color = vec4(0.50, 0.48, 0.44, 1.0);
 uniform vec4 peak : source_color = vec4(0.94, 0.95, 0.97, 1.0);
 uniform vec4 ink : source_color = vec4(0.29, 0.19, 0.11, 1.0);
@@ -69,7 +68,7 @@ void fragment() {
 	}
 	// Lakes stand on land; their edge is where the lake flag, read smoothly, crosses a half.
 	if (h >= sea && f.a > 0.5 && field != 1) {
-		col = lake_water;
+		col = shallow;
 	}
 	if (h >= sea && field != 1 && abs(f.a - 0.5) < fwidth(f.a) * line * 0.5) {
 		col = shore_line;

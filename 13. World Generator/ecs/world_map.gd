@@ -35,7 +35,7 @@ const BIOMES: Array[Array] = [
 	["Savanna", Color8(170, 168, 86)], ["Tropical forest", Color8(40, 104, 52)]]
 ## What height and water decide: name and map colour.
 const WATERS: Array[Array] = [["Deep sea", Color8(42, 86, 134)], ["Shallow sea", Color8(70, 124, 168)],
-	["Sea ice", Color8(214, 226, 238)], ["Lake", Color8(78, 132, 170)], ["River", Color8(64, 118, 160)],
+	["Sea ice", Color8(214, 226, 238)], ["Lake", Color8(70, 124, 168)], ["River", Color8(70, 124, 168)],
 	["Mountains", Color8(128, 122, 112)], ["Snow peaks", Color8(240, 242, 246)]]
 ## The map modes besides biomes: name, which field (0 height, 1 heat, 2 humidity) and its bands as
 ## [from, colour, name]. Heat's bands are the biome table's heat steps.

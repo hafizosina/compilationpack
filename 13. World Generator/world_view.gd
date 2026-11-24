@@ -44,6 +44,7 @@ const MAX_JOBS: int = 3
 const CLOUDS := preload("res://13. World Generator/art/clouds.gdshader")
 const IRIS := preload("res://13. World Generator/art/iris.gdshader")
 const L3_MAP := preload("res://13. World Generator/art/l3_map.gdshader")
+const WATER_LINE := preload("res://13. World Generator/art/water_line.gdshader")
 const TABLE := preload("res://13. World Generator/art/table.gdshader")
 const SURYA := preload("res://Global/Asset/Map/surya.png")
 ## Table drawn round the sheet, in cells, and the brass sun weights' size.
@@ -273,12 +274,19 @@ func _draw_l3() -> void:
 		weight.position = corner * map + (corner * 2.0 - Vector2.ONE) * 2.0 * CELL_PX
 		_roots[0].add_child(weight)
 
-## L3's rivers as lines over the map, each widening with its flow: water with a thin sea-blue edge, in the
-## daluang-faded colours the map shader gives everything else.
+## L3's rivers as lines over the map, each widening with its flow, in the map's own shallow water (the water
+## line shader matches its colour and fibres). Each has a thin sea-blue edge that stops short of its mouth, and
+## every edge is drawn under every river, so rivers, lakes and the sea join as one water.
 func _draw_rivers() -> void:
 	_river_lines = Node2D.new()
 	_roots[0].add_child(_river_lines)
-	var water := _faded(WorldMap.WATERS[4][1])
+	var edges := Node2D.new()
+	var waters := Node2D.new()
+	_river_lines.add_child(edges)
+	_river_lines.add_child(waters)
+	var material := ShaderMaterial.new()
+	material.shader = WATER_LINE
+	material.set_shader_parameter(&"cell", CELL_PX)
 	var edge := _faded(Color(0.17, 0.29, 0.38))
 	for river: Dictionary in _map.rivers:
 		var points: PackedVector2Array = river["points"]
@@ -287,18 +295,39 @@ func _draw_rivers() -> void:
 		var curve := Curve.new()
 		for k in flows.size():
 			curve.add_point(Vector2(float(k) / (flows.size() - 1), WorldMap.river_width(flows[k]) / widest))
-		for outline in [true, false]:
-			var line := Line2D.new()
-			for p in points:
-				line.add_point(p * CELL_PX)
-			line.width = (widest + (0.14 if outline else 0.0)) * CELL_PX
-			line.width_curve = curve
-			line.default_color = edge if outline else water
-			line.joint_mode = Line2D.LINE_JOINT_ROUND
-			line.begin_cap_mode = Line2D.LINE_CAP_ROUND
-			line.end_cap_mode = Line2D.LINE_CAP_ROUND
-			line.antialiased = true
-			_river_lines.add_child(line)
+		var outline := _river_line(_trimmed(points, 0.8), widest + 0.14, curve)
+		outline.default_color = edge
+		edges.add_child(outline)
+		var water := _river_line(points, widest, curve)
+		water.material = material
+		waters.add_child(water)
+
+func _river_line(points: PackedVector2Array, width: float, curve: Curve) -> Line2D:
+	var line := Line2D.new()
+	for p in points:
+		line.add_point(p * CELL_PX)
+	line.width = width * CELL_PX
+	line.width_curve = curve
+	line.joint_mode = Line2D.LINE_JOINT_ROUND
+	line.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	line.end_cap_mode = Line2D.LINE_CAP_ROUND
+	line.antialiased = true
+	return line
+
+## `points` with `length` (in cells) cut off their end.
+static func _trimmed(points: PackedVector2Array, length: float) -> PackedVector2Array:
+	var out := points.duplicate()
+	var left := length
+	while out.size() > 2 and left > 0.0:
+		var last := out[out.size() - 1]
+		var before := out[out.size() - 2]
+		var span := last.distance_to(before)
+		if span > left:
+			out[out.size() - 1] = last.move_toward(before, left)
+			break
+		left -= span
+		out.remove_at(out.size() - 1)
+	return out
 
 ## `c` as the map shader shows pigment on daluang: a little faded and warmed.
 static func _faded(c: Color) -> Color:
