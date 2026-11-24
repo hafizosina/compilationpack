@@ -787,6 +787,7 @@ func _make_level(size: Vector2i, commands: Array[EcsBuildCommand], at: Vector2, 
 	world.add_singleton(EcsLifecycleSingleton.new())
 	world.add_singleton(EcsTownNavSingleton.new())
 	var tile_sync := EcsTileSyncSystem.new(tiles, catalog)
+	tile_sync.level = 2 if scale >= 1.0 else 1  # the region is L2, chunks L1
 	var scheduler := EcsScheduler.new()
 	scheduler \
 		.add(EcsLifecycleSystem.new(EcsEntityManager.new(entities), entity_catalog)) \

@@ -19,8 +19,8 @@ var _numbered: bool = false
 ## Dual-grid TileSets made from defs' sheets this run: def -> TileSet.
 var _tile_sets: Dictionary = {}
 var _wall_tile_set: TileSet
-## Every terrain's ground, one layer each in list order, made the first time it is asked for.
-var _grounds: Texture2DArray
+## Every terrain's ground per map level, one layer each in list order, made the first time it is asked for.
+var _grounds: Dictionary[int, Texture2DArray] = {}
 ## Every floor's surface likewise, a layer per floor in list order.
 var _surfaces: Texture2DArray
 ## Every floor's piece map likewise.
@@ -51,32 +51,39 @@ func tiles(def: EcsTileDef) -> TileSet:
 		_tile_sets[def] = EcsDualGrid.make_tile_set(def.texture, def.tile_size)
 	return _tile_sets[def]
 
-## The terrains' grounds as one array, a layer per terrain in list order, each GROUND_SIZE square;
-## a terrain with no `ground` repeats its sheet's full tile.
-func grounds() -> Texture2DArray:
-	if _grounds == null:
-		_grounds = _stack(terrains, &"ground", _repeat_full_tile)
-	return _grounds
+## The terrains' grounds at map `level` (1, 2 or 3) as one array, a layer per terrain in list order,
+## each GROUND_SIZE square; a terrain with no ground for the level uses `ground`, else repeats its sheet's full tile.
+func grounds(level: int = 1) -> Texture2DArray:
+	if not _grounds.has(level):
+		var properties: Array[StringName] = [&"ground"]
+		if level == 2 or level == 3:
+			properties.push_front(StringName("ground_l%d" % level))
+		_grounds[level] = _stack(terrains, properties, _repeat_full_tile)
+	return _grounds[level]
 
 ## The floors' surfaces as one array, a layer per floor in list order, as `grounds()`.
 func surfaces() -> Texture2DArray:
 	if _surfaces == null:
-		_surfaces = _stack(floors, &"surface", _repeat_full_tile)
+		_surfaces = _stack(floors, [&"surface"], _repeat_full_tile)
 	return _surfaces
 
 ## The floors' piece maps likewise, read exactly: no mipmaps, never smoothed; a floor with none
 ## gets a map that cuts it straight.
 func pieces() -> Texture2DArray:
 	if _pieces == null:
-		_pieces = _stack(floors, &"pieces", _no_pieces, false)
+		_pieces = _stack(floors, [&"pieces"], _no_pieces, false)
 	return _pieces
 
-## Each def's texture `property`, or `fallback` of the def when it has none, as GROUND_SIZE layers;
-## data maps (`mipmaps` false) are resized nearest.
-func _stack(defs: Array, property: StringName, fallback: Callable, mipmaps: bool = true) -> Texture2DArray:
+## Each def's first texture set among `properties`, or `fallback` of the def when it has none, as
+## GROUND_SIZE layers; data maps (`mipmaps` false) are resized nearest.
+func _stack(defs: Array, properties: Array[StringName], fallback: Callable, mipmaps: bool = true) -> Texture2DArray:
 	var images: Array[Image] = []
 	for def: EcsTileDef in defs:
-		var texture := def.get(property) as Texture2D
+		var texture: Texture2D = null
+		for property in properties:
+			texture = def.get(property) as Texture2D
+			if texture != null:
+				break
 		var image: Image
 		if texture != null:
 			image = texture.get_image()

@@ -3,6 +3,8 @@
 [ext_resource type="Script" uid="uid://bjrdpjs1inii4" path="res://10. Town Generator/defs/ecs_terrain_def.gd" id="1"]
 [ext_resource type="Texture2D" uid="uid://cujkmtrbgvsmt" path="res://10. Town Generator/art/placeholder/grassTileset.png" id="2_tiles"]
 [ext_resource type="Texture2D" path="res://Global/Asset/Ground/grass.png" id="ground"]
+[ext_resource type="Texture2D" uid="uid://dni84uxjtlblc" path="res://Global/Asset/Ground/l2/grass.png" id="ground_l2"]
+[ext_resource type="Texture2D" uid="uid://bax83pykkhejh" path="res://Global/Asset/Ground/l3/grass.png" id="ground_l3"]
 
 [resource]
 script = ExtResource("1")
@@ -11,3 +13,5 @@ display_name = "grass"
 texture = ExtResource("2_tiles")
 tile_size = 16
 ground = ExtResource("ground")
+ground_l2 = ExtResource("ground_l2")
+ground_l3 = ExtResource("ground_l3")
