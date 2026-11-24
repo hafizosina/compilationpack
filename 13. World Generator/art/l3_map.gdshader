@@ -1,6 +1,7 @@
 shader_type canvas_item;
 
-// The L3 world map, by biome or one field at a time, from its fields (WorldPlaceholder.l3_fields): R height, G temperature, B moisture, read
+// The L3 world map, by biome or one field at a time, from its fields (WorldMap.fields_image): R height, G heat,
+// B humidity, A lake, read
 // smoothly so every edge is a curve. Sea by depth with a shallow band; land by the
 // biome table, mountains and snow by height; land and mountains each keep a shaded crescent on the side
 // away from the light (flat-vector lit copy). All of it painted on daluang: faded, warmed, fibres showing.
@@ -17,6 +18,7 @@ uniform vec2 light = vec2(0.45, 0.45);
 uniform vec4 deep : source_color = vec4(0.16, 0.34, 0.53, 1.0);
 uniform vec4 shallow : source_color = vec4(0.27, 0.49, 0.66, 1.0);
 uniform vec4 sea_ice : source_color = vec4(0.84, 0.89, 0.93, 1.0);
+uniform vec4 lake_water : source_color = vec4(0.31, 0.52, 0.67, 1.0);
 uniform vec4 rock : source_color = vec4(0.50, 0.48, 0.44, 1.0);
 uniform vec4 peak : source_color = vec4(0.94, 0.95, 0.97, 1.0);
 uniform vec4 ink : source_color = vec4(0.29, 0.19, 0.11, 1.0);
@@ -64,6 +66,13 @@ void fragment() {
 				col.rgb *= 0.78;
 			}
 		}
+	}
+	// Lakes stand on land; their edge is where the lake flag, read smoothly, crosses a half.
+	if (h >= sea && f.a > 0.5 && field != 1) {
+		col = lake_water;
+	}
+	if (h >= sea && field != 1 && abs(f.a - 0.5) < fwidth(f.a) * line * 0.5) {
+		col = shore_line;
 	}
 	if (h >= sea && h - sea < edge * line) {
 		col = shore_line;

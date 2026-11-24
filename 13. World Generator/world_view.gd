@@ -84,12 +84,14 @@ var _touches: Dictionary = {}
 var _spread: float = 0.0
 var _past: float = 1.0
 var _legend: WorldMapKey
-## The map mode: -1 biomes, else an index into WorldPlaceholder.MODES; and the L3 map's material.
+## The map mode: -1 biomes, else an index into WorldMap.MODES; and the L3 map's material.
 var _mode: int = -1
 var _map_material: ShaderMaterial
 var _mode_bar: WorldModeToggle
-## L3's fields, a pixel a cell; the map shader draws them and chunks read their parent colours from them.
-var _l3_image: Image
+## L3, the world map; its fields are drawn by the map shader and chunks read their parent colours from it.
+var _map: WorldMap
+## The river lines, shown on L3.
+var _river_lines: Node2D
 
 func _ready() -> void:
 	# Dark past the poles, so the ice caps read as land.
@@ -100,15 +102,15 @@ func _ready() -> void:
 		root.visible = level == 0
 		_world_root.add_child(root)
 		_roots.append(root)
-	_stores[1] = WorldChunkStore.new(CHUNK[1], WorldPlaceholder.L3 * SPLIT, CAP[1])
-	_stores[2] = WorldChunkStore.new(CHUNK[2], WorldPlaceholder.L3 * SPLIT * SPLIT, CAP[2])
+	_stores[1] = WorldChunkStore.new(CHUNK[1], WorldMap.SIZE * SPLIT, CAP[1])
+	_stores[2] = WorldChunkStore.new(CHUNK[2], WorldMap.SIZE * SPLIT * SPLIT, CAP[2])
 	_draw_l3()
 	_build_cover()
 	_info = Label.new()
 	_info.position = Vector2(12, 8)
 	_ui.add_child(_info)
 	_build_legend()
-	var size := Vector2(WorldPlaceholder.L3) * CELL_PX
+	var size := Vector2(WorldMap.SIZE) * CELL_PX
 	_camera.zoom = Vector2.ONE * _standard(0)
 	_camera.position = size * 0.5
 
@@ -229,7 +231,7 @@ func _zoom_at(at: Vector2, zoom: float, screen: Vector2) -> void:
 func _standard(level: int) -> float:
 	if level == 0:
 		var view := get_viewport_rect().size
-		var sheet := (Vector2(WorldPlaceholder.L3) + Vector2.ONE * SHEET_VIEW * 2.0) * CELL_PX
+		var sheet := (Vector2(WorldMap.SIZE) + Vector2.ONE * SHEET_VIEW * 2.0) * CELL_PX
 		return minf(view.x / sheet.x, view.y / sheet.y)
 	return STANDARD_PX[level] / CELL_PX
 
@@ -247,22 +249,23 @@ func _view_cells(level: int) -> Rect2i:
 ## The L3 map as one sheet on the table, drawn by the map shader from its fields.
 func _draw_l3() -> void:
 	_draw_table()
-	_l3_image = WorldPlaceholder.l3_fields(world_seed)
+	_map = WorldMap.make(world_seed)
 	var material := ShaderMaterial.new()
 	material.shader = L3_MAP
 	_map_material = material
-	material.set_shader_parameter(&"table", ImageTexture.create_from_image(WorldPlaceholder.table()))
-	material.set_shader_parameter(&"sea", WorldPlaceholder.SEA)
-	material.set_shader_parameter(&"mountain", WorldPlaceholder.MOUNTAIN)
-	material.set_shader_parameter(&"snow", WorldPlaceholder.SNOW)
+	material.set_shader_parameter(&"table", ImageTexture.create_from_image(WorldMap.table()))
+	material.set_shader_parameter(&"sea", WorldMap.SEA)
+	material.set_shader_parameter(&"mountain", WorldMap.MOUNTAIN)
+	material.set_shader_parameter(&"snow", WorldMap.SNOW)
 	var sprite := Sprite2D.new()
-	sprite.texture = ImageTexture.create_from_image(_l3_image)
+	sprite.texture = ImageTexture.create_from_image(_map.fields_image())
 	sprite.material = material
 	sprite.centered = false
 	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	sprite.scale = Vector2(CELL_PX, CELL_PX)
 	_roots[0].add_child(sprite)
-	var map := Vector2(WorldPlaceholder.L3) * CELL_PX
+	_draw_rivers()
+	var map := Vector2(WorldMap.SIZE) * CELL_PX
 	for corner: Vector2 in [Vector2.ZERO, Vector2(1, 0), Vector2(0, 1), Vector2.ONE]:
 		var weight := Sprite2D.new()
 		weight.texture = SURYA
@@ -270,9 +273,41 @@ func _draw_l3() -> void:
 		weight.position = corner * map + (corner * 2.0 - Vector2.ONE) * 2.0 * CELL_PX
 		_roots[0].add_child(weight)
 
+## L3's rivers as lines over the map, each widening with its flow: water with a thin sea-blue edge, in the
+## daluang-faded colours the map shader gives everything else.
+func _draw_rivers() -> void:
+	_river_lines = Node2D.new()
+	_roots[0].add_child(_river_lines)
+	var water := _faded(WorldMap.WATERS[4][1])
+	var edge := _faded(Color(0.17, 0.29, 0.38))
+	for river: Dictionary in _map.rivers:
+		var points: PackedVector2Array = river["points"]
+		var flows: PackedFloat32Array = river["flows"]
+		var widest := WorldMap.river_width(flows[flows.size() - 1])
+		var curve := Curve.new()
+		for k in flows.size():
+			curve.add_point(Vector2(float(k) / (flows.size() - 1), WorldMap.river_width(flows[k]) / widest))
+		for outline in [true, false]:
+			var line := Line2D.new()
+			for p in points:
+				line.add_point(p * CELL_PX)
+			line.width = (widest + (0.14 if outline else 0.0)) * CELL_PX
+			line.width_curve = curve
+			line.default_color = edge if outline else water
+			line.joint_mode = Line2D.LINE_JOINT_ROUND
+			line.begin_cap_mode = Line2D.LINE_CAP_ROUND
+			line.end_cap_mode = Line2D.LINE_CAP_ROUND
+			line.antialiased = true
+			_river_lines.add_child(line)
+
+## `c` as the map shader shows pigment on daluang: a little faded and warmed.
+static func _faded(c: Color) -> Color:
+	var paper := Color(0.95, 0.86, 0.68)
+	return Color(lerpf(c.r, c.r * paper.r, 0.45), lerpf(c.g, c.g * paper.g, 0.45), lerpf(c.b, c.b * paper.b, 0.45))
+
 ## Round the map: the sheet's margin with its tumpal border and torn edge, then the teak table.
 func _draw_table() -> void:
-	var map := Vector2(WorldPlaceholder.L3) * CELL_PX
+	var map := Vector2(WorldMap.SIZE) * CELL_PX
 	var material := ShaderMaterial.new()
 	material.shader = TABLE
 	material.set_shader_parameter(&"cell", CELL_PX)
@@ -295,7 +330,7 @@ func _build_legend() -> void:
 	_mode_bar = WorldModeToggle.new()
 	_ui.add_child(_mode_bar)
 	var names: Array[String] = ["Biome"]
-	for mode: Dictionary in WorldPlaceholder.MODES:
+	for mode: Dictionary in WorldMap.MODES:
 		names.append(mode["name"])
 	_mode_bar.names = names
 	_mode_bar.picked.connect(func(k: int) -> void: _set_mode(k - 1))
@@ -310,17 +345,17 @@ func _build_legend() -> void:
 	_mode_bar.offset_bottom = -12.0
 	_set_mode(-1)
 
-## Shows L3 by biome (-1) or by one of WorldPlaceholder.MODES, and fits the key to it.
+## Shows L3 by biome (-1) or by one of WorldMap.MODES, and fits the key to it.
 func _set_mode(mode: int) -> void:
 	_mode = mode
 	if mode < 0:
 		_map_material.set_shader_parameter(&"field", -1)
 		_legend.title = "Biomes"
-		_legend.entries = WorldPlaceholder.HEIGHTS + WorldPlaceholder.BIOMES
+		_legend.entries = WorldMap.WATERS + WorldMap.BIOMES
 	else:
-		var entry: Dictionary = WorldPlaceholder.MODES[mode]
+		var entry: Dictionary = WorldMap.MODES[mode]
 		_map_material.set_shader_parameter(&"field", entry["field"])
-		_map_material.set_shader_parameter(&"ramp", WorldPlaceholder.ramp(entry))
+		_map_material.set_shader_parameter(&"ramp", WorldMap.ramp(entry))
 		_legend.title = entry["name"]
 		_legend.entries = entry["bands"].map(func(band: Array) -> Array: return [band[2], band[1]])
 	_mode_bar.selected = mode + 1
@@ -339,7 +374,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 ## Keeps the camera over the table: no further than TABLE_VIEW cells past the sheet's edge.
 func _clamp_l3() -> void:
-	var map := Vector2(WorldPlaceholder.L3) * CELL_PX
+	var map := Vector2(WorldMap.SIZE) * CELL_PX
 	var half := get_viewport_rect().size * 0.5 / _camera.zoom.x
 	var margin := TABLE_VIEW * CELL_PX
 	for axis in 2:
@@ -396,10 +431,10 @@ func _plan_chunk(level: int, at: Vector2i) -> void:
 	store.busy[at] = true
 	var job := {"level": level, "at": at}
 	var size := store.size
-	var l3 := _l3_image
+	var map := _map
 	_jobs[WorkerThreadPool.add_task(func() -> void:
 		var started := Time.get_ticks_usec()
-		job["image"] = WorldPlaceholder.chunk_image(level, at, size, l3)
+		job["image"] = WorldPlaceholder.chunk_image(level, at, size, map)
 		job["usec"] = Time.get_ticks_usec() - started, false, "world chunk")] = job
 
 func _draw_chunk(level: int, at: Vector2i, plan: Dictionary) -> void:
