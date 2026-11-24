@@ -15,8 +15,8 @@ entity_catalog = ExtResource("4_entities")
 
 [node name="Camera2D" parent="." instance=ExtResource("1_camera")]
 zoom_speed = 0.0
-min_zoom = 0.7
-max_zoom = 96.0
+min_zoom = 0.15
+max_zoom = 24.0
 pan_speed = 4.0
 
 [node name="UI" type="CanvasLayer" parent="."]
