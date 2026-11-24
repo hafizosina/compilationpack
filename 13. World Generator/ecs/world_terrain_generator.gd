@@ -96,16 +96,29 @@ static func plan(def: WorldLandDef, rng_seed: int, catalog: EcsTownCatalog, enti
 
 ## A child map of `def`'s size zoomed `scale` times into `parent`'s cells from `origin`: its
 ## terrain (`refine_terrain`), then nodes and commands as in `plan`. Neighbouring windows meet
-## without a seam.
+## without a seam. Its rivers are the lines it drew, in its own cells, so it can be refined in turn;
+## its deposits are its own when the parent has none. `border` > 0 adds `outer_kinds`, the kinds
+## with that many cells round the window, for drawing it seamlessly beside its neighbours.
 static func refine(parent: Dictionary, parent_def: WorldLandDef, def: WorldLandDef, origin: Vector2i,
-		scale: int, rng_seed: int, catalog: EcsTownCatalog, entities: EcsEntityCatalog) -> Dictionary:
-	var terrain := refine_terrain(parent, parent_def, def.size, def.shore_width, origin * scale, scale, rng_seed)
+		scale: int, rng_seed: int, catalog: EcsTownCatalog, entities: EcsEntityCatalog, border: int = 0) -> Dictionary:
+	var terrain := refine_terrain(parent, parent_def, def.size, def.shore_width, origin * scale, scale, rng_seed, border, [], true)
 	var usec := terrain["usec"] as Dictionary
-	var out := _finish(def, terrain["kinds"], terrain["zones"], _rng(hash([rng_seed, origin]), 7), catalog, entities, usec,
-		terrain["deposits"])
-	out["rivers"] = []
-	out["river"] = terrain["river"]
+	var kinds := terrain["kinds"] as PackedByteArray
+	var river := terrain["river"] as PackedByteArray
+	var outer := def.size + Vector2i(border, border) * 2
+	if border > 0:
+		kinds = _crop(kinds, outer.x, Vector2i(border, border), def.size)
+		river = _crop(river, outer.x, Vector2i(border, border), def.size)
+	var deposits := terrain["deposits"] as Dictionary
+	if deposits.is_empty() and not def.deposits.is_empty():
+		deposits = _deposits(def, kinds, _rng(hash([rng_seed, origin]), 8))
+	var out := _finish(def, kinds, terrain["zones"], _rng(hash([rng_seed, origin]), 7), catalog, entities, usec, deposits)
+	out["deposits"] = deposits if not deposits.is_empty() else {"ids": PackedByteArray(), "keys": [], "blobs": []}
+	out["rivers"] = terrain["rivers"]
+	out["river"] = river
 	out["coast_side"] = parent["coast_side"]
+	if border > 0:
+		out["outer_kinds"] = terrain["kinds"]
 	return out
 
 ## A child's ground only, `size` cells from child cell `at` (`scale` child cells a parent cell):
@@ -114,9 +127,10 @@ static func refine(parent: Dictionary, parent_def: WorldLandDef, def: WorldLandD
 ## MARGIN cells wider each side, so any two areas agree cell for cell where they overlap.
 ## Each cell is in its parent cell's deposit.
 ## {kinds, river: with `border` cells round `size`, zones and deposits: `size` only, usec}. `shares` is
-## `blend_shares(parent, …)` when the caller keeps it, else it is made here.
+## `blend_shares(parent, …)` when the caller keeps it, else it is made here. With `lines`, also
+## `rivers`: the lines drawn, in cells from `at`.
 static func refine_terrain(parent: Dictionary, parent_def: WorldLandDef, size: Vector2i, shore_width: int,
-		at: Vector2i, scale: int, rng_seed: int, border: int = 0, shares: Array = []) -> Dictionary:
+		at: Vector2i, scale: int, rng_seed: int, border: int = 0, shares: Array = [], lines: bool = false) -> Dictionary:
 	var pw := parent_def.size.x
 	var ph := parent_def.size.y
 	var pad := border + MARGIN
@@ -150,8 +164,9 @@ static func refine_terrain(parent: Dictionary, parent_def: WorldLandDef, size: V
 	var river := PackedByteArray()
 	river.resize(w * h)
 	var jitter := _noise(_rng(rng_seed, 6), 0.05)
+	var drawn: Array[Dictionary] = []
 	for line: Dictionary in parent["rivers"]:
-		_redraw(line, base, scale, kinds, river, w, h, jitter)
+		_redraw(line, base, scale, kinds, river, w, h, jitter, drawn if lines else null, base - at)
 	usec["river"] = _lap(started)
 	started = Time.get_ticks_usec()
 	var from_water := distance_from(kinds, w, h, WATER, false)
@@ -162,7 +177,7 @@ static func refine_terrain(parent: Dictionary, parent_def: WorldLandDef, size: V
 	var outer := size + Vector2i(border, border) * 2
 	usec["shore"] = _lap(started)
 	return {"kinds": _crop(kinds, w, Vector2i(MARGIN, MARGIN), outer), "river": _crop(river, w, Vector2i(MARGIN, MARGIN), outer),
-		"zones": zones, "deposits": _child_deposits(parent, parent_def, size, at, scale), "usec": usec}
+		"zones": zones, "deposits": _child_deposits(parent, parent_def, size, at, scale), "usec": usec, "rivers": drawn}
 
 ## The deposits of a child area `size` from child cell `at`, each cell its parent cell's; empty
 ## when the parent has none.
@@ -265,24 +280,38 @@ static func _blend(share: PackedFloat32Array, pw: int, ph: int, at: Vector2) -> 
 	return lerpf(top, bottom, fy)
 
 ## Paints a parent river's line into a child grid whose top-left child cell is `base`, scaled,
-## its centre wandering a little by noise read in whole-map child cells.
+## its centre wandering a little by noise read in whole-map child cells. With `drawn`, each run of
+## segments it drew is added there as a line, its points moved by `shift`.
 static func _redraw(line: Dictionary, base: Vector2i, scale: int, kinds: PackedByteArray,
-		river: PackedByteArray, w: int, h: int, jitter: FastNoiseLite) -> void:
+		river: PackedByteArray, w: int, h: int, jitter: FastNoiseLite, drawn: Variant = null, shift: Vector2i = Vector2i.ZERO) -> void:
 	var points := line["points"] as PackedVector2Array
 	var radii := line["radii"] as PackedFloat32Array
 	var box := Rect2(-RIVER_JITTER, -RIVER_JITTER, w + RIVER_JITTER * 2.0, h + RIVER_JITTER * 2.0)
+	var run := PackedVector2Array()
+	var run_radii := PackedFloat32Array()
 	for k in range(1, points.size()):
 		var a := (points[k - 1] + Vector2(0.5, 0.5)) * scale - Vector2(0.5, 0.5) - Vector2(base)
 		var b := (points[k] + Vector2(0.5, 0.5)) * scale - Vector2(0.5, 0.5) - Vector2(base)
 		var radius := maxf(radii[k - 1], radii[k]) * scale + 1.0
 		if not box.grow(radius).intersects(Rect2(a, Vector2.ZERO).expand(b)):
+			_add_run(drawn, run, run_radii)
+			run = PackedVector2Array()
+			run_radii = PackedFloat32Array()
 			continue
 		var steps := maxi(ceili(a.distance_to(b)), 1)
 		for s in steps:
 			var at := a.lerp(b, float(s) / steps)
 			var world := at + Vector2(base)
 			var centre := at + Vector2(jitter.get_noise_2d(world.x, world.y), jitter.get_noise_2d(world.y, world.x)) * RIVER_JITTER
-			_disc(kinds, river, w, h, Vector2i(roundi(centre.x), roundi(centre.y)), lerpf(radii[k - 1], radii[k], float(s) / steps) * scale)
+			var r := lerpf(radii[k - 1], radii[k], float(s) / steps) * scale
+			_disc(kinds, river, w, h, Vector2i(roundi(centre.x), roundi(centre.y)), r)
+			run.append(centre + Vector2(shift))
+			run_radii.append(r)
+	_add_run(drawn, run, run_radii)
+
+static func _add_run(drawn: Variant, points: PackedVector2Array, radii: PackedFloat32Array) -> void:
+	if drawn != null and points.size() >= 2:
+		(drawn as Array).append({"points": points, "radii": radii})
 
 ## Per cell, a bit for each WorldNodeSpawnDef.Zone it is in.
 static func zones_of(kinds: PackedByteArray, w: int, h: int) -> PackedByteArray:

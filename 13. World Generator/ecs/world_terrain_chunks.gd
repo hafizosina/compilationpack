@@ -1,7 +1,7 @@
 class_name WorldTerrainChunks
 extends RefCounted
 
-## The L1 chunks of a region and what each has: its terrain planned, drawn, its objects planned,
+## The L1 chunks of a world and what each has: its terrain planned, drawn, its objects planned,
 ## drawn. Kept in memory, so a chunk is never planned twice. Says what to do next: every stage of
 ## the chunks in view, nearest the view's centre first, before any of the ring around them, and
 ## within that terrain before drawing it, before objects, before drawing them. A town over the
@@ -46,8 +46,9 @@ func around(view: Rect2i, ring: int) -> Array[Vector2i]:
 	outside.sort_custom(nearest)
 	return inside + outside
 
-## The next {chunk, stage} for `view` with `ring`, or {} when there is nothing to do.
-func next_job(view: Rect2i, ring: int) -> Dictionary:
+## The next {chunk, stage} for `view` with `ring`, or {} when there is nothing to do; a chunk
+## `ready` (when given) says no to is skipped.
+func next_job(view: Rect2i, ring: int, ready: Callable = Callable()) -> Dictionary:
 	var order := around(view, ring)
 	var visible := around(view, 0).size()
 	for part in 2:
@@ -57,7 +58,7 @@ func next_job(view: Rect2i, ring: int) -> Dictionary:
 			for k in range(from, to):
 				var at := order[k]
 				var chunk: Dictionary = chunks.get(at, {})
-				if not chunk.get("busy", false) and _needs(chunk, stage):
+				if not chunk.get("busy", false) and _needs(chunk, stage) and (not ready.is_valid() or ready.call(at)):
 					return {"chunk": at, "stage": stage}
 	return {}
 

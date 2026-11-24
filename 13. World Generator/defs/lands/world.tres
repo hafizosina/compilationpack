@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="WorldLandDef" format=3]
+
+[ext_resource type="Script" path="res://13. World Generator/defs/world_land_def.gd" id="1_land"]
+[ext_resource type="Resource" path="res://13. World Generator/defs/lands/region.tres" id="2_region"]
+
+[resource]
+script = ExtResource("1_land")
+key = &"world"
+display_name = "World (L3)"
+size = Vector2i(128, 96)
+water = 3
+water_share = 0.18
+rock_share = 0.06
+forest_share = 0.3
+shore_width = 1
+river_width = Vector2i(2, 3)
+child = ExtResource("2_region")

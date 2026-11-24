@@ -1,7 +1,8 @@
 extends Node2D
 
-## Headless test for module 12's step 1, the terrain generator: maps on their own, an L2 region,
-## and L1 windows zoomed into it.
+## Headless test for module 13's terrain: module 12's checks on the copied generator (maps on their
+## own, an L2 region, L1 windows zoomed into it), then the L3 world, L2 regions refined from its
+## windows and L1 windows refined from those.
 ##
 ##   "$GODOT" --headless --path . "res://13. World Generator/tests/terrain_test.tscn"
 ##
@@ -12,6 +13,7 @@ const ENTITIES := preload("res://10. Town Generator/defs/entity_catalog.tres")
 const DEFS := "res://13. World Generator/defs/settlements/%s.tres"
 const REGION := "res://13. World Generator/defs/lands/region.tres"
 const L1 := "res://13. World Generator/defs/lands/l1.tres"
+const WORLD := "res://13. World Generator/defs/lands/world.tres"
 ## Maps planned on their own, by size: [size, usual water, its share].
 const MAPS := {
 	&"hamlet": [Vector2i(160, 120), WorldLandDef.Water.LAKE, 0.12],
@@ -41,6 +43,10 @@ func _ready() -> void:
 	_neighbouring_windows_meet_without_a_seam()
 	_chunk_borders_are_their_neighbours_cells()
 	_chunks_are_made_in_order_and_kept()
+	_the_world_is_sound()
+	_regions_follow_the_world_and_l1_follows_them()
+	_neighbouring_regions_meet_without_a_seam()
+	_regions_are_made_in_order_and_kept()
 	print("[terrain] %d/%d checks passed" % [_checks - _failures, _checks])
 	get_tree().quit(1 if _failures > 0 else 0)
 
@@ -246,6 +252,107 @@ func _chunks_are_made_in_order_and_kept() -> void:
 	_check("nothing is planned again once made", chunks.next_job(view, 1).is_empty())
 	var far := chunks.far(Rect2i(Vector2i(0, 0), Vector2i(32, 32)), 1)
 	_check("drawn chunks far from a moved view are offered up to free", far.size() > 0 and not far.has(Vector2i(0, 0)))
+
+## The L3 world, a river into the sea, over several seeds passes WorldTerrainCheck.
+func _the_world_is_sound() -> void:
+	var world := load(WORLD) as WorldLandDef
+	var bad: Array[String] = []
+	var usec := 0
+	for s in 5:
+		var plan := WorldTerrainGenerator.plan(world, s, CATALOG, ENTITIES)
+		usec += _sum(plan["usec"])
+		var problems := WorldTerrainCheck.problems(world, plan)
+		if not problems.is_empty() and bad.is_empty():
+			bad = problems
+			bad.push_front("seed %d:" % s)
+	_check("the L3 world (%dx%d, river to the sea): 5 seeds, every map sound, plan %d ms on average%s" % [world.size.x,
+		world.size.y, usec / 5000, "" if bad.is_empty() else "  " + " ".join(bad)], bad.is_empty())
+
+## Regions refined 8x from L3 windows — the one on the river, a corner, the middle — follow the
+## world and are sound, and an L1 window on each region's river (or middle) follows the region.
+func _regions_follow_the_world_and_l1_follows_them() -> void:
+	var world := load(WORLD) as WorldLandDef
+	var region := world.child
+	var window := region.size / ZOOM
+	var land := _land(region, Vector2i(128, 128))
+	for s in 3:
+		var parent := WorldTerrainGenerator.plan(world, s, CATALOG, ENTITIES)
+		var regions := WorldRegions.new(world.size, window)
+		var points := ((parent["rivers"] as Array)[0] as Dictionary)["points"] as PackedVector2Array
+		var places := {"on the river": regions.region_at(Vector2i(points[points.size() / 2])), "in a corner": Vector2i.ZERO,
+			"in the middle": regions.count / 2}
+		for name: String in places:
+			var at: Vector2i = places[name]
+			var origin := at * window
+			var started := Time.get_ticks_usec()
+			var child := WorldTerrainGenerator.refine(parent, world, region, origin, ZOOM, s, CATALOG, ENTITIES, 1)
+			var spent := Time.get_ticks_usec() - started
+			var problems := WorldTerrainCheck.follows(parent, world, child, region, origin, ZOOM)
+			problems.append_array(WorldTerrainCheck.problems(region, child, true))
+			_check("seed %d, region %s %s follows its L3 window and is sound (%d ms)%s" % [s, at, name, spent / 1000,
+				"" if problems.is_empty() else "  " + " ".join(problems)], problems.is_empty())
+			var lines := child["rivers"] as Array
+			var middle := (region.size - land.size / ZOOM) / 2
+			if not lines.is_empty():
+				var line := (lines[0] as Dictionary)["points"] as PackedVector2Array
+				middle = Vector2i(line[line.size() / 2]) - land.size / ZOOM / 2
+			var l1_origin := middle.clamp(Vector2i.ZERO, region.size - land.size / ZOOM)
+			var l1 := WorldTerrainGenerator.refine(child, region, land, l1_origin, ZOOM, hash([s, at]), CATALOG, ENTITIES)
+			problems = WorldTerrainCheck.follows(child, region, l1, land, l1_origin, ZOOM)
+			problems.append_array(WorldTerrainCheck.problems(land, l1, true))
+			_check("seed %d, an L1 window at %s of region %s (%s) follows it and is sound%s" % [s, l1_origin, at,
+				"on its river" if not lines.is_empty() else "no river", "" if problems.is_empty() else "  " + " ".join(problems)],
+				problems.is_empty())
+
+## Two regions side by side: each one's border cells are the other's own, so L2 has no seam.
+func _neighbouring_regions_meet_without_a_seam() -> void:
+	var world := load(WORLD) as WorldLandDef
+	var region := world.child
+	var window := region.size / ZOOM
+	var parent := WorldTerrainGenerator.plan(world, 2, CATALOG, ENTITIES)
+	var points := ((parent["rivers"] as Array)[0] as Dictionary)["points"] as PackedVector2Array
+	var left_at := WorldRegions.new(world.size, window).region_at(Vector2i(points[points.size() / 2]))
+	left_at.x = mini(left_at.x, world.size.x / window.x - 2)
+	var a := WorldTerrainGenerator.refine(parent, world, region, left_at * window, ZOOM, 2, CATALOG, ENTITIES, 1)
+	var b := WorldTerrainGenerator.refine(parent, world, region, (left_at + Vector2i.RIGHT) * window, ZOOM, 2, CATALOG, ENTITIES, 1)
+	var outer_a := a["outer_kinds"] as PackedByteArray
+	var outer_b := b["outer_kinds"] as PackedByteArray
+	var kinds_a := a["kinds"] as PackedByteArray
+	var kinds_b := b["kinds"] as PackedByteArray
+	var w := region.size.x
+	var outer := w + 2
+	var same := true
+	for y in region.size.y:
+		if outer_a[(y + 1) * outer + w + 1] != kinds_b[y * w] or outer_b[(y + 1) * outer] != kinds_a[y * w + w - 1]:
+			same = false
+		for x in w:
+			if outer_a[(y + 1) * outer + x + 1] != kinds_a[y * w + x]:
+				same = false
+	_check("regions %s and %s: each one's border cells are the other's own" % [left_at, left_at + Vector2i.RIGHT], same)
+
+## Regions in view are planned before any is drawn, nearest the middle first; nothing is made twice;
+## drawn regions far from a moved view are offered up to free.
+func _regions_are_made_in_order_and_kept() -> void:
+	var regions := WorldRegions.new(Vector2i(128, 96), Vector2i(32, 24))
+	var view := Rect2i(Vector2i(40, 20), Vector2i(30, 20))
+	var order: Array[int] = []
+	for step in 40:
+		var job := regions.next_job(view)
+		if job.is_empty():
+			break
+		var at: Vector2i = job["region"]
+		if not regions.regions.has(at):
+			regions.regions[at] = {}
+		regions.regions[at]["plan" if job["stage"] == WorldRegions.Stage.PLAN else "drawn"] = true
+		order.append(job["stage"])
+	var visible := regions.around(view)
+	var sorted := order.duplicate()
+	sorted.sort()
+	_check("the %d regions in view are planned, then drawn, %s first" % [visible.size(), visible[0]],
+		order == sorted and order.size() == visible.size() * 2 and visible[0] == Vector2i(1, 1))
+	_check("no region is made twice", regions.next_job(view).is_empty())
+	var far := regions.far(Rect2i(Vector2i(100, 80), Vector2i(10, 10)), 0)
+	_check("drawn regions far from a moved view are offered up to free", far.size() == visible.size())
 
 ## A map through module 10's real pipeline: every command accepted, the grid's terrain the
 ## plan's, every node born on its cell.

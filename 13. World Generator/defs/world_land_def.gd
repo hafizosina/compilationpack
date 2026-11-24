@@ -2,8 +2,8 @@ class_name WorldLandDef
 extends Resource
 
 ## What the land is, for WorldTerrainGenerator: its size, its water, how much is rock and forest, its
-## deposits and what grows where. A region (L2) names the land its L1 refines into as `child`;
-## of a child only the shore width and nodes are read.
+## deposits and what grows where. A world (L3) names its regions' land as `child`, a region (L2)
+## the land its L1 refines into; of a child its size, shore width, deposits and nodes are read.
 
 ## RIVER_TO_SEA: a coast on one side and a river from the far edge into it.
 enum Water { LAKE, RIVER, COAST, RIVER_TO_SEA }
@@ -25,5 +25,5 @@ enum Water { LAKE, RIVER, COAST, RIVER_TO_SEA }
 @export var nodes: Array[WorldNodeSpawnDef] = []
 ## Deposits of ore and clay, placed as blobs on their ground; a region's are what its L1 veins grow in.
 @export var deposits: Array[WorldDepositDef] = []
-## The land its L1 refines into: the shore width and nodes of the chunks and of a town's area.
+## The land it refines into: a world's regions, or a region's L1 chunks and town area.
 @export var child: WorldLandDef
