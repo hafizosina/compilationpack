@@ -26,9 +26,6 @@ uniform vec4 paper : source_color = vec4(0.95, 0.86, 0.68, 1.0);
 uniform vec4 shore_line : source_color = vec4(0.17, 0.29, 0.38, 1.0);
 uniform vec4 ridge_line : source_color = vec4(0.36, 0.27, 0.19, 1.0);
 uniform float line = 0.8;
-// Land's shadow cast on water, toward the bottom-right (light from the top-left), in cells, and how dark.
-uniform vec2 cast = vec2(0.9, 0.9);
-uniform float cast_dark = 0.78;
 
 float hash(vec2 p) {
 	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -72,13 +69,6 @@ void fragment() {
 	// Lakes stand on land; their edge is where the lake flag, read smoothly, crosses a half.
 	if (h >= sea && f.a > 0.5 && field != 1) {
 		col = shallow;
-	}
-	// Water lies under land's cast shadow where the land up-left of it stands above the sea.
-	if (field != 1 && (h < sea || f.a > 0.5)) {
-		vec4 up = texture(TEXTURE, UV - cast * TEXTURE_PIXEL_SIZE);
-		if (up.r >= sea && up.a < 0.5) {
-			col.rgb *= cast_dark;
-		}
 	}
 	if (h >= sea && field != 1 && abs(f.a - 0.5) < fwidth(f.a) * line * 0.5) {
 		col = shore_line;
