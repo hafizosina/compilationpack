@@ -65,6 +65,8 @@ var roofs_visible: bool = true:
 			layer.visible = on
 ## The world of the current run, for a door's open state.
 var _world: EcsWorld
+## The map level drawn (1, 2 or 3), choosing the terrains' ground textures; set before the first run.
+var level: int = 1
 ## Tiles written on the last run, and the microseconds it took.
 var redrawn: int = 0
 var last_usec: int = 0
@@ -214,7 +216,7 @@ func _make_ground(grid: EcsTownGridSingleton) -> void:
 	_ground_image = Image.create_empty(grid.width, grid.height, false, Image.FORMAT_R8)
 	_ground_texture = ImageTexture.create_from_image(_ground_image)
 	_ground = _map_sprite("Ground", _ground_texture, GROUND_SHADER, {
-		&"grounds": _catalog.grounds(), &"count": _catalog.terrains.size()})
+		&"grounds": _catalog.grounds(level), &"count": _catalog.terrains.size()})
 
 ## The floors sprite, like the ground's, drawn by the floor shader.
 func _make_floors(grid: EcsTownGridSingleton) -> void:
