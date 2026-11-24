@@ -27,9 +27,11 @@ The scene is `world.tscn` (`world_view.gd`). L3 is finished; L2 and L1 are still
 `WorldMap.make(seed)`, about 350 ms, read-only after (workers read it for chunk colours).
 
 - **Height:** Perlin fBm sampled on a cylinder (`_at`). Sea below `SEA` 0.5, mountains from 0.74, snow from 0.84.
-- **Heat:** latitude (cold at both poles), bent ±0.45 by a slow Perlin noise so the climate bands wave, minus
-  height above the sea.
-- **Humidity:** Perlin, plus `WETTER` next to a river or lake.
+- **Heat:** latitude (cold at both poles), bent ±0.4 by a slow two-octave Perlin so the climate bands wave,
+  minus height above the sea.
+- **Humidity:** a broad three-octave Perlin, wetter by the sea and drier up to `INLAND` cells inland, plus
+  `WETTER` next to a river or lake. Heat and humidity are each smoothed twice (`_blur`), so biomes come in
+  broad regions without specks.
 - **Biomes** (`BIOMES`, `biome_at`): heat × humidity, 11 of them: ice cap, tundra, wet tundra, cold
   steppe, taiga, dry grassland, grassland, temperate forest, desert, savanna, tropical forest. Sea, sea
   ice, lakes, rivers, mountains and snow are `WATERS`.

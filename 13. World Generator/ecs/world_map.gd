@@ -2,7 +2,8 @@ class_name WorldMap
 extends RefCounted
 
 ## L3, the world map, made whole from a seed and read-only after (safe for workers). Per cell: height (Perlin),
-## heat (latitude bent by noise, colder up high) and humidity (Perlin, wetter by rivers and lakes). Water is
+## heat (latitude bent by a slow noise, colder up high) and humidity (a broad Perlin, wetter by the sea, drier
+## inland, wetter by rivers and lakes); both smoothed. Water is
 ## drained over the whole map: Priority-Flood fills basins into lakes and gives every land cell the cell it
 ## drains to, flow adds up the rain downstream, and cells with enough flow are rivers, traced as lines from
 ## their heads to the sea, a lake or a bigger river. Biomes come from heat and humidity, sea, mountains and
@@ -20,6 +21,8 @@ const LAKE_CELLS: int = 4
 ## Flow, in cells of rain, that makes a river; no rivers where it is this cold (frozen).
 const RIVER_FLOW: float = 16.0
 const RIVER_HEAT: float = 0.14
+## Distance from the sea, in cells, at which land is as dry as inland gets.
+const INLAND: float = 18.0
 ## Humidity added next to a river or lake.
 const WETTER: float = 0.15
 ## Side of the biome lookup, heat across, humidity down.
@@ -103,9 +106,11 @@ static func _at(n: FastNoiseLite, p: Vector2) -> float:
 func _fields(salt: int) -> void:
 	var land := noise(salt)
 	var warp := noise(salt + 1)
-	warp.frequency = 0.02
+	warp.frequency = 0.015
+	warp.fractal_octaves = 2
 	var wet := noise(salt + 2)
-	wet.frequency = 0.03
+	wet.frequency = 0.015
+	wet.fractal_octaves = 3
 	var n := SIZE.x * SIZE.y
 	height.resize(n)
 	heat.resize(n)
@@ -113,12 +118,57 @@ func _fields(salt: int) -> void:
 	for y in SIZE.y:
 		for x in SIZE.x:
 			var p := Vector2(x + 0.5, y + 0.5)
+			height[y * SIZE.x + x] = clampf(0.5 + _at(land, p) * 1.15, 0.0, 1.0)
+	var inland := _sea_distance()
+	for y in SIZE.y:
+		for x in SIZE.x:
+			var p := Vector2(x + 0.5, y + 0.5)
 			var i := y * SIZE.x + x
-			var h := clampf(0.5 + _at(land, p) * 1.15, 0.0, 1.0)
 			var lat := absf(p.y - SIZE.y * 0.5) / (SIZE.y * 0.5)
-			height[i] = h
-			heat[i] = clampf(1.0 - lat + _at(warp, p) * 0.45 - maxf(h - SEA, 0.0) * 0.9, 0.0, 1.0)
-			humidity[i] = clampf(0.5 + _at(wet, p) * 1.4, 0.0, 1.0)
+			heat[i] = clampf(1.0 - lat + _at(warp, p) * 0.4 - maxf(height[i] - SEA, 0.0) * 0.9, 0.0, 1.0)
+			# Wetter by the sea, drier deep inland.
+			humidity[i] = clampf(0.62 + _at(wet, p) * 1.0 - minf(inland[i] / INLAND, 1.0) * 0.35, 0.0, 1.0)
+	_blur(heat, 2)
+	_blur(humidity, 2)
+
+## Each cell's distance, in cells, to the nearest sea (0 at sea).
+func _sea_distance() -> PackedFloat32Array:
+	var distance := PackedFloat32Array()
+	distance.resize(SIZE.x * SIZE.y)
+	distance.fill(INF)
+	var queue := PackedInt32Array()
+	for i in distance.size():
+		if height[i] < SEA:
+			distance[i] = 0.0
+			queue.append(i)
+	var k := 0
+	while k < queue.size():
+		var c := queue[k]
+		k += 1
+		var at := Vector2i(c % SIZE.x, c / SIZE.x)
+		for step in NEIGHBOURS:
+			if has(at + step):
+				var j := index(at + step)
+				if distance[j] == INF:
+					distance[j] = distance[c] + 1.0
+					queue.append(j)
+	return distance
+
+## Averages each cell with its neighbours, `passes` times, so fields have no specks.
+static func _blur(field: PackedFloat32Array, passes: int) -> void:
+	for pass_ in passes:
+		var copy := field.duplicate()
+		for y in SIZE.y:
+			for x in SIZE.x:
+				var sum := 0.0
+				var count := 0
+				for dy in range(-1, 2):
+					for dx in range(-1, 2):
+						var at := Vector2i(x + dx, y + dy)
+						if has(at):
+							sum += copy[index(at)]
+							count += 1
+				field[y * SIZE.x + x] = sum / count
 
 ## Priority-Flood (with a small rise on flats so every cell drains): from the sea and the map's edge inward,
 ## lowest first, each cell reached stands at least a little above the cell it was reached from. Then every
